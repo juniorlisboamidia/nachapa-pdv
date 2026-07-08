@@ -10,6 +10,15 @@ import BonificacaoPublica from './pages/BonificacaoPublica'
 import BonificacaoEu from './pages/BonificacaoEu'
 import BancoTalentos from './pages/BancoTalentos'
 import TalentosPublico from './pages/TalentosPublico'
+import Insumos from './pages/Insumos'
+import Produtos from './pages/Produtos'
+import FichaTecnica from './pages/FichaTecnica'
+import Custos from './pages/Custos'
+import CustosFixos from './pages/CustosFixos'
+import CustosVariaveis from './pages/CustosVariaveis'
+import PontoEquilibrio from './pages/PontoEquilibrio'
+import Faturamento from './pages/Faturamento'
+import MinhaEmpresa from './pages/MinhaEmpresa'
 
 function TelaCarregando() {
   return (
@@ -47,17 +56,22 @@ export default function App() {
           <Route element={<RequireAuth><Layout /></RequireAuth>}>
             {/* Tela inicial */}
             <Route index element={<Inicio />} />
-            {/* Gestão (chega na F2 — cópia do H360) */}
-            <Route path="custos" element={<EmConstrucao titulo="Custos" descricao="Custos fixos, variáveis e ponto de equilíbrio. Chega na próxima fase." />} />
-            <Route path="faturamento" element={<EmConstrucao titulo="Faturamento" descricao="Lançamento e acompanhamento do faturamento. Chega na próxima fase." />} />
-            <Route path="produtos" element={<EmConstrucao titulo="Ficha Técnica" descricao="Fichas técnicas e precificação dos produtos. Chega na próxima fase." />} />
-            <Route path="insumos" element={<EmConstrucao titulo="Insumos" descricao="Cadastro de insumos e custos de compra. Chega na próxima fase." />} />
+            {/* Gestão (F2) */}
+            <Route path="produtos" element={<Produtos />} />
+            <Route path="insumos" element={<Insumos />} />
+            <Route path="ficha-tecnica" element={<FichaTecnica />} />
+            <Route path="ficha-tecnica/:produtoId" element={<FichaTecnica />} />
+            <Route path="custos" element={<Custos />} />
+            <Route path="custos-fixos" element={<CustosFixos />} />
+            <Route path="custos-variaveis" element={<CustosVariaveis />} />
+            <Route path="ponto-equilibrio" element={<PontoEquilibrio />} />
+            <Route path="faturamento" element={<Faturamento />} />
             {/* Dep. Pessoal — Equipe + Bonificação (F1a) */}
             <Route path="rh/equipe" element={<Equipe />} />
             <Route path="rh/bonificacao" element={<Bonificacao />} />
             <Route path="rh/banco-de-talentos" element={<BancoTalentos />} />
             {/* Extras */}
-            <Route path="minha-empresa" element={<EmConstrucao titulo="Minha Empresa" descricao="Dados da loja (nome, logo, contato). Chega na próxima fase." />} />
+            <Route path="minha-empresa" element={<MinhaEmpresa />} />
             <Route path="central-de-ajuda" element={<EmConstrucao titulo="Central de Ajuda" descricao="Artigos e ajuda do sistema." />} />
           </Route>
           {/* Públicas (sem login, por token) — página da equipe e página pessoal */}
