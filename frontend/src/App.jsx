@@ -4,6 +4,10 @@ import Login from './pages/Login'
 import Layout from './components/Layout'
 import Inicio from './pages/Inicio'
 import EmConstrucao from './pages/EmConstrucao'
+import Equipe from './pages/Equipe'
+import Bonificacao from './pages/Bonificacao'
+import BonificacaoPublica from './pages/BonificacaoPublica'
+import BonificacaoEu from './pages/BonificacaoEu'
 
 function TelaCarregando() {
   return (
@@ -46,14 +50,17 @@ export default function App() {
             <Route path="faturamento" element={<EmConstrucao titulo="Faturamento" descricao="Lançamento e acompanhamento do faturamento. Chega na próxima fase." />} />
             <Route path="produtos" element={<EmConstrucao titulo="Ficha Técnica" descricao="Fichas técnicas e precificação dos produtos. Chega na próxima fase." />} />
             <Route path="insumos" element={<EmConstrucao titulo="Insumos" descricao="Cadastro de insumos e custos de compra. Chega na próxima fase." />} />
-            {/* Dep. Pessoal (chega na F1 — cópia do H360) */}
-            <Route path="rh/equipe" element={<EmConstrucao titulo="Equipe" descricao="Cadastro da equipe interna da loja. Chega na próxima fase." />} />
-            <Route path="rh/bonificacao" element={<EmConstrucao titulo="Bonificação" descricao="Programa de Bonificação (Destaque do Mês). Chega na próxima fase." />} />
+            {/* Dep. Pessoal — Equipe + Bonificação (F1a) */}
+            <Route path="rh/equipe" element={<Equipe />} />
+            <Route path="rh/bonificacao" element={<Bonificacao />} />
             <Route path="rh/banco-de-talentos" element={<EmConstrucao titulo="Banco de Talentos" descricao="Recrutamento e seleção. Chega na próxima fase." />} />
             {/* Extras */}
             <Route path="minha-empresa" element={<EmConstrucao titulo="Minha Empresa" descricao="Dados da loja (nome, logo, contato). Chega na próxima fase." />} />
             <Route path="central-de-ajuda" element={<EmConstrucao titulo="Central de Ajuda" descricao="Artigos e ajuda do sistema." />} />
           </Route>
+          {/* Públicas (sem login, por token) — página da equipe e página pessoal */}
+          <Route path="bonificacao/:token" element={<BonificacaoPublica />} />
+          <Route path="eu/:token" element={<BonificacaoEu />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
