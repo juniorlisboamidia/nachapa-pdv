@@ -1145,4 +1145,793 @@ app.post('/api/public/eu/:token/resgatar', async (req, res) => {
 });
 
 
+
+// ===================== Dep. Pessoal: Banco de Talentos (portado do H360) =====================
+// ============================================================================
+// ============================================================================
+// Dep. Pessoal › Banco de Talentos / Seleção
+// Arquitetura: Candidato = perfil permanente; Candidatura = participação numa vaga
+// (status/score/histórico/avaliações/entrevistas/contatos são POR candidatura).
+// ============================================================================
+const RH_STATUS = ['NOVO', 'TRIAGEM', 'PRE_SELECIONADO', 'CONTATO_REALIZADO', 'ENTREVISTA_AGENDADA', 'TESTE_PRATICO', 'APROVADO', 'BANCO_TALENTOS', 'REPROVADO', 'SEM_RETORNO'];
+const RH_ORIGENS = ['MANUAL', 'PUBLICO', 'INSTAGRAM', 'WHATSAPP', 'INDICACAO', 'QRCODE', 'SITE', 'ANUNCIO', 'LOJA', 'OUTRO'];
+const RH_VINCULOS = ['CLT', 'FREELANCER', 'DIARISTA', 'ESTAGIO', 'A_COMBINAR'];
+const RH_CONTATO_TIPO = ['WHATSAPP', 'LIGACAO', 'EMAIL', 'PRESENCIAL'];
+const RH_CONTATO_RES = ['SEM_RESPOSTA', 'INTERESSADO', 'SEM_INTERESSE', 'ENTREVISTA_MARCADA', 'RETORNAR'];
+const RH_ENTREVISTA_TIPO = ['ONLINE', 'PRESENCIAL', 'TESTE'];
+const RH_ENTREVISTA_STATUS = ['AGENDADA', 'REALIZADA', 'CANCELADA', 'NAO_COMPARECEU'];
+const RH_VAGA_STATUS = ['ABERTA', 'PAUSADA', 'ENCERRADA'];
+const RH_PESOS_PADRAO = { disponibilidade: 30, experiencia: 25, deslocamento: 15, triagem: 15, gestor: 15 };
+const SCORE_VERSAO = '1.0';
+
+const usuarioAtual = () => tenantStore.getStore()?.user?.nome ?? null;
+const rhData = (v) => { const s = String(v ?? '').trim(); return /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(s + 'T00:00:00Z') : null; };
+const rhStr = (v, max = 255) => { const s = String(v ?? '').trim(); return s ? s.slice(0, max) : null; };
+const rhArr = (v, perm) => Array.isArray(v) ? [...new Set(v.map((x) => String(x)).filter((x) => (perm ? perm.includes(x) : x)))] : [];
+const rhNum = (v) => { const n = Number(v); return Number.isFinite(n) && n >= 0 ? n : null; };
+// Telefone só dígitos; chave de dedup remove o +55 (por empresa).
+const rhTelefone = (v) => String(v ?? '').replace(/\D/g, '');
+const rhNormTelefone = (v) => { const d = rhTelefone(v); return /^55\d{10,11}$/.test(d) ? d.slice(2) : d; };
+const rhEmailNorm = (v) => { const s = String(v ?? '').trim().toLowerCase(); return s || null; };
+
+// Score de compatibilidade candidato×vaga (0-100), por regras transparentes + auditoria.
+// Dados ausentes NÃO inflam o candidato: dimensão sem dado do candidato = 0 (não 0,5).
+function calcularScore(cand, vaga, avaliacaoGestor) {
+  const pesos = { ...RH_PESOS_PADRAO, ...(vaga?.pesos && typeof vaga.pesos === 'object' ? vaga.pesos : {}) };
+  const disp = cand?.disponibilidade && typeof cand.disponibilidade === 'object' ? cand.disponibilidade : {};
+  const inter = (a, b) => (Array.isArray(a) ? a : []).filter((x) => (Array.isArray(b) ? b : []).includes(x));
+  const partes = [];
+
+  const vTur = Array.isArray(vaga?.turno) ? vaga.turno : []; const vDia = Array.isArray(vaga?.diasTrabalho) ? vaga.diasTrabalho : [];
+  const cTur = Array.isArray(disp.turnos) ? disp.turnos : []; const cDia = Array.isArray(disp.dias) ? disp.dias : [];
+  let rDisp;
+  if (!vTur.length && !vDia.length) rDisp = 1;                 // vaga não exige disponibilidade específica
+  else if (!cTur.length && !cDia.length) rDisp = 0;            // candidato não informou → não infla
+  else { const cobT = vTur.length ? inter(vTur, cTur).length / vTur.length : 1; const cobD = vDia.length ? inter(vDia, cDia).length / vDia.length : 1; rDisp = (cobT + cobD) / 2; }
+  partes.push({ chave: 'disponibilidade', label: 'Disponibilidade compatível', ratio: rDisp, peso: pesos.disponibilidade });
+
+  const ess = Array.isArray(vaga?.atividadesEssenciais) ? vaga.atividadesEssenciais : [];
+  const exp = Array.isArray(cand?.experienciasRapidas) ? cand.experienciasRapidas : [];
+  const rExp = !ess.length ? 1 : inter(ess, exp).length / ess.length; // sem essenciais na vaga = neutro alto; senão fração real (0 se nada)
+  partes.push({ chave: 'experiencia', label: 'Experiência nas atividades', ratio: rExp, peso: pesos.experiencia });
+
+  let rDesl;
+  if (disp.transporteProprio) rDesl = 1;
+  else if (disp.tempoDeslocamentoMin != null && disp.tempoDeslocamentoMin !== '') { const t = Number(disp.tempoDeslocamentoMin); rDesl = t <= 20 ? 1 : t <= 40 ? 0.75 : t <= 60 ? 0.5 : 0.3; }
+  else rDesl = 0.3; // desconhecido → baixo (não infla)
+  partes.push({ chave: 'deslocamento', label: 'Deslocamento compatível', ratio: rDesl, peso: pesos.deslocamento });
+
+  const perguntas = Array.isArray(vaga?.perguntas) ? vaga.perguntas : [];
+  const resp = cand?.respostasTriagem && typeof cand.respostasTriagem === 'object' ? cand.respostasTriagem : {};
+  const comIdeal = perguntas.filter((p) => p && p.respostaIdeal != null && p.respostaIdeal !== '');
+  let rTri;
+  if (!comIdeal.length) rTri = 1; // vaga sem perguntas → dimensão não discrimina
+  else { let ok = 0; for (const p of comIdeal) { const r = resp[p.id]; if (r != null && r !== '' && String(r).toLowerCase() === String(p.respostaIdeal).toLowerCase()) ok++; } rTri = ok / comIdeal.length; }
+  partes.push({ chave: 'triagem', label: 'Respostas da triagem', ratio: rTri, peso: pesos.triagem });
+
+  const rGestor = avaliacaoGestor != null ? Math.max(0, Math.min(100, avaliacaoGestor)) / 100 : 0;
+  partes.push({ chave: 'gestor', label: 'Avaliação do gestor', ratio: rGestor, peso: pesos.gestor });
+
+  const soma = partes.reduce((s, p) => s + (Number(p.peso) || 0), 0) || 100;
+  let score = 0;
+  const breakdown = partes.map((p) => { const max = Math.round(((Number(p.peso) || 0) / soma) * 100); const pontos = Math.round(Math.max(0, Math.min(1, p.ratio)) * max); score += pontos; return { chave: p.chave, label: p.label, pontos, max }; });
+  score = Math.max(0, Math.min(100, score));
+
+  // Qualidade dos dados (independente do score): % de campos-chave preenchidos.
+  const checks = [
+    (cTur.length || cDia.length) > 0,
+    exp.length > 0,
+    !!(disp.transporteProprio || (disp.tempoDeslocamentoMin != null && disp.tempoDeslocamentoMin !== '')),
+    Array.isArray(cand?.funcoesInteresse) && cand.funcoesInteresse.length > 0,
+    avaliacaoGestor != null,
+  ];
+  const preenchimento = Math.round((checks.filter(Boolean).length / checks.length) * 100);
+  const qualidade = (avaliacaoGestor == null || preenchimento < 40) ? 'ESTIMADO' : (preenchimento >= 75 ? 'COMPLETO' : 'PARCIAL');
+  return { score, breakdown, pesos, preenchimento, qualidade };
+}
+
+function scoreHumano(av) {
+  const pos = ['comunicacao', 'organizacao', 'postura', 'tecnico', 'compatibilidade', 'disponibilidade', 'interesse'];
+  const vals = [];
+  for (const k of pos) if (av[k] != null) vals.push(Math.max(1, Math.min(5, Number(av[k]))));
+  if (av.treinamento != null) vals.push(6 - Math.max(1, Math.min(5, Number(av.treinamento))));
+  if (!vals.length) return null;
+  return Math.round((vals.reduce((s, v) => s + v, 0) / vals.length / 5) * 100);
+}
+
+// Calcula e persiste o score de uma candidatura + registra na trilha (ScoreHistorico).
+async function registrarScoreCandidatura(candidaturaId, motivo) {
+  const cx = await prisma.candidatura.findUnique({ where: { id: candidaturaId }, include: { candidato: true, vaga: true } });
+  if (!cx) return null;
+  const r = calcularScore(cx.candidato, cx.vaga, cx.avaliacaoGestor);
+  await prisma.candidatura.update({ where: { id: candidaturaId }, data: { score: r.score, scoreBreakdown: r.breakdown, scorePesos: r.pesos, scoreVersao: SCORE_VERSAO, scoreMotivo: motivo, scorePreenchimento: r.preenchimento, scoreQualidade: r.qualidade, scoreCalculadoEm: new Date() } });
+  await prisma.scoreHistorico.create({ data: { candidaturaId, score: r.score, breakdown: r.breakdown, pesos: r.pesos, versao: SCORE_VERSAO, motivo, preenchimento: r.preenchimento, qualidade: r.qualidade } });
+  return r;
+}
+async function recalcularCandidaturasDoCandidato(candidatoId, motivo) {
+  const cxs = await prisma.candidatura.findMany({ where: { candidatoId }, select: { id: true } });
+  for (const c of cxs) await registrarScoreCandidatura(c.id, motivo);
+}
+async function recalcularCandidaturasDaVaga(vagaId, motivo) {
+  const cxs = await prisma.candidatura.findMany({ where: { vagaId }, select: { id: true } });
+  for (const c of cxs) await registrarScoreCandidatura(c.id, motivo);
+}
+
+// ---- Construtor de formulário (permanente e por vaga) ----
+const FORM_TIPOS = ['sim_nao', 'unica', 'multipla', 'numero', 'escala', 'texto', 'texto_longo'];
+const FORM_PAPEIS = ['informativa', 'eliminatoria', 'prioridade'];
+const FORM_CAMPOS = ['email', 'endereco', 'cidade', 'bairro', 'transporte', 'tempoDeslocamento', 'disponivelEm', 'funcoes', 'experiencias', 'historico', 'ultimosEmpregos', 'pretensao', 'sobre', 'disponibilidade'];
+// Rótulos de duração de vínculo → aproximação em meses (análise de permanência).
+const RH_DURACOES = { 'Menos de 3 meses': 2, '3 a 6 meses': 4, '6 meses a 1 ano': 9, '1 a 2 anos': 18, '2 a 5 anos': 42, 'Mais de 5 anos': 72 };
+// Salva o histórico estruturado de empresas (substitui o anterior).
+async function salvarExperiencias(candidatoId, arr) {
+  if (!Array.isArray(arr)) return;
+  await prisma.experienciaProfissional.deleteMany({ where: { candidatoId } });
+  for (const e of arr.slice(0, 15)) {
+    if (!e?.empresa) continue;
+    const duracao = rhStr(e.duracao, 60);
+    await prisma.experienciaProfissional.create({ data: { candidatoId, empresa: String(e.empresa).slice(0, 160), cargo: rhStr(e.cargo, 120), funcao: rhStr(e.funcao, 120), duracao, duracaoMeses: duracao && RH_DURACOES[duracao] != null ? RH_DURACOES[duracao] : (e.duracaoMeses != null ? Number(e.duracaoMeses) || null : null), atividades: e.atividades ? String(e.atividades).slice(0, 1000) : null, motivoSaida: rhStr(e.motivoSaida, 200) } });
+  }
+}
+function formPadrao(vaga) {
+  return {
+    titulo: vaga ? 'Candidate-se a esta vaga' : 'Trabalhe conosco',
+    apresentacao: vaga ? '' : 'Deixe seus dados no nosso banco de talentos. Quando surgir uma vaga, a gente te chama!',
+    campos: { email: { ativo: true, obrigatorio: false }, endereco: { ativo: true }, cidade: { ativo: true }, bairro: { ativo: true }, funcoes: { ativo: true }, experiencias: { ativo: true }, historico: { ativo: true }, disponibilidade: { ativo: true }, sobre: { ativo: true }, transporte: { ativo: false }, tempoDeslocamento: { ativo: false }, disponivelEm: { ativo: false }, ultimosEmpregos: { ativo: false }, pretensao: { ativo: false } },
+    funcoes: ['Atendente', 'Auxiliar de cozinha', 'Chapista', 'Caixa', 'Motoboy'],
+    experiencias: ['Atendimento', 'Caixa', 'Chapa', 'Montagem', 'Delivery'],
+    dispDias: ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'],
+    dispTurnos: ['Manhã', 'Tarde', 'Noite'],
+    perguntas: [],
+  };
+}
+// Sanitiza/valida o objeto formulário vindo do gestor.
+function sanitizarFormulario(f) {
+  if (!f || typeof f !== 'object') return null;
+  const out = {};
+  out.titulo = String(f.titulo ?? '').slice(0, 120) || 'Trabalhe conosco';
+  out.apresentacao = String(f.apresentacao ?? '').slice(0, 1000);
+  out.campos = {};
+  for (const k of FORM_CAMPOS) { const c = f.campos?.[k] || {}; out.campos[k] = { ativo: !!c.ativo, obrigatorio: !!c.obrigatorio }; }
+  out.funcoes = Array.isArray(f.funcoes) ? f.funcoes.map((x) => String(x).slice(0, 60)).filter(Boolean).slice(0, 40) : [];
+  out.experiencias = Array.isArray(f.experiencias) ? f.experiencias.map((x) => String(x).slice(0, 60)).filter(Boolean).slice(0, 40) : [];
+  out.dispDias = Array.isArray(f.dispDias) ? f.dispDias.map((x) => String(x).slice(0, 30)).filter(Boolean).slice(0, 14) : [];
+  out.dispTurnos = Array.isArray(f.dispTurnos) ? f.dispTurnos.map((x) => String(x).slice(0, 40)).filter(Boolean).slice(0, 14) : [];
+  out.perguntas = Array.isArray(f.perguntas) ? f.perguntas.slice(0, 30).map((p, i) => ({
+    id: String(p.id || `p${i}_${Date.now()}`).slice(0, 40),
+    texto: String(p.texto ?? '').slice(0, 300),
+    tipo: FORM_TIPOS.includes(p.tipo) ? p.tipo : 'sim_nao',
+    opcoes: Array.isArray(p.opcoes) ? p.opcoes.map((o) => String(o).slice(0, 100)).filter(Boolean).slice(0, 20) : [],
+    obrigatoria: !!p.obrigatoria,
+    papel: FORM_PAPEIS.includes(p.papel) ? p.papel : 'informativa',
+    respostaIdeal: p.respostaIdeal != null ? (Array.isArray(p.respostaIdeal) ? p.respostaIdeal.map(String) : String(p.respostaIdeal).slice(0, 100)) : null,
+    peso: Number.isFinite(Number(p.peso)) && Number(p.peso) > 0 ? Math.min(10, Math.round(Number(p.peso))) : 1,
+  })).filter((p) => p.texto) : [];
+  return out;
+}
+
+// Motor de classificação simples por aderência (sem score complexo).
+// Retorna { classificacao, aderencia, detalhe } a partir das respostas de uma vaga.
+function classificarCandidatura(formulario, respostas) {
+  const perguntas = Array.isArray(formulario?.perguntas) ? formulario.perguntas : [];
+  const resp = respostas && typeof respostas === 'object' ? respostas : {};
+  const relevantes = perguntas.filter((p) => p.papel !== 'informativa' && p.tipo !== 'texto' && p.tipo !== 'texto_longo');
+  if (!relevantes.length) return { classificacao: 'ATENDE', aderencia: 100, detalhe: [] };
+
+  const atende = (p, r) => {
+    if (r == null || r === '' || (Array.isArray(r) && !r.length)) return 'faltando';
+    if (p.respostaIdeal == null || p.respostaIdeal === '') return 'sim'; // sem gabarito: basta responder
+    if (p.tipo === 'numero' || p.tipo === 'escala') return Number(r) >= Number(p.respostaIdeal) ? 'sim' : 'nao';
+    if (p.tipo === 'multipla') { const arr = Array.isArray(r) ? r.map((x) => String(x).toLowerCase()) : [String(r).toLowerCase()]; const ideais = Array.isArray(p.respostaIdeal) ? p.respostaIdeal : [p.respostaIdeal]; return ideais.some((i) => arr.includes(String(i).toLowerCase())) ? 'sim' : 'nao'; }
+    return String(r).toLowerCase() === String(p.respostaIdeal).toLowerCase() ? 'sim' : 'nao';
+  };
+
+  let elimFail = false, faltando = false, prioFail = false, pesoTotal = 0, pesoOk = 0;
+  const detalhe = relevantes.map((p) => {
+    const ok = atende(p, resp[p.id]);
+    const peso = Number(p.peso) || 1; pesoTotal += peso; if (ok === 'sim') pesoOk += peso;
+    if (p.papel === 'eliminatoria') { if (ok === 'nao') elimFail = true; if (ok === 'faltando') faltando = true; }
+    if (p.papel === 'prioridade') { if (ok === 'nao') prioFail = true; if (ok === 'faltando' && p.obrigatoria) faltando = true; }
+    if (p.obrigatoria && ok === 'faltando') faltando = true;
+    return { label: p.texto, ok, papel: p.papel };
+  });
+  let classificacao;
+  if (elimFail) classificacao = 'NAO_ATENDE';
+  else if (faltando) classificacao = 'INCOMPLETO';
+  else if (prioFail) classificacao = 'PARCIAL';
+  else classificacao = 'ATENDE';
+  const aderencia = pesoTotal ? Math.round((pesoOk / pesoTotal) * 100) : 100;
+  return { classificacao, aderencia, detalhe };
+}
+
+// Aplica a classificação a uma candidatura (usa o formulário da vaga + respostas guardadas).
+async function classificarECaptar(candidaturaId) {
+  const cx = await prisma.candidatura.findUnique({ where: { id: candidaturaId }, include: { vaga: { select: { formulario: true } } } });
+  if (!cx) return null;
+  const r = classificarCandidatura(cx.vaga?.formulario, cx.respostas);
+  await prisma.candidatura.update({ where: { id: candidaturaId }, data: { classificacao: r.classificacao, aderencia: r.aderencia, classificacaoDetalhe: r.detalhe } });
+  return r;
+}
+
+function rhSlugify(nome) {
+  return String(nome || 'loja').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 40) || 'loja';
+}
+async function getOrCreateRecrutamentoConfig() {
+  const existente = await prisma.recrutamentoConfig.findFirst();
+  if (existente) return existente;
+  const empresaId = getEmpresaIdAtual();
+  const emp = await prisma.empresa.findUnique({ where: { id: empresaId }, select: { nome: true } }).catch(() => null);
+  let base = rhSlugify(emp?.nome); let slug = base; let n = 1;
+  while (await prisma.recrutamentoConfig.findUnique({ where: { slug } })) { n++; slug = `${base}-${n}`; }
+  return prisma.recrutamentoConfig.create({ data: { slug } });
+}
+async function rhSyncTags(tags) {
+  if (!Array.isArray(tags)) return;
+  for (const nome of tags) { try { await prisma.recrutamentoTag.create({ data: { nome: String(nome).slice(0, 60) } }); } catch { /* já existe */ } }
+}
+
+// Campos PERMANENTES do candidato (nada de status/score/currículo — esses não existem aqui).
+function rhCandidatoInput(body) {
+  const d = {};
+  if (body.nome !== undefined) { const v = String(body.nome).trim(); if (!v) throw { http: 400, msg: 'Informe o nome.' }; d.nome = v.slice(0, 160); }
+  if (body.email !== undefined) d.email = rhEmailNorm(body.email);
+  if (body.endereco !== undefined) d.endereco = rhStr(body.endereco, 200);
+  if (body.cidade !== undefined) d.cidade = rhStr(body.cidade, 120);
+  if (body.bairro !== undefined) d.bairro = rhStr(body.bairro, 120);
+  if (body.nascimento !== undefined) d.nascimento = rhData(body.nascimento);
+  if (body.linkedin !== undefined) d.linkedin = rhStr(body.linkedin, 300);
+  if (body.instagram !== undefined) d.instagram = rhStr(body.instagram, 120);
+  if (body.funcoesInteresse !== undefined) d.funcoesInteresse = rhArr(body.funcoesInteresse).slice(0, 20);
+  if (body.pretensaoSalarial !== undefined) d.pretensaoSalarial = body.pretensaoSalarial === '' || body.pretensaoSalarial == null ? null : rhNum(body.pretensaoSalarial);
+  if (body.disponivelEm !== undefined) d.disponivelEm = rhData(body.disponivelEm);
+  if (body.tipoVinculo !== undefined) d.tipoVinculo = RH_VINCULOS.includes(body.tipoVinculo) ? body.tipoVinculo : null;
+  if (body.disponibilidade !== undefined && body.disponibilidade && typeof body.disponibilidade === 'object') d.disponibilidade = body.disponibilidade;
+  if (body.experienciasRapidas !== undefined) d.experienciasRapidas = rhArr(body.experienciasRapidas).slice(0, 40);
+  if (body.respostasTriagem !== undefined && body.respostasTriagem && typeof body.respostasTriagem === 'object') d.respostasTriagem = body.respostasTriagem;
+  if (body.tags !== undefined) d.tags = rhArr(body.tags).slice(0, 40);
+  if (body.observacoesInternas !== undefined) d.observacoesInternas = body.observacoesInternas ? String(body.observacoesInternas).slice(0, 2000) : null;
+  return d;
+}
+// Só os campos que o formulário PÚBLICO pode tocar (nunca dados internos).
+function rhCandidatoInputPublico(body) {
+  return rhCandidatoInput({
+    nome: body.nome, email: body.email, endereco: body.endereco, cidade: body.cidade, bairro: body.bairro, nascimento: body.nascimento,
+    linkedin: body.linkedin, instagram: body.instagram, funcoesInteresse: body.funcoesInteresse,
+    pretensaoSalarial: body.pretensaoSalarial, disponivelEm: body.disponivelEm, tipoVinculo: body.tipoVinculo,
+    disponibilidade: body.disponibilidade, experienciasRapidas: body.experienciasRapidas,
+  });
+}
+
+// ---------- ADMIN: config ----------
+app.get('/api/recrutamento/config', async (req, res) => {
+  try { const cfg = await getOrCreateRecrutamentoConfig(); res.json({ ...cfg, formulario: cfg.formulario || formPadrao(false) }); }
+  catch (err) { console.error(err); res.status(err?.http || 500).json({ error: err?.msg || 'Erro interno' }); }
+});
+app.put('/api/recrutamento/config', async (req, res) => {
+  try {
+    const cfg = await getOrCreateRecrutamentoConfig();
+    const data = {};
+    if (req.body?.publicoAtivo !== undefined) data.publicoAtivo = !!req.body.publicoAtivo;
+    if (req.body?.retencaoMeses !== undefined) { const m = Number(req.body.retencaoMeses); if (Number.isInteger(m) && m > 0 && m <= 120) data.retencaoMeses = m; }
+    if (req.body?.formulario !== undefined) { const f = sanitizarFormulario(req.body.formulario); if (f) data.formulario = f; }
+    const upd = await prisma.recrutamentoConfig.update({ where: { id: cfg.id }, data });
+    res.json({ ...upd, formulario: upd.formulario || formPadrao(false) });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+// ---------- ADMIN: KPIs ----------
+app.get('/api/recrutamento/kpis', async (req, res) => {
+  try {
+    const agora = new Date();
+    const trintaDias = new Date(agora.getTime() - 30 * 24 * 3600 * 1000);
+    const [ativos, novos30, entrevistas, preSelRaw, vagasAbertas, altaRaw] = await Promise.all([
+      prisma.candidato.count({ where: { anonimizado: false } }),
+      prisma.candidato.count({ where: { anonimizado: false, criadoEm: { gte: trintaDias } } }),
+      prisma.entrevistaCandidato.count({ where: { status: 'AGENDADA', quando: { gte: agora } } }),
+      prisma.candidatura.findMany({ where: { status: 'PRE_SELECIONADO' }, select: { candidatoId: true }, distinct: ['candidatoId'] }),
+      prisma.vaga.count({ where: { status: 'ABERTA' } }),
+      prisma.candidatura.findMany({ where: { score: { gte: 80 }, scoreQualidade: { in: ['COMPLETO', 'PARCIAL'] } }, select: { candidatoId: true }, distinct: ['candidatoId'] }),
+    ]);
+    res.json({ ativos, novos30, entrevistas, preSelecionados: preSelRaw.length, altaCompatibilidade: altaRaw.length, vagasAbertas });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+// ---------- ADMIN: cargos ----------
+app.get('/api/recrutamento/cargos', async (req, res) => {
+  try { res.json(await prisma.cargo.findMany({ orderBy: { nome: 'asc' } })); }
+  catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+app.post('/api/recrutamento/cargos', async (req, res) => {
+  try { const nome = String(req.body?.nome ?? '').trim(); if (!nome) return res.status(400).json({ error: 'Informe o cargo.' }); res.status(201).json(await prisma.cargo.create({ data: { nome: nome.slice(0, 80) } })); }
+  catch (err) { if (err?.code === 'P2002') return res.status(409).json({ error: 'Cargo já existe.' }); console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+app.delete('/api/recrutamento/cargos/:id', async (req, res) => {
+  try { await prisma.cargo.deleteMany({ where: { id: Number(req.params.id) } }); res.json({ ok: true }); }
+  catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+// ---------- ADMIN: tags ----------
+app.get('/api/recrutamento/tags', async (req, res) => {
+  try { res.json(await prisma.recrutamentoTag.findMany({ orderBy: { nome: 'asc' } })); }
+  catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+app.post('/api/recrutamento/tags', async (req, res) => {
+  try { const nome = String(req.body?.nome ?? '').trim(); if (!nome) return res.status(400).json({ error: 'Informe a tag.' }); await rhSyncTags([nome]); res.status(201).json(await prisma.recrutamentoTag.findFirst({ where: { nome: nome.slice(0, 60) } })); }
+  catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+// ---------- ADMIN: vagas ----------
+function rhVagaInput(body) {
+  const d = {};
+  if (body.titulo !== undefined) { const v = String(body.titulo).trim(); if (!v) throw { http: 400, msg: 'Informe o título da vaga.' }; d.titulo = v.slice(0, 160); }
+  if (body.cargoId !== undefined) d.cargoId = body.cargoId ? Number(body.cargoId) : null;
+  if (body.status !== undefined) { if (!RH_VAGA_STATUS.includes(body.status)) throw { http: 400, msg: 'Status inválido' }; d.status = body.status; }
+  if (body.quantidade !== undefined) { const q = Number(body.quantidade); d.quantidade = Number.isInteger(q) && q > 0 ? q : 1; }
+  if (body.descricao !== undefined) d.descricao = body.descricao ? String(body.descricao).slice(0, 4000) : null;
+  if (body.jornada !== undefined) d.jornada = rhStr(body.jornada, 120);
+  if (body.turno !== undefined) d.turno = rhArr(body.turno, ['manha', 'tarde', 'noite', 'madrugada']);
+  if (body.diasTrabalho !== undefined) d.diasTrabalho = rhArr(body.diasTrabalho, ['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom']);
+  if (body.salarioMin !== undefined) d.salarioMin = body.salarioMin === '' || body.salarioMin == null ? null : rhNum(body.salarioMin);
+  if (body.salarioMax !== undefined) d.salarioMax = body.salarioMax === '' || body.salarioMax == null ? null : rhNum(body.salarioMax);
+  if (body.inicioPrevisto !== undefined) d.inicioPrevisto = rhData(body.inicioPrevisto);
+  if (body.requisitos !== undefined) d.requisitos = body.requisitos ? String(body.requisitos).slice(0, 2000) : null;
+  if (body.diferenciais !== undefined) d.diferenciais = body.diferenciais ? String(body.diferenciais).slice(0, 2000) : null;
+  if (body.responsavel !== undefined) d.responsavel = rhStr(body.responsavel, 120);
+  if (body.observacoes !== undefined) d.observacoes = body.observacoes ? String(body.observacoes).slice(0, 2000) : null;
+  if (body.atividadesEssenciais !== undefined) d.atividadesEssenciais = rhArr(body.atividadesEssenciais).slice(0, 40);
+  if (body.perguntas !== undefined) d.perguntas = Array.isArray(body.perguntas) ? body.perguntas.slice(0, 30) : null;
+  if (body.pesos !== undefined && body.pesos && typeof body.pesos === 'object') d.pesos = body.pesos;
+  if (body.formulario !== undefined) { const f = sanitizarFormulario(body.formulario); if (f) d.formulario = f; }
+  return d;
+}
+async function rhVagaComStats(vagas) {
+  const ids = vagas.map((v) => v.id);
+  if (!ids.length) return [];
+  const cands = await prisma.candidatura.findMany({ where: { vagaId: { in: ids } }, select: { vagaId: true, classificacao: true, classificacaoManual: true } });
+  return vagas.map((v) => {
+    const cs = cands.filter((c) => c.vagaId === v.id);
+    const efetiva = (c) => c.classificacaoManual || c.classificacao;
+    const atende = cs.filter((c) => efetiva(c) === 'ATENDE').length;
+    const parcial = cs.filter((c) => efetiva(c) === 'PARCIAL').length;
+    return { ...v, stats: { inscritos: cs.length, atende, parcial } };
+  });
+}
+app.get('/api/recrutamento/vagas', async (req, res) => {
+  try {
+    const where = {};
+    if (req.query.status && RH_VAGA_STATUS.includes(req.query.status)) where.status = req.query.status;
+    const vagas = await prisma.vaga.findMany({ where, orderBy: { criadoEm: 'desc' }, include: { cargo: { select: { nome: true } } } });
+    res.json(await rhVagaComStats(vagas));
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+app.get('/api/recrutamento/vagas/:id', async (req, res) => {
+  try {
+    const v = await prisma.vaga.findUnique({ where: { id: Number(req.params.id) }, include: { cargo: { select: { nome: true } } } });
+    if (!v) return res.status(404).json({ error: 'Vaga não encontrada' });
+    res.json({ ...v, formulario: v.formulario || formPadrao(true) });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+// Inscritos da vaga (lista simples, sem Kanban)
+app.get('/api/recrutamento/vagas/:id/candidaturas', async (req, res) => {
+  try {
+    const vagaId = Number(req.params.id);
+    const cxs = await prisma.candidatura.findMany({ where: { vagaId }, orderBy: [{ aderencia: 'desc' }, { criadoEm: 'desc' }], include: { candidato: { select: { id: true, nome: true, telefone: true, cidade: true, bairro: true, situacao: true, funcoesInteresse: true } } } });
+    res.json(cxs.map((c) => ({ id: c.id, candidatoId: c.candidatoId, nome: c.candidato?.nome, telefone: c.candidato?.telefone, cidade: c.candidato?.cidade, bairro: c.candidato?.bairro, situacao: c.candidato?.situacao, funcoes: c.candidato?.funcoesInteresse, classificacao: c.classificacaoManual || c.classificacao, classificacaoManual: c.classificacaoManual, aderencia: c.aderencia, detalhe: c.classificacaoDetalhe, criadoEm: c.criadoEm })));
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+app.post('/api/recrutamento/vagas', async (req, res) => {
+  try {
+    const data = rhVagaInput(req.body || {});
+    if (!data.titulo) return res.status(400).json({ error: 'Informe o título da vaga.' });
+    if (data.formulario === undefined) data.formulario = formPadrao(true);
+    res.status(201).json(await prisma.vaga.create({ data }));
+  } catch (err) { console.error(err); res.status(err?.http || 500).json({ error: err?.msg || 'Erro interno' }); }
+});
+app.put('/api/recrutamento/vagas/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const existe = await prisma.vaga.findUnique({ where: { id }, select: { id: true } });
+    if (!existe) return res.status(404).json({ error: 'Vaga não encontrada' });
+    const data = rhVagaInput(req.body || {});
+    const v = await prisma.vaga.update({ where: { id }, data });
+    // Formulário mudou → reclassifica todas as candidaturas da vaga
+    if (data.formulario !== undefined) { const cxs = await prisma.candidatura.findMany({ where: { vagaId: id }, select: { id: true } }); for (const c of cxs) await classificarECaptar(c.id); }
+    res.json(v);
+  } catch (err) { console.error(err); res.status(err?.http || 500).json({ error: err?.msg || 'Erro interno' }); }
+});
+app.delete('/api/recrutamento/vagas/:id', async (req, res) => {
+  try { await prisma.vaga.deleteMany({ where: { id: Number(req.params.id) } }); res.json({ ok: true }); }
+  catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+// Override manual da classificação de uma candidatura
+app.put('/api/recrutamento/candidaturas/:id/classificacao', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const val = req.body?.classificacao;
+    const permitido = ['ATENDE', 'PARCIAL', 'NAO_ATENDE', 'INCOMPLETO', null, ''];
+    if (!permitido.includes(val)) return res.status(400).json({ error: 'Classificação inválida' });
+    await prisma.candidatura.update({ where: { id }, data: { classificacaoManual: val || null } });
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+// ---------- ADMIN: candidatos (perfil) ----------
+function rhResumoCandidato(c) {
+  const cxs = c.candidaturas || [];
+  const ativas = cxs.filter((x) => !['REPROVADO', 'SEM_RETORNO'].includes(x.status));
+  const best = cxs.filter((x) => x.score != null).sort((a, b) => b.score - a.score)[0] || null;
+  const principal = ativas[0] || cxs[0] || null;
+  return {
+    id: c.id, nome: c.nome, telefone: c.telefone, email: c.email, cidade: c.cidade, bairro: c.bairro,
+    funcoesInteresse: c.funcoesInteresse, experienciasRapidas: c.experienciasRapidas, disponibilidade: c.disponibilidade,
+    origem: c.origem, tags: c.tags, bancoTalentos: c.bancoTalentos, situacao: c.situacao, atualizadoEm: c.atualizadoEm, criadoEm: c.criadoEm,
+    candidaturasAtivas: ativas.length, totalCandidaturas: cxs.length,
+    vagaPrincipal: principal ? { candidaturaId: principal.id, vagaId: principal.vagaId, titulo: principal.vaga?.titulo, status: principal.status } : null,
+    compat: best?.score ?? null, compatQualidade: best?.scoreQualidade ?? null,
+    proximaEntrevista: (c.entrevistas || [])[0]?.quando ?? null,
+    candidaturas: cxs.map((x) => ({ id: x.id, vagaId: x.vagaId, titulo: x.vaga?.titulo, status: x.status, score: x.score, qualidade: x.scoreQualidade })),
+  };
+}
+app.get('/api/recrutamento/candidatos', async (req, res) => {
+  try {
+    const q = String(req.query.q ?? '').trim().toLowerCase();
+    const where = { anonimizado: false };
+    if (req.query.situacao && ['ATIVO', 'ARQUIVADO', 'CONTRATADO'].includes(req.query.situacao)) where.situacao = req.query.situacao;
+    if (req.query.origem && RH_ORIGENS.includes(req.query.origem)) where.origem = req.query.origem;
+    if (req.query.funcao) where.funcoesInteresse = { has: String(req.query.funcao) };
+    if (req.query.experiencia) where.experienciasRapidas = { has: String(req.query.experiencia) };
+    if (req.query.tag) where.tags = { has: String(req.query.tag) };
+    const cxWhere = {};
+    if (req.query.status && RH_STATUS.includes(req.query.status)) cxWhere.status = req.query.status;
+    if (req.query.vagaId) cxWhere.vagaId = Number(req.query.vagaId);
+    if (Object.keys(cxWhere).length) where.candidaturas = { some: cxWhere };
+    const agora = new Date();
+    const lista = await prisma.candidato.findMany({
+      where, orderBy: { atualizadoEm: 'desc' }, take: 1000,
+      include: { candidaturas: { select: { id: true, vagaId: true, status: true, score: true, scoreQualidade: true, vaga: { select: { titulo: true } } } }, entrevistas: { where: { status: 'AGENDADA', quando: { gte: agora } }, orderBy: { quando: 'asc' }, take: 1 } },
+    });
+    let itens = lista.map(rhResumoCandidato);
+    if (q) itens = itens.filter((c) => c.nome.toLowerCase().includes(q) || (c.telefone || '').includes(q) || (c.email || '').toLowerCase().includes(q));
+    if (req.query.vagaId) { const vid = Number(req.query.vagaId); itens = itens.map((c) => ({ ...c, compat: c.candidaturas.find((x) => x.vagaId === vid)?.score ?? c.compat })); }
+    const cmin = req.query.compatMin != null && req.query.compatMin !== '' ? Number(req.query.compatMin) : null;
+    if (cmin != null) itens = itens.filter((c) => (c.compat ?? -1) >= cmin);
+    if (req.query.turno) itens = itens.filter((c) => Array.isArray(c.disponibilidade?.turnos) && c.disponibilidade.turnos.includes(String(req.query.turno)));
+    const sort = String(req.query.sort ?? 'compat');
+    itens.sort((a, b) => {
+      if (sort === 'recentes') return new Date(b.criadoEm) - new Date(a.criadoEm);
+      if (sort === 'movimentacao') return new Date(b.atualizadoEm) - new Date(a.atualizadoEm);
+      if (sort === 'entrevista') return (a.proximaEntrevista ? new Date(a.proximaEntrevista) : Infinity) - (b.proximaEntrevista ? new Date(b.proximaEntrevista) : Infinity);
+      return (b.compat ?? -1) - (a.compat ?? -1);
+    });
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const pageSize = Math.min(100, Math.max(5, Number(req.query.pageSize) || 20));
+    res.json({ itens: itens.slice((page - 1) * pageSize, page * pageSize), total: itens.length, page, pageSize });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+app.get('/api/recrutamento/candidatos/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const c = await prisma.candidato.findUnique({
+      where: { id },
+      include: {
+        experiencias: { orderBy: { criadoEm: 'desc' } },
+        candidaturas: {
+          orderBy: { criadoEm: 'desc' },
+          include: {
+            vaga: { select: { id: true, titulo: true, status: true, formulario: true } },
+            historico: { orderBy: { criadoEm: 'desc' }, take: 60 },
+            avaliacoes: { orderBy: { criadoEm: 'desc' } },
+            contatos: { orderBy: { criadoEm: 'desc' } },
+            entrevistas: { orderBy: { quando: 'desc' } },
+          },
+        },
+        historico: { where: { candidaturaId: null }, orderBy: { criadoEm: 'desc' }, take: 40 },
+      },
+    });
+    if (!c) return res.status(404).json({ error: 'Candidato não encontrado' });
+    const vagasAbertas = await prisma.vaga.findMany({ where: { status: 'ABERTA' }, select: { id: true, titulo: true }, orderBy: { titulo: 'asc' } });
+    const cfg = await prisma.recrutamentoConfig.findFirst({ select: { formulario: true } }).catch(() => null);
+    res.json({ ...c, vagasAbertas, configForm: cfg?.formulario || null });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+app.post('/api/recrutamento/candidatos', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const telefone = rhTelefone(body.telefone);
+    const telefoneNorm = rhNormTelefone(body.telefone);
+    if (!telefoneNorm) return res.status(400).json({ error: 'Informe um telefone válido.' });
+    const data = rhCandidatoInput(body);
+    if (!data.nome) return res.status(400).json({ error: 'Informe o nome.' });
+    const existe = await prisma.candidato.findFirst({ where: { telefoneNorm } });
+    if (existe) return res.status(409).json({ error: 'Já existe um candidato com esse telefone.', candidatoId: existe.id });
+    data.telefone = telefone; data.telefoneNorm = telefoneNorm;
+    data.origem = RH_ORIGENS.includes(body.origem) ? body.origem : 'MANUAL';
+    if (body.tags) await rhSyncTags(data.tags);
+    const cand = await prisma.candidato.create({ data });
+    await prisma.candidatoHistorico.create({ data: { candidatoId: cand.id, tipo: 'SISTEMA', descricao: 'Candidato cadastrado', usuario: usuarioAtual() } });
+    if (Array.isArray(body.experiencias)) await salvarExperiencias(cand.id, body.experiencias);
+    if (body.vagaId) { const vaga = await prisma.vaga.findUnique({ where: { id: Number(body.vagaId) } }); if (vaga) { const cx = await prisma.candidatura.create({ data: { candidatoId: cand.id, vagaId: vaga.id } }); await registrarScoreCandidatura(cx.id, 'Cadastro inicial'); await prisma.candidatoHistorico.create({ data: { candidatoId: cand.id, candidaturaId: cx.id, tipo: 'STATUS', para: 'NOVO', descricao: `Candidatura em ${vaga.titulo}`, usuario: usuarioAtual() } }); } }
+    res.status(201).json(cand);
+  } catch (err) { if (err?.code === 'P2002') return res.status(409).json({ error: 'Já existe um candidato com esse telefone.' }); console.error(err); res.status(err?.http || 500).json({ error: err?.msg || 'Erro interno' }); }
+});
+app.put('/api/recrutamento/candidatos/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const existe = await prisma.candidato.findUnique({ where: { id }, select: { id: true } });
+    if (!existe) return res.status(404).json({ error: 'Candidato não encontrado' });
+    const body = req.body || {};
+    const data = rhCandidatoInput(body);
+    if (body.telefone !== undefined) { const n = rhNormTelefone(body.telefone); if (!n) return res.status(400).json({ error: 'Telefone inválido' }); data.telefone = rhTelefone(body.telefone); data.telefoneNorm = n; }
+    if (body.bancoTalentos !== undefined) data.bancoTalentos = !!body.bancoTalentos;
+    if (body.situacao !== undefined && ['ATIVO', 'ARQUIVADO', 'CONTRATADO'].includes(body.situacao)) data.situacao = body.situacao;
+    if (body.tags) await rhSyncTags(data.tags);
+    const cand = await prisma.candidato.update({ where: { id }, data });
+    // Perfil mudou (disponibilidade/experiências/triagem) → recalcula candidaturas
+    if (data.disponibilidade !== undefined || data.experienciasRapidas !== undefined || data.respostasTriagem !== undefined || data.funcoesInteresse !== undefined) await recalcularCandidaturasDoCandidato(id, 'Atualização do perfil do candidato');
+    res.json(cand);
+  } catch (err) { if (err?.code === 'P2002') return res.status(409).json({ error: 'Já existe um candidato com esse telefone.' }); console.error(err); res.status(err?.http || 500).json({ error: err?.msg || 'Erro interno' }); }
+});
+// Vincular candidato a uma vaga (nova candidatura)
+app.post('/api/recrutamento/candidatos/:id/candidatura', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const vagaId = Number(req.body?.vagaId);
+    const cand = await prisma.candidato.findUnique({ where: { id } });
+    const vaga = await prisma.vaga.findUnique({ where: { id: vagaId } });
+    if (!cand || !vaga) return res.status(404).json({ error: 'Candidato ou vaga não encontrado' });
+    const jaTem = await prisma.candidatura.findFirst({ where: { candidatoId: id, vagaId } });
+    if (jaTem) return res.status(409).json({ error: 'Este candidato já participa dessa vaga.', candidaturaId: jaTem.id });
+    const cx = await prisma.candidatura.create({ data: { candidatoId: id, vagaId } });
+    await registrarScoreCandidatura(cx.id, 'Cadastro inicial');
+    await prisma.candidatoHistorico.create({ data: { candidatoId: id, candidaturaId: cx.id, tipo: 'STATUS', para: 'NOVO', descricao: `Candidatura em ${vaga.titulo}`, usuario: usuarioAtual() } });
+    res.status(201).json(cx);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+// Anonimização / exclusão (LGPD — irreversível)
+app.delete('/api/recrutamento/candidatos/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const existe = await prisma.candidato.findUnique({ where: { id }, select: { id: true } });
+    if (!existe) return res.status(404).json({ error: 'Candidato não encontrado' });
+    // Remove dados identificáveis e textos livres; preserva só estatística (status/score/vaga/origem/datas).
+    await prisma.experienciaProfissional.deleteMany({ where: { candidatoId: id } });
+    await prisma.avaliacaoCandidato.deleteMany({ where: { candidatoId: id } });
+    await prisma.contatoCandidato.deleteMany({ where: { candidatoId: id } });
+    await prisma.entrevistaCandidato.deleteMany({ where: { candidatoId: id } });
+    await prisma.candidatoHistorico.updateMany({ where: { candidatoId: id }, data: { descricao: null, usuario: null } });
+    await prisma.candidato.update({ where: { id }, data: { anonimizado: true, situacao: 'ARQUIVADO', anonimizadoEm: new Date(), nome: 'Candidato anonimizado', telefone: '', telefoneNorm: `anon-${id}`, email: null, endereco: null, cidade: null, bairro: null, nascimento: null, linkedin: null, instagram: null, observacoesInternas: null, funcoesInteresse: [], experienciasRapidas: [], tags: [], disponibilidade: null, respostasTriagem: null, respostasFormulario: null } });
+    await prisma.candidatoHistorico.create({ data: { candidatoId: id, tipo: 'SISTEMA', descricao: 'Dados anonimizados (LGPD)', usuario: usuarioAtual() } });
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+// ---------- ADMIN: candidaturas (processo) ----------
+app.get('/api/recrutamento/candidaturas/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const cx = await prisma.candidatura.findUnique({
+      where: { id },
+      include: {
+        candidato: { select: { id: true, nome: true, telefone: true, email: true, cidade: true, bairro: true } },
+        vaga: { select: { id: true, titulo: true, status: true } },
+        historico: { orderBy: { criadoEm: 'desc' }, take: 100 },
+        avaliacoes: { orderBy: { criadoEm: 'desc' } },
+        contatos: { orderBy: { criadoEm: 'desc' } },
+        entrevistas: { orderBy: { quando: 'desc' } },
+        scoreHist: { orderBy: { criadoEm: 'desc' }, take: 20 },
+      },
+    });
+    if (!cx) return res.status(404).json({ error: 'Candidatura não encontrada' });
+    res.json(cx);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+// Alterar status (com histórico) — só desta candidatura
+app.put('/api/recrutamento/candidaturas/:id/status', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const novo = String(req.body?.status ?? '');
+    if (!RH_STATUS.includes(novo)) return res.status(400).json({ error: 'Status inválido' });
+    const cx = await prisma.candidatura.findUnique({ where: { id }, select: { status: true, candidatoId: true } });
+    if (!cx) return res.status(404).json({ error: 'Candidatura não encontrada' });
+    if (cx.status === novo) return res.json({ ok: true, semMudanca: true });
+    const data = { status: novo };
+    if (novo === 'REPROVADO' && req.body?.motivoReprovacao) data.motivoReprovacao = rhStr(req.body.motivoReprovacao, 200);
+    await prisma.candidatura.update({ where: { id }, data });
+    if (novo === 'BANCO_TALENTOS') await prisma.candidato.update({ where: { id: cx.candidatoId }, data: { bancoTalentos: true } }).catch(() => {});
+    await prisma.candidatoHistorico.create({ data: { candidatoId: cx.candidatoId, candidaturaId: id, tipo: 'STATUS', de: cx.status, para: novo, descricao: req.body?.observacao ? String(req.body.observacao).slice(0, 500) : (data.motivoReprovacao || null), usuario: usuarioAtual() } });
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+app.post('/api/recrutamento/candidaturas/:id/observacao', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const cx = await prisma.candidatura.findUnique({ where: { id }, select: { candidatoId: true } });
+    if (!cx) return res.status(404).json({ error: 'Candidatura não encontrada' });
+    const texto = String(req.body?.descricao ?? '').trim();
+    if (!texto) return res.status(400).json({ error: 'Informe a observação.' });
+    const data = {};
+    if (req.body?.proximaAcao !== undefined) data.proximaAcao = rhStr(req.body.proximaAcao, 200);
+    if (req.body?.dataRetorno !== undefined) data.dataRetorno = rhData(req.body.dataRetorno);
+    if (Object.keys(data).length) await prisma.candidatura.update({ where: { id }, data });
+    await prisma.candidatoHistorico.create({ data: { candidatoId: cx.candidatoId, candidaturaId: id, tipo: 'OBS', descricao: texto.slice(0, 2000), usuario: usuarioAtual() } });
+    res.status(201).json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+app.post('/api/recrutamento/candidaturas/:id/avaliacao', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const cx = await prisma.candidatura.findUnique({ where: { id }, select: { candidatoId: true } });
+    if (!cx) return res.status(404).json({ error: 'Candidatura não encontrada' });
+    const b = req.body || {};
+    const evidencias = String(b.evidencias ?? '').trim();
+    if (!evidencias) return res.status(400).json({ error: 'Descreva as evidências da avaliação.' });
+    const crit = {}; for (const k of ['comunicacao', 'organizacao', 'postura', 'tecnico', 'compatibilidade', 'disponibilidade', 'interesse', 'treinamento']) { const n = Number(b[k]); if (Number.isInteger(n) && n >= 1 && n <= 5) crit[k] = n; }
+    const av = await prisma.avaliacaoCandidato.create({ data: { candidatoId: cx.candidatoId, candidaturaId: id, ...crit, evidencias: evidencias.slice(0, 2000), autor: usuarioAtual() } });
+    const sh = scoreHumano(crit);
+    if (sh != null) { await prisma.candidatura.update({ where: { id }, data: { avaliacaoGestor: sh } }); await registrarScoreCandidatura(id, 'Nova avaliação do gestor'); }
+    await prisma.candidatoHistorico.create({ data: { candidatoId: cx.candidatoId, candidaturaId: id, tipo: 'AVALIACAO', descricao: `Avaliação registrada${sh != null ? ` (nota humana ${sh}/100)` : ''}`, usuario: usuarioAtual() } });
+    res.status(201).json(av);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+app.post('/api/recrutamento/candidaturas/:id/contato', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const cx = await prisma.candidatura.findUnique({ where: { id }, select: { candidatoId: true } });
+    if (!cx) return res.status(404).json({ error: 'Candidatura não encontrada' });
+    const tipo = String(req.body?.tipo ?? ''); const resultado = String(req.body?.resultado ?? '');
+    if (!RH_CONTATO_TIPO.includes(tipo)) return res.status(400).json({ error: 'Tipo de contato inválido' });
+    if (!RH_CONTATO_RES.includes(resultado)) return res.status(400).json({ error: 'Resultado inválido' });
+    const ct = await prisma.contatoCandidato.create({ data: { candidatoId: cx.candidatoId, candidaturaId: id, tipo, resultado, observacao: req.body?.observacao ? String(req.body.observacao).slice(0, 1000) : null, proximaAcao: rhStr(req.body?.proximaAcao, 200), dataRetorno: rhData(req.body?.dataRetorno), autor: usuarioAtual() } });
+    const data = {}; if (req.body?.proximaAcao) data.proximaAcao = rhStr(req.body.proximaAcao, 200); if (req.body?.dataRetorno) data.dataRetorno = rhData(req.body.dataRetorno);
+    if (Object.keys(data).length) await prisma.candidatura.update({ where: { id }, data });
+    await prisma.candidatoHistorico.create({ data: { candidatoId: cx.candidatoId, candidaturaId: id, tipo: 'CONTATO', para: resultado, descricao: `${tipo}: ${resultado}`, usuario: usuarioAtual() } });
+    res.status(201).json(ct);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+app.post('/api/recrutamento/candidaturas/:id/entrevista', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const cx = await prisma.candidatura.findUnique({ where: { id }, select: { candidatoId: true } });
+    if (!cx) return res.status(404).json({ error: 'Candidatura não encontrada' });
+    const quando = req.body?.quando ? new Date(req.body.quando) : null;
+    if (!quando || isNaN(quando.getTime())) return res.status(400).json({ error: 'Informe data e hora válidas.' });
+    const tipo = RH_ENTREVISTA_TIPO.includes(req.body?.tipo) ? req.body.tipo : 'PRESENCIAL';
+    const ent = await prisma.entrevistaCandidato.create({ data: { candidatoId: cx.candidatoId, candidaturaId: id, quando, tipo, responsavel: rhStr(req.body?.responsavel, 120), local: rhStr(req.body?.local, 300), observacoes: req.body?.observacoes ? String(req.body.observacoes).slice(0, 1000) : null } });
+    await prisma.candidatura.update({ where: { id }, data: { status: 'ENTREVISTA_AGENDADA' } });
+    await prisma.candidatoHistorico.create({ data: { candidatoId: cx.candidatoId, candidaturaId: id, tipo: 'ENTREVISTA', para: 'ENTREVISTA_AGENDADA', descricao: `Entrevista ${tipo} agendada`, usuario: usuarioAtual() } });
+    res.status(201).json(ent);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+app.post('/api/recrutamento/candidaturas/:id/recalcular-score', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const cx = await prisma.candidatura.findUnique({ where: { id }, select: { id: true } });
+    if (!cx) return res.status(404).json({ error: 'Candidatura não encontrada' });
+    const r = await registrarScoreCandidatura(id, 'Recálculo manual');
+    res.json(r || { ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+app.delete('/api/recrutamento/candidaturas/:id', async (req, res) => {
+  try { await prisma.candidatura.deleteMany({ where: { id: Number(req.params.id) } }); res.json({ ok: true }); }
+  catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+// Kanban: CANDIDATURAS agrupadas por status (opcional ?vagaId)
+app.get('/api/recrutamento/kanban', async (req, res) => {
+  try {
+    const where = {};
+    if (req.query.vagaId) where.vagaId = Number(req.query.vagaId);
+    const agora = new Date();
+    const cxs = await prisma.candidatura.findMany({
+      where, orderBy: { atualizadoEm: 'desc' }, take: 2000,
+      include: { candidato: { select: { id: true, nome: true, tags: true, anonimizado: true } }, vaga: { select: { titulo: true } }, entrevistas: { where: { status: 'AGENDADA', quando: { gte: agora } }, orderBy: { quando: 'asc' }, take: 1 } },
+    });
+    const colunas = {}; for (const s of RH_STATUS) colunas[s] = [];
+    for (const cx of cxs) {
+      if (cx.candidato?.anonimizado) continue;
+      colunas[cx.status]?.push({
+        candidaturaId: cx.id, candidatoId: cx.candidatoId, vagaId: cx.vagaId, nome: cx.candidato?.nome, vagaTitulo: cx.vaga?.titulo,
+        status: cx.status, score: cx.score, qualidade: cx.scoreQualidade, tags: cx.candidato?.tags || [],
+        atualizadoEm: cx.atualizadoEm, proximaAcao: cx.proximaAcao, proximaEntrevista: (cx.entrevistas || [])[0]?.quando ?? null,
+      });
+    }
+    res.json({ status: RH_STATUS, colunas });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+// ---------- ADMIN: LGPD (visão de gestão manual) ----------
+app.get('/api/recrutamento/lgpd', async (req, res) => {
+  try {
+    const cfg = await getOrCreateRecrutamentoConfig();
+    const agora = new Date();
+    const msAlerta = agora.getTime() - Math.max(1, cfg.retencaoMeses - 1) * 30 * 24 * 3600 * 1000;
+    const msLimite = agora.getTime() - cfg.retencaoMeses * 30 * 24 * 3600 * 1000;
+    const sel = { id: true, nome: true, origem: true, criadoEm: true, consentimentoLGPD: true, consentimentoBanco: true, consentimentoEm: true, termoVersao: true };
+    const [proximos, soProcesso, todos] = await Promise.all([
+      prisma.candidato.findMany({ where: { anonimizado: false, criadoEm: { lte: new Date(msAlerta) } }, select: sel, orderBy: { criadoEm: 'asc' }, take: 200 }),
+      prisma.candidato.findMany({ where: { anonimizado: false, consentimentoLGPD: true, consentimentoBanco: false }, select: sel, orderBy: { criadoEm: 'asc' }, take: 200 }),
+      prisma.candidato.count({ where: { anonimizado: false } }),
+    ]);
+    const elegiveis = proximos.filter((c) => new Date(c.criadoEm).getTime() <= msLimite || c.consentimentoBanco === false);
+    res.json({ retencaoMeses: cfg.retencaoMeses, termoVersao: cfg.termoVersao, totalAtivos: todos, proximosRetencao: proximos, soConsentimentoProcesso: soProcesso, elegiveisAnonimizar: elegiveis });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+// ---------- PÚBLICO: formulário PERMANENTE (banco de talentos) ----------
+app.get('/api/public/talentos/:slug', async (req, res) => {
+  try {
+    const cfg = await prisma.recrutamentoConfig.findUnique({ where: { slug: String(req.params.slug) } });
+    if (!cfg || !cfg.publicoAtivo) return res.status(404).json({ error: 'Formulário indisponível' });
+    const empr = await prisma.empresa.findUnique({ where: { id: cfg.empresaId }, select: { nome: true, logoDataUrl: true } }).catch(() => null);
+    const vagas = await tenantStore.run({ empresaId: cfg.empresaId }, () => prisma.vaga.findMany({ where: { status: 'ABERTA' }, select: { id: true, titulo: true }, orderBy: { criadoEm: 'desc' } }));
+    res.json({ empresa: { nome: (empr?.nome ?? '').trim() || 'Hamburgueria', logo: empr?.logoDataUrl ?? null }, formulario: cfg.formulario || formPadrao(false), vagas, termoVersao: cfg.termoVersao });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+// ---------- PÚBLICO: formulário de uma VAGA específica ----------
+app.get('/api/public/talentos/:slug/vagas/:vagaId', async (req, res) => {
+  try {
+    const cfg = await prisma.recrutamentoConfig.findUnique({ where: { slug: String(req.params.slug) } });
+    if (!cfg || !cfg.publicoAtivo) return res.status(404).json({ error: 'Formulário indisponível' });
+    const empr = await prisma.empresa.findUnique({ where: { id: cfg.empresaId }, select: { nome: true, logoDataUrl: true } }).catch(() => null);
+    const vaga = await tenantStore.run({ empresaId: cfg.empresaId }, () => prisma.vaga.findUnique({ where: { id: Number(req.params.vagaId) }, select: { id: true, titulo: true, descricao: true, status: true, jornada: true, formulario: true } }));
+    if (!vaga || vaga.status !== 'ABERTA') return res.status(404).json({ error: 'Vaga indisponível' });
+    res.json({ empresa: { nome: (empr?.nome ?? '').trim() || 'Hamburgueria', logo: empr?.logoDataUrl ?? null }, vaga: { id: vaga.id, titulo: vaga.titulo, descricao: vaga.descricao, jornada: vaga.jornada }, formulario: vaga.formulario || formPadrao(true), termoVersao: cfg.termoVersao });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+// Grava/atualiza candidato (dedup por telefone, preservando dados internos) + consentimento.
+async function upsertCandidatoPublico(cfg, body, origem) {
+  const telefone = rhTelefone(body.telefone); const telefoneNorm = rhNormTelefone(body.telefone);
+  const data = rhCandidatoInputPublico(body);
+  if (!data.nome) throw { http: 400, msg: 'Informe o nome.' };
+  const consent = { consentimentoLGPD: true, consentimentoBanco: !!body.consentimentoBanco, consentimentoEm: new Date(), consentimentoOrigem: 'PUBLICO', termoVersao: cfg.termoVersao };
+  const respostasFormulario = body.respostasFormulario && typeof body.respostasFormulario === 'object' ? body.respostasFormulario : undefined;
+  const existente = await prisma.candidato.findFirst({ where: { telefoneNorm } });
+  if (existente) { const cand = await prisma.candidato.update({ where: { id: existente.id }, data: { ...data, telefone, ...consent, ...(respostasFormulario !== undefined ? { respostasFormulario } : {}) } }); if (Array.isArray(body.experiencias)) await salvarExperiencias(cand.id, body.experiencias); return { cand, novo: false }; }
+  const cand = await prisma.candidato.create({ data: { ...data, telefone, telefoneNorm, origem, ...consent, ...(respostasFormulario !== undefined ? { respostasFormulario } : {}) } });
+  if (Array.isArray(body.experiencias)) await salvarExperiencias(cand.id, body.experiencias);
+  await prisma.candidatoHistorico.create({ data: { candidatoId: cand.id, tipo: 'SISTEMA', descricao: 'Cadastro pelo formulário público', usuario: null } });
+  return { cand, novo: true };
+}
+app.post('/api/public/talentos/:slug', async (req, res) => {
+  try {
+    const cfg = await prisma.recrutamentoConfig.findUnique({ where: { slug: String(req.params.slug) } });
+    if (!cfg || !cfg.publicoAtivo) return res.status(404).json({ error: 'Formulário indisponível' });
+    const body = req.body || {};
+    if (!body.consentimentoLGPD) return res.status(400).json({ error: 'É necessário aceitar o uso dos dados para participar.' });
+    if (!rhNormTelefone(body.telefone)) return res.status(400).json({ error: 'Informe um telefone válido.' });
+    const out = await tenantStore.run({ empresaId: cfg.empresaId }, async () => {
+      const { novo } = await upsertCandidatoPublico(cfg, body, 'PUBLICO');
+      return { ok: true, novoCadastro: novo, banco: true };
+    });
+    res.status(201).json(out);
+  } catch (err) { console.error(err); res.status(err?.http || 500).json({ error: err?.msg || 'Erro interno' }); }
+});
+app.post('/api/public/talentos/:slug/vagas/:vagaId', async (req, res) => {
+  try {
+    const cfg = await prisma.recrutamentoConfig.findUnique({ where: { slug: String(req.params.slug) } });
+    if (!cfg || !cfg.publicoAtivo) return res.status(404).json({ error: 'Formulário indisponível' });
+    const body = req.body || {};
+    if (!body.consentimentoLGPD) return res.status(400).json({ error: 'É necessário aceitar o uso dos dados para participar.' });
+    if (!rhNormTelefone(body.telefone)) return res.status(400).json({ error: 'Informe um telefone válido.' });
+    const out = await tenantStore.run({ empresaId: cfg.empresaId }, async () => {
+      const vaga = await prisma.vaga.findUnique({ where: { id: Number(req.params.vagaId) } });
+      if (!vaga || vaga.status !== 'ABERTA') throw { http: 404, msg: 'Vaga indisponível' };
+      const { cand, novo } = await upsertCandidatoPublico(cfg, body, 'PUBLICO');
+      const respostas = body.respostas && typeof body.respostas === 'object' ? body.respostas : {};
+      let jaInscrito = false;
+      const jaTem = await prisma.candidatura.findFirst({ where: { candidatoId: cand.id, vagaId: vaga.id } });
+      if (jaTem) { jaInscrito = true; await prisma.candidatura.update({ where: { id: jaTem.id }, data: { respostas } }); await classificarECaptar(jaTem.id); }
+      else {
+        const cx = await prisma.candidatura.create({ data: { candidatoId: cand.id, vagaId: vaga.id, respostas } });
+        await classificarECaptar(cx.id);
+        await prisma.candidatoHistorico.create({ data: { candidatoId: cand.id, candidaturaId: cx.id, tipo: 'STATUS', para: 'NOVO', descricao: `Candidatura em ${vaga.titulo}` } });
+      }
+      return { ok: true, novoCadastro: novo, jaInscrito, vaga: vaga.titulo };
+    });
+    res.status(201).json(out);
+  } catch (err) { console.error(err); res.status(err?.http || 500).json({ error: err?.msg || 'Erro interno' }); }
+});
+
+
 app.listen(PORT, () => console.log(`Operação (PDV) API rodando em http://localhost:${PORT}`));

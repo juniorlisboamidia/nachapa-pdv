@@ -8,6 +8,8 @@ import Equipe from './pages/Equipe'
 import Bonificacao from './pages/Bonificacao'
 import BonificacaoPublica from './pages/BonificacaoPublica'
 import BonificacaoEu from './pages/BonificacaoEu'
+import BancoTalentos from './pages/BancoTalentos'
+import TalentosPublico from './pages/TalentosPublico'
 
 function TelaCarregando() {
   return (
@@ -53,7 +55,7 @@ export default function App() {
             {/* Dep. Pessoal — Equipe + Bonificação (F1a) */}
             <Route path="rh/equipe" element={<Equipe />} />
             <Route path="rh/bonificacao" element={<Bonificacao />} />
-            <Route path="rh/banco-de-talentos" element={<EmConstrucao titulo="Banco de Talentos" descricao="Recrutamento e seleção. Chega na próxima fase." />} />
+            <Route path="rh/banco-de-talentos" element={<BancoTalentos />} />
             {/* Extras */}
             <Route path="minha-empresa" element={<EmConstrucao titulo="Minha Empresa" descricao="Dados da loja (nome, logo, contato). Chega na próxima fase." />} />
             <Route path="central-de-ajuda" element={<EmConstrucao titulo="Central de Ajuda" descricao="Artigos e ajuda do sistema." />} />
@@ -61,6 +63,8 @@ export default function App() {
           {/* Públicas (sem login, por token) — página da equipe e página pessoal */}
           <Route path="bonificacao/:token" element={<BonificacaoPublica />} />
           <Route path="eu/:token" element={<BonificacaoEu />} />
+          {/* Banco de Talentos — formulário público de candidatura */}
+          <Route path="talentos/:slug" element={<TalentosPublico />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
