@@ -33,8 +33,8 @@ export default function Inicio() {
       </div>
 
       {/* Hero da loja */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 20, borderRadius: 16, border: '1px solid #eee', background: 'linear-gradient(135deg, #fff7f0, #ffffff)', marginBottom: 20 }}>
-        <div style={{ width: 56, height: 56, borderRadius: 14, background: 'linear-gradient(150deg,#ff7a1a,#e04e00)', display: 'grid', placeItems: 'center', color: '#fff', fontSize: 26, fontWeight: 800, overflow: 'hidden', flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 20, borderRadius: 16, border: '1px solid #eee', background: 'linear-gradient(135deg, #eff6ff, #ffffff)', marginBottom: 20 }}>
+        <div style={{ width: 56, height: 56, borderRadius: 14, background: 'linear-gradient(150deg,#3b82f6,#1d4ed8)', display: 'grid', placeItems: 'center', color: '#fff', fontSize: 26, fontWeight: 800, overflow: 'hidden', flexShrink: 0 }}>
           {loja?.logoDataUrl ? <img src={loja.logoDataUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (nomeLoja.charAt(0).toUpperCase())}
         </div>
         <div style={{ minWidth: 0 }}>
@@ -55,7 +55,7 @@ export default function Inicio() {
           <div key={m.nome} style={{ padding: 16, borderRadius: 14, border: '1px solid #eee', background: '#fff', display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 26 }}>{m.emoji}</span>
-              <span style={{ fontSize: 10.5, fontWeight: 800, color: '#c2410c', background: '#fff1e6', borderRadius: 999, padding: '2px 8px', textTransform: 'uppercase', letterSpacing: '.04em' }}>em breve · {m.fase}</span>
+              <span style={{ fontSize: 10.5, fontWeight: 800, color: '#1d4ed8', background: '#eff6ff', borderRadius: 999, padding: '2px 8px', textTransform: 'uppercase', letterSpacing: '.04em' }}>em breve · {m.fase}</span>
             </div>
             <div style={{ fontWeight: 700, fontSize: 15 }}>{m.nome}</div>
             <div style={{ fontSize: 12.5, color: '#888', lineHeight: 1.4 }}>{m.desc}</div>

@@ -422,7 +422,7 @@ function MoedasModal({ func, onClose, onMudou, toast }) {
                     <td>{dataHora(x.criadoEm)}</td>
                     <td style={{ color: '#666', fontSize: 12 }}>{x.motivo || '—'}</td>
                     <td><span className="badge badge-gray">{ORIGEM[x.origem] || x.origem}</span></td>
-                    <td style={{ textAlign: 'right', fontWeight: 700, color: x.pontos < 0 ? '#c2410c' : '#0F8A54' }}>{x.pontos > 0 ? '+' : ''}{nf.format(x.pontos)}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700, color: x.pontos < 0 ? '#1d4ed8' : '#0F8A54' }}>{x.pontos > 0 ? '+' : ''}{nf.format(x.pontos)}</td>
                     <td style={{ textAlign: 'right' }}>{x.origem === 'MANUAL' && <button type="button" className="btn btn-danger btn-sm" onClick={() => excluir(x.id)}>Excluir</button>}</td>
                   </tr>
                 ))}
@@ -506,7 +506,7 @@ function XpModal({ func, onClose, onMudou, toast }) {
                     <td>{dataHora(x.criadoEm)}</td>
                     <td style={{ color: '#666', fontSize: 12 }}>{x.motivo || '—'}</td>
                     <td>{x.origem === 'FECHAMENTO' ? <span className="badge badge-gray">Fechamento</span> : <span className="badge">Manual</span>}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 700, color: x.pontos < 0 ? '#c2410c' : '#0F8A54' }}>{x.pontos > 0 ? '+' : ''}{new Intl.NumberFormat('pt-BR').format(x.pontos)}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700, color: x.pontos < 0 ? '#1d4ed8' : '#0F8A54' }}>{x.pontos > 0 ? '+' : ''}{new Intl.NumberFormat('pt-BR').format(x.pontos)}</td>
                     <td style={{ textAlign: 'right' }}>{x.origem === 'MANUAL' && <button type="button" className="btn btn-danger btn-sm" onClick={() => excluir(x.id)}>Excluir</button>}</td>
                   </tr>
                 ))}

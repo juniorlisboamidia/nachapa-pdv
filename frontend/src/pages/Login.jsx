@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext'
 // Reset de senha e gerido pelo HUB (login unificado).
 const HUB_URL = import.meta.env.VITE_HUB_URL || 'https://nachapahub.com.br'
 
-const C = { laranja: '#ff5f00', laranjaHover: '#e65500' }
+const C = { laranja: '#2563eb', laranjaHover: '#1d4ed8' }
 
 const MailIcon = () => (
   <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
