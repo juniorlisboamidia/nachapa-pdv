@@ -1,0 +1,1361 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================
+// MULTI-TENANCY (Fase 2C): cada registro de negocio pertence a uma LOJA.
+// "Empresa" = a Loja (tenant). empresaId carimba todos os models de negocio.
+// A FK empresaId->Empresa e criada na migration SQL (nao declarada como relation
+// Prisma para nao encher Empresa de back-relations). Filtro por empresaId e
+// injetado globalmente no backend (Prisma extension). A Loja referencia o
+// Cliente dono no HUB via Empresa.clienteId (referencia logica, sem FK cross-db).
+// ============================================================
+
+// ============================================================
+// Insumos (matérias-primas)
+// ============================================================
+enum TipoInsumo {
+  INGREDIENTE
+  PRODUCAO_PROPRIA
+  BEBIDA
+  HORTIFRUTI
+  EMBALAGEM
+  ACOMPANHAMENTO
+  OPERACIONAL
+}
+
+model Insumo {
+  id             Int        @id @default(autoincrement())
+  empresaId      Int
+  nome           String
+  tipo           TipoInsumo @default(INGREDIENTE)
+  unidade        String
+  custoUnitario  Decimal    @db.Decimal(12, 4)
+  fornecedor     String?
+  ativo          Boolean    @default(true)
+
+  // ===== Perda/rendimento no preparo (V2) =====
+  // Insumos que perdem peso/volume ao fritar/assar/preparar (ex.: bacon cru que
+  // vira bacon frito). A ficha técnica lança a quantidade PRONTA/servida; o
+  // sistema calcula a necessidade bruta = pronta / rendimento e ajusta o custo.
+  // custoUnitario continua sendo o custo de compra do bruto (não é sobrescrito).
+  considerarPerdaPreparo        Boolean @default(false)
+  quantidadeBrutaPreparo        Float?
+  quantidadeAproveitavelPreparo Float?
+
+  criadoEm       DateTime   @default(now())
+  atualizadoEm   DateTime   @updatedAt
+
+  fichaTecnicaItens FichaTecnicaItem[]
+  // Usos deste insumo como custo adicional de combos (box, sacola, embalagem especial)
+  comboInsumos      ComboInsumo[]
+
+  // Receita própria (quando o insumo é PRODUCAO_PROPRIA)
+  receitaProducao ReceitaProducao?      @relation("ReceitaDoInsumo")
+  // Usos deste insumo como ingrediente em receitas de produção própria
+  usosEmReceitas  ReceitaProducaoItem[] @relation("IngredienteDeReceita")
+
+  @@index([empresaId])
+  @@index([nome])
+  @@index([ativo])
+  @@index([tipo])
+}
+
+// ============================================================
+// Receita de produção própria (insumo PRODUCAO_PROPRIA)
+// ============================================================
+model ReceitaProducao {
+  id                Int      @id @default(autoincrement())
+  empresaId         Int
+  insumoId          Int      @unique
+  rendimento        Decimal  @db.Decimal(10, 3)
+  unidadeRendimento String
+  // Modo de cadastro do rendimento: "TOTAL" (informa o total direto) ou
+  // "PORCOES" (informa quantidadePorcoes × pesoPorcao e o total é calculado).
+  // Null em receitas antigas = TOTAL.
+  modoRendimento    String?  @default("TOTAL")
+  quantidadePorcoes Decimal? @db.Decimal(10, 3)
+  pesoPorcao        Decimal? @db.Decimal(10, 3)
+  unidadePorcao     String?
+  observacoes       String?
+  criadoEm          DateTime @default(now())
+  atualizadoEm      DateTime @updatedAt
+
+  insumo Insumo                @relation("ReceitaDoInsumo", fields: [insumoId], references: [id], onDelete: Cascade)
+  itens  ReceitaProducaoItem[]
+
+  @@index([empresaId])
+}
+
+model ReceitaProducaoItem {
+  id           Int      @id @default(autoincrement())
+  empresaId    Int
+  receitaId    Int
+  insumoId     Int
+  quantidade   Decimal  @db.Decimal(10, 3)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  receita ReceitaProducao @relation(fields: [receitaId], references: [id], onDelete: Cascade)
+  insumo  Insumo          @relation("IngredienteDeReceita", fields: [insumoId], references: [id], onDelete: Restrict)
+
+  @@unique([receitaId, insumoId])
+  @@index([empresaId])
+  @@index([receitaId])
+  @@index([insumoId])
+}
+
+// ============================================================
+// Produtos (itens vendidos)
+// ============================================================
+model Produto {
+  id           Int      @id @default(autoincrement())
+  empresaId    Int
+  nome         String
+  descricao    String?
+  precoVenda   Decimal  @db.Decimal(12, 2)
+  // Tipo do item vendido: PRODUTO (montado, com ficha técnica), BEBIDA
+  // (revenda simples, custo direto) ou COMBO (composição em fase futura)
+  tipoProduto  String   @default("PRODUTO")
+  // Custo de compra para BEBIDA (revenda); PRODUTO usa ficha técnica
+  custoDireto  Decimal? @db.Decimal(12, 2)
+  ativo        Boolean  @default(true)
+
+  // ===== Inteligência do cardápio (análises estratégicas futuras) =====
+  // Produto assinatura da marca: não é recomendado para remoção automática
+  produtoAncora             Boolean @default(false)
+  // Produto isca: item de aquisição (preço/benefício agressivo) para atrair
+  // clientes e gerar volume/upsell — margem menor não significa ruim
+  produtoIsca               Boolean @default(false)
+  // Permite tirar o item do ranking estratégico (bebidas commodity saem por padrão)
+  incluirAnaliseEstrategica Boolean @default(true)
+  // Classificação da bebida na análise: COMMODITY (refri/revenda) ou AUTORAL (da casa)
+  tipoBebidaAnalise         String?
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  fichaTecnica FichaTecnicaItem[]
+  comboItens   ComboItem[]        @relation("ItensDoCombo")
+  emCombos     ComboItem[]        @relation("ProdutoEmCombos")
+  // Insumos adicionais quando este Produto é um COMBO (box, sacola, etc.)
+  comboInsumos ComboInsumo[]      @relation("InsumosAdicionaisCombo")
+
+  @@index([empresaId])
+  @@index([nome])
+  @@index([ativo])
+}
+
+// ============================================================
+// Itens de combo: combo (Produto tipo COMBO) composto por
+// produtos/bebidas prontos — nunca por insumos nem por outro combo
+// ============================================================
+model ComboItem {
+  id           Int      @id @default(autoincrement())
+  empresaId    Int
+  comboId      Int
+  produtoId    Int
+  quantidade   Decimal  @db.Decimal(10, 2)
+  // Quando o produto entra no combo, por padrão a embalagem individual da ficha
+  // técnica (itens tipoUso=EMBALAGEM) NÃO entra no custo do combo — costuma ser
+  // substituída por uma embalagem única do combo. true mantém a embalagem.
+  incluirEmbalagemIndividual Boolean @default(false)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  combo   Produto @relation("ItensDoCombo", fields: [comboId], references: [id], onDelete: Cascade)
+  produto Produto @relation("ProdutoEmCombos", fields: [produtoId], references: [id], onDelete: Restrict)
+
+  // Mesmo produto adicionado de novo soma quantidade (consolidado por item)
+  @@unique([comboId, produtoId])
+  @@index([empresaId])
+  @@index([comboId])
+  @@index([produtoId])
+}
+
+// ============================================================
+// Insumos adicionais do combo: custos próprios do combo que não vêm dos
+// produtos/bebidas (box única, sacola, embalagem especial, brinde). Referenciam
+// um Insumo do cadastro geral, sem duplicá-lo.
+// ============================================================
+model ComboInsumo {
+  id                Int      @id @default(autoincrement())
+  empresaId         Int
+  comboId           Int
+  insumoId          Int
+  quantidade        Decimal  @db.Decimal(12, 4)
+  // Mesma semântica da ficha técnica: "BASE" usa a unidade base do insumo;
+  // "PORCAO" usa porções de produção própria (1 = uma porção da receita).
+  modoUsoQuantidade String?  @default("BASE")
+  criadoEm          DateTime @default(now())
+  atualizadoEm      DateTime @updatedAt
+
+  combo  Produto @relation("InsumosAdicionaisCombo", fields: [comboId], references: [id], onDelete: Cascade)
+  insumo Insumo  @relation(fields: [insumoId], references: [id], onDelete: Restrict)
+
+  // Mesmo insumo adicionado de novo soma quantidade (consolidado por insumo)
+  @@unique([comboId, insumoId])
+  @@index([empresaId])
+  @@index([comboId])
+  @@index([insumoId])
+}
+
+// ============================================================
+// Ficha técnica (composição produto x insumo)
+// ============================================================
+enum TipoUsoFicha {
+  INGREDIENTE
+  EMBALAGEM
+  ACOMPANHAMENTO
+  OPERACIONAL
+}
+
+enum FormaRateioFicha {
+  POR_PRODUTO
+  POR_EMBALAGEM
+  POR_PEDIDO
+}
+
+model FichaTecnicaItem {
+  id                 Int              @id @default(autoincrement())
+  empresaId          Int
+  produtoId          Int
+  insumoId           Int
+  quantidade         Decimal          @db.Decimal(12, 4)
+  // Como interpretar `quantidade`: "BASE" = unidade base do insumo (Kg em g,
+  // L em ml, Und em und — comportamento original). "PORCAO" = unidades/porções
+  // da receita própria (1 = uma porção; custo = pesoPorcao × custo base).
+  // Null em itens antigos = BASE.
+  modoUsoQuantidade  String?          @default("BASE")
+  tipoUso            TipoUsoFicha     @default(INGREDIENTE)
+  formaRateio        FormaRateioFicha @default(POR_PRODUTO)
+  quantidadeAtendida Decimal?         @db.Decimal(10, 3)
+  aplicarMargem      Boolean          @default(true)
+  criadoEm           DateTime         @default(now())
+  atualizadoEm       DateTime         @updatedAt
+
+  produto Produto @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  insumo  Insumo  @relation(fields: [insumoId], references: [id], onDelete: Restrict)
+
+  // Sem unique(produtoId, insumoId): o mesmo insumo pode aparecer em várias
+  // linhas da ficha (ex.: 2x "Pão de hambúrguer — 1 und" para leitura visual)
+  @@index([empresaId])
+  @@index([produtoId])
+  @@index([insumoId])
+}
+
+// ============================================================
+// Configuração de precificação — agora UMA POR LOJA (empresaId único)
+// ============================================================
+model ConfiguracaoPrecificacao {
+  id                      Int      @id @default(autoincrement())
+  empresaId               Int
+  cmvAlvoPercentual       Decimal  @db.Decimal(10, 2) @default(32.00)
+  lucroDesejadoPercentual Decimal  @db.Decimal(10, 2) @default(20.00)
+  taxaIfoodPercentual     Decimal  @db.Decimal(10, 2) @default(23.00)
+  campanhaInteligente     Decimal  @db.Decimal(10, 2) @default(0.00)
+  maiorTaxaEntrega        Decimal  @db.Decimal(10, 2) @default(0.00)
+  cupomDesconto           Decimal  @db.Decimal(10, 2) @default(0.00)
+  ticketMedioDelivery     Decimal  @db.Decimal(10, 2) @default(40.00)
+  // Legado (mantidos no banco, fora da fórmula e da interface)
+  taxaPagamentoOnlinePercentual   Decimal @db.Decimal(10, 2) @default(0.00)
+  taxaRepasseAntecipadoPercentual Decimal @db.Decimal(10, 2) @default(0.00)
+  campanhaIfoodPercentual         Decimal @db.Decimal(10, 2) @default(10.00)
+  custoFixoIfood                  Decimal @db.Decimal(10, 2) @default(0.00)
+  produtosPorPedidoIfood          Decimal @db.Decimal(10, 2) @default(2.00)
+  ativo                           Boolean  @default(true)
+  criadoEm                        DateTime @default(now())
+  atualizadoEm                    DateTime @updatedAt
+
+  @@unique([empresaId])
+  @@index([ativo])
+}
+
+// ============================================================
+// Custos fixos (recorrentes mensais — sem mês de referência no MVP)
+// ============================================================
+model CustoFixo {
+  id           Int      @id @default(autoincrement())
+  empresaId    Int
+  nome         String
+  // Valor mensal efetivo usado em TODOS os cálculos (dashboard, PE, totais).
+  // Para colaborador CLT com encargos automáticos, o backend grava aqui o
+  // total calculado (salário + 13º + férias + FGTS) — fonte única, sem duplicar.
+  valorMensal  Decimal  @db.Decimal(12, 2)
+  tipo         String?
+  observacao   String?
+  // Campos opcionais de colaborador (estimativa gerencial, não folha oficial):
+  // tipoCusto GERAL|COLABORADOR; tipoColaborador CLT|FREELANCER|OUTRO|PJ|DIARISTA.
+  // salarioBase fica persistido para reeditar sem perder a base do cálculo.
+  tipoCusto       String?  @default("GERAL")
+  tipoColaborador String?
+  salarioBase     Decimal? @db.Decimal(12, 2)
+  calcularEncargos Boolean @default(false)
+  // Motoboy diarista: total mensal = valorDiaria × quantidade × dias
+  valorDiaria     Decimal? @db.Decimal(12, 2)
+  quantidade      Decimal? @db.Decimal(10, 2)
+  dias            Decimal? @db.Decimal(10, 2)
+  ativo        Boolean  @default(true)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([empresaId])
+  @@index([ativo])
+}
+
+// ============================================================
+// Custos variáveis
+// ============================================================
+enum CategoriaCustoVariavel {
+  TAXA_CARTAO
+  MARKETPLACE
+  EMBALAGEM
+  ENTREGA
+  IMPOSTO
+  CUPOM
+  COMISSAO
+  OUTROS
+}
+
+enum TipoCalculoCustoVariavel {
+  PERCENTUAL_FATURAMENTO
+  VALOR_POR_PEDIDO
+  VALOR_FIXO_MENSAL_VARIAVEL
+}
+
+model CustoVariavel {
+  id           Int                       @id @default(autoincrement())
+  empresaId    Int
+  nome         String
+  categoria    CategoriaCustoVariavel
+  tipoCalculo  TipoCalculoCustoVariavel
+  valor        Decimal                   @db.Decimal(12, 4)
+  ativo        Boolean                   @default(true)
+  criadoEm     DateTime                  @default(now())
+  atualizadoEm DateTime                  @updatedAt
+
+  @@index([empresaId])
+  @@index([ativo])
+  @@index([categoria])
+}
+
+// ============================================================
+// Faturamento diário
+// ============================================================
+model FaturamentoDiario {
+  id                Int      @id @default(autoincrement())
+  empresaId         Int
+  data              DateTime @db.Date
+  valorTotal        Decimal  @db.Decimal(12, 2)
+  quantidadePedidos Int
+  canal             String?
+  observacoes       String?
+  ativo             Boolean  @default(true)
+  criadoEm          DateTime @default(now())
+  atualizadoEm      DateTime @updatedAt
+
+  @@index([empresaId])
+  @@index([data])
+  @@index([canal])
+  @@index([ativo])
+}
+
+// ============================================================
+// Análise de Vendas (snapshot persistido) — base da Inteligência de Compras.
+// Guarda as métricas principais como colunas escalares (listagem rápida) e o
+// detalhe completo da análise em campos JSON (itens, diagnóstico V2, consumo V3,
+// curva ABC V4 e alertas). Nada aqui altera os cálculos: é só persistência.
+// ============================================================
+model AnaliseVenda {
+  id                       Int       @id @default(autoincrement())
+  empresaId                Int
+  nome                     String
+  origem                   String    @default("SAIPOS")
+  periodoInicio            DateTime?
+  periodoFim               DateTime?
+  totalVendido             Int       @default(0)
+  itensUnicos              Int       @default(0)
+  qtdPrincipal             Int       @default(0)
+  qtdComplemento           Int       @default(0)
+  qtdOfertaCombo           Int       @default(0)
+  produtosAssociados       Int       @default(0)
+  produtosNaoIdentificados Int       @default(0)
+  valorEstimadoConsumido   Float     @default(0)
+  insumosConsumidos        Int       @default(0)
+  alertasDados             Int       @default(0)
+  classeAQtd               Int       @default(0)
+  classeBQtd               Int       @default(0)
+  classeCQtd               Int       @default(0)
+  classeAValorPercentual   Float     @default(0)
+  classeBValorPercentual   Float     @default(0)
+  classeCValorPercentual   Float     @default(0)
+  itens                    Json
+  diagnostico              Json
+  consumo                  Json
+  curvaABC                 Json
+  alertas                  Json
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  @@index([empresaId])
+  @@index([createdAt])
+}
+
+// ============================================================
+// Empresa = LOJA (tenant). Cada loja pertence a um Cliente do HUB (clienteId,
+// referencia logica ao banco do HUB — sem FK cross-db). Um cliente pode ter
+// varias lojas. clienteNome e cache para exibicao (evita consultar o HUB).
+// ============================================================
+model Empresa {
+  id           Int      @id @default(autoincrement())
+  clienteId    String
+  clienteNome  String?
+  nome         String   @default("Hamburgueria")
+  whatsapp     String?
+  email        String?
+  endereco     String?
+  // Logo em dataURL base64 (png/jpeg/webp). Sem upload de arquivo no servidor.
+  logoDataUrl  String?
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([clienteId])
+}
+
+// ============================================================
+// Escala de Motoboys (V1) — escala mensal de entregadores com vagas por dia e
+// inscrição pública por token. Independente do cadastro de produtos/custos.
+// Sem cadastro fixo de motoboy nesta V1: nome/WhatsApp ficam na inscrição.
+// ============================================================
+enum EscalaStatus {
+  ABERTA
+  FECHADA
+}
+enum EscalaDiaStatus {
+  ABERTO
+  FECHADO
+}
+enum InscricaoStatus {
+  INSCRITO
+  CONFIRMADO
+  CANCELADO
+}
+enum InscricaoOrigem {
+  PUBLICO
+  ADMIN
+}
+
+model EscalaMotoboy {
+  id           Int          @id @default(autoincrement())
+  empresaId    Int
+  ano          Int
+  mes          Int
+  titulo       String?
+  tokenPublico String       @unique
+  status       EscalaStatus @default(ABERTA)
+  criadoEm     DateTime     @default(now())
+  atualizadoEm DateTime     @updatedAt
+
+  dias EscalaMotoboyDia[]
+
+  @@unique([empresaId, ano, mes])
+  @@index([empresaId])
+}
+
+model EscalaMotoboyDia {
+  id           Int             @id @default(autoincrement())
+  empresaId    Int
+  escalaId     Int
+  data         DateTime        @db.Date
+  diaSemana    Int
+  semanaDoMes  Int
+  vagas        Int             @default(0)
+  status       EscalaDiaStatus @default(ABERTO)
+  criadoEm     DateTime        @default(now())
+  atualizadoEm DateTime        @updatedAt
+
+  escala     EscalaMotoboy            @relation(fields: [escalaId], references: [id], onDelete: Cascade)
+  inscricoes EscalaMotoboyInscricao[]
+
+  @@unique([escalaId, data])
+  @@index([empresaId])
+  @@index([escalaId])
+}
+
+model EscalaMotoboyInscricao {
+  id           Int             @id @default(autoincrement())
+  empresaId    Int
+  escalaDiaId  Int
+  // Snapshot histórico (mantido mesmo quando há motoboyId vinculado)
+  nome         String
+  whatsapp     String
+  status       InscricaoStatus @default(INSCRITO)
+  origem       InscricaoOrigem @default(PUBLICO)
+  // V2: vínculo opcional com a base de entregadores (preenchido na inscrição/backfill)
+  motoboyId    Int?
+  // V2: presença na escala — independente de InscricaoStatus
+  presencaStatus     PresencaMotoboyStatus @default(PENDENTE)
+  presencaObservacao String?
+  criadoEm     DateTime        @default(now())
+  atualizadoEm DateTime        @updatedAt
+
+  dia     EscalaMotoboyDia @relation(fields: [escalaDiaId], references: [id], onDelete: Cascade)
+  motoboy Motoboy?         @relation(fields: [motoboyId], references: [id], onDelete: SetNull)
+
+  @@index([empresaId])
+  @@index([escalaDiaId])
+  @@index([escalaDiaId, whatsapp])
+  @@index([motoboyId])
+}
+
+// ============================================================
+// Base de Entregadores / Motoboys (V2) — cadastro da pessoa, presença e
+// ocorrências. Independente do cadastro de produtos/custos.
+// ============================================================
+enum MotoboyStatus {
+  ATIVO
+  INATIVO
+  BLOQUEADO
+}
+enum PresencaMotoboyStatus {
+  PENDENTE
+  COMPARECEU
+  FALTOU
+  JUSTIFICOU
+}
+enum MotoboyOcorrenciaTipo {
+  NAO_COMPARECEU
+  ABANDONO
+  MOTO_QUEBROU
+  ATRASO
+  PREJUIZO
+  CONDUTA
+  ATENDIMENTO
+  OBSERVACAO_POSITIVA
+  OUTRO
+}
+enum MotoboyOcorrenciaGravidade {
+  BAIXA
+  MEDIA
+  ALTA
+  CRITICA
+}
+
+model Motoboy {
+  id           Int           @id @default(autoincrement())
+  empresaId    Int
+  nome         String
+  whatsapp     String
+  status       MotoboyStatus @default(ATIVO)
+  observacoes  String?
+  criadoEm     DateTime      @default(now())
+  atualizadoEm DateTime      @updatedAt
+
+  inscricoes  EscalaMotoboyInscricao[]
+  ocorrencias MotoboyOcorrencia[]
+
+  @@unique([empresaId, whatsapp])
+  @@index([empresaId])
+  @@index([status])
+}
+
+model MotoboyOcorrencia {
+  id             Int                        @id @default(autoincrement())
+  empresaId      Int
+  motoboyId      Int
+  // Acoplamento solto com a escala (sem FK): preserva o histórico mesmo se a
+  // escala/dia/inscrição for removida.
+  escalaDiaId    Int?
+  inscricaoId    Int?
+  tipo           MotoboyOcorrenciaTipo
+  gravidade      MotoboyOcorrenciaGravidade @default(MEDIA)
+  dataOcorrencia DateTime                   @db.Date
+  descricao      String
+  valorPrejuizo  Decimal?                   @db.Decimal(10, 2)
+  resolvida      Boolean                    @default(false)
+  criadoEm       DateTime                   @default(now())
+  atualizadoEm   DateTime                   @updatedAt
+
+  motoboy Motoboy @relation(fields: [motoboyId], references: [id], onDelete: Cascade)
+
+  @@index([empresaId])
+  @@index([motoboyId])
+  @@index([dataOcorrencia])
+  @@index([tipo])
+  @@index([gravidade])
+  @@index([resolvida])
+}
+
+// ============================================================
+// Dep. Pessoal › Equipe — cadastro da equipe interna (cozinha/atendimento).
+// Base para o sistema de Bonificação. Multi-tenant por loja (empresaId).
+model Funcionario {
+  id           Int      @id @default(autoincrement())
+  empresaId    Int
+  nome         String
+  funcao       String?
+  cpf          String?
+  whatsapp     String?
+  status       String   @default("ATIVO") // ATIVO | INATIVO
+  tokenPrivado String?  @unique // link privado do funcionário (XP/nível/perfil)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([empresaId])
+  @@index([empresaId, status])
+}
+
+// Dep. Pessoal › Bonificação — configuração POR LOJA (1 linha por empresa):
+// tetos em R$ de cada pilar, bônus do Top 3 e % de penalidade da assiduidade.
+model BonificacaoConfig {
+  id               Int      @id @default(autoincrement())
+  empresaId        Int      @unique
+  tokenPublico     String?  @unique // link público p/ a equipe acompanhar o ranking
+  ativo            Boolean  @default(true)
+  tetoAssiduidade  Decimal  @default(100) @db.Decimal(10, 2)
+  tetoDesempenho   Decimal  @default(100) @db.Decimal(10, 2)
+  tetoColetiva     Decimal  @default(100) @db.Decimal(10, 2)
+  bonusTop1        Decimal  @default(100) @db.Decimal(10, 2)
+  bonusTop2        Decimal  @default(50)  @db.Decimal(10, 2)
+  bonusTop3        Decimal  @default(25)  @db.Decimal(10, 2)
+  xpPorNivel       Int      @default(500) // XP necessário por nível
+  moedasPorReal    Decimal  @default(1) @db.Decimal(6, 2) // moedas creditadas por R$ no fechamento
+  criadoEm         DateTime @default(now())
+  atualizadoEm     DateTime @updatedAt
+}
+
+// Nomes dos níveis (lista ordenada, editável por loja). Nível N = nome[N-1] ou "Nível N".
+model BonificacaoNivel {
+  id        Int      @id @default(autoincrement())
+  empresaId Int
+  nome      String
+  ordem     Int      @default(0)
+  criadoEm  DateTime @default(now())
+
+  @@index([empresaId, ordem])
+}
+
+// Ledger de XP (permanente): + por bom desempenho, fechamento do mês, elogios etc.
+model BonificacaoXp {
+  id            Int      @id @default(autoincrement())
+  empresaId     Int
+  funcionarioId Int
+  pontos        Int
+  motivo        String?
+  origem        String   @default("MANUAL") // MANUAL | FECHAMENTO
+  ano           Int?
+  mes           Int?
+  criadoEm      DateTime @default(now())
+
+  @@index([empresaId, funcionarioId])
+  @@index([funcionarioId])
+}
+
+// Tipos de ocorrência que descontam % de um pilar (Assiduidade ou Desempenho).
+// Configuráveis por loja — os dois pilares começam em 100% e caem por ocorrências.
+model BonificacaoTipoOcorrencia {
+  id           Int      @id @default(autoincrement())
+  empresaId    Int
+  nome         String
+  pilar        String   // ASSIDUIDADE | DESEMPENHO
+  percentual   Decimal  @db.Decimal(5, 2) // % descontado por ocorrência
+  ordem        Int      @default(0)
+  ativo        Boolean  @default(true)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([empresaId, pilar, ordem])
+}
+
+// Ocorrência lançada no mês (desconta % de um pilar de um funcionário). Snapshot do
+// tipo (nome/pilar/%) p/ o histórico ficar imutável mesmo se o tipo mudar depois.
+model BonificacaoOcorrencia {
+  id            Int      @id @default(autoincrement())
+  empresaId     Int
+  funcionarioId Int
+  ano           Int
+  mes           Int
+  tipoId        Int?
+  nomeTipo      String
+  pilar         String   // ASSIDUIDADE | DESEMPENHO
+  percentual    Decimal  @db.Decimal(5, 2)
+  data          DateTime @db.Date
+  observacao    String?
+  criadoEm      DateTime @default(now())
+
+  @@index([empresaId, ano, mes])
+  @@index([funcionarioId, ano, mes])
+}
+
+// Nota Coletiva da LOJA no mês (0–100%), aplicada igual a todos.
+model BonificacaoColetiva {
+  id           Int      @id @default(autoincrement())
+  empresaId    Int
+  ano          Int
+  mes          Int
+  percentual   Decimal  @default(0) @db.Decimal(5, 2)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@unique([empresaId, ano, mes])
+}
+
+// Fechamento do mês — snapshot imutável p/ o relatório de pagamento.
+model BonificacaoFechamento {
+  id          Int      @id @default(autoincrement())
+  empresaId   Int
+  ano         Int
+  mes         Int
+  coletivaPct Decimal  @default(0) @db.Decimal(5, 2)
+  itensJson   Json
+  totalGeral  Decimal  @default(0) @db.Decimal(12, 2)
+  fechadoPor  String?
+  fechadoEm   DateTime @default(now())
+
+  @@unique([empresaId, ano, mes])
+}
+
+// Conquista (card) — definição por loja. Desbloqueada automaticamente por regra
+// (XP, nível, vitórias, pódios, meses ativos, presença/score 100%) ou concedida à mão.
+model Conquista {
+  id           Int      @id @default(autoincrement())
+  empresaId    Int
+  nome         String
+  descricao    String?
+  emoji        String   @default("🏅")
+  raridade     String   @default("COMUM")  // COMUM | RARO | EPICO | LENDARIO
+  regra        String   @default("MANUAL") // XP_TOTAL | NIVEL | VITORIAS | PODIOS | MESES_ATIVOS | PRESENCA_100 | SCORE_100 | MANUAL
+  meta         Int      @default(1)        // limiar da regra (ignorado p/ MANUAL)
+  xpBonus      Int      @default(0)        // XP creditado ao desbloquear
+  ativo        Boolean  @default(true)
+  ordem        Int      @default(0)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([empresaId, ordem])
+}
+
+// Conquista desbloqueada por um funcionário (permanente). Uma por conquista/funcionário.
+model ConquistaDesbloqueada {
+  id             Int      @id @default(autoincrement())
+  empresaId      Int
+  conquistaId    Int
+  funcionarioId  Int
+  origem         String   @default("AUTO") // AUTO | MANUAL
+  ano            Int?
+  mes            Int?
+  desbloqueadoEm DateTime @default(now())
+
+  @@unique([conquistaId, funcionarioId])
+  @@index([empresaId, funcionarioId])
+  @@index([funcionarioId])
+}
+
+// Mercado (Fase D) — economia de MOEDAS gastáveis (separadas do XP/nível).
+// Ledger de moedas: + crédito (fechamento/manual/estorno) e − débito (resgate). Saldo = soma.
+model BonificacaoMoeda {
+  id            Int      @id @default(autoincrement())
+  empresaId     Int
+  funcionarioId Int
+  pontos        Int      // + credita, − debita
+  motivo        String?
+  origem        String   @default("MANUAL") // FECHAMENTO | MANUAL | RESGATE | ESTORNO
+  resgateId     Int?
+  ano           Int?
+  mes           Int?
+  criadoEm      DateTime @default(now())
+
+  @@index([empresaId, funcionarioId])
+  @@index([funcionarioId])
+}
+
+// Item/prêmio à venda no mercado da loja.
+model MercadoItem {
+  id           Int      @id @default(autoincrement())
+  empresaId    Int
+  nome         String
+  descricao    String?
+  emoji        String   @default("🎁")
+  custo        Int      @default(100) // moedas
+  estoque      Int?     // null = ilimitado
+  ativo        Boolean  @default(true)
+  ordem        Int      @default(0)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([empresaId, ordem])
+}
+
+// Pedido de resgate — passa por aprovação da liderança. Snapshot do item p/ histórico.
+model MercadoResgate {
+  id            Int       @id @default(autoincrement())
+  empresaId     Int
+  funcionarioId Int
+  itemId        Int?
+  itemNome      String
+  itemEmoji     String    @default("🎁")
+  custo         Int
+  status        String    @default("PENDENTE") // PENDENTE | APROVADO | ENTREGUE | REJEITADO
+  observacao    String?
+  decididoPor   String?
+  decididoEm    DateTime?
+  criadoEm      DateTime  @default(now())
+
+  @@index([empresaId, status])
+  @@index([funcionarioId])
+}
+
+// ============================================================
+// Avaliação (Marketing) — coleta de feedback de clientes por link/QR.
+// Cada campanha tem suas próprias categorias de nota (personalizáveis).
+// ============================================================
+model AvaliacaoCampanha {
+  id           Int      @id @default(autoincrement())
+  empresaId    Int
+  nome         String
+  tokenPublico String   @unique
+  ativa        Boolean  @default(true)
+  // Categorias de nota definidas pelo usuário (ex.: ["Comida","Atendimento"])
+  categorias   String[]
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  respostas AvaliacaoResposta[]
+
+  @@index([empresaId])
+}
+
+model AvaliacaoResposta {
+  id              Int      @id @default(autoincrement())
+  empresaId       Int
+  campanhaId      Int
+  notaGeral       Int
+  // Notas por categoria: { "Comida": 5, "Atendimento": 4 }
+  notasCategorias Json     @default("{}")
+  comentario      String?
+  nome            String
+  whatsapp        String
+  email           String?
+  criadoEm        DateTime @default(now())
+
+  campanha AvaliacaoCampanha @relation(fields: [campanhaId], references: [id], onDelete: Cascade)
+
+  @@index([empresaId])
+  @@index([campanhaId])
+}
+
+// ============================================================
+// Central de Ajuda — artigos GLOBAIS (NÃO escopados por loja). Por isso NÃO
+// entra em MODELS_TENANT no backend: o conteúdo é igual para todas as lojas.
+// ============================================================
+model AjudaArtigo {
+  id           Int      @id @default(autoincrement())
+  categoria    String
+  titulo       String
+  slug         String   @unique
+  resumo       String?
+  conteudo     String   // markdown
+  ordem        Int      @default(0)
+  publicado    Boolean  @default(true)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([categoria])
+  @@index([publicado])
+}
+
+// ============================================================
+// Marketing › Programa de Indicação (referral). Multi-tenant por loja.
+// Fluxo: promotor (público OU criado pelo dono) compartilha seu `codigo`;
+// o amigo se cadastra e resgata um Cupom INDICACAO; o atendente dá baixa no
+// balcão (valida a indicação); ao acumular indicações validadas o promotor
+// desbloqueia RecompensaTier (marcos) e recebe Cupom RECOMPENSA.
+// ============================================================
+enum PromotorOrigem {
+  PUBLICO
+  ADMIN
+}
+
+// Tipo/origem do promotor (finalidade: identificar de onde ele veio)
+enum PromotorTipo {
+  CLIENTE
+  INFLUENCER
+  PARCEIRA
+}
+
+enum PromotorStatus {
+  ATIVO
+  BLOQUEADO
+}
+
+enum IndicacaoStatus {
+  PENDENTE
+  VALIDADA
+  CANCELADA
+}
+
+enum RecompensaDestino {
+  SALAO
+  DELIVERY
+}
+
+enum CupomTipo {
+  INDICACAO
+  RECOMPENSA
+}
+
+enum CupomStatus {
+  DISPONIVEL
+  USADO
+  CANCELADO
+}
+
+// Configuração do programa por loja (1/loja). Guarda os tokens dos links
+// públicos e o snapshot do cupom de boas-vindas do amigo.
+model IndicacaoConfig {
+  id                Int               @id @default(autoincrement())
+  empresaId         Int
+  ativo             Boolean           @default(false)
+  promotorToken     String            @unique // link público "Seja Promotor"
+  atendenteToken    String            @unique // link do balcão (dar baixa)
+  cupomAmigoTitulo  String            @default("Cupom de boas-vindas")
+  cupomEmoji        String            @default("🎁") // emoji exibido junto ao cupom
+  cupomAmigoDestino RecompensaDestino @default(SALAO) // legado (mantido; ver cupomAmigoTipos)
+  cupomAmigoPercentual Int            @default(10) // legado (ver cupomAmigoValor)
+  cupomAmigoTipoDesconto String       @default("percent_discount") // percent_discount | flat_discount | free_shipping
+  cupomAmigoValor      Float?         // valor do desconto (% ou R$); null p/ free_shipping
+  cupomAmigoTipos      String[]       @default([]) // tipos de pedido do CW: delivery|takeout|onsite ([] = todos)
+  // Aparência do cupom/página do amigo
+  cupomCorTipo      String            @default("gradiente") // solido | gradiente
+  cupomCor1         String            @default("#ecc558")   // cor sólida / início do degradê
+  cupomCor2         String            @default("#c48a1c")   // fim do degradê
+  botaoCor          String            @default("#7c3aed")   // cor do botão "Resgatar meu cupom"
+  // Campos do formulário do amigo (nao | opcional | obrigatorio). Nome/WhatsApp são sempre obrigatórios.
+  campoEmail        String            @default("opcional")
+  campoNascimento   String            @default("opcional")
+  bannerDataUrl     String?           @db.Text // arte do topo das páginas públicas (base64)
+  criadoEm          DateTime          @default(now())
+  atualizadoEm      DateTime          @updatedAt
+
+  @@unique([empresaId])
+}
+
+model Promotor {
+  id           Int            @id @default(autoincrement())
+  empresaId    Int
+  nome         String
+  whatsapp     String         // normalizado (só dígitos)
+  codigo       String         @unique // curto/compartilhável (link do amigo)
+  painelToken  String         @unique // secreto (painel do promotor)
+  origem       PromotorOrigem @default(PUBLICO)
+  tipo         PromotorTipo   @default(CLIENTE)
+  status       PromotorStatus @default(ATIVO)
+  criadoEm     DateTime       @default(now())
+  atualizadoEm DateTime       @updatedAt
+
+  indicacoes Indicacao[]
+  cupons     Cupom[]
+
+  @@unique([empresaId, whatsapp])
+  @@index([empresaId])
+  @@index([status])
+}
+
+model Indicacao {
+  id            Int             @id @default(autoincrement())
+  empresaId     Int
+  promotorId    Int
+  amigoNome     String
+  amigoWhatsapp String          // normalizado
+  amigoEmail    String?
+  amigoNascimento DateTime?     @db.Date
+  status        IndicacaoStatus @default(PENDENTE)
+  validadoEm    DateTime?
+  criadoEm      DateTime        @default(now())
+  atualizadoEm  DateTime        @updatedAt
+
+  promotor Promotor @relation(fields: [promotorId], references: [id], onDelete: Cascade)
+  cupom    Cupom?
+
+  @@unique([empresaId, promotorId, amigoWhatsapp])
+  @@index([empresaId])
+  @@index([promotorId])
+  @@index([status])
+}
+
+// Marco de recompensa (ex.: 3 validadas = brinde). Escolhido salão ou delivery.
+model RecompensaTier {
+  id           Int               @id @default(autoincrement())
+  empresaId    Int
+  meta         Int               // nº de indicações validadas p/ desbloquear
+  titulo       String
+  tipo         String            @default("CONSUMO") // CONSUMO | BRINDE
+  emoji        String            @default("🎁")
+  descricao    String?
+  destino      RecompensaDestino // legado (derivado de destinos p/ o cupom de recompensa)
+  destinos     String[]          @default([]) // salao|delivery|retirada ([] = todos), quando CONSUMO
+  ativo        Boolean           @default(true)
+  criadoEm     DateTime          @default(now())
+  atualizadoEm DateTime          @updatedAt
+
+  cupons Cupom[]
+
+  @@unique([empresaId, meta])
+  @@index([empresaId])
+}
+
+// Cupom (peça central): INDICACAO = boas-vindas do amigo (baixa valida a
+// indicação); RECOMPENSA = prêmio do promotor ao bater um marco. Código curto
+// apresentado no balcão. A unique (empresaId, promotorId, recompensaTierId)
+// garante que cada marco gera 1 recompensa por promotor (idempotência).
+model Cupom {
+  id               Int               @id @default(autoincrement())
+  empresaId        Int
+  codigo           String            @unique
+  tipo             CupomTipo
+  titulo           String            // snapshot do que dá
+  destino          RecompensaDestino
+  status           CupomStatus       @default(DISPONIVEL)
+  promotorId       Int?
+  indicacaoId      Int?              @unique
+  recompensaTierId Int?
+  cwCouponId       Int? // id do cupom no Cardápio Web (INDICACAO com CW conectado)
+  usadoEm          DateTime?
+  usadoPor         String? // nome livre do atendente (opcional)
+  valorPedido      Float? // valor do pedido no CW que usou este cupom (faturamento gerado)
+  criadoEm         DateTime          @default(now())
+  atualizadoEm     DateTime          @updatedAt
+
+  promotor       Promotor?       @relation(fields: [promotorId], references: [id], onDelete: SetNull)
+  indicacao      Indicacao?      @relation(fields: [indicacaoId], references: [id], onDelete: SetNull)
+  recompensaTier RecompensaTier? @relation(fields: [recompensaTierId], references: [id], onDelete: SetNull)
+
+  @@unique([empresaId, promotorId, recompensaTierId])
+  @@index([empresaId])
+  @@index([status])
+  @@index([promotorId])
+}
+
+// ===================== Dep. Pessoal › Banco de Talentos / Seleção =====================
+
+enum VagaStatus {
+  ABERTA
+  PAUSADA
+  ENCERRADA
+}
+
+enum CandidatoStatus {
+  NOVO
+  TRIAGEM
+  PRE_SELECIONADO
+  CONTATO_REALIZADO
+  ENTREVISTA_AGENDADA
+  TESTE_PRATICO
+  APROVADO
+  BANCO_TALENTOS
+  REPROVADO
+  SEM_RETORNO
+}
+
+model Cargo {
+  id           Int      @id @default(autoincrement())
+  empresaId    Int
+  nome         String
+  ativo        Boolean  @default(true)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  vagas Vaga[]
+
+  @@unique([empresaId, nome])
+  @@index([empresaId])
+}
+
+model Vaga {
+  id                   Int        @id @default(autoincrement())
+  empresaId            Int
+  cargoId              Int?
+  titulo               String
+  status               VagaStatus @default(ABERTA)
+  quantidade           Int        @default(1)
+  descricao            String?    @db.Text
+  jornada              String?
+  turno                String[]   @default([]) // manha|tarde|noite|madrugada
+  diasTrabalho         String[]   @default([]) // seg..dom
+  salarioMin           Float?
+  salarioMax           Float?
+  inicioPrevisto       DateTime?  @db.Date
+  requisitos           String?    @db.Text
+  diferenciais         String?    @db.Text
+  responsavel          String?
+  observacoes          String?    @db.Text
+  atividadesEssenciais String[]   @default([]) // legado (chaves de experienciasRapidas)
+  perguntas            Json? // legado
+  pesos                Json? // legado
+  formulario           Json? // construtor do formulário desta vaga (campos, perguntas, disponibilidade)
+  criadoEm             DateTime   @default(now())
+  atualizadoEm         DateTime   @updatedAt
+
+  cargo        Cargo?        @relation(fields: [cargoId], references: [id], onDelete: SetNull)
+  candidaturas Candidatura[]
+
+  @@index([empresaId])
+  @@index([status])
+}
+
+// PERFIL PERMANENTE da pessoa (dados reutilizáveis). Tudo que muda por vaga vive
+// na Candidatura. NÃO existe currículo/anexo — o formulário estruturado é o currículo.
+model Candidato {
+  id                  Int       @id @default(autoincrement())
+  empresaId           Int
+  nome                String
+  telefone            String // como informado (dígitos)
+  telefoneNorm        String // chave de deduplicação (sem +55) — por empresa
+  email               String?
+  endereco            String? // rua e número
+  cidade              String?
+  bairro              String?
+  nascimento          DateTime? @db.Date
+  linkedin            String?
+  instagram           String?
+  origem              String    @default("MANUAL") // MANUAL|PUBLICO|INSTAGRAM|WHATSAPP|INDICACAO|QRCODE|SITE|ANUNCIO|LOJA|OUTRO
+  funcoesInteresse    String[]  @default([]) // preferências de função
+  pretensaoSalarial   Float?
+  disponivelEm        DateTime? @db.Date
+  tipoVinculo         String? // CLT|FREELANCER|DIARISTA|ESTAGIO|A_COMBINAR
+  disponibilidade     Json? // {dias[],turnos[],fimDeSemana,feriados,fechamento,transporteProprio,meioDeslocamento,tempoDeslocamentoMin}
+  experienciasRapidas String[]  @default([])
+  respostasTriagem    Json?
+  tags                String[]  @default([]) // tags globais da pessoa
+  bancoTalentos       Boolean   @default(false) // legado (inscrição espontânea no banco)
+  situacao            String    @default("ATIVO") // ATIVO | ARQUIVADO | CONTRATADO
+  respostasFormulario Json? // respostas do formulário permanente (perguntas personalizadas)
+  observacoesInternas String?   @db.Text // notas gerais da pessoa
+  // LGPD / consentimento
+  consentimentoLGPD    Boolean   @default(false)
+  consentimentoBanco   Boolean   @default(false)
+  consentimentoEm      DateTime?
+  consentimentoOrigem  String? // MANUAL|PUBLICO
+  termoVersao          String?
+  // soft delete / anonimização
+  anonimizado         Boolean   @default(false)
+  anonimizadoEm       DateTime?
+  criadoEm            DateTime  @default(now())
+  atualizadoEm        DateTime  @updatedAt
+
+  experiencias ExperienciaProfissional[]
+  candidaturas Candidatura[]
+  historico    CandidatoHistorico[]
+  avaliacoes   AvaliacaoCandidato[]
+  contatos     ContatoCandidato[]
+  entrevistas  EntrevistaCandidato[]
+
+  @@unique([empresaId, telefoneNorm])
+  @@index([empresaId])
+}
+
+model ExperienciaProfissional {
+  id           Int      @id @default(autoincrement())
+  empresaId    Int
+  candidatoId  Int
+  empresa      String // nome da empresa
+  cargo        String?
+  funcao       String?
+  periodo      String? // legado
+  duracao      String? // rótulo (ex.: "6 meses a 1 ano")
+  duracaoMeses Int? // aproximação em meses (análise de permanência)
+  atividades   String?  @db.Text
+  motivoSaida  String?
+  criadoEm     DateTime @default(now())
+
+  candidato Candidato @relation(fields: [candidatoId], references: [id], onDelete: Cascade)
+
+  @@index([empresaId])
+  @@index([candidatoId])
+}
+
+// PARTICIPAÇÃO do candidato numa vaga (processo seletivo independente). Guarda o
+// status, o score e todo o histórico específico daquele processo.
+model Candidatura {
+  id               Int             @id @default(autoincrement())
+  empresaId        Int
+  candidatoId      Int
+  vagaId           Int
+  status           CandidatoStatus @default(NOVO)
+  avaliacaoGestor  Int? // 0-100 (parte humana do score, deste processo)
+  proximaAcao      String?
+  dataRetorno      DateTime?       @db.Date
+  motivoReprovacao String?
+  tags             String[]        @default([]) // tags específicas deste processo
+  // Respostas do formulário da vaga + classificação por aderência (visual principal)
+  respostas           Json?
+  classificacao       String? // ATENDE | PARCIAL | NAO_ATENDE | INCOMPLETO
+  classificacaoManual String? // override do gestor (ignora o cálculo)
+  aderencia           Int? // % de aderência aos requisitos
+  classificacaoDetalhe Json? // checklist explicativo [{label, ok:'sim'|'nao'|'parcial'}]
+  // Score auditável (valor atual; a trilha fica em ScoreHistorico)
+  score            Int?
+  scoreBreakdown   Json?
+  scorePesos       Json?
+  scoreVersao      String?
+  scoreMotivo      String?
+  scorePreenchimento Int? // % de dados preenchidos (0-100)
+  scoreQualidade   String? // COMPLETO | PARCIAL | ESTIMADO
+  scoreCalculadoEm DateTime?
+  criadoEm         DateTime        @default(now())
+  atualizadoEm     DateTime        @updatedAt
+
+  candidato   Candidato   @relation(fields: [candidatoId], references: [id], onDelete: Cascade)
+  vaga        Vaga        @relation(fields: [vagaId], references: [id], onDelete: Cascade)
+  historico   CandidatoHistorico[]
+  avaliacoes  AvaliacaoCandidato[]
+  contatos    ContatoCandidato[]
+  entrevistas EntrevistaCandidato[]
+  scoreHist   ScoreHistorico[]
+
+  @@unique([empresaId, candidatoId, vagaId])
+  @@index([empresaId])
+  @@index([vagaId])
+  @@index([candidatoId])
+  @@index([empresaId, status])
+}
+
+// Trilha de auditoria do score (1 linha por cálculo/recálculo).
+model ScoreHistorico {
+  id            Int      @id @default(autoincrement())
+  empresaId     Int
+  candidaturaId Int
+  score         Int
+  breakdown     Json?
+  pesos         Json?
+  versao        String
+  motivo        String
+  preenchimento Int
+  qualidade     String
+  criadoEm      DateTime @default(now())
+
+  candidatura Candidatura @relation(fields: [candidaturaId], references: [id], onDelete: Cascade)
+
+  @@index([empresaId])
+  @@index([candidaturaId])
+}
+
+model CandidatoHistorico {
+  id            Int      @id @default(autoincrement())
+  empresaId     Int
+  candidatoId   Int
+  candidaturaId Int? // nulo = evento do candidato (cadastro/anonimização); set = evento do processo
+  tipo          String // STATUS | CONTATO | AVALIACAO | ENTREVISTA | OBS | TAG | SISTEMA
+  de            String?
+  para          String?
+  descricao     String?  @db.Text
+  usuario       String?
+  criadoEm      DateTime @default(now())
+
+  candidato   Candidato    @relation(fields: [candidatoId], references: [id], onDelete: Cascade)
+  candidatura Candidatura? @relation(fields: [candidaturaId], references: [id], onDelete: Cascade)
+
+  @@index([empresaId])
+  @@index([candidatoId])
+  @@index([candidaturaId])
+}
+
+model AvaliacaoCandidato {
+  id              Int      @id @default(autoincrement())
+  empresaId       Int
+  candidatoId     Int
+  candidaturaId   Int? // avaliação de entrevista/teste é do processo (vaga)
+  comunicacao     Int?
+  organizacao     Int?
+  postura         Int?
+  tecnico         Int?
+  compatibilidade Int?
+  disponibilidade Int?
+  interesse       Int?
+  treinamento     Int?
+  evidencias      String   @db.Text
+  autor           String?
+  criadoEm        DateTime @default(now())
+
+  candidato   Candidato    @relation(fields: [candidatoId], references: [id], onDelete: Cascade)
+  candidatura Candidatura? @relation(fields: [candidaturaId], references: [id], onDelete: Cascade)
+
+  @@index([empresaId])
+  @@index([candidatoId])
+  @@index([candidaturaId])
+}
+
+model ContatoCandidato {
+  id            Int       @id @default(autoincrement())
+  empresaId     Int
+  candidatoId   Int
+  candidaturaId Int? // contato daquele processo (vaga)
+  tipo          String // WHATSAPP | LIGACAO | EMAIL | PRESENCIAL
+  resultado     String // SEM_RESPOSTA | INTERESSADO | SEM_INTERESSE | ENTREVISTA_MARCADA | RETORNAR
+  observacao    String?   @db.Text
+  proximaAcao   String?
+  dataRetorno   DateTime? @db.Date
+  autor         String?
+  criadoEm      DateTime  @default(now())
+
+  candidato   Candidato    @relation(fields: [candidatoId], references: [id], onDelete: Cascade)
+  candidatura Candidatura? @relation(fields: [candidaturaId], references: [id], onDelete: Cascade)
+
+  @@index([empresaId])
+  @@index([candidatoId])
+  @@index([candidaturaId])
+}
+
+model EntrevistaCandidato {
+  id            Int      @id @default(autoincrement())
+  empresaId     Int
+  candidatoId   Int
+  candidaturaId Int? // entrevista pertence ao processo (vaga)
+  quando        DateTime
+  tipo          String // ONLINE | PRESENCIAL | TESTE
+  responsavel   String?
+  local         String?
+  observacoes   String?  @db.Text
+  status        String   @default("AGENDADA") // AGENDADA | REALIZADA | CANCELADA | NAO_COMPARECEU
+  criadoEm      DateTime @default(now())
+
+  candidato   Candidato    @relation(fields: [candidatoId], references: [id], onDelete: Cascade)
+  candidatura Candidatura? @relation(fields: [candidaturaId], references: [id], onDelete: Cascade)
+
+  @@index([empresaId])
+  @@index([candidatoId])
+  @@index([candidaturaId])
+  @@index([empresaId, quando])
+}
+
+model RecrutamentoTag {
+  id        Int      @id @default(autoincrement())
+  empresaId Int
+  nome      String
+  criadoEm  DateTime @default(now())
+
+  @@unique([empresaId, nome])
+  @@index([empresaId])
+}
+
+model RecrutamentoConfig {
+  id           Int      @id @default(autoincrement())
+  empresaId    Int
+  slug         String   @unique
+  publicoAtivo Boolean  @default(true)
+  retencaoMeses Int     @default(12)
+  termoVersao  String   @default("1.0")
+  formulario   Json? // construtor do formulário PERMANENTE do banco de talentos
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@unique([empresaId])
+}
