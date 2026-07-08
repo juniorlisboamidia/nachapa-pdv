@@ -100,7 +100,7 @@ async function main() {
       WHERE s.relkind = 'S'
     `);
     for (const s of seqs.rows) {
-      await dest.query(`SELECT setval('${s.seq}', COALESCE((SELECT MAX(${s.col}) FROM ${s.tbl}), 1))`);
+      await dest.query(`SELECT setval('"${s.seq}"', COALESCE((SELECT MAX(${s.col}) FROM ${s.tbl}), 1))`);
     }
 
     console.log(`\n✅ ${total} linhas copiadas. Sequences ajustadas.`);
