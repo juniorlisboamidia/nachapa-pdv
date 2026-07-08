@@ -420,10 +420,10 @@ export default function Sidebar() {
               to="/"
               end
               className={itemClass}
-              title={collapsed ? 'Dashboard' : undefined}
+              title={collapsed ? 'Visão Geral' : undefined}
             >
               <Icon name="dashboard" />
-              <span className="sidebar-item-label">Dashboard</span>
+              <span className="sidebar-item-label">Visão Geral</span>
             </NavLink>
             {grupos.map((g) => {
               const bloqueado = g.soAdmin && usuario?.papel !== 'ADMIN'
