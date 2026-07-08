@@ -1,4 +1,7 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+// override:true => o .env é a fonte de verdade e SOBRESCREVE variáveis herdadas do
+// ambiente (ex.: um JWT_SECRET antigo que o PM2 injeta nos processos filhos).
+dotenv.config({ override: true });
 import { randomBytes } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import express from 'express';

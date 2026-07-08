@@ -19,7 +19,8 @@ npm run build
 cd ..
 
 echo "==> PM2 restart"
-pm2 restart pdv-backend || pm2 start backend/server.js --name pdv-backend --update-env
+# Sobe/reinicia a partir de backend/ pra o dotenv achar o .env (cwd = backend).
+pm2 restart pdv-backend --update-env || (cd backend && pm2 start server.js --name pdv-backend)
 pm2 save
 
 echo "==> OK. Ctrl+Shift+R no navegador."
