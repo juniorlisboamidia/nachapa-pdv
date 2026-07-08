@@ -34,14 +34,14 @@ a { text-decoration: none; color: inherit; }
 /* Sidebar */
 .sidebar {
   width: 268px;
-  background: linear-gradient(180deg, #f97316 0%, #ea580c 52%, #c2410b 100%);
+  background: linear-gradient(180deg, #3b82f6 0%, #2563eb 52%, #1d4ed8 100%);
   border-right: none;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
   position: fixed;
   top: 0; left: 0; bottom: 0;
-  box-shadow: 2px 0 16px rgba(124, 45, 18, 0.22);
+  box-shadow: 2px 0 16px rgba(30, 58, 138, 0.22);
   z-index: 20;
   transition: width 0.18s ease;
 }
@@ -93,7 +93,7 @@ a { text-decoration: none; color: inherit; }
 .sidebar-company-avatar {
   width: 38px; height: 38px;
   background: #fff;
-  color: #ea580c;
+  color: #2563eb;
   border-radius: 10px;
   display: flex; align-items: center; justify-content: center;
   font-size: 18px; font-weight: 800; flex-shrink: 0;
@@ -133,7 +133,7 @@ a { text-decoration: none; color: inherit; }
 .sidebar-item:hover  { background: rgba(255,255,255,0.16); color: #fff; }
 .sidebar-item.active {
   background: #fff;
-  color: #ea580c;
+  color: #2563eb;
   font-weight: 600;
   box-shadow: 0 2px 8px rgba(0,0,0,0.10);
 }
@@ -178,7 +178,7 @@ a { text-decoration: none; color: inherit; }
 .sidebar-user-avatar {
   width: 32px; height: 32px;
   background: rgba(255,255,255,0.92);
-  color: #ea580c;
+  color: #2563eb;
   border-radius: 9px;
   display: flex; align-items: center; justify-content: center;
   font-size: 12.5px; font-weight: 700; flex-shrink: 0;
