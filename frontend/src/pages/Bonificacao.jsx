@@ -1173,7 +1173,7 @@ export default function Bonificacao() {
       <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />
 
       <div className="modal-tabs" style={{ marginBottom: 16 }}>
-        <button type="button" className={'av-tab' + (aba === 'mes' ? ' active' : '')} onClick={() => setAba('mes')}>Mês atual</button>
+        <button type="button" className={'av-tab' + (aba === 'mes' ? ' active' : '')} onClick={() => setAba('mes')}>Mês Atual</button>
         <button type="button" className={'av-tab' + (aba === 'equipe' ? ' active' : '')} onClick={() => setAba('equipe')}>Equipe & XP</button>
         <button type="button" className={'av-tab' + (aba === 'conquistas' ? ' active' : '')} onClick={() => setAba('conquistas')}>Conquistas</button>
         <button type="button" className={'av-tab' + (aba === 'mercado' ? ' active' : '')} onClick={() => setAba('mercado')}>Mercado</button>
