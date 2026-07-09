@@ -5186,6 +5186,22 @@ app.get('/api/ponto/painel', async (req, res) => {
   } catch (err) { console.error('[ponto/painel]', err); res.status(500).json({ error: 'Erro ao carregar o painel.' }); }
 });
 
+// Lançamento manual de marcação (ADMIN) — corrige batida esquecida/ajuste.
+app.post('/api/ponto/marcacoes', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const funcionarioId = parseInt(req.body?.funcionarioId, 10);
+    if (!funcionarioId) return res.status(400).json({ error: 'Selecione o colaborador.' });
+    const func = await prisma.funcionario.findFirst({ where: { id: funcionarioId } });
+    if (!func) return res.status(404).json({ error: 'Colaborador não encontrado.' });
+    if (!PONTO_TIPOS.includes(req.body?.tipo)) return res.status(400).json({ error: 'Tipo de marcação inválido.' });
+    const dataHora = req.body?.dataHora ? new Date(req.body.dataHora) : new Date();
+    if (isNaN(dataHora.getTime())) return res.status(400).json({ error: 'Data/hora inválida.' });
+    const reg = await prisma.pontoRegistro.create({ data: { funcionarioId, tipo: req.body.tipo, dataHora, origem: 'MANUAL' } });
+    res.status(201).json({ id: reg.id, ok: true, tipoLabel: PONTO_LABEL[req.body.tipo], dataHora: reg.dataHora });
+  } catch (err) { console.error('[ponto/marcacoes POST]', err); res.status(500).json({ error: 'Erro ao lançar a marcação.' }); }
+});
+
 // ===== PÚBLICO — tela quiosque do tablet (aberta por token do dispositivo) =====
 async function resolverDispositivo(token) {
   return prisma.dispositivo.findFirst({ where: { token: String(token), ativo: true } });

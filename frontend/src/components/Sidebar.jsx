@@ -133,6 +133,13 @@ const ICONS = {
       <path d="M9 17v-3M12 17v-5M15 17v-7" />
     </>
   ),
+  // Relógio (Ponto Facial)
+  ponto: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7.5V12l3 1.8" />
+    </>
+  ),
   // Cadeado (área restrita ao ADMIN)
   cadeado: (
     <>
@@ -174,7 +181,7 @@ const grupos = [
     label: 'Dep. Pessoal',
     icon: 'clientes',
     itens: [
-      { to: '/rh/equipe', label: 'Equipe', icon: 'entregadores' },
+      { to: '/rh/ponto-facial', label: 'Ponto Facial', icon: 'ponto' },
       { to: '/rh/bonificacao', label: 'Bonificação', icon: 'faturamento' },
       { to: '/rh/banco-de-talentos', label: 'Banco de Talentos', icon: 'clientes' }
     ]

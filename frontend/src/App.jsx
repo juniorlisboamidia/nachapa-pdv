@@ -5,6 +5,7 @@ import Layout from './components/Layout'
 import Inicio from './pages/Inicio'
 import EmConstrucao from './pages/EmConstrucao'
 import Equipe from './pages/Equipe'
+import PontoFacial from './pages/PontoFacial'
 import Bonificacao from './pages/Bonificacao'
 import BonificacaoPublica from './pages/BonificacaoPublica'
 import BonificacaoEu from './pages/BonificacaoEu'
@@ -66,7 +67,8 @@ export default function App() {
             <Route path="custos-variaveis" element={<CustosVariaveis />} />
             <Route path="ponto-equilibrio" element={<PontoEquilibrio />} />
             <Route path="faturamento" element={<Faturamento />} />
-            {/* Dep. Pessoal — Equipe + Bonificação (F1a) */}
+            {/* Dep. Pessoal — Ponto Facial + Bonificação (Equipe fundida em Colaboradores) */}
+            <Route path="rh/ponto-facial" element={<PontoFacial />} />
             <Route path="rh/equipe" element={<Equipe />} />
             <Route path="rh/bonificacao" element={<Bonificacao />} />
             <Route path="rh/banco-de-talentos" element={<BancoTalentos />} />

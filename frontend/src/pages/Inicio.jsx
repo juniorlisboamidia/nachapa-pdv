@@ -16,7 +16,7 @@ const GRUPOS = [
   {
     titulo: 'Dep. Pessoal',
     itens: [
-      { emoji: '👥', nome: 'Equipe', desc: 'Cadastro da equipe interna', to: '/rh/equipe' },
+      { emoji: '🕐', nome: 'Ponto Facial', desc: 'Controle de ponto e colaboradores', to: '/rh/ponto-facial' },
       { emoji: '🏆', nome: 'Bonificação', desc: 'Destaque do Mês (XP, conquistas, mercado)', to: '/rh/bonificacao' },
       { emoji: '🎯', nome: 'Banco de Talentos', desc: 'Recrutamento e seleção', to: '/rh/banco-de-talentos' },
     ],
