@@ -31,6 +31,7 @@ const MODELS_TENANT = new Set([
   'bonificacaoNivel', 'bonificacaoXp',
   'conquista', 'conquistaDesbloqueada',
   'bonificacaoMoeda', 'mercadoItem', 'mercadoResgate',
+  'funcionarioFace', 'pontoRegistro', 'dispositivo',
 ]);
 const OPS_WHERE = new Set([
   'findMany', 'findFirst', 'findFirstOrThrow', 'findUnique', 'findUniqueOrThrow',
@@ -5032,5 +5033,216 @@ app.get('/api/ponto-equilibrio', async (req, res) => {
   }
 });
 
+
+// ===================== Dep. Pessoal: Ponto Facial (Fase 1) =====================
+// Reconhecimento no tablet (face-api.js); aqui só guardamos/comparamos VETORES.
+const PONTO_LIMIAR = 0.55; // distância euclidiana máx. p/ considerar "reconhecido"
+const PONTO_TIPOS = ['ENTRADA', 'SAIDA_INTERVALO', 'RETORNO_INTERVALO', 'SAIDA'];
+const PONTO_LABEL = { ENTRADA: 'Entrada', SAIDA_INTERVALO: 'Saída p/ intervalo', RETORNO_INTERVALO: 'Retorno do intervalo', SAIDA: 'Saída' };
+
+function distEuclid(a, b) {
+  let s = 0; const n = Math.min(a.length, b.length);
+  for (let i = 0; i < n; i++) { const d = a[i] - b[i]; s += d * d; }
+  return Math.sqrt(s);
+}
+// Acha o melhor funcionário para um vetor detectado (menor distância). empresaId manual.
+async function melhorMatchFacial(descritor, empresaId) {
+  if (!Array.isArray(descritor) || descritor.length < 100) return null;
+  const faces = await prisma.funcionarioFace.findMany({ where: { empresaId } });
+  let best = null;
+  for (const f of faces) {
+    const amostras = Array.isArray(f.descritoresJson) ? f.descritoresJson : [];
+    for (const s of amostras) {
+      if (!Array.isArray(s) || s.length < 100) continue;
+      const d = distEuclid(descritor, s);
+      if (best === null || d < best.distancia) best = { funcionarioId: f.funcionarioId, distancia: d };
+    }
+  }
+  return best;
+}
+const inicioDoDia = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
+// Próxima marcação esperada (auto-sequência entrada→intervalo→retorno→saída).
+async function proximoTipoPonto(funcionarioId, empresaId) {
+  const de = inicioDoDia(); const ate = new Date(de); ate.setDate(ate.getDate() + 1);
+  const regs = await prisma.pontoRegistro.findMany({ where: { funcionarioId, empresaId, dataHora: { gte: de, lt: ate } }, orderBy: { dataHora: 'asc' } });
+  const ultimo = regs.length ? regs[regs.length - 1].tipo : null;
+  const seq = { ENTRADA: 'SAIDA_INTERVALO', SAIDA_INTERVALO: 'RETORNO_INTERVALO', RETORNO_INTERVALO: 'SAIDA', SAIDA: null };
+  return ultimo ? seq[ultimo] : 'ENTRADA';
+}
+const funcPublico = (f) => ({ id: f.id, nome: f.nome, funcao: f.funcao || null });
+
+// ===== Colaboradores (ADMIN) — reusa o cadastro de Funcionario, + biometria/PIN =====
+app.get('/api/ponto/colaboradores', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const fs = await prisma.funcionario.findMany({ orderBy: [{ status: 'asc' }, { nome: 'asc' }] });
+    const de = inicioDoDia();
+    const ultimas = await prisma.pontoRegistro.groupBy({ by: ['funcionarioId'], _max: { dataHora: true } });
+    const uMap = new Map(ultimas.map((u) => [u.funcionarioId, u._max.dataHora]));
+    res.json(fs.map((f) => ({
+      id: f.id, nome: f.nome, funcao: f.funcao || null, cpf: f.cpf || null, whatsapp: f.whatsapp || null, status: f.status,
+      biometriaStatus: f.biometriaStatus, biometriaEm: f.biometriaEm, temPin: !!f.pinPonto, ultimaMarcacao: uMap.get(f.id) || null,
+    })));
+  } catch (err) { console.error('[ponto/colaboradores]', err); res.status(500).json({ error: 'Erro ao carregar colaboradores.' }); }
+});
+
+// Salva o(s) vetor(es) facial(is) do funcionário. SÓ vetor — nenhuma foto.
+app.post('/api/funcionarios/:id/face', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const id = parseInt(req.params.id, 10);
+    const func = await prisma.funcionario.findFirst({ where: { id } });
+    if (!func) return res.status(404).json({ error: 'Funcionário não encontrado.' });
+    const descritores = Array.isArray(req.body?.descritores) ? req.body.descritores.filter((d) => Array.isArray(d) && d.length >= 100) : [];
+    if (!descritores.length) return res.status(400).json({ error: 'Nenhum vetor facial válido recebido.' });
+    const ex = await prisma.funcionarioFace.findFirst({ where: { funcionarioId: id } });
+    if (ex) await prisma.funcionarioFace.update({ where: { id: ex.id }, data: { descritoresJson: descritores } });
+    else await prisma.funcionarioFace.create({ data: { funcionarioId: id, descritoresJson: descritores } });
+    await prisma.funcionario.update({ where: { id }, data: { biometriaStatus: 'CADASTRADA', biometriaEm: new Date(), termoBiometriaEm: req.body?.termo === true ? new Date() : func.termoBiometriaEm } });
+    res.json({ ok: true });
+  } catch (err) { console.error('[funcionarios/face POST]', err); res.status(500).json({ error: 'Erro ao salvar o rosto.' }); }
+});
+
+app.delete('/api/funcionarios/:id/face', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const id = parseInt(req.params.id, 10);
+    await prisma.funcionarioFace.deleteMany({ where: { funcionarioId: id } });
+    await prisma.funcionario.update({ where: { id }, data: { biometriaStatus: 'PENDENTE', biometriaEm: null } });
+    res.json({ ok: true });
+  } catch (err) { console.error('[funcionarios/face DELETE]', err); res.status(500).json({ error: 'Erro ao remover o rosto.' }); }
+});
+
+// Define/gera o PIN de reserva (único na loja).
+app.put('/api/funcionarios/:id/pin', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const id = parseInt(req.params.id, 10);
+    const func = await prisma.funcionario.findFirst({ where: { id } });
+    if (!func) return res.status(404).json({ error: 'Funcionário não encontrado.' });
+    const pin = String(req.body?.pin ?? '').replace(/\D/g, '');
+    if (pin && (pin.length < 4 || pin.length > 8)) return res.status(400).json({ error: 'O PIN deve ter de 4 a 8 dígitos.' });
+    if (pin) { const dup = await prisma.funcionario.findFirst({ where: { pinPonto: pin, id: { not: id } } }); if (dup) return res.status(400).json({ error: 'Esse PIN já está em uso por outro colaborador.' }); }
+    await prisma.funcionario.update({ where: { id }, data: { pinPonto: pin || null } });
+    res.json({ ok: true });
+  } catch (err) { console.error('[funcionarios/pin]', err); res.status(500).json({ error: 'Erro ao salvar o PIN.' }); }
+});
+
+// ===== Dispositivos (tablets) (ADMIN) =====
+app.get('/api/ponto/dispositivos', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const ds = await prisma.dispositivo.findMany({ orderBy: { criadoEm: 'asc' } });
+    res.json(ds.map((d) => ({ id: d.id, nome: d.nome, token: d.token, ativo: d.ativo, ultimaSync: d.ultimaSync })));
+  } catch (err) { console.error('[ponto/dispositivos GET]', err); res.status(500).json({ error: 'Erro ao carregar dispositivos.' }); }
+});
+app.post('/api/ponto/dispositivos', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const nome = typeof req.body?.nome === 'string' ? req.body.nome.trim().slice(0, 60) : '';
+    if (!nome) return res.status(400).json({ error: 'Informe o nome do dispositivo.' });
+    const d = await prisma.dispositivo.create({ data: { nome, token: randomBytes(12).toString('base64url') } });
+    res.status(201).json({ id: d.id, nome: d.nome, token: d.token, ativo: d.ativo });
+  } catch (err) { console.error('[ponto/dispositivos POST]', err); res.status(500).json({ error: 'Erro ao criar o dispositivo.' }); }
+});
+app.delete('/api/ponto/dispositivos/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try { await prisma.dispositivo.delete({ where: { id: parseInt(req.params.id, 10) } }); res.json({ ok: true }); }
+  catch (err) { console.error('[ponto/dispositivos DELETE]', err); res.status(500).json({ error: 'Erro ao excluir.' }); }
+});
+
+// ===== Marcações + Painel (ADMIN) =====
+app.get('/api/ponto/marcacoes', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const where = {};
+    if (req.query.funcionarioId) where.funcionarioId = parseInt(req.query.funcionarioId, 10);
+    if (req.query.data) { const de = new Date(req.query.data + 'T00:00:00'); if (!isNaN(de)) { const ate = new Date(de); ate.setDate(ate.getDate() + 1); where.dataHora = { gte: de, lt: ate }; } }
+    const regs = await prisma.pontoRegistro.findMany({ where, orderBy: { dataHora: 'desc' }, take: 300 });
+    const fs = new Map((await prisma.funcionario.findMany()).map((f) => [f.id, f.nome]));
+    res.json(regs.map((r) => ({ id: r.id, funcionarioId: r.funcionarioId, funcionarioNome: fs.get(r.funcionarioId) || '—', tipo: r.tipo, tipoLabel: PONTO_LABEL[r.tipo] || r.tipo, dataHora: r.dataHora, origem: r.origem, distancia: r.distancia })));
+  } catch (err) { console.error('[ponto/marcacoes]', err); res.status(500).json({ error: 'Erro ao carregar marcações.' }); }
+});
+
+app.get('/api/ponto/painel', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const de = inicioDoDia(); const ate = new Date(de); ate.setDate(ate.getDate() + 1);
+    const fs = await prisma.funcionario.findMany({ where: { status: 'ATIVO' }, orderBy: { nome: 'asc' } });
+    const regs = await prisma.pontoRegistro.findMany({ where: { dataHora: { gte: de, lt: ate } }, orderBy: { dataHora: 'asc' } });
+    const porFunc = new Map();
+    for (const r of regs) { const a = porFunc.get(r.funcionarioId) || []; a.push(r); porFunc.set(r.funcionarioId, a); }
+    const linhas = fs.map((f) => {
+      const rs = porFunc.get(f.id) || [];
+      const ultimo = rs.length ? rs[rs.length - 1].tipo : null;
+      let situacao = 'ausente';
+      if (ultimo === 'ENTRADA' || ultimo === 'RETORNO_INTERVALO') situacao = 'presente';
+      else if (ultimo === 'SAIDA_INTERVALO') situacao = 'intervalo';
+      else if (ultimo === 'SAIDA') situacao = 'encerrado';
+      return { id: f.id, nome: f.nome, funcao: f.funcao || null, situacao, entrada: rs.find((r) => r.tipo === 'ENTRADA')?.dataHora || null, ultimaMarcacao: rs.length ? rs[rs.length - 1].dataHora : null };
+    });
+    const cont = (s) => linhas.filter((l) => l.situacao === s).length;
+    res.json({ total: linhas.length, presentes: cont('presente'), intervalo: cont('intervalo'), encerrados: cont('encerrado'), ausentes: cont('ausente'), colaboradores: linhas });
+  } catch (err) { console.error('[ponto/painel]', err); res.status(500).json({ error: 'Erro ao carregar o painel.' }); }
+});
+
+// ===== PÚBLICO — tela quiosque do tablet (aberta por token do dispositivo) =====
+async function resolverDispositivo(token) {
+  return prisma.dispositivo.findFirst({ where: { token: String(token), ativo: true } });
+}
+app.get('/api/public/ponto/:token', async (req, res) => {
+  try {
+    const disp = await resolverDispositivo(req.params.token);
+    if (!disp) return res.status(404).json({ error: 'Dispositivo não autorizado.' });
+    const loja = await prisma.empresa.findUnique({ where: { id: disp.empresaId }, select: { nome: true, logoDataUrl: true } });
+    res.json({ dispositivo: { nome: disp.nome }, loja: { nome: loja?.nome || 'Loja', logoDataUrl: loja?.logoDataUrl || null }, limiar: PONTO_LIMIAR });
+  } catch (err) { console.error('[public/ponto GET]', err); res.status(500).json({ error: 'Erro.' }); }
+});
+
+// Identifica pelo vetor (matching no servidor).
+app.post('/api/public/ponto/:token/identificar', async (req, res) => {
+  try {
+    const disp = await resolverDispositivo(req.params.token);
+    if (!disp) return res.status(404).json({ error: 'Dispositivo não autorizado.' });
+    const match = await melhorMatchFacial(req.body?.descritor, disp.empresaId);
+    if (!match || match.distancia > PONTO_LIMIAR) return res.json({ reconhecido: false });
+    const func = await prisma.funcionario.findFirst({ where: { id: match.funcionarioId, empresaId: disp.empresaId, status: 'ATIVO' } });
+    if (!func) return res.json({ reconhecido: false });
+    const proximo = await proximoTipoPonto(func.id, disp.empresaId);
+    res.json({ reconhecido: true, funcionario: funcPublico(func), distancia: match.distancia, proximoTipo: proximo, proximoLabel: proximo ? PONTO_LABEL[proximo] : null });
+  } catch (err) { console.error('[public/ponto identificar]', err); res.status(500).json({ error: 'Erro ao identificar.' }); }
+});
+
+// Identifica pelo PIN de reserva.
+app.post('/api/public/ponto/:token/identificar-pin', async (req, res) => {
+  try {
+    const disp = await resolverDispositivo(req.params.token);
+    if (!disp) return res.status(404).json({ error: 'Dispositivo não autorizado.' });
+    const pin = String(req.body?.pin ?? '').replace(/\D/g, '');
+    if (!pin) return res.status(400).json({ error: 'Informe o PIN.' });
+    const func = await prisma.funcionario.findFirst({ where: { pinPonto: pin, empresaId: disp.empresaId, status: 'ATIVO' } });
+    if (!func) return res.json({ reconhecido: false });
+    const proximo = await proximoTipoPonto(func.id, disp.empresaId);
+    res.json({ reconhecido: true, funcionario: funcPublico(func), proximoTipo: proximo, proximoLabel: proximo ? PONTO_LABEL[proximo] : null });
+  } catch (err) { console.error('[public/ponto pin]', err); res.status(500).json({ error: 'Erro.' }); }
+});
+
+// Registra a marcação (auto-sequência; aceita tipo explícito opcional).
+app.post('/api/public/ponto/:token/registrar', async (req, res) => {
+  try {
+    const disp = await resolverDispositivo(req.params.token);
+    if (!disp) return res.status(404).json({ error: 'Dispositivo não autorizado.' });
+    const funcionarioId = parseInt(req.body?.funcionarioId, 10);
+    const func = await prisma.funcionario.findFirst({ where: { id: funcionarioId, empresaId: disp.empresaId, status: 'ATIVO' } });
+    if (!func) return res.status(404).json({ error: 'Colaborador não encontrado.' });
+    let tipo = PONTO_TIPOS.includes(req.body?.tipo) ? req.body.tipo : await proximoTipoPonto(func.id, disp.empresaId);
+    if (!tipo) return res.status(400).json({ error: 'Expediente de hoje já foi encerrado.' });
+    const origem = req.body?.origem === 'PIN' ? 'PIN' : 'FACIAL';
+    const distancia = typeof req.body?.distancia === 'number' ? req.body.distancia : null;
+    const reg = await prisma.pontoRegistro.create({ data: { empresaId: disp.empresaId, funcionarioId: func.id, tipo, origem, dispositivoId: disp.id, distancia } });
+    await prisma.dispositivo.update({ where: { id: disp.id }, data: { ultimaSync: new Date() } });
+    res.status(201).json({ ok: true, tipo, tipoLabel: PONTO_LABEL[tipo], funcionario: funcPublico(func), dataHora: reg.dataHora });
+  } catch (err) { console.error('[public/ponto registrar]', err); res.status(500).json({ error: 'Erro ao registrar o ponto.' }); }
+});
 
 app.listen(PORT, () => console.log(`Operação (PDV) API rodando em http://localhost:${PORT}`));

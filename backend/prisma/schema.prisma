@@ -606,11 +606,58 @@ model Funcionario {
   whatsapp     String?
   status       String   @default("ATIVO") // ATIVO | INATIVO
   tokenPrivado String?  @unique // link privado do funcionário (XP/nível/perfil)
+  // Ponto Facial
+  pinPonto        String?  // PIN de reserva p/ bater ponto quando o rosto não é reconhecido
+  biometriaStatus String   @default("PENDENTE") // PENDENTE | CADASTRADA | BLOQUEADA
+  biometriaEm     DateTime? // quando o rosto foi cadastrado
+  termoBiometriaEm DateTime? // aceite do termo LGPD de uso da biometria
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
   @@index([empresaId])
   @@index([empresaId, status])
+}
+
+// Ponto Facial — vetor(es) faciais do funcionário. SÓ o descritor (128 floats),
+// NUNCA a foto (decisão de privacidade). Usado só pra matching no servidor.
+model FuncionarioFace {
+  id             Int      @id @default(autoincrement())
+  empresaId      Int
+  funcionarioId  Int      @unique
+  descritoresJson Json    // array de descritores (cada um = array de 128 números)
+  criadoEm       DateTime @default(now())
+  atualizadoEm   DateTime @updatedAt
+
+  @@index([empresaId])
+}
+
+// Registro de ponto (marcação). Sem foto — só o vínculo + horário + como bateu.
+model PontoRegistro {
+  id            Int      @id @default(autoincrement())
+  empresaId     Int
+  funcionarioId Int
+  tipo          String   // ENTRADA | SAIDA_INTERVALO | RETORNO_INTERVALO | SAIDA
+  dataHora      DateTime @default(now())
+  origem        String   @default("FACIAL") // FACIAL | PIN | MANUAL
+  dispositivoId Int?
+  distancia     Float?   // distância do match facial (quanto menor, mais confiante)
+  criadoEm      DateTime @default(now())
+
+  @@index([empresaId, dataHora])
+  @@index([empresaId, funcionarioId, dataHora])
+}
+
+// Dispositivo (tablet/totem) autorizado a abrir a tela de bater ponto (por token).
+model Dispositivo {
+  id         Int      @id @default(autoincrement())
+  empresaId  Int
+  nome       String
+  token      String   @unique // abre a tela quiosque /ponto/:token (sem login)
+  ativo      Boolean  @default(true)
+  ultimaSync DateTime?
+  criadoEm   DateTime @default(now())
+
+  @@index([empresaId])
 }
 
 // Dep. Pessoal › Bonificação — configuração POR LOJA (1 linha por empresa):
