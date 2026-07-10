@@ -5432,6 +5432,77 @@ app.get('/api/ponto/espelho', async (req, res) => {
   } catch (err) { if (err?.http) return res.status(err.http).json({ error: err.msg }); console.error('[ponto/espelho]', err); res.status(500).json({ error: 'Erro ao gerar o espelho.' }); }
 });
 
+// ===== Fechamento do Ponto → lança a Presença (falta/atraso) na Bonificação =====
+const semAcento = (s) => String(s || '').normalize('NFD').replace(new RegExp('[\\u0300-\\u036f]', 'g'), '').toLowerCase();
+const acharTipoAssid = (tipos, chave) => tipos.find((t) => t.ativo && semAcento(t.nome).includes(chave));
+
+app.get('/api/ponto/fechamento', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const agora = brFields(Date.now());
+    const ano = parseInt(req.query.ano, 10) || agora.y;
+    const mes = parseInt(req.query.mes, 10) || (agora.mo + 1);
+    if (mes < 1 || mes > 12) return res.status(400).json({ error: 'Mês inválido.' });
+    const funcs = await prisma.funcionario.findMany({ where: { status: 'ATIVO', jornadaId: { not: null } }, orderBy: { nome: 'asc' } });
+    const tipos = await prisma.bonificacaoTipoOcorrencia.findMany({ where: { pilar: 'ASSIDUIDADE' } });
+    const tipoFalta = acharTipoAssid(tipos, 'falta');
+    const tipoAtraso = acharTipoAssid(tipos, 'atraso');
+    const pctFalta = tipoFalta ? Number(tipoFalta.percentual) : 0;
+    const pctAtraso = tipoAtraso ? Number(tipoAtraso.percentual) : 0;
+    const bonificacaoFechada = !!(await prisma.bonificacaoFechamento.findFirst({ where: { ano, mes } }));
+    const jaLancadas = await prisma.bonificacaoOcorrencia.count({ where: { ano, mes, origem: 'PONTO' } });
+
+    const colaboradores = [];
+    for (const f of funcs) {
+      const esp = await calcularEspelho(f.id, ano, mes);
+      const t = esp.totais;
+      const incompletos = esp.dias.filter((d) => d.situacao === 'incompleto').length;
+      const presenca = Math.max(0, 100 - t.faltas * pctFalta - t.atrasos * pctAtraso);
+      colaboradores.push({ id: f.id, nome: f.nome, funcao: f.funcao || null, faltas: t.faltas, atrasos: t.atrasos, incompletos, trabalhadoMin: t.trabalhadoMin, saldoMin: t.saldoMin, noturnoMin: t.noturnoMin, presenca: Math.round(presenca) });
+    }
+    res.json({ ano, mes, colaboradores, pctFalta, pctAtraso, temTipoFalta: !!tipoFalta, temTipoAtraso: !!tipoAtraso, bonificacaoFechada, jaLancadas });
+  } catch (err) { console.error('[ponto/fechamento GET]', err); res.status(500).json({ error: 'Erro ao gerar o fechamento.' }); }
+});
+
+app.post('/api/ponto/fechamento/sincronizar', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const ano = parseInt(req.body?.ano, 10);
+    const mes = parseInt(req.body?.mes, 10);
+    if (!ano || mes < 1 || mes > 12) return res.status(400).json({ error: 'Período inválido.' });
+    if (await prisma.bonificacaoFechamento.findFirst({ where: { ano, mes } })) return res.status(400).json({ error: 'A Bonificação deste mês já está fechada. Reabra-a na aba Bonificação para lançar o ponto.' });
+    const tipos = await prisma.bonificacaoTipoOcorrencia.findMany({ where: { pilar: 'ASSIDUIDADE' } });
+    const tipoFalta = acharTipoAssid(tipos, 'falta');
+    const tipoAtraso = acharTipoAssid(tipos, 'atraso');
+    if (!tipoFalta && !tipoAtraso) return res.status(400).json({ error: 'Não encontrei os tipos "Falta"/"Atraso" no pilar Assiduidade da Bonificação. Crie-os na aba Bonificação.' });
+
+    const funcs = await prisma.funcionario.findMany({ where: { status: 'ATIVO', jornadaId: { not: null } } });
+    // idempotência: remove só o que o Ponto já lançou nesse mês (preserva as ocorrências manuais)
+    await prisma.bonificacaoOcorrencia.deleteMany({ where: { ano, mes, origem: 'PONTO' } });
+
+    const novas = [];
+    let nFaltas = 0, nAtrasos = 0, nColab = 0;
+    for (const f of funcs) {
+      const esp = await calcularEspelho(f.id, ano, mes);
+      let teve = false;
+      for (const d of esp.dias) {
+        const dataDia = new Date(brToUtcMs(ano, mes - 1, d.dia, 12, 0));
+        const ref = `${String(d.dia).padStart(2, '0')}/${String(mes).padStart(2, '0')}`;
+        if (d.situacao === 'falta' && tipoFalta) {
+          novas.push({ funcionarioId: f.id, ano, mes, tipoId: tipoFalta.id, nomeTipo: tipoFalta.nome, pilar: 'ASSIDUIDADE', percentual: tipoFalta.percentual, data: dataDia, observacao: `Ponto: falta em ${ref}`, origem: 'PONTO' });
+          nFaltas++; teve = true;
+        } else if (d.situacao === 'atraso' && tipoAtraso) {
+          novas.push({ funcionarioId: f.id, ano, mes, tipoId: tipoAtraso.id, nomeTipo: tipoAtraso.nome, pilar: 'ASSIDUIDADE', percentual: tipoAtraso.percentual, data: dataDia, observacao: `Ponto: atraso de ${d.atrasoMin} min em ${ref}`, origem: 'PONTO' });
+          nAtrasos++; teve = true;
+        }
+      }
+      if (teve) nColab++;
+    }
+    if (novas.length) await prisma.bonificacaoOcorrencia.createMany({ data: novas });
+    res.json({ ok: true, faltas: nFaltas, atrasos: nAtrasos, colaboradores: nColab, total: novas.length });
+  } catch (err) { console.error('[ponto/fechamento sincronizar]', err); res.status(500).json({ error: 'Erro ao lançar na Bonificação.' }); }
+});
+
 // ===== PÚBLICO — tela quiosque do tablet (aberta por token do dispositivo) =====
 async function resolverDispositivo(token) {
   return prisma.dispositivo.findFirst({ where: { token: String(token), ativo: true } });

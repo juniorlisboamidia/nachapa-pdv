@@ -754,6 +754,7 @@ model BonificacaoOcorrencia {
   percentual    Decimal  @db.Decimal(5, 2)
   data          DateTime @db.Date
   observacao    String?
+  origem        String   @default("MANUAL") // MANUAL | PONTO (lançada pelo Ponto Facial)
   criadoEm      DateTime @default(now())
 
   @@index([empresaId, ano, mes])

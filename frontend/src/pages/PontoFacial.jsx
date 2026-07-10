@@ -78,7 +78,8 @@ const TABS = [
   { id: 'colaboradores', label: 'Colaboradores' },
   { id: 'jornadas', label: 'Jornadas e Escalas' },
   { id: 'marcacoes', label: 'Marcações' },
-  { id: 'espelho', label: 'Espelho' }
+  { id: 'espelho', label: 'Espelho' },
+  { id: 'fechamento', label: 'Fechamento' }
 ]
 
 export default function PontoFacial() {
@@ -110,6 +111,7 @@ export default function PontoFacial() {
       {tab === 'jornadas' && <Jornadas notify={notify} />}
       {tab === 'marcacoes' && <Marcacoes notify={notify} />}
       {tab === 'espelho' && <Espelho notify={notify} />}
+      {tab === 'fechamento' && <Fechamento notify={notify} />}
     </div>
   )
 }
@@ -868,6 +870,130 @@ function Espelho() {
           </div>
         </>
       )}
+    </div>
+  )
+}
+
+// ===================== FECHAMENTO =====================
+function Fechamento({ notify }) {
+  const hoje = new Date()
+  const [ano, setAno] = useState(hoje.getFullYear())
+  const [mes, setMes] = useState(hoje.getMonth() + 1)
+  const [dados, setDados] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [erro, setErro] = useState(null)
+  const [confirmar, setConfirmar] = useState(false)
+  const [sincronizando, setSincronizando] = useState(false)
+
+  const carregar = useCallback(() => {
+    setLoading(true); setErro(null)
+    api.get('/ponto/fechamento', { params: { ano, mes } })
+      .then((r) => setDados(r.data))
+      .catch((e) => setErro(e?.response?.data?.error ?? 'Não foi possível carregar o fechamento.'))
+      .finally(() => setLoading(false))
+  }, [ano, mes])
+  useEffect(() => { carregar() }, [carregar])
+
+  function mudarMes(delta) {
+    let m = mes + delta, a = ano
+    if (m < 1) { m = 12; a-- } else if (m > 12) { m = 1; a++ }
+    setMes(m); setAno(a)
+  }
+
+  async function sincronizar() {
+    setSincronizando(true)
+    try {
+      const { data } = await api.post('/ponto/fechamento/sincronizar', { ano, mes })
+      notify(`Lançado na Bonificação: ${data.faltas} falta(s) e ${data.atrasos} atraso(s) em ${data.colaboradores} colaborador(es).`)
+      setConfirmar(false); carregar()
+    } catch (e) {
+      notify(e?.response?.data?.error ?? 'Não foi possível lançar.', 'error')
+    } finally { setSincronizando(false) }
+  }
+
+  const semTipos = dados && !dados.temTipoFalta && !dados.temTipoAtraso
+  const podeLancar = dados && !dados.bonificacaoFechada && !semTipos && dados.colaboradores.length > 0
+  const corPresenca = (p) => (p >= 90 ? '#166534' : p >= 70 ? '#92400e' : '#b91c1c')
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
+        <div className="page-header-sub" style={{ margin: 0 }}>Consolida o mês e lança faltas/atrasos no pilar Presença da Bonificação.</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => mudarMes(-1)}>‹</button>
+          <span style={{ fontWeight: 700, minWidth: 150, textAlign: 'center' }}>{MESES[mes - 1]} {ano}</span>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => mudarMes(1)}>›</button>
+        </div>
+      </div>
+
+      {erro ? (
+        <div className="alert alert-red"><div className="alert-msg clr-red">{erro}</div></div>
+      ) : loading ? (
+        <div className="loading-state">Carregando fechamento…</div>
+      ) : !dados ? null : (
+        <>
+          {semTipos && (
+            <div className="alert" style={{ background: '#fee2e2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 12px', marginBottom: 12, fontSize: 13, color: '#991b1b' }}>
+              Não encontrei os tipos <strong>Falta</strong>/<strong>Atraso</strong> no pilar Assiduidade da Bonificação. Crie-os na aba Bonificação para lançar o ponto.
+            </div>
+          )}
+          {dados.bonificacaoFechada && (
+            <div className="alert" style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 12px', marginBottom: 12, fontSize: 13, color: '#92400e' }}>
+              A Bonificação deste mês está <strong>fechada</strong>. Reabra-a na aba Bonificação para lançar/atualizar o ponto.
+            </div>
+          )}
+          {dados.jaLancadas > 0 && !dados.bonificacaoFechada && (
+            <div className="alert" style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '10px 12px', marginBottom: 12, fontSize: 13, color: '#1e40af' }}>
+              O ponto já lançou <strong>{dados.jaLancadas}</strong> ocorrência(s) neste mês. Lançar de novo substitui essas (as manuais são preservadas).
+            </div>
+          )}
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+            <div className="page-header-sub" style={{ margin: 0 }}>
+              {dados.colaboradores.length} colaborador(es) com jornada · Falta −{dados.pctFalta}% · Atraso −{dados.pctAtraso}%
+            </div>
+            <button type="button" className="btn btn-primary" style={{ marginLeft: 'auto' }} disabled={!podeLancar} onClick={() => setConfirmar(true)}>Lançar na Bonificação</button>
+          </div>
+
+          {dados.colaboradores.length === 0 ? (
+            <div className="empty-state" style={{ padding: '32px 16px' }}>Nenhum colaborador ativo com jornada atribuída. Atribua jornadas na aba Colaboradores.</div>
+          ) : (
+            <div className="table-card">
+              <table className="hb-table">
+                <thead>
+                  <tr><th>Colaborador</th><th>Faltas</th><th>Atrasos</th><th>Pendências</th><th>Trabalhado</th><th>Saldo</th><th>Noturno</th><th>Presença</th></tr>
+                </thead>
+                <tbody>
+                  {dados.colaboradores.map((c) => (
+                    <tr key={c.id}>
+                      <td><strong>{c.nome}</strong>{c.funcao ? <span style={{ color: 'var(--app-text-soft,#737373)' }}> · {c.funcao}</span> : null}</td>
+                      <td style={{ color: c.faltas ? '#b91c1c' : undefined }}>{c.faltas}</td>
+                      <td style={{ color: c.atrasos ? '#92400e' : undefined }}>{c.atrasos}</td>
+                      <td>{c.incompletos ? <span style={{ color: '#92400e' }}>{c.incompletos}</span> : '—'}</td>
+                      <td>{minHm0(c.trabalhadoMin)}</td>
+                      <td style={{ color: c.saldoMin < 0 ? '#b91c1c' : c.saldoMin > 0 ? '#166534' : undefined }}>{minHm0(c.saldoMin)}</td>
+                      <td>{minHm(c.noturnoMin)}</td>
+                      <td><strong style={{ color: corPresenca(c.presenca) }}>{c.presenca}%</strong></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+
+      <ConfirmDialog
+        open={confirmar}
+        title="Lançar na Bonificação"
+        message={`Lançar as faltas e atrasos de ${MESES[mes - 1]} ${ano} no pilar Presença?`}
+        description="As ocorrências lançadas antes pelo ponto neste mês serão substituídas. As manuais são preservadas."
+        confirmLabel="Lançar"
+        cancelLabel="Cancelar"
+        loading={sincronizando}
+        onConfirm={sincronizar}
+        onCancel={() => setConfirmar(false)}
+      />
     </div>
   )
 }
