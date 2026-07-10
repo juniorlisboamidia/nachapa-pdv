@@ -31,7 +31,7 @@ const MODELS_TENANT = new Set([
   'bonificacaoNivel', 'bonificacaoXp',
   'conquista', 'conquistaDesbloqueada',
   'bonificacaoMoeda', 'mercadoItem', 'mercadoResgate',
-  'funcionarioFace', 'pontoRegistro', 'dispositivo',
+  'funcionarioFace', 'pontoRegistro', 'dispositivo', 'jornada',
 ]);
 const OPS_WHERE = new Set([
   'findMany', 'findFirst', 'findFirstOrThrow', 'findUnique', 'findUniqueOrThrow',
@@ -5076,12 +5076,14 @@ app.get('/api/ponto/colaboradores', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
   try {
     const fs = await prisma.funcionario.findMany({ orderBy: [{ status: 'asc' }, { nome: 'asc' }] });
-    const de = inicioDoDia();
     const ultimas = await prisma.pontoRegistro.groupBy({ by: ['funcionarioId'], _max: { dataHora: true } });
     const uMap = new Map(ultimas.map((u) => [u.funcionarioId, u._max.dataHora]));
+    const jornadas = await prisma.jornada.findMany({ select: { id: true, nome: true } });
+    const jMap = new Map(jornadas.map((j) => [j.id, j.nome]));
     res.json(fs.map((f) => ({
       id: f.id, nome: f.nome, funcao: f.funcao || null, cpf: f.cpf || null, whatsapp: f.whatsapp || null, status: f.status,
       biometriaStatus: f.biometriaStatus, biometriaEm: f.biometriaEm, temPin: !!f.pinPonto, ultimaMarcacao: uMap.get(f.id) || null,
+      jornadaId: f.jornadaId || null, jornadaNome: f.jornadaId ? (jMap.get(f.jornadaId) || null) : null,
     })));
   } catch (err) { console.error('[ponto/colaboradores]', err); res.status(500).json({ error: 'Erro ao carregar colaboradores.' }); }
 });
@@ -5126,6 +5128,88 @@ app.put('/api/funcionarios/:id/pin', async (req, res) => {
     await prisma.funcionario.update({ where: { id }, data: { pinPonto: pin || null } });
     res.json({ ok: true });
   } catch (err) { console.error('[funcionarios/pin]', err); res.status(500).json({ error: 'Erro ao salvar o PIN.' }); }
+});
+
+// ===== Jornadas e Escalas (ADMIN) =====
+const HHMM = /^([01]\d|2[0-3]):([0-5]\d)$/;
+// diasJson: 7 posições (0=domingo .. 6=sábado). Cada dia = {folga:true} ou {entrada,saida}.
+function normalizarDias(raw) {
+  const arr = Array.isArray(raw) ? raw : [];
+  const out = [];
+  for (let i = 0; i < 7; i++) {
+    const d = arr[i] || {};
+    if (d.folga || (!d.entrada && !d.saida)) { out.push({ folga: true }); continue; }
+    const entrada = String(d.entrada || '').trim();
+    const saida = String(d.saida || '').trim();
+    if (!HHMM.test(entrada) || !HHMM.test(saida)) throw { http: 400, msg: `Horário inválido (use HH:MM) no dia ${i}.` };
+    out.push({ entrada, saida });
+  }
+  return out;
+}
+const clampTol = (v, def) => (Number.isFinite(+v) ? Math.max(0, Math.min(60, Math.round(+v))) : def);
+
+app.get('/api/ponto/jornadas', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const js = await prisma.jornada.findMany({ orderBy: [{ ativo: 'desc' }, { nome: 'asc' }] });
+    const usos = await prisma.funcionario.groupBy({ by: ['jornadaId'], _count: { _all: true }, where: { jornadaId: { not: null } } });
+    const uMap = new Map(usos.map((u) => [u.jornadaId, u._count._all]));
+    res.json(js.map((j) => ({ id: j.id, nome: j.nome, dias: j.diasJson, toleranciaMin: j.toleranciaMin, ativo: j.ativo, colaboradores: uMap.get(j.id) || 0 })));
+  } catch (err) { console.error('[ponto/jornadas GET]', err); res.status(500).json({ error: 'Erro ao carregar jornadas.' }); }
+});
+
+app.post('/api/ponto/jornadas', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const nome = String(req.body?.nome || '').trim().slice(0, 60);
+    if (!nome) return res.status(400).json({ error: 'Informe o nome da jornada.' });
+    const dias = normalizarDias(req.body?.dias);
+    const j = await prisma.jornada.create({ data: { nome, diasJson: dias, toleranciaMin: clampTol(req.body?.toleranciaMin, 10) } });
+    res.status(201).json({ id: j.id });
+  } catch (err) { if (err?.http) return res.status(err.http).json({ error: err.msg }); console.error('[ponto/jornadas POST]', err); res.status(500).json({ error: 'Erro ao criar a jornada.' }); }
+});
+
+app.put('/api/ponto/jornadas/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const id = parseInt(req.params.id, 10);
+    const ex = await prisma.jornada.findFirst({ where: { id } });
+    if (!ex) return res.status(404).json({ error: 'Jornada não encontrada.' });
+    const nome = String(req.body?.nome ?? ex.nome).trim().slice(0, 60);
+    if (!nome) return res.status(400).json({ error: 'Informe o nome da jornada.' });
+    const dias = req.body?.dias !== undefined ? normalizarDias(req.body.dias) : ex.diasJson;
+    const ativo = typeof req.body?.ativo === 'boolean' ? req.body.ativo : ex.ativo;
+    await prisma.jornada.update({ where: { id }, data: { nome, diasJson: dias, toleranciaMin: clampTol(req.body?.toleranciaMin, ex.toleranciaMin), ativo } });
+    res.json({ ok: true });
+  } catch (err) { if (err?.http) return res.status(err.http).json({ error: err.msg }); console.error('[ponto/jornadas PUT]', err); res.status(500).json({ error: 'Erro ao salvar a jornada.' }); }
+});
+
+app.delete('/api/ponto/jornadas/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const id = parseInt(req.params.id, 10);
+    await prisma.funcionario.updateMany({ where: { jornadaId: id }, data: { jornadaId: null } });
+    await prisma.jornada.delete({ where: { id } });
+    res.json({ ok: true });
+  } catch (err) { console.error('[ponto/jornadas DELETE]', err); res.status(500).json({ error: 'Erro ao excluir a jornada.' }); }
+});
+
+// Atribui (ou remove, jornadaId null) a jornada de um colaborador.
+app.put('/api/ponto/colaboradores/:id/jornada', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const id = parseInt(req.params.id, 10);
+    const func = await prisma.funcionario.findFirst({ where: { id } });
+    if (!func) return res.status(404).json({ error: 'Colaborador não encontrado.' });
+    const raw = req.body?.jornadaId;
+    const jornadaId = raw === null || raw === '' || raw === undefined ? null : parseInt(raw, 10);
+    if (jornadaId !== null) {
+      const j = await prisma.jornada.findFirst({ where: { id: jornadaId } });
+      if (!j) return res.status(400).json({ error: 'Jornada inválida.' });
+    }
+    await prisma.funcionario.update({ where: { id }, data: { jornadaId } });
+    res.json({ ok: true });
+  } catch (err) { console.error('[ponto/colaboradores jornada PUT]', err); res.status(500).json({ error: 'Erro ao atribuir a jornada.' }); }
 });
 
 // ===== Dispositivos (tablets) (ADMIN) =====

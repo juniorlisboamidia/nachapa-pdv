@@ -607,6 +607,7 @@ model Funcionario {
   status       String   @default("ATIVO") // ATIVO | INATIVO
   tokenPrivado String?  @unique // link privado do funcionário (XP/nível/perfil)
   // Ponto Facial
+  jornadaId       Int?     // jornada de trabalho atribuída (horário previsto)
   pinPonto        String?  // PIN de reserva p/ bater ponto quando o rosto não é reconhecido
   biometriaStatus String   @default("PENDENTE") // PENDENTE | CADASTRADA | BLOQUEADA
   biometriaEm     DateTime? // quando o rosto foi cadastrado
@@ -656,6 +657,23 @@ model Dispositivo {
   ativo      Boolean  @default(true)
   ultimaSync DateTime?
   criadoEm   DateTime @default(now())
+
+  @@index([empresaId])
+}
+
+// Ponto Facial › Jornadas e Escalas — horário previsto por dia da semana.
+// diasJson: 7 itens (índice 0=domingo .. 6=sábado). Cada item:
+//   { folga: true }  OU  { entrada: "HH:MM", saida: "HH:MM" }
+// Se saida <= entrada, o turno cruza a meia-noite (sai no dia seguinte).
+model Jornada {
+  id            Int      @id @default(autoincrement())
+  empresaId     Int
+  nome          String
+  diasJson      Json
+  toleranciaMin Int      @default(10) // tolerância de atraso (min) antes de contar atraso
+  ativo         Boolean  @default(true)
+  criadoEm      DateTime @default(now())
+  atualizadoEm  DateTime @updatedAt
 
   @@index([empresaId])
 }

@@ -76,6 +76,7 @@ function Pill({ meta }) {
 const TABS = [
   { id: 'painel', label: 'Painel' },
   { id: 'colaboradores', label: 'Colaboradores' },
+  { id: 'jornadas', label: 'Jornadas e Escalas' },
   { id: 'marcacoes', label: 'Marcações' }
 ]
 
@@ -105,6 +106,7 @@ export default function PontoFacial() {
 
       {tab === 'painel' && <Painel />}
       {tab === 'colaboradores' && <Colaboradores notify={notify} />}
+      {tab === 'jornadas' && <Jornadas notify={notify} />}
       {tab === 'marcacoes' && <Marcacoes notify={notify} />}
     </div>
   )
@@ -214,6 +216,16 @@ function Colaboradores({ notify }) {
   }, [])
   useEffect(() => { carregar() }, [carregar])
 
+  const [jornadas, setJornadas] = useState([])
+  useEffect(() => { api.get('/ponto/jornadas').then((r) => setJornadas(Array.isArray(r.data) ? r.data : [])).catch(() => {}) }, [])
+
+  async function atribuirJornada(f, value) {
+    const jornadaId = value === '' ? null : Number(value)
+    setLista((ls) => ls.map((x) => x.id === f.id ? { ...x, jornadaId, jornadaNome: jornadas.find((j) => j.id === jornadaId)?.nome || null } : x))
+    try { await api.put(`/ponto/colaboradores/${f.id}/jornada`, { jornadaId }) }
+    catch (e) { notify(e?.response?.data?.error ?? 'Não foi possível atribuir a jornada.', 'error'); carregar() }
+  }
+
   const filtrada = lista.filter((f) => {
     if (!busca.trim()) return true
     const q = busca.toLowerCase()
@@ -296,6 +308,7 @@ function Colaboradores({ notify }) {
                 <th>Colaborador</th>
                 <th>Função</th>
                 <th>CPF</th>
+                <th>Jornada</th>
                 <th>PIN</th>
                 <th>Última marcação</th>
                 <th aria-hidden="true"></th>
@@ -316,6 +329,12 @@ function Colaboradores({ notify }) {
                   <td>{f.funcao || '—'}</td>
                   <td>
                     {f.cpf ? mascararCPF(f.cpf) : <span style={{ color: '#b91c1c', fontSize: 12, fontWeight: 600 }}>sem CPF</span>}
+                  </td>
+                  <td onClick={(e) => e.stopPropagation()}>
+                    <select className="form-input" style={{ padding: '4px 8px', fontSize: 13, minWidth: 130 }} value={f.jornadaId || ''} onChange={(e) => atribuirJornada(f, e.target.value)}>
+                      <option value="">Sem jornada</option>
+                      {jornadas.map((j) => <option key={j.id} value={j.id}>{j.nome}</option>)}
+                    </select>
                   </td>
                   <td>
                     {f.temPin
@@ -530,6 +549,182 @@ function Marcacoes({ notify }) {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ===================== JORNADAS E ESCALAS =====================
+const DIAS_NOMES = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
+const DIAS_ABREV = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+// Default = turno noturno da hamburgueria (seg–sex 17h–00h30, sáb 18h–01h, dom folga).
+const DIAS_DEFAULT = [
+  { folga: true },
+  { entrada: '17:00', saida: '00:30' },
+  { entrada: '17:00', saida: '00:30' },
+  { entrada: '17:00', saida: '00:30' },
+  { entrada: '17:00', saida: '00:30' },
+  { entrada: '17:00', saida: '00:30' },
+  { entrada: '18:00', saida: '01:00' }
+]
+function cruzaMeiaNoite(d) {
+  if (!d || d.folga || !d.entrada || !d.saida) return false
+  return d.saida <= d.entrada
+}
+function resumoJornada(dias) {
+  if (!Array.isArray(dias)) return '—'
+  const trab = dias.map((d, i) => ({ ...d, i })).filter((d) => !d.folga && d.entrada)
+  const folga = dias.map((d, i) => ({ ...d, i })).filter((d) => d.folga).map((d) => DIAS_ABREV[d.i])
+  if (!trab.length) return 'Sem dias de trabalho'
+  const horarios = [...new Set(trab.map((d) => `${d.entrada}–${d.saida}`))]
+  const base = horarios.length === 1
+    ? `${trab.map((d) => DIAS_ABREV[d.i]).join(', ')} · ${horarios[0]}`
+    : 'Horários variados'
+  return folga.length ? `${base}  ·  Folga: ${folga.join(', ')}` : base
+}
+
+function Jornadas({ notify }) {
+  const [lista, setLista] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [erro, setErro] = useState(null)
+  const [modal, setModal] = useState(null) // { id?, nome, toleranciaMin, dias }
+  const [salvando, setSalvando] = useState(false)
+  const [confirmExcluir, setConfirmExcluir] = useState(null)
+  const [excluindo, setExcluindo] = useState(false)
+
+  const carregar = useCallback(() => {
+    setLoading(true); setErro(null)
+    api.get('/ponto/jornadas')
+      .then((r) => setLista(Array.isArray(r.data) ? r.data : []))
+      .catch((e) => setErro(e?.response?.data?.error ?? 'Não foi possível carregar as jornadas.'))
+      .finally(() => setLoading(false))
+  }, [])
+  useEffect(() => { carregar() }, [carregar])
+
+  const abrirNova = () => setModal({ id: null, nome: '', toleranciaMin: 10, dias: DIAS_DEFAULT.map((d) => ({ ...d })) })
+  const abrirEditar = (j) => setModal({ id: j.id, nome: j.nome, toleranciaMin: j.toleranciaMin, dias: (Array.isArray(j.dias) ? j.dias : []).map((d) => ({ folga: !!d.folga, entrada: d.entrada || '', saida: d.saida || '' })) })
+
+  const setDia = (i, patch) => setModal((m) => ({ ...m, dias: m.dias.map((d, idx) => idx === i ? { ...d, ...patch } : d) }))
+  const toggleFolga = (i, folga) => setDia(i, folga ? { folga: true } : { folga: false, entrada: '17:00', saida: '00:30' })
+
+  async function salvar() {
+    if (!modal.nome.trim()) return notify('Informe o nome da jornada.', 'error')
+    const dias = modal.dias.map((d) => d.folga ? { folga: true } : { entrada: d.entrada, saida: d.saida })
+    setSalvando(true)
+    try {
+      if (modal.id) await api.put(`/ponto/jornadas/${modal.id}`, { nome: modal.nome, toleranciaMin: modal.toleranciaMin, dias })
+      else await api.post('/ponto/jornadas', { nome: modal.nome, toleranciaMin: modal.toleranciaMin, dias })
+      notify(modal.id ? 'Jornada atualizada.' : 'Jornada criada.')
+      setModal(null); carregar()
+    } catch (e) {
+      notify(e?.response?.data?.error ?? 'Não foi possível salvar.', 'error')
+    } finally { setSalvando(false) }
+  }
+
+  async function excluir() {
+    const alvo = confirmExcluir; if (!alvo) return
+    setExcluindo(true)
+    try {
+      await api.delete(`/ponto/jornadas/${alvo.id}`)
+      setConfirmExcluir(null); notify('Jornada excluída.'); carregar()
+    } catch (e) {
+      notify(e?.response?.data?.error ?? 'Não foi possível excluir.', 'error')
+    } finally { setExcluindo(false) }
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+        <div className="page-header-sub" style={{ margin: 0 }}>Modelos de horário previsto. Atribua uma jornada a cada colaborador na aba Colaboradores.</div>
+        <button type="button" className="btn btn-primary" style={{ marginLeft: 'auto' }} onClick={abrirNova}>Nova jornada</button>
+      </div>
+
+      {erro ? (
+        <div className="alert alert-red"><div className="alert-msg clr-red">{erro}</div></div>
+      ) : loading ? (
+        <div className="loading-state">Carregando jornadas…</div>
+      ) : lista.length === 0 ? (
+        <div className="empty-state" style={{ padding: '32px 16px' }}>Nenhuma jornada cadastrada. Crie a primeira.</div>
+      ) : (
+        <div className="table-card">
+          <table className="hb-table">
+            <thead>
+              <tr><th>Jornada</th><th>Horário</th><th>Tolerância</th><th>Colaboradores</th><th aria-hidden="true"></th></tr>
+            </thead>
+            <tbody>
+              {lista.map((j) => (
+                <tr key={j.id} className="ent-row-click" onClick={() => abrirEditar(j)}>
+                  <td><strong>{j.nome}</strong>{!j.ativo && <span className="badge badge-gray" style={{ marginLeft: 8 }}>Inativa</span>}</td>
+                  <td style={{ color: 'var(--app-text-soft, #737373)' }}>{resumoJornada(j.dias)}</td>
+                  <td>{j.toleranciaMin} min</td>
+                  <td>{j.colaboradores}</td>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }} onClick={(e) => e.stopPropagation()}>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => abrirEditar(j)}>Editar</button>{' '}
+                    <button type="button" className="btn btn-danger btn-sm" onClick={() => setConfirmExcluir(j)}>Excluir</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {modal && (
+        <div className="modal-overlay">
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560 }}>
+            <div className="modal-title">{modal.id ? 'Editar jornada' : 'Nova jornada'}</div>
+            <div className="form-grid-2">
+              <div className="form-group">
+                <label className="form-label">Nome</label>
+                <input className="form-input" value={modal.nome} onChange={(e) => setModal((m) => ({ ...m, nome: e.target.value }))} placeholder="Ex.: Turno noite" autoFocus />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Tolerância de atraso (min)</label>
+                <input type="number" min="0" max="60" className="form-input" value={modal.toleranciaMin} onChange={(e) => setModal((m) => ({ ...m, toleranciaMin: e.target.value }))} />
+              </div>
+            </div>
+
+            <div className="form-label" style={{ marginTop: 4, marginBottom: 6 }}>Horário por dia da semana</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {modal.dias.map((d, i) => (
+                <div key={i} style={{ display: 'grid', gridTemplateColumns: '84px 78px 1fr 1fr 58px', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{DIAS_NOMES[i]}</span>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12.5, color: 'var(--app-text-soft, #737373)' }}>
+                    <input type="checkbox" checked={!!d.folga} onChange={(e) => toggleFolga(i, e.target.checked)} /> Folga
+                  </label>
+                  {d.folga ? (
+                    <span style={{ gridColumn: '3 / 6', fontSize: 12.5, color: 'var(--app-text-soft, #737373)' }}>—</span>
+                  ) : (
+                    <>
+                      <input type="time" className="form-input" value={d.entrada} onChange={(e) => setDia(i, { entrada: e.target.value })} />
+                      <input type="time" className="form-input" value={d.saida} onChange={(e) => setDia(i, { saida: e.target.value })} />
+                      <span style={{ fontSize: 11, fontWeight: 600, color: cruzaMeiaNoite(d) ? '#2563eb' : 'transparent' }}>+1 dia</span>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="page-header-sub" style={{ marginTop: 8 }}>Se a saída for menor ou igual à entrada, o turno vira o dia (sai na madrugada seguinte) — marcado com “+1 dia”.</div>
+
+            <div className="modal-actions">
+              <button type="button" className="btn btn-secondary" onClick={() => setModal(null)} disabled={salvando}>Cancelar</button>
+              <button type="button" className="btn btn-primary" onClick={salvar} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={!!confirmExcluir}
+        title="Excluir jornada"
+        message={confirmExcluir ? `Excluir a jornada "${confirmExcluir.nome}"?` : ''}
+        description={confirmExcluir?.colaboradores ? `${confirmExcluir.colaboradores} colaborador(es) ficarão sem jornada.` : 'Esta ação não pode ser desfeita.'}
+        confirmLabel="Excluir"
+        cancelLabel="Cancelar"
+        variant="danger"
+        loading={excluindo}
+        onConfirm={excluir}
+        onCancel={() => setConfirmExcluir(null)}
+      />
     </div>
   )
 }
