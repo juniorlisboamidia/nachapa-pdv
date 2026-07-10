@@ -77,7 +77,8 @@ const TABS = [
   { id: 'painel', label: 'Painel' },
   { id: 'colaboradores', label: 'Colaboradores' },
   { id: 'jornadas', label: 'Jornadas e Escalas' },
-  { id: 'marcacoes', label: 'Marcações' }
+  { id: 'marcacoes', label: 'Marcações' },
+  { id: 'espelho', label: 'Espelho' }
 ]
 
 export default function PontoFacial() {
@@ -108,6 +109,7 @@ export default function PontoFacial() {
       {tab === 'colaboradores' && <Colaboradores notify={notify} />}
       {tab === 'jornadas' && <Jornadas notify={notify} />}
       {tab === 'marcacoes' && <Marcacoes notify={notify} />}
+      {tab === 'espelho' && <Espelho notify={notify} />}
     </div>
   )
 }
@@ -725,6 +727,147 @@ function Jornadas({ notify }) {
         onConfirm={excluir}
         onCancel={() => setConfirmExcluir(null)}
       />
+    </div>
+  )
+}
+
+// ===================== ESPELHO =====================
+const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+// minutos -> "Xh00" (mostra '—' quando zero); minHm0 sempre mostra
+function minHm(min) {
+  if (!min) return '—'
+  const neg = min < 0; const a = Math.abs(Math.round(min))
+  return `${neg ? '-' : ''}${Math.floor(a / 60)}h${String(a % 60).padStart(2, '0')}`
+}
+function minHm0(min) {
+  const neg = min < 0; const a = Math.abs(Math.round(min || 0))
+  return `${neg ? '-' : ''}${Math.floor(a / 60)}h${String(a % 60).padStart(2, '0')}`
+}
+const SIT_ESP = {
+  ok: { label: 'OK', bg: '#dcfce7', fg: '#166534' },
+  atraso: { label: 'Atraso', bg: '#fef3c7', fg: '#92400e' },
+  falta: { label: 'Falta', bg: '#fee2e2', fg: '#991b1b' },
+  incompleto: { label: 'Incompleto', bg: '#fee2e2', fg: '#991b1b' },
+  folga: { label: 'Folga', bg: '#f4f4f5', fg: '#71717a' },
+  folga_trabalhada: { label: 'Trab. na folga', bg: '#dbeafe', fg: '#1e40af' },
+  trabalhado: { label: 'Trabalhado', bg: '#dbeafe', fg: '#1e40af' }
+}
+
+function Espelho() {
+  const [colabs, setColabs] = useState([])
+  const [funcId, setFuncId] = useState('')
+  const hoje = new Date()
+  const [ano, setAno] = useState(hoje.getFullYear())
+  const [mes, setMes] = useState(hoje.getMonth() + 1)
+  const [dados, setDados] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [erro, setErro] = useState(null)
+
+  useEffect(() => {
+    api.get('/ponto/colaboradores').then((r) => {
+      const l = Array.isArray(r.data) ? r.data : []
+      setColabs(l)
+      setFuncId((cur) => cur || (l.length ? String(l[0].id) : ''))
+    }).catch(() => {})
+  }, [])
+
+  const carregar = useCallback(() => {
+    if (!funcId) { setDados(null); return }
+    setLoading(true); setErro(null)
+    api.get('/ponto/espelho', { params: { funcionarioId: funcId, ano, mes } })
+      .then((r) => setDados(r.data))
+      .catch((e) => setErro(e?.response?.data?.error ?? 'Não foi possível gerar o espelho.'))
+      .finally(() => setLoading(false))
+  }, [funcId, ano, mes])
+  useEffect(() => { carregar() }, [carregar])
+
+  function mudarMes(delta) {
+    let m = mes + delta, a = ano
+    if (m < 1) { m = 12; a-- } else if (m > 12) { m = 1; a++ }
+    setMes(m); setAno(a)
+  }
+
+  const t = dados?.totais
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Colaborador</label>
+          <select className="form-input" value={funcId} onChange={(e) => setFuncId(e.target.value)} style={{ minWidth: 220 }}>
+            <option value="">Selecione…</option>
+            {colabs.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+          </select>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => mudarMes(-1)}>‹</button>
+          <span style={{ fontWeight: 700, minWidth: 150, textAlign: 'center' }}>{MESES[mes - 1]} {ano}</span>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => mudarMes(1)}>›</button>
+        </div>
+      </div>
+
+      {!funcId ? (
+        <div className="empty-state" style={{ padding: '32px 16px' }}>Selecione um colaborador para ver o espelho.</div>
+      ) : erro ? (
+        <div className="alert alert-red"><div className="alert-msg clr-red">{erro}</div></div>
+      ) : loading ? (
+        <div className="loading-state">Gerando espelho…</div>
+      ) : !dados ? null : (
+        <>
+          {!dados.funcionario.temJornada && (
+            <div className="alert" style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 12px', marginBottom: 12, fontSize: 13, color: '#92400e' }}>
+              Este colaborador não tem <strong>jornada atribuída</strong> — sem horário previsto, o espelho mostra só as batidas (sem atraso/falta). Atribua uma jornada na aba Colaboradores.
+            </div>
+          )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(128px, 1fr))', gap: 10, marginBottom: 16 }}>
+            {[
+              { label: 'Previsto', val: minHm0(t.previstoMin) },
+              { label: 'Trabalhado', val: minHm0(t.trabalhadoMin) },
+              { label: 'Saldo', val: minHm0(t.saldoMin), cor: t.saldoMin < 0 ? '#b91c1c' : (t.saldoMin > 0 ? '#166534' : undefined) },
+              { label: 'Atrasos', val: `${t.atrasos} · ${minHm(t.atrasoMin)}` },
+              { label: 'Faltas', val: String(t.faltas) },
+              { label: 'Hora extra', val: minHm(t.extraMin) },
+              { label: 'Ad. noturno', val: minHm(t.noturnoMin) }
+            ].map((c) => (
+              <div key={c.label} className="table-card" style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span style={{ fontSize: 12.5, color: 'var(--app-text-soft, #737373)' }}>{c.label}</span>
+                <span style={{ fontSize: 20, fontWeight: 800, color: c.cor }}>{c.val}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="table-card">
+            <table className="hb-table">
+              <thead>
+                <tr>
+                  <th>Dia</th><th>Previsto</th><th>Entrada</th><th>Saída</th>
+                  <th>Trabalhado</th><th>Atraso</th><th>Extra</th><th>Noturno</th><th>Situação</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dados.dias.map((d) => {
+                  const sit = SIT_ESP[d.situacao] || null
+                  const dim = d.folga || d.futuro || d.situacao === 'vazio'
+                  return (
+                    <tr key={d.dia} style={dim ? { opacity: 0.5 } : undefined}>
+                      <td style={{ whiteSpace: 'nowrap' }}><strong>{String(d.dia).padStart(2, '0')}</strong> <span style={{ color: 'var(--app-text-soft, #737373)', fontSize: 12 }}>{DIAS_ABREV[d.dow]}</span></td>
+                      <td>{d.folga ? '—' : (d.previstoMin ? minHm0(d.previstoMin) : '—')}</td>
+                      <td>{d.entradaHm || '—'}</td>
+                      <td>{d.saidaHm || '—'}</td>
+                      <td>{d.trabalhadoMin ? minHm0(d.trabalhadoMin) : '—'}</td>
+                      <td style={{ color: d.atrasoMin ? '#92400e' : undefined }}>{minHm(d.atrasoMin)}</td>
+                      <td style={{ color: d.extraMin ? '#166534' : undefined }}>{minHm(d.extraMin)}</td>
+                      <td>{minHm(d.noturnoMin)}</td>
+                      <td><Pill meta={sit} /></td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </div>
   )
 }

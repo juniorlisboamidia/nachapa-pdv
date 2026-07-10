@@ -5071,6 +5071,48 @@ async function proximoTipoPonto(funcionarioId, empresaId) {
 }
 const funcPublico = (f) => ({ id: f.id, nome: f.nome, funcao: f.funcao || null });
 
+// ---- Fuso BR fixo (UTC-3, sem horário de verão desde 2019) p/ os cálculos de ponto.
+// Assim o resultado independe do timezone do servidor (o VPS roda em UTC).
+const BR_OFFSET_MIN = -180;
+// Campos "de parede" (ano/mês/dia/hora) no fuso BR de um instante (Date | ms | ISO).
+function brFields(dataHora) {
+  const d = new Date(new Date(dataHora).getTime() + BR_OFFSET_MIN * 60000);
+  return { y: d.getUTCFullYear(), mo: d.getUTCMonth(), day: d.getUTCDate(), h: d.getUTCHours(), mi: d.getUTCMinutes(), min: d.getUTCHours() * 60 + d.getUTCMinutes() };
+}
+// Instante (ms UTC) a partir de campos de parede BR (day/hora podem estourar; Date.UTC normaliza).
+const brToUtcMs = (y, mo, day, h, mi) => Date.UTC(y, mo, day, h, mi) - BR_OFFSET_MIN * 60000;
+// Parseia "YYYY-MM-DDTHH:mm" (sem tz) como horário BR; respeita o tz se vier explícito.
+function parseDataHoraBr(str) {
+  if (!str) return new Date();
+  const s = String(str);
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (m && !/([zZ]|[+-]\d{2}:?\d{2})$/.test(s)) return new Date(brToUtcMs(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]));
+  return new Date(s);
+}
+const EXP_CUTOFF_MIN = 5 * 60; // 05:00 — corte do "dia de expediente" (junta o turno que vira a meia-noite)
+const hmToMin = (hm) => { const p = String(hm).split(':'); return (+p[0]) * 60 + (+p[1] || 0); };
+const hmFmt = (min) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+// Minutos do intervalo [iniMs,fimMs) dentro da faixa noturna 22:00–05:00 BR.
+function minutosNoturnos(iniMs, fimMs) {
+  if (fimMs <= iniMs) return 0;
+  const f = brFields(iniMs);
+  let total = 0;
+  for (let k = -1; k <= 2; k++) {
+    const ns = brToUtcMs(f.y, f.mo, f.day + k, 22, 0);
+    const ne = brToUtcMs(f.y, f.mo, f.day + k + 1, 5, 0);
+    const s = Math.max(iniMs, ns), e = Math.min(fimMs, ne);
+    if (e > s) total += (e - s) / 60000;
+  }
+  return Math.round(total);
+}
+// Chave "y-mo-day" do dia de expediente de uma marcação (antes do corte = dia anterior).
+function diaExpedienteKey(dataHora) {
+  const f = brFields(dataHora);
+  const base = new Date(Date.UTC(f.y, f.mo, f.day));
+  if (f.min < EXP_CUTOFF_MIN) base.setUTCDate(base.getUTCDate() - 1);
+  return `${base.getUTCFullYear()}-${base.getUTCMonth()}-${base.getUTCDate()}`;
+}
+
 // ===== Colaboradores (ADMIN) — reusa o cadastro de Funcionario, + biometria/PIN =====
 app.get('/api/ponto/colaboradores', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
@@ -5279,11 +5321,115 @@ app.post('/api/ponto/marcacoes', async (req, res) => {
     const func = await prisma.funcionario.findFirst({ where: { id: funcionarioId } });
     if (!func) return res.status(404).json({ error: 'Colaborador não encontrado.' });
     if (!PONTO_TIPOS.includes(req.body?.tipo)) return res.status(400).json({ error: 'Tipo de marcação inválido.' });
-    const dataHora = req.body?.dataHora ? new Date(req.body.dataHora) : new Date();
+    const dataHora = parseDataHoraBr(req.body?.dataHora);
     if (isNaN(dataHora.getTime())) return res.status(400).json({ error: 'Data/hora inválida.' });
     const reg = await prisma.pontoRegistro.create({ data: { funcionarioId, tipo: req.body.tipo, dataHora, origem: 'MANUAL' } });
     res.status(201).json({ id: reg.id, ok: true, tipoLabel: PONTO_LABEL[req.body.tipo], dataHora: reg.dataHora });
   } catch (err) { console.error('[ponto/marcacoes POST]', err); res.status(500).json({ error: 'Erro ao lançar a marcação.' }); }
+});
+
+// ===== Espelho de ponto (ADMIN) — previsto × realizado por dia =====
+async function calcularEspelho(funcionarioId, ano, mes) {
+  const func = await prisma.funcionario.findFirst({ where: { id: funcionarioId } });
+  if (!func) throw { http: 404, msg: 'Colaborador não encontrado.' };
+  const jornada = func.jornadaId ? await prisma.jornada.findFirst({ where: { id: func.jornadaId } }) : null;
+  const dias = jornada && Array.isArray(jornada.diasJson) ? jornada.diasJson : null;
+  const semJornada = !dias;
+  const tol = jornada?.toleranciaMin ?? 0;
+
+  // Batidas do mês com margem (pega madrugadas da virada do 1º dia e do fim do mês).
+  const de = new Date(brToUtcMs(ano, mes - 1, 0, 0, 0));
+  const ate = new Date(brToUtcMs(ano, mes - 1, 32, 12, 0));
+  const regs = await prisma.pontoRegistro.findMany({ where: { funcionarioId, dataHora: { gte: de, lt: ate } }, orderBy: { dataHora: 'asc' } });
+  const porDia = new Map();
+  for (const r of regs) { const k = diaExpedienteKey(r.dataHora); const a = porDia.get(k) || []; a.push(r); porDia.set(k, a); }
+
+  const hojeF = brFields(Date.now());
+  const hojeNum = Date.UTC(hojeF.y, hojeF.mo, hojeF.day);
+
+  const linhas = [];
+  const tot = { previstoMin: 0, trabalhadoMin: 0, atrasoMin: 0, faltaMin: 0, extraMin: 0, noturnoMin: 0, saldoMin: 0, faltas: 0, atrasos: 0, diasTrabalhados: 0 };
+
+  for (let d = 1; d <= 31; d++) {
+    const dt = new Date(Date.UTC(ano, mes - 1, d));
+    if (dt.getUTCMonth() !== mes - 1) break;
+    const dow = dt.getUTCDay();
+    const cfg = dias ? dias[dow] : null;
+    const futuro = Date.UTC(ano, mes - 1, d) > hojeNum;
+    const batidas = porDia.get(`${ano}-${mes - 1}-${d}`) || [];
+
+    let previstoMin = 0, entradaPrevMs = null, folga = true;
+    if (cfg && !cfg.folga && cfg.entrada && cfg.saida) {
+      folga = false;
+      const em = hmToMin(cfg.entrada), sm = hmToMin(cfg.saida);
+      entradaPrevMs = brToUtcMs(ano, mes - 1, d, Math.floor(em / 60), em % 60);
+      const saidaPrevMs = brToUtcMs(ano, mes - 1, d + (sm <= em ? 1 : 0), Math.floor(sm / 60), sm % 60);
+      previstoMin = Math.round((saidaPrevMs - entradaPrevMs) / 60000);
+    }
+
+    const entradaMs = batidas.length ? new Date(batidas[0].dataHora).getTime() : null;
+    const saidaMs = batidas.length > 1 ? new Date(batidas[batidas.length - 1].dataHora).getTime() : null;
+
+    let trabalhadoMin = 0, atrasoMin = 0, extraMin = 0, faltaMin = 0, noturnoMin = 0, situacao;
+
+    if (folga) {
+      if (entradaMs && saidaMs) {
+        trabalhadoMin = Math.round((saidaMs - entradaMs) / 60000);
+        noturnoMin = minutosNoturnos(entradaMs, saidaMs);
+        if (!semJornada) extraMin = trabalhadoMin;
+        situacao = semJornada ? 'trabalhado' : 'folga_trabalhada';
+        tot.diasTrabalhados++;
+      } else situacao = semJornada ? 'vazio' : 'folga';
+    } else if (futuro) {
+      situacao = 'futuro';
+    } else if (!entradaMs) {
+      faltaMin = previstoMin; situacao = 'falta'; tot.faltas++;
+    } else if (!saidaMs) {
+      situacao = 'incompleto'; tot.diasTrabalhados++;
+    } else {
+      trabalhadoMin = Math.round((saidaMs - entradaMs) / 60000);
+      const atr = Math.round((entradaMs - entradaPrevMs) / 60000);
+      if (atr > tol) { atrasoMin = atr; tot.atrasos++; situacao = 'atraso'; } else situacao = 'ok';
+      extraMin = Math.max(0, trabalhadoMin - previstoMin);
+      noturnoMin = minutosNoturnos(entradaMs, saidaMs);
+      tot.diasTrabalhados++;
+    }
+
+    const saldoMin = (!folga && !futuro) ? (trabalhadoMin - previstoMin) : 0;
+    tot.saldoMin += saldoMin;
+    tot.previstoMin += previstoMin;
+    tot.trabalhadoMin += trabalhadoMin;
+    tot.atrasoMin += atrasoMin;
+    tot.faltaMin += faltaMin;
+    tot.extraMin += extraMin;
+    tot.noturnoMin += noturnoMin;
+
+    linhas.push({
+      dia: d, dow, folga, futuro, situacao, previstoMin,
+      entradaHm: entradaMs ? hmFmt(brFields(entradaMs).min) : null,
+      saidaHm: saidaMs ? hmFmt(brFields(saidaMs).min) : null,
+      trabalhadoMin, atrasoMin, extraMin, faltaMin, noturnoMin, saldoMin,
+    });
+  }
+
+  return {
+    funcionario: { id: func.id, nome: func.nome, funcao: func.funcao || null, cpf: func.cpf || null, temJornada: !!jornada },
+    jornada: jornada ? { id: jornada.id, nome: jornada.nome } : null,
+    ano, mes, totais: tot, dias: linhas,
+  };
+}
+
+app.get('/api/ponto/espelho', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const funcionarioId = parseInt(req.query.funcionarioId, 10);
+    if (!funcionarioId) return res.status(400).json({ error: 'Selecione o colaborador.' });
+    const agora = brFields(Date.now());
+    const ano = parseInt(req.query.ano, 10) || agora.y;
+    const mes = parseInt(req.query.mes, 10) || (agora.mo + 1);
+    if (mes < 1 || mes > 12) return res.status(400).json({ error: 'Mês inválido.' });
+    res.json(await calcularEspelho(funcionarioId, ano, mes));
+  } catch (err) { if (err?.http) return res.status(err.http).json({ error: err.msg }); console.error('[ponto/espelho]', err); res.status(500).json({ error: 'Erro ao gerar o espelho.' }); }
 });
 
 // ===== PÚBLICO — tela quiosque do tablet (aberta por token do dispositivo) =====
