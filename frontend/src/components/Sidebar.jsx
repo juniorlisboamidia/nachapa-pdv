@@ -166,26 +166,58 @@ function Icon({ name, extra }) {
   )
 }
 
+// Grupos com `itens` fazem drill (nível 2). Grupos com `to` (sem itens) são
+// link direto no nível raiz — usado nos "em construção".
 const grupos = [
   {
-    label: 'Gestão',
-    icon: 'gestao',
+    label: 'Gestão', icon: 'gestao',
     itens: [
       { to: '/custos', label: 'Custos', icon: 'custos' },
       { to: '/faturamento', label: 'Faturamento', icon: 'faturamento' },
-      { to: '/produtos', label: 'Ficha Técnica', icon: 'ficha' },
-      { to: '/insumos', label: 'Insumos', icon: 'produtos' },
     ]
   },
   {
-    label: 'Dep. Pessoal',
-    icon: 'clientes',
+    label: 'Produtos', icon: 'produtos',
     itens: [
-      { to: '/rh/ponto-facial', label: 'Ponto Facial', icon: 'ponto' },
-      { to: '/rh/bonificacao', label: 'Bonificação', icon: 'faturamento' },
-      { to: '/rh/banco-de-talentos', label: 'Banco de Talentos', icon: 'clientes' }
+      { to: '/produtos', label: 'Ficha técnica', icon: 'ficha' },
+      { to: '/insumos', label: 'Insumos', icon: 'insumos' },
+      { to: '/estoque', label: 'Estoque', icon: 'produtos' },
     ]
-  }
+  },
+  { label: 'Relatórios', icon: 'relatorios', to: '/relatorios' },
+  {
+    label: 'Ponto Facial', icon: 'ponto',
+    itens: [
+      { to: '/rh/ponto-facial/painel', label: 'Painel', icon: 'ponto' },
+      { to: '/rh/ponto-facial/colaboradores', label: 'Colaboradores', icon: 'clientes' },
+      { to: '/rh/ponto-facial/jornadas', label: 'Jornadas e Escalas', icon: 'calendario' },
+      { to: '/rh/ponto-facial/marcacoes', label: 'Marcações', icon: 'ponto' },
+      { to: '/rh/ponto-facial/espelho', label: 'Espelho', icon: 'ficha' },
+      { to: '/rh/ponto-facial/fechamento', label: 'Fechamento', icon: 'custos' },
+      { to: '/rh/ponto-facial/coletor', label: 'Coletor', icon: 'ponto' },
+    ]
+  },
+  {
+    label: 'Bonificação', icon: 'faturamento',
+    itens: [
+      { to: '/rh/bonificacao/mes', label: 'Mês atual', icon: 'calendario' },
+      { to: '/rh/bonificacao/equipe', label: 'Equipe & Coins', icon: 'clientes' },
+      { to: '/rh/bonificacao/conquistas', label: 'Conquistas', icon: 'avaliacao' },
+      { to: '/rh/bonificacao/mercado', label: 'Mercado', icon: 'produtos' },
+      { to: '/rh/bonificacao/config', label: 'Configuração', icon: 'gestao' },
+    ]
+  },
+  { label: 'Checklist', icon: 'ficha', to: '/checklist' },
+  { label: 'Etiquetas', icon: 'ficha', to: '/etiquetas' },
+  {
+    label: 'Banco de talentos', icon: 'clientes',
+    itens: [
+      { to: '/rh/banco-de-talentos/banco', label: 'Cadastros', icon: 'clientes' },
+      { to: '/rh/banco-de-talentos/vagas', label: 'Vagas abertas', icon: 'ficha' },
+      { to: '/rh/banco-de-talentos/formulario', label: 'Formulário permanente', icon: 'ficha' },
+    ]
+  },
+  { label: 'Automações', icon: 'gestao', to: '/automacoes' },
 ]
 
 // Casa a rota atual e devolve o caminho { grupo, sub } para abrir a sidebar já
@@ -193,6 +225,7 @@ const grupos = [
 const matchLeaf = (it, pathname) => it.to && (it.to === '/' ? pathname === '/' : pathname === it.to || pathname.startsWith(it.to + '/'))
 function localizarRota(pathname) {
   for (const g of grupos) {
+    if (!g.itens) continue // grupo-folha (link direto) não abre subnível
     for (const it of g.itens) {
       if (it.itens) {
         if (it.itens.some((sub) => matchLeaf(sub, pathname))) return { grupo: g.label, sub: it.label }
@@ -433,6 +466,15 @@ export default function Sidebar() {
               <span className="sidebar-item-label">Visão Geral</span>
             </NavLink>
             {grupos.map((g) => {
+              // Grupo-folha (link direto) — usado nos "em construção".
+              if (g.to) {
+                return (
+                  <NavLink key={g.label} to={g.to} className={itemClass} title={collapsed ? g.label : undefined}>
+                    <Icon name={g.icon} />
+                    <span className="sidebar-item-label">{g.label}</span>
+                  </NavLink>
+                )
+              }
               const bloqueado = g.soAdmin && usuario?.papel !== 'ADMIN'
               return (
                 <button

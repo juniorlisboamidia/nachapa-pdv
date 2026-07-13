@@ -1,6 +1,7 @@
 // Dep. Pessoal › Banco de Talentos — banco permanente, vagas abertas e formulário.
 // Foco: pequenas operações. Sem Kanban/pipeline no centro.
 import { useEffect, useState, useCallback } from 'react'
+import { useParams } from 'react-router-dom'
 import api from '../services/api'
 import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -14,8 +15,10 @@ import {
 
 const origin = typeof window !== 'undefined' ? window.location.origin : ''
 
+const BT_TABS = ['banco', 'vagas', 'formulario']
 export default function BancoTalentos() {
-  const [tab, setTab] = useState('banco') // banco | vagas | formulario
+  const { tab: tabParam } = useParams() // aba controlada pela URL / sidebar
+  const tab = BT_TABS.includes(tabParam) ? tabParam : 'banco'
   const [toast, setToast] = useState(null)
   const [confirm, setConfirm] = useState(null)
   const [config, setConfig] = useState(null)
@@ -116,12 +119,6 @@ export default function BancoTalentos() {
       </div>
 
       <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />
-
-      <div className="modal-tabs" style={{ margin: '10px 0 16px' }}>
-        <button className={'modal-tab' + (tab === 'banco' ? ' active' : '')} onClick={() => setTab('banco')}>Banco de Talentos</button>
-        <button className={'modal-tab' + (tab === 'vagas' ? ' active' : '')} onClick={() => setTab('vagas')}>Vagas abertas</button>
-        <button className={'modal-tab' + (tab === 'formulario' ? ' active' : '')} onClick={() => setTab('formulario')}>Formulário permanente</button>
-      </div>
 
       {/* ===== BANCO DE TALENTOS ===== */}
       {tab === 'banco' && (

@@ -67,11 +67,21 @@ export default function App() {
             <Route path="custos-variaveis" element={<CustosVariaveis />} />
             <Route path="ponto-equilibrio" element={<PontoEquilibrio />} />
             <Route path="faturamento" element={<Faturamento />} />
-            {/* Dep. Pessoal — Ponto Facial + Bonificação (Equipe fundida em Colaboradores) */}
+            {/* Produtos / Relatórios (Estoque e Relatórios em construção) */}
+            <Route path="estoque" element={<EmConstrucao titulo="Estoque" descricao="Controle de estoque dos insumos e produtos." />} />
+            <Route path="relatorios" element={<EmConstrucao titulo="Relatórios" descricao="Relatórios e análises da operação." />} />
+            {/* Dep. Pessoal — abas viram subitens da sidebar (a página lê a aba da URL) */}
             <Route path="rh/ponto-facial" element={<PontoFacial />} />
+            <Route path="rh/ponto-facial/:tab" element={<PontoFacial />} />
             <Route path="rh/equipe" element={<Equipe />} />
             <Route path="rh/bonificacao" element={<Bonificacao />} />
+            <Route path="rh/bonificacao/:aba" element={<Bonificacao />} />
             <Route path="rh/banco-de-talentos" element={<BancoTalentos />} />
+            <Route path="rh/banco-de-talentos/:tab" element={<BancoTalentos />} />
+            {/* Em construção */}
+            <Route path="checklist" element={<EmConstrucao titulo="Checklist" descricao="Rotinas e checklists da operação." />} />
+            <Route path="etiquetas" element={<EmConstrucao titulo="Etiquetas" descricao="Impressão de etiquetas de validade e produção." />} />
+            <Route path="automacoes" element={<EmConstrucao titulo="Automações" descricao="Automações da operação." />} />
             {/* Extras */}
             <Route path="minha-empresa" element={<MinhaEmpresa />} />
             <Route path="central-de-ajuda" element={<EmConstrucao titulo="Central de Ajuda" descricao="Artigos e ajuda do sistema." />} />

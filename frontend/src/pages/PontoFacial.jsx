@@ -2,6 +2,7 @@
 // Alimenta a Presença da Bonificação. As batidas podem vir do coletor facial
 // (casadas pelo CPF), de importação, ou de lançamento manual. Restrito ao ADMIN.
 import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useParams } from 'react-router-dom'
 import api from '../services/api'
 import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -83,8 +84,12 @@ const TABS = [
   { id: 'coletor', label: 'Coletor' }
 ]
 
+// Aba controlada pela URL (/rh/ponto-facial/:tab); a navegação é pela sidebar.
+const PF_IDS = TABS.map((t) => t.id)
 export default function PontoFacial() {
-  const [tab, setTab] = useState('painel')
+  const { tab: tabParam } = useParams()
+  const tab = PF_IDS.includes(tabParam) ? tabParam : 'painel'
+  const tabLabel = TABS.find((t) => t.id === tab)?.label || 'Ponto Facial'
   const [toast, setToast] = useState(null)
   const notify = (message, type = 'success') => setToast({ message, type })
 
@@ -92,20 +97,12 @@ export default function PontoFacial() {
     <div>
       <div className="page-header">
         <div>
-          <h1>Ponto Facial</h1>
+          <h1>Ponto Facial · {tabLabel}</h1>
           <div className="page-header-sub">Controle de ponto da equipe — alimenta a Presença da Bonificação.</div>
         </div>
       </div>
 
       <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />
-
-      <div className="modal-tabs" style={{ margin: '10px 0 16px' }}>
-        {TABS.map((t) => (
-          <button key={t.id} type="button" className={'av-tab' + (tab === t.id ? ' active' : '')} onClick={() => setTab(t.id)}>
-            {t.label}
-          </button>
-        ))}
-      </div>
 
       {tab === 'painel' && <Painel />}
       {tab === 'colaboradores' && <Colaboradores notify={notify} />}

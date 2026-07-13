@@ -1,6 +1,7 @@
 // Dep. Pessoal › Bonificação — abas Mês atual (lançamentos + cálculo + fechamento)
 // e Configuração (tetos, bônus, tipos por pilar). Restrito ao ADMIN.
 import { useEffect, useState } from 'react'
+import { useParams } from 'react-router-dom'
 import api from '../services/api'
 import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -1129,8 +1130,10 @@ function AbaConfig({ cfg, setCfg, tipos, setTipos, niveis, setNiveis, salvar, sa
 }
 
 /* ───────────── Container ───────────── */
+const BONI_ABAS = ['mes', 'equipe', 'conquistas', 'mercado', 'config']
 export default function Bonificacao() {
-  const [aba, setAba] = useState('mes')
+  const { aba: abaParam } = useParams()
+  const aba = BONI_ABAS.includes(abaParam) ? abaParam : 'mes'
   const [cfg, setCfg] = useState(null)
   const [tipos, setTipos] = useState([])
   const [niveis, setNiveis] = useState([])
@@ -1171,14 +1174,6 @@ export default function Bonificacao() {
       </div>
 
       <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />
-
-      <div className="modal-tabs" style={{ marginBottom: 16 }}>
-        <button type="button" className={'av-tab' + (aba === 'mes' ? ' active' : '')} onClick={() => setAba('mes')}>Mês Atual</button>
-        <button type="button" className={'av-tab' + (aba === 'equipe' ? ' active' : '')} onClick={() => setAba('equipe')}>Equipe & XP</button>
-        <button type="button" className={'av-tab' + (aba === 'conquistas' ? ' active' : '')} onClick={() => setAba('conquistas')}>Conquistas</button>
-        <button type="button" className={'av-tab' + (aba === 'mercado' ? ' active' : '')} onClick={() => setAba('mercado')}>Mercado</button>
-        <button type="button" className={'av-tab' + (aba === 'config' ? ' active' : '')} onClick={() => setAba('config')}>Configuração</button>
-      </div>
 
       {loading || !cfg ? (
         <div className="loading-state">Carregando…</div>
