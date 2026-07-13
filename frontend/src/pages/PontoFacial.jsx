@@ -1,7 +1,7 @@
 // Dep. Pessoal › Ponto Facial — controle de ponto da equipe.
 // Alimenta a Presença da Bonificação. As batidas podem vir do coletor facial
 // (casadas pelo CPF), de importação, ou de lançamento manual. Restrito ao ADMIN.
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import api from '../services/api'
 import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -79,7 +79,8 @@ const TABS = [
   { id: 'jornadas', label: 'Jornadas e Escalas' },
   { id: 'marcacoes', label: 'Marcações' },
   { id: 'espelho', label: 'Espelho' },
-  { id: 'fechamento', label: 'Fechamento' }
+  { id: 'fechamento', label: 'Fechamento' },
+  { id: 'coletor', label: 'Coletor' }
 ]
 
 export default function PontoFacial() {
@@ -112,6 +113,142 @@ export default function PontoFacial() {
       {tab === 'marcacoes' && <Marcacoes notify={notify} />}
       {tab === 'espelho' && <Espelho notify={notify} />}
       {tab === 'fechamento' && <Fechamento notify={notify} />}
+      {tab === 'coletor' && <Coletor notify={notify} />}
+    </div>
+  )
+}
+
+// ===================== COLETOR (DIXI) =====================
+const fmtDT = (x) => (x ? new Date(x).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—')
+
+function Coletor({ notify }) {
+  const [coletores, setColetores] = useState([])
+  const [pendencias, setPendencias] = useState([])
+  const [funcionarios, setFuncionarios] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [erro, setErro] = useState(null)
+  const [sel, setSel] = useState({}) // { enrollid: funcionarioId } em edição
+
+  const carregar = useCallback(() => {
+    setLoading(true); setErro(null)
+    Promise.all([
+      api.get('/ponto/coletores'),
+      api.get('/ponto/coletor/pendencias'),
+      api.get('/ponto/colaboradores'),
+    ]).then(([c, p, f]) => {
+      setColetores(c.data || [])
+      setPendencias(p.data || [])
+      setFuncionarios((f.data || []).filter((x) => x.status === 'ATIVO'))
+    }).catch((e) => setErro(e?.response?.data?.error ?? 'Não foi possível carregar.'))
+      .finally(() => setLoading(false))
+  }, [])
+  useEffect(() => { carregar() }, [carregar])
+
+  async function toggleColetor(c) {
+    try {
+      await api.put(`/ponto/coletores/${c.id}/ativar`, { ativo: !c.ativo })
+      notify(c.ativo ? 'Coletor desativado.' : 'Coletor ativado — batidas passam a virar ponto.')
+      carregar()
+    } catch (e) { notify(e?.response?.data?.error ?? 'Erro ao atualizar.', 'error') }
+  }
+  async function vincular(enrollid) {
+    const funcionarioId = sel[enrollid]
+    if (!funcionarioId) return
+    try {
+      const r = await api.post('/ponto/coletor/pendencias/vincular', { enrollid, funcionarioId: Number(funcionarioId) })
+      notify(`Vinculado! ${r.data.criados} batida(s) viraram ponto.`)
+      setSel((s) => ({ ...s, [enrollid]: '' })); carregar()
+    } catch (e) { notify(e?.response?.data?.error ?? 'Erro ao vincular.', 'error') }
+  }
+
+  // Agrupa pendências por enrollid (1 linha por ID do coletor).
+  const porEnrollid = useMemo(() => {
+    const m = new Map()
+    for (const p of pendencias) {
+      if (!m.has(p.enrollid)) m.set(p.enrollid, { enrollid: p.enrollid, nome: p.nome, count: 0, ultima: p.dataHora })
+      const g = m.get(p.enrollid); g.count++; if (p.dataHora > g.ultima) g.ultima = p.dataHora
+    }
+    return [...m.values()].sort((a, b) => (a.ultima < b.ultima ? 1 : -1))
+  }, [pendencias])
+
+  if (loading) return <div className="loading-state">Carregando…</div>
+  if (erro) return <div className="alert alert-red"><div className="alert-msg clr-red">{erro}</div></div>
+
+  const temPendente = coletores.some((c) => !c.ativo)
+
+  return (
+    <div>
+      <div className="page-header-sub" style={{ margin: '0 0 8px' }}>Coletores</div>
+      {coletores.length === 0 ? (
+        <div className="empty-state" style={{ padding: '24px 16px' }}>
+          Nenhum coletor detectado ainda. Aponte o aparelho DIXI para este servidor (porta <strong>7788</strong>, HTTPS não) — ele aparece aqui automaticamente como <strong>pendente</strong>, aí é só ativar.
+        </div>
+      ) : (
+        <>
+          {temPendente && (
+            <div className="alert" style={{ background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', marginBottom: 10 }}>
+              <div className="alert-msg">Há coletor <strong>pendente</strong> — as batidas só viram ponto depois que você <strong>ativar</strong>.</div>
+            </div>
+          )}
+          <div className="table-card" style={{ marginBottom: 22 }}>
+            <table className="hb-table">
+              <thead><tr><th>Coletor</th><th>Serial</th><th>Status</th><th>Última sync</th><th></th></tr></thead>
+              <tbody>
+                {coletores.map((c) => (
+                  <tr key={c.id}>
+                    <td><strong>{c.nome}</strong></td>
+                    <td style={{ fontFamily: 'monospace', fontSize: 13 }}>{c.serial}</td>
+                    <td><span style={{ color: c.ativo ? '#16a34a' : '#d97706', fontWeight: 700 }}>{c.ativo ? 'Ativo' : 'Pendente'}</span></td>
+                    <td>{fmtDT(c.ultimaSync)}</td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button type="button" className={'btn btn-sm ' + (c.ativo ? 'btn-secondary' : 'btn-primary')} onClick={() => toggleColetor(c)}>
+                        {c.ativo ? 'Desativar' : 'Ativar'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '0 0 8px' }}>
+        <div className="page-header-sub" style={{ margin: 0 }}>Batidas a vincular ({porEnrollid.length})</div>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={carregar}>Atualizar</button>
+      </div>
+      {porEnrollid.length === 0 ? (
+        <div className="empty-state" style={{ padding: '24px 16px' }}>Nada pendente. Batidas que casam pelo nome viram ponto sozinhas; só caem aqui as de IDs que ainda não conhecemos.</div>
+      ) : (
+        <div className="table-card">
+          <table className="hb-table">
+            <thead><tr><th>ID no coletor</th><th>Nome (no aparelho)</th><th>Batidas</th><th>Última</th><th>Vincular ao colaborador</th></tr></thead>
+            <tbody>
+              {porEnrollid.map((p) => (
+                <tr key={p.enrollid}>
+                  <td><strong>{p.enrollid}</strong></td>
+                  <td>{p.nome || '—'}</td>
+                  <td>{p.count}</td>
+                  <td>{fmtDT(p.ultima)}</td>
+                  <td>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                      <select
+                        value={sel[p.enrollid] || ''}
+                        onChange={(e) => setSel((s) => ({ ...s, [p.enrollid]: e.target.value }))}
+                        style={{ padding: '6px 8px', borderRadius: 8, border: '1px solid var(--app-border, #d4d4d4)', minWidth: 160 }}
+                      >
+                        <option value="">Selecione…</option>
+                        {funcionarios.map((f) => <option key={f.id} value={f.id}>{f.nome}</option>)}
+                      </select>
+                      <button type="button" className="btn btn-primary btn-sm" disabled={!sel[p.enrollid]} onClick={() => vincular(p.enrollid)}>Vincular</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }

@@ -9,6 +9,7 @@ import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from './generated/prisma/client.ts';
+import { iniciarColetorServer, gravarPontoColetor } from './coletorServer.js';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 
@@ -31,7 +32,7 @@ const MODELS_TENANT = new Set([
   'bonificacaoNivel', 'bonificacaoXp',
   'conquista', 'conquistaDesbloqueada',
   'bonificacaoMoeda', 'mercadoItem', 'mercadoResgate',
-  'funcionarioFace', 'pontoRegistro', 'dispositivo', 'jornada',
+  'funcionarioFace', 'pontoRegistro', 'dispositivo', 'jornada', 'coletorBatidaPendente',
 ]);
 const OPS_WHERE = new Set([
   'findMany', 'findFirst', 'findFirstOrThrow', 'findUnique', 'findUniqueOrThrow',
@@ -5562,4 +5563,84 @@ app.post('/api/public/ponto/:token/registrar', async (req, res) => {
   } catch (err) { console.error('[public/ponto registrar]', err); res.status(500).json({ error: 'Erro ao registrar o ponto.' }); }
 });
 
+/* ── Ponto Facial › Coletor DIXI (gestão) ───────────────────────────── */
+
+// Lista os coletores (Dispositivos com serial). Novos nascem PENDENTES (inativos).
+app.get('/api/ponto/coletores', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const ds = await prisma.dispositivo.findMany({ where: { serialColetor: { not: null } }, orderBy: { criadoEm: 'asc' } });
+    res.json(ds.map((d) => ({ id: d.id, nome: d.nome, serial: d.serialColetor, ativo: d.ativo, ultimaSync: d.ultimaSync })));
+  } catch (err) { console.error('[ponto/coletores GET]', err); res.status(500).json({ error: 'Erro ao carregar coletores.' }); }
+});
+
+// Autoriza/desautoriza um coletor (só grava batidas quando ativo).
+app.put('/api/ponto/coletores/:id/ativar', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const id = parseInt(req.params.id, 10);
+    const disp = await prisma.dispositivo.findFirst({ where: { id, serialColetor: { not: null } } });
+    if (!disp) return res.status(404).json({ error: 'Coletor não encontrado.' });
+    const upd = await prisma.dispositivo.update({ where: { id }, data: { ativo: req.body?.ativo !== false } });
+    res.json({ ok: true, ativo: upd.ativo });
+  } catch (err) { console.error('[ponto/coletores ativar]', err); res.status(500).json({ error: 'Erro ao atualizar.' }); }
+});
+
+// Batidas que não casaram com nenhum funcionário (fila pra vincular).
+app.get('/api/ponto/coletor/pendencias', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const pend = await prisma.coletorBatidaPendente.findMany({ where: { resolvidoEm: null }, orderBy: { dataHora: 'desc' }, take: 500 });
+    res.json(pend.map((p) => ({ id: p.id, serial: p.serial, enrollid: p.enrollid, nome: p.nome, dataHora: p.dataHora })));
+  } catch (err) { console.error('[coletor pendencias GET]', err); res.status(500).json({ error: 'Erro ao carregar pendências.' }); }
+});
+
+// Vincula um enrollid a um funcionário: grava o vínculo e converte as pendências
+// daquele enrollid em PontoRegistro (dedup por coletorRef).
+app.post('/api/ponto/coletor/pendencias/vincular', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const empresaId = getEmpresaIdAtual();
+    const enrollid = parseInt(req.body?.enrollid, 10);
+    const funcionarioId = parseInt(req.body?.funcionarioId, 10);
+    if (!Number.isInteger(enrollid) || !Number.isInteger(funcionarioId)) return res.status(400).json({ error: 'Dados inválidos.' });
+    const func = await prisma.funcionario.findFirst({ where: { id: funcionarioId } });
+    if (!func) return res.status(404).json({ error: 'Colaborador não encontrado.' });
+    try { await prisma.funcionario.update({ where: { id: funcionarioId }, data: { enrollidColetor: enrollid } }); }
+    catch (e) { if (e?.code === 'P2002') return res.status(409).json({ error: 'Esse ID do coletor já está vinculado a outro colaborador.' }); throw e; }
+    const pend = await prisma.coletorBatidaPendente.findMany({ where: { enrollid, resolvidoEm: null }, orderBy: { dataHora: 'asc' } });
+    let criados = 0;
+    for (const p of pend) {
+      try {
+        const ja = await prisma.pontoRegistro.findFirst({ where: { coletorRef: p.coletorRef }, select: { id: true } });
+        if (!ja) { await gravarPontoColetor(prisma, empresaId, funcionarioId, { dataHora: p.dataHora, coletorRef: p.coletorRef, dispositivoId: p.dispositivoId }); criados++; }
+        await prisma.coletorBatidaPendente.update({ where: { id: p.id }, data: { resolvidoEm: new Date() } });
+      } catch (e) { if (e?.code !== 'P2002') console.error('[coletor vincular record]', e?.message); }
+    }
+    res.json({ ok: true, criados, total: pend.length });
+  } catch (err) { console.error('[coletor vincular]', err); res.status(500).json({ error: 'Erro ao vincular.' }); }
+});
+
+// Edita/limpa o ID do coletor (enrollid) de um colaborador.
+app.put('/api/ponto/colaboradores/:id/enrollid', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const id = parseInt(req.params.id, 10);
+    const func = await prisma.funcionario.findFirst({ where: { id } });
+    if (!func) return res.status(404).json({ error: 'Colaborador não encontrado.' });
+    const raw = req.body?.enrollid;
+    const enrollid = (raw === null || raw === '' || raw === undefined) ? null : parseInt(raw, 10);
+    if (enrollid !== null && !Number.isInteger(enrollid)) return res.status(400).json({ error: 'ID do coletor inválido.' });
+    try { await prisma.funcionario.update({ where: { id }, data: { enrollidColetor: enrollid } }); }
+    catch (e) { if (e?.code === 'P2002') return res.status(409).json({ error: 'Esse ID do coletor já está em uso.' }); throw e; }
+    res.json({ ok: true, enrollidColetor: enrollid });
+  } catch (err) { console.error('[colaboradores enrollid]', err); res.status(500).json({ error: 'Erro ao salvar.' }); }
+});
+
 app.listen(PORT, () => console.log(`Operação (PDV) API rodando em http://localhost:${PORT}`));
+
+// Servidor de ingest do coletor DIXI (WebSocket na porta própria 7788).
+if (process.env.COLETOR_ENABLED !== 'false') {
+  try { iniciarColetorServer(prisma); }
+  catch (e) { console.error('[coletor] falha ao iniciar:', e?.message || e); }
+}

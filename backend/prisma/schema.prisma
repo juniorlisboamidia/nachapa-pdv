@@ -612,9 +612,11 @@ model Funcionario {
   biometriaStatus String   @default("PENDENTE") // PENDENTE | CADASTRADA | BLOQUEADA
   biometriaEm     DateTime? // quando o rosto foi cadastrado
   termoBiometriaEm DateTime? // aceite do termo LGPD de uso da biometria
+  enrollidColetor Int?     // ID do usuário no coletor DIXI (casa as batidas). Auto-aprendido pelo nome.
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
+  @@unique([empresaId, enrollidColetor])
   @@index([empresaId])
   @@index([empresaId, status])
 }
@@ -639,9 +641,10 @@ model PontoRegistro {
   funcionarioId Int
   tipo          String   // ENTRADA | SAIDA_INTERVALO | RETORNO_INTERVALO | SAIDA
   dataHora      DateTime @default(now())
-  origem        String   @default("FACIAL") // FACIAL | PIN | MANUAL
+  origem        String   @default("FACIAL") // FACIAL | PIN | MANUAL | COLETOR
   dispositivoId Int?
   distancia     Float?   // distância do match facial (quanto menor, mais confiante)
+  coletorRef    String?  @unique // dedup das batidas do coletor: "sn:enrollid:time"
   criadoEm      DateTime @default(now())
 
   @@index([empresaId, dataHora])
@@ -650,15 +653,35 @@ model PontoRegistro {
 
 // Dispositivo (tablet/totem) autorizado a abrir a tela de bater ponto (por token).
 model Dispositivo {
-  id         Int      @id @default(autoincrement())
-  empresaId  Int
-  nome       String
-  token      String   @unique // abre a tela quiosque /ponto/:token (sem login)
-  ativo      Boolean  @default(true)
-  ultimaSync DateTime?
-  criadoEm   DateTime @default(now())
+  id            Int      @id @default(autoincrement())
+  empresaId     Int
+  nome          String
+  token         String   @unique // abre a tela quiosque /ponto/:token (sem login)
+  ativo         Boolean  @default(true)
+  serialColetor String?  @unique // sn do coletor DIXI (push). NULL nos tablets-quiosque.
+  ultimaSync    DateTime?
+  criadoEm      DateTime @default(now())
 
   @@index([empresaId])
+}
+
+// Ponto Facial › Coletor — batidas que chegaram do coletor mas cujo enrollid
+// ainda não casou com um funcionário. Ficam na fila até o admin vincular
+// (aí viram PontoRegistro). Não perde ponto de quem não foi mapeado ainda.
+model ColetorBatidaPendente {
+  id            Int      @id @default(autoincrement())
+  empresaId     Int
+  dispositivoId Int?
+  serial        String
+  enrollid      Int
+  nome          String?  // nome como veio do coletor (ajuda a identificar)
+  dataHora      DateTime
+  coletorRef    String   @unique // "sn:enrollid:time" — dedup
+  resolvidoEm   DateTime? // preenchido quando vira PontoRegistro
+  criadoEm      DateTime @default(now())
+
+  @@index([empresaId, resolvidoEm])
+  @@index([empresaId, enrollid])
 }
 
 // Ponto Facial › Jornadas e Escalas — horário previsto por dia da semana.
