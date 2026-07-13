@@ -32,7 +32,7 @@ const MODELS_TENANT = new Set([
   'bonificacaoNivel', 'bonificacaoXp',
   'conquista', 'conquistaDesbloqueada',
   'bonificacaoMoeda', 'mercadoItem', 'mercadoResgate',
-  'funcionarioFace', 'pontoRegistro', 'dispositivo', 'jornada', 'coletorBatidaPendente',
+  'funcionarioFace', 'pontoRegistro', 'dispositivo', 'jornada', 'coletorBatidaPendente', 'coletorComando',
 ]);
 const OPS_WHERE = new Set([
   'findMany', 'findFirst', 'findFirstOrThrow', 'findUnique', 'findUniqueOrThrow',
@@ -5636,6 +5636,49 @@ app.put('/api/ponto/colaboradores/:id/enrollid', async (req, res) => {
     catch (e) { if (e?.code === 'P2002') return res.status(409).json({ error: 'Esse ID do coletor já está em uso.' }); throw e; }
     res.json({ ok: true, enrollidColetor: enrollid });
   } catch (err) { console.error('[colaboradores enrollid]', err); res.status(500).json({ error: 'Erro ao salvar.' }); }
+});
+
+// Comando de cadastro de usuário no coletor (formato capturado da DIXI).
+// record vazio = cria o "slot" (ID + nome) SEM biometria; a face é cadastrada
+// no aparelho depois.
+function montarSetUserInfo(enrollid, nome) {
+  return { cmd: 'setuserinfo', enrollid, name: String(nome || '').slice(0, 64), backupnum: 0, admin: 0, record: '' };
+}
+
+// Enfileira o envio de colaborador(es) pro coletor. body: { funcionarioIds: [] }
+// ou { todos: true }. O coletorServer envia a fila no próximo reg do coletor.
+app.post('/api/ponto/coletor/enviar', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const coletores = await prisma.dispositivo.findMany({ where: { serialColetor: { not: null }, ativo: true }, select: { serialColetor: true } });
+    if (!coletores.length) return res.status(400).json({ error: 'Nenhum coletor ativo. Ative em Ponto Facial › Coletor.' });
+
+    let funcionarios;
+    if (req.body?.todos) {
+      funcionarios = await prisma.funcionario.findMany({ where: { status: 'ATIVO' }, select: { id: true, nome: true, enrollidColetor: true } });
+    } else {
+      const ids = Array.isArray(req.body?.funcionarioIds) ? req.body.funcionarioIds.map((x) => parseInt(x, 10)).filter(Number.isInteger) : [];
+      if (!ids.length) return res.status(400).json({ error: 'Nenhum colaborador informado.' });
+      funcionarios = await prisma.funcionario.findMany({ where: { id: { in: ids }, status: 'ATIVO' }, select: { id: true, nome: true, enrollidColetor: true } });
+    }
+    if (!funcionarios.length) return res.status(400).json({ error: 'Nenhum colaborador ativo para enviar.' });
+
+    // próximo enrollid livre (para quem ainda não tem um ID no coletor)
+    const agg = await prisma.funcionario.aggregate({ _max: { enrollidColetor: true } });
+    let proximo = (agg._max.enrollidColetor || 0) + 1;
+
+    let enfileirados = 0;
+    for (const f of funcionarios) {
+      let enrollid = f.enrollidColetor;
+      if (!enrollid) { enrollid = proximo++; await prisma.funcionario.update({ where: { id: f.id }, data: { enrollidColetor: enrollid } }).catch(() => {}); }
+      const payload = montarSetUserInfo(enrollid, f.nome);
+      for (const c of coletores) {
+        await prisma.coletorComando.create({ data: { serial: c.serialColetor, funcionarioId: f.id, enrollid, cmd: 'setuserinfo', payload } });
+        enfileirados++;
+      }
+    }
+    res.json({ ok: true, enfileirados, funcionarios: funcionarios.length });
+  } catch (err) { console.error('[coletor enviar]', err); res.status(500).json({ error: 'Erro ao enfileirar o envio.' }); }
 });
 
 app.listen(PORT, () => console.log(`Operação (PDV) API rodando em http://localhost:${PORT}`));

@@ -684,6 +684,25 @@ model ColetorBatidaPendente {
   @@index([empresaId, enrollid])
 }
 
+// Fila de comandos a ENVIAR pro coletor (downlink). Ex.: cadastrar usuário
+// (setuserinfo). O coletorServer envia os PENDENTE quando o coletor dá sinal
+// (reg) e marca ENVIADO. A face NÃO vai aqui — é cadastrada no aparelho.
+model ColetorComando {
+  id            Int      @id @default(autoincrement())
+  empresaId     Int
+  serial        String   // coletor destino (Dispositivo.serialColetor)
+  funcionarioId Int?
+  enrollid      Int
+  cmd           String   @default("setuserinfo")
+  payload       Json     // comando completo enviado pelo WebSocket
+  status        String   @default("PENDENTE") // PENDENTE | ENVIADO
+  enviadoEm     DateTime?
+  criadoEm      DateTime @default(now())
+
+  @@index([serial, status])
+  @@index([empresaId])
+}
+
 // Ponto Facial › Jornadas e Escalas — horário previsto por dia da semana.
 // diasJson: 7 itens (índice 0=domingo .. 6=sábado). Cada item:
 //   { folga: true }  OU  { entrada: "HH:MM", saida: "HH:MM" }

@@ -157,6 +157,13 @@ function Coletor({ notify }) {
       setSel((s) => ({ ...s, [enrollid]: '' })); carregar()
     } catch (e) { notify(e?.response?.data?.error ?? 'Erro ao vincular.', 'error') }
   }
+  // Envia todos os colaboradores ativos pro coletor (carga inicial).
+  async function enviarTodos() {
+    try {
+      const r = await api.post('/ponto/coletor/enviar', { todos: true })
+      notify(`${r.data.funcionarios} colaborador(es) enviado(s). Cadastre as faces no aparelho.`)
+    } catch (e) { notify(e?.response?.data?.error ?? 'Não foi possível enviar.', 'error') }
+  }
 
   // Agrupa pendências por enrollid (1 linha por ID do coletor).
   const porEnrollid = useMemo(() => {
@@ -175,7 +182,10 @@ function Coletor({ notify }) {
 
   return (
     <div>
-      <div className="page-header-sub" style={{ margin: '0 0 8px' }}>Coletores</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '0 0 8px' }}>
+        <div className="page-header-sub" style={{ margin: 0 }}>Coletores</div>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={enviarTodos} disabled={!coletores.some((c) => c.ativo)} title="Enviar o cadastro (ID + nome) de todos os colaboradores ativos">Enviar todos ao coletor</button>
+      </div>
       {coletores.length === 0 ? (
         <div className="empty-state" style={{ padding: '24px 16px' }}>
           Nenhum coletor detectado ainda. Aponte o aparelho DIXI para este servidor (porta <strong>7788</strong>, HTTPS não) — ele aparece aqui automaticamente como <strong>pendente</strong>, aí é só ativar.
@@ -377,6 +387,17 @@ function Colaboradores({ notify }) {
     } catch (e) { notify(e?.response?.data?.error ?? 'Não foi possível salvar o ID do coletor.', 'error'); carregar() }
   }
 
+  // Envia o cadastro (ID + nome) do colaborador pro coletor. A face é cadastrada
+  // depois no aparelho. Chega no coletor no próximo "sinal" dele (~20s).
+  async function enviarColetor(f) {
+    try {
+      const r = await api.post('/ponto/coletor/enviar', { funcionarioIds: [f.id] })
+      if (!r.data?.enfileirados) { notify('Nenhum coletor ativo pra receber.', 'error'); return }
+      notify(`${f.nome} enviado ao coletor. Cadastre a face no aparelho (Menu › Usuários).`)
+      carregar()
+    } catch (e) { notify(e?.response?.data?.error ?? 'Não foi possível enviar ao coletor.', 'error') }
+  }
+
   const filtrada = lista.filter((f) => {
     if (!busca.trim()) return true
     const q = busca.toLowerCase()
@@ -508,6 +529,7 @@ function Colaboradores({ notify }) {
                   </td>
                   <td>{fmtDataHora(f.ultimaMarcacao)}</td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }} onClick={(e) => e.stopPropagation()}>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => enviarColetor(f)} title="Enviar cadastro (ID + nome) pro coletor">→ Coletor</button>{' '}
                     <button type="button" className="btn btn-secondary btn-sm" onClick={() => abrirEditar(f)}>Editar</button>{' '}
                     <button type="button" className="btn btn-secondary btn-sm" onClick={() => setPinModal({ id: f.id, nome: f.nome, pin: '' })}>PIN</button>{' '}
                     <button type="button" className="btn btn-danger btn-sm" onClick={() => setConfirmExcluir(f)}>Excluir</button>

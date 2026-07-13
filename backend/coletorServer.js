@@ -78,6 +78,22 @@ export async function gravarPontoColetor(prisma, empresaId, funcionarioId, { dat
   return prisma.pontoRegistro.create({ data: { empresaId, funcionarioId, tipo, origem: 'COLETOR', dispositivoId, dataHora, coletorRef } });
 }
 
+// Envia os comandos PENDENTE do coletor (downlink) pela conexão WS e marca
+// ENVIADO. Chamado no reg (device conectado e autorizado). `enviar(obj)` manda
+// um frame text com o JSON.
+async function enviarComandosPendentes(prisma, sn, enviar) {
+  let pend;
+  try { pend = await prisma.coletorComando.findMany({ where: { serial: sn, status: 'PENDENTE' }, orderBy: { id: 'asc' }, take: 50 }); }
+  catch (e) { console.error('[coletor] ler fila de comandos:', e?.message || e); return; }
+  for (const c of pend) {
+    try {
+      enviar(c.payload);
+      await prisma.coletorComando.update({ where: { id: c.id }, data: { status: 'ENVIADO', enviadoEm: new Date() } });
+      console.log(`[coletor] comando ${c.cmd} enviado (enrollid=${c.enrollid}) p/ ${sn}`);
+    } catch (e) { console.error('[coletor] envio de comando falhou:', e?.message || e); }
+  }
+}
+
 // reg → resolve/auto-cadastra o Dispositivo pelo serial (novo nasce PENDENTE).
 async function resolverDispositivoColetor(prisma, sn) {
   if (!sn) return null;
@@ -163,6 +179,9 @@ export function iniciarColetorServer(prisma, opts = {}) {
           sn = String(msg.sn || '').trim();
           disp = await resolverDispositivoColetor(prisma, sn);
           responder({ ret: 'reg', result: true, cloudtime: cloudtimeBR(), nosenduser: true });
+          // Downlink: envia os comandos pendentes (ex.: cadastro de usuário) agora
+          // que o coletor deu sinal e está autorizado.
+          if (disp && disp.ativo) await enviarComandosPendentes(prisma, sn, responder);
         } else if (msg.cmd === 'sendlog') {
           const ok = await processarSendlog(prisma, disp, sn || String(msg.sn || '').trim(), Array.isArray(msg.record) ? msg.record : []);
           if (ok) responder({ ret: 'sendlog', result: true, count: msg.count, logindex: msg.logindex, cloudtime: cloudtimeBR() });
