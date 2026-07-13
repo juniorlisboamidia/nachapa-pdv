@@ -89,6 +89,12 @@ async function resolverDispositivoColetor(prisma, sn) {
       data: { empresaId: emp.id, nome: `Coletor ${sn}`, token: `coletor-${sn}-${crypto.randomBytes(6).toString('hex')}`, ativo: false, serialColetor: sn },
     });
     console.log(`[coletor] novo device PENDENTE de autorização (ative no painel): sn=${sn}`);
+  } else {
+    // Heartbeat: o reg chega a cada ~20s — marca "Última sync" mesmo sem batida,
+    // pra dar pra ver no painel se o coletor está vivo/conectado.
+    const agora = new Date();
+    await prisma.dispositivo.update({ where: { id: disp.id }, data: { ultimaSync: agora } }).catch(() => {});
+    disp.ultimaSync = agora;
   }
   return disp;
 }

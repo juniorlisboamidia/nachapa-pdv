@@ -364,6 +364,19 @@ function Colaboradores({ notify }) {
     catch (e) { notify(e?.response?.data?.error ?? 'Não foi possível atribuir a jornada.', 'error'); carregar() }
   }
 
+  // ID do funcionário no coletor DIXI (casa as batidas). Salva ao sair do campo.
+  async function salvarEnrollid(f, valorRaw) {
+    const value = String(valorRaw ?? '').trim()
+    const enrollid = value === '' ? null : parseInt(value, 10)
+    if (value !== '' && !Number.isInteger(enrollid)) { notify('ID do coletor inválido.', 'error'); carregar(); return }
+    if (enrollid === (f.enrollidColetor ?? null)) return
+    try {
+      await api.put(`/ponto/colaboradores/${f.id}/enrollid`, { enrollid })
+      setLista((ls) => ls.map((x) => x.id === f.id ? { ...x, enrollidColetor: enrollid } : x))
+      notify('ID do coletor salvo.')
+    } catch (e) { notify(e?.response?.data?.error ?? 'Não foi possível salvar o ID do coletor.', 'error'); carregar() }
+  }
+
   const filtrada = lista.filter((f) => {
     if (!busca.trim()) return true
     const q = busca.toLowerCase()
@@ -447,6 +460,7 @@ function Colaboradores({ notify }) {
                 <th>Função</th>
                 <th>CPF</th>
                 <th>Jornada</th>
+                <th>ID coletor</th>
                 <th>PIN</th>
                 <th>Última marcação</th>
                 <th aria-hidden="true"></th>
@@ -473,6 +487,19 @@ function Colaboradores({ notify }) {
                       <option value="">Sem jornada</option>
                       {jornadas.map((j) => <option key={j.id} value={j.id}>{j.nome}</option>)}
                     </select>
+                  </td>
+                  <td onClick={(e) => e.stopPropagation()}>
+                    <input
+                      key={'enr-' + (f.enrollidColetor ?? 'x')}
+                      type="number"
+                      className="form-input"
+                      style={{ padding: '4px 8px', fontSize: 13, width: 78 }}
+                      defaultValue={f.enrollidColetor ?? ''}
+                      placeholder="—"
+                      title="ID do usuário no coletor DIXI (casa as batidas)"
+                      onBlur={(e) => salvarEnrollid(f, e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                    />
                   </td>
                   <td>
                     {f.temPin

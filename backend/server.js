@@ -5127,6 +5127,7 @@ app.get('/api/ponto/colaboradores', async (req, res) => {
       id: f.id, nome: f.nome, funcao: f.funcao || null, cpf: f.cpf || null, whatsapp: f.whatsapp || null, status: f.status,
       biometriaStatus: f.biometriaStatus, biometriaEm: f.biometriaEm, temPin: !!f.pinPonto, ultimaMarcacao: uMap.get(f.id) || null,
       jornadaId: f.jornadaId || null, jornadaNome: f.jornadaId ? (jMap.get(f.jornadaId) || null) : null,
+      enrollidColetor: f.enrollidColetor ?? null,
     })));
   } catch (err) { console.error('[ponto/colaboradores]', err); res.status(500).json({ error: 'Erro ao carregar colaboradores.' }); }
 });
