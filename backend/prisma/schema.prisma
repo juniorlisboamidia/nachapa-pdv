@@ -704,6 +704,18 @@ model ColetorComando {
   @@index([empresaId])
 }
 
+// Ponto Facial — regras de marcação (1 por loja). Como as batidas do coletor
+// viram ponto: janela anti-duplicação (batida repetida por engano) + se usa
+// intervalo (4 batidas) ou só entrada/saída (2 batidas).
+model PontoConfig {
+  id           Int      @id @default(autoincrement())
+  empresaId    Int      @unique
+  dedupeMin    Int      @default(15)    // janela anti-duplicação em minutos (0 = desliga)
+  usaIntervalo Boolean  @default(false) // false = só Entrada/Saída; true = com intervalo
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+}
+
 // Ponto Facial › Jornadas e Escalas — horário previsto por dia da semana.
 // diasJson: 7 itens (índice 0=domingo .. 6=sábado). Cada item:
 //   { folga: true }  OU  { entrada: "HH:MM", saida: "HH:MM" }

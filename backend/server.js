@@ -32,7 +32,7 @@ const MODELS_TENANT = new Set([
   'bonificacaoNivel', 'bonificacaoXp',
   'conquista', 'conquistaDesbloqueada',
   'bonificacaoMoeda', 'mercadoItem', 'mercadoResgate',
-  'funcionarioFace', 'pontoRegistro', 'dispositivo', 'jornada', 'coletorBatidaPendente', 'coletorComando',
+  'funcionarioFace', 'pontoRegistro', 'dispositivo', 'jornada', 'coletorBatidaPendente', 'coletorComando', 'pontoConfig',
 ]);
 const OPS_WHERE = new Set([
   'findMany', 'findFirst', 'findFirstOrThrow', 'findUnique', 'findUniqueOrThrow',
@@ -5599,6 +5599,26 @@ app.post('/api/public/ponto/:token/registrar', async (req, res) => {
 });
 
 /* ── Ponto Facial › Coletor DIXI (gestão) ───────────────────────────── */
+
+// Config de marcação (janela anti-duplicação + modo de batidas). 1 por loja.
+app.get('/api/ponto/config', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const c = await prisma.pontoConfig.findFirst();
+    res.json({ dedupeMin: c ? c.dedupeMin : 15, usaIntervalo: c ? c.usaIntervalo : false });
+  } catch (err) { console.error('[ponto/config GET]', err); res.status(500).json({ error: 'Erro ao carregar a configuração.' }); }
+});
+app.put('/api/ponto/config', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const dedupeMin = Math.max(0, Math.min(240, parseInt(req.body?.dedupeMin, 10) || 0));
+    const usaIntervalo = !!req.body?.usaIntervalo;
+    const ex = await prisma.pontoConfig.findFirst();
+    const c = ex ? await prisma.pontoConfig.update({ where: { id: ex.id }, data: { dedupeMin, usaIntervalo } })
+                 : await prisma.pontoConfig.create({ data: { dedupeMin, usaIntervalo } });
+    res.json({ dedupeMin: c.dedupeMin, usaIntervalo: c.usaIntervalo });
+  } catch (err) { console.error('[ponto/config PUT]', err); res.status(500).json({ error: 'Erro ao salvar a configuração.' }); }
+});
 
 // Lista os coletores (Dispositivos com serial). Novos nascem PENDENTES (inativos).
 app.get('/api/ponto/coletores', async (req, res) => {

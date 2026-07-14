@@ -59,8 +59,15 @@ function encodeFrame(opcode, buf) {
 }
 
 // ── Regras de negócio ───────────────────────────────────────────
-const SEQ = { ENTRADA: 'SAIDA_INTERVALO', SAIDA_INTERVALO: 'RETORNO_INTERVALO', RETORNO_INTERVALO: 'SAIDA', SAIDA: null };
-async function proximoTipoPontoNaData(prisma, empresaId, funcionarioId, dataHora) {
+const SEQ_INTERVALO = { ENTRADA: 'SAIDA_INTERVALO', SAIDA_INTERVALO: 'RETORNO_INTERVALO', RETORNO_INTERVALO: 'SAIDA', SAIDA: null };
+
+// Config de marcação da loja (com defaults se ainda não foi salva).
+async function lerPontoConfigColetor(prisma, empresaId) {
+  const c = await prisma.pontoConfig.findFirst({ where: { empresaId } }).catch(() => null);
+  return { dedupeMin: c ? Math.max(0, c.dedupeMin) : 15, usaIntervalo: !!(c && c.usaIntervalo) };
+}
+
+async function proximoTipoPontoNaData(prisma, empresaId, funcionarioId, dataHora, usaIntervalo) {
   const { ini, fim } = brDiaRange(dataHora);
   const regs = await prisma.pontoRegistro.findMany({
     where: { empresaId, funcionarioId, dataHora: { gte: ini, lt: fim } },
@@ -68,13 +75,24 @@ async function proximoTipoPontoNaData(prisma, empresaId, funcionarioId, dataHora
   });
   const ultimo = regs.length ? regs[regs.length - 1].tipo : null;
   if (!ultimo) return 'ENTRADA';
-  return SEQ[ultimo] || 'SAIDA'; // além da 4ª batida, mantém como SAIDA (Espelho usa a última)
+  if (!usaIntervalo) return (ultimo === 'ENTRADA' || ultimo === 'RETORNO_INTERVALO') ? 'SAIDA' : 'ENTRADA'; // alterna E↔S
+  return SEQ_INTERVALO[ultimo] || 'SAIDA'; // além da 4ª batida, mantém como SAIDA (Espelho usa a última)
 }
 
 // Grava uma batida do coletor como PontoRegistro (tipo pela sequência do dia).
 // Reusado no ingest e ao resolver pendências (vincular enrollid a funcionário).
+// Retorna null quando é DUPLICADA (outra batida do mesmo funcionário dentro da
+// janela dedupeMin) — o chamador ainda ACK, então o coletor não reenvia.
 export async function gravarPontoColetor(prisma, empresaId, funcionarioId, { dataHora, coletorRef, dispositivoId = null }) {
-  const tipo = await proximoTipoPontoNaData(prisma, empresaId, funcionarioId, dataHora);
+  const cfg = await lerPontoConfigColetor(prisma, empresaId);
+  if (cfg.dedupeMin > 0) {
+    const desde = new Date(new Date(dataHora).getTime() - cfg.dedupeMin * 60000);
+    const recente = await prisma.pontoRegistro.findFirst({
+      where: { empresaId, funcionarioId, dataHora: { gte: desde, lte: dataHora } }, select: { id: true },
+    });
+    if (recente) return null; // batida repetida por engano — ignora
+  }
+  const tipo = await proximoTipoPontoNaData(prisma, empresaId, funcionarioId, dataHora, cfg.usaIntervalo);
   return prisma.pontoRegistro.create({ data: { empresaId, funcionarioId, tipo, origem: 'COLETOR', dispositivoId, dataHora, coletorRef } });
 }
 

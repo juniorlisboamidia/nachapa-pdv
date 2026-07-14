@@ -235,6 +235,8 @@ function Coletor({ notify }) {
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState(null)
   const [sel, setSel] = useState({}) // { enrollid: funcionarioId } em edição
+  const [cfg, setCfg] = useState({ dedupeMin: 15, usaIntervalo: false })
+  const [salvandoCfg, setSalvandoCfg] = useState(false)
   const { envio, enviar, fechar } = useEnvioColetor(notify)
 
   const carregar = useCallback(() => {
@@ -243,14 +245,26 @@ function Coletor({ notify }) {
       api.get('/ponto/coletores'),
       api.get('/ponto/coletor/pendencias'),
       api.get('/ponto/colaboradores'),
-    ]).then(([c, p, f]) => {
+      api.get('/ponto/config'),
+    ]).then(([c, p, f, cf]) => {
       setColetores(c.data || [])
       setPendencias(p.data || [])
       setFuncionarios((f.data || []).filter((x) => x.status === 'ATIVO'))
+      if (cf.data) setCfg({ dedupeMin: cf.data.dedupeMin ?? 15, usaIntervalo: !!cf.data.usaIntervalo })
     }).catch((e) => setErro(e?.response?.data?.error ?? 'Não foi possível carregar.'))
       .finally(() => setLoading(false))
   }, [])
   useEffect(() => { carregar() }, [carregar])
+
+  async function salvarConfig() {
+    setSalvandoCfg(true)
+    try {
+      const r = await api.put('/ponto/config', { dedupeMin: Number(cfg.dedupeMin) || 0, usaIntervalo: cfg.usaIntervalo })
+      setCfg({ dedupeMin: r.data.dedupeMin, usaIntervalo: r.data.usaIntervalo })
+      notify('Regras de marcação salvas.')
+    } catch (e) { notify(e?.response?.data?.error ?? 'Erro ao salvar.', 'error') }
+    finally { setSalvandoCfg(false) }
+  }
 
   async function toggleColetor(c) {
     try {
@@ -291,6 +305,36 @@ function Coletor({ notify }) {
 
   return (
     <div>
+      {/* Regras de marcação — anti-duplicação + modo de batidas */}
+      <div className="table-card" style={{ padding: 16, marginBottom: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ fontWeight: 700, fontSize: 14.5 }}>Regras de marcação</div>
+            <div style={{ fontSize: 12.5, color: 'var(--app-text-soft, #737373)', marginTop: 3 }}>Como as batidas do coletor viram ponto.</div>
+          </div>
+          <button type="button" className="btn btn-primary btn-sm" onClick={salvarConfig} disabled={salvandoCfg}>{salvandoCfg ? 'Salvando…' : 'Salvar'}</button>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 16 }}>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label">Janela anti-duplicação</label>
+            <div style={{ position: 'relative', maxWidth: 150 }}>
+              <input type="number" min="0" max="240" className="form-input" style={{ paddingRight: 42 }}
+                value={cfg.dedupeMin} onChange={(e) => setCfg((c) => ({ ...c, dedupeMin: e.target.value }))} />
+              <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: '#999', fontSize: 12.5, pointerEvents: 'none' }}>min</span>
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--app-text-soft, #999)', marginTop: 5 }}>Bateu de novo dentro desse tempo? Conta como a mesma batida (ignora a repetida). 0 desliga.</div>
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label">Modo de batidas</label>
+            <select className="form-input" style={{ maxWidth: 220 }} value={cfg.usaIntervalo ? 'sim' : 'nao'} onChange={(e) => setCfg((c) => ({ ...c, usaIntervalo: e.target.value === 'sim' }))}>
+              <option value="nao">Só Entrada e Saída</option>
+              <option value="sim">Com intervalo (4 batidas)</option>
+            </select>
+            <div style={{ fontSize: 11.5, color: 'var(--app-text-soft, #999)', marginTop: 5 }}>“Só Entrada e Saída” alterna entre as duas. Use “Com intervalo” só se a equipe registra a saída/retorno do intervalo.</div>
+          </div>
+        </div>
+      </div>
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '0 0 8px' }}>
         <div className="page-header-sub" style={{ margin: 0 }}>Coletores</div>
         <button type="button" className="btn btn-secondary btn-sm" onClick={enviarTodos} disabled={!coletores.some((c) => c.ativo)} title="Enviar o cadastro (ID + nome) de todos os colaboradores ativos">Enviar todos ao coletor</button>
