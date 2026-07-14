@@ -451,10 +451,16 @@ async function avaliarConquistas() {
   }
   return total;
 }
+function sanitizarSlugBonif(v) {
+  const s = String(v ?? '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
+  return s || null;
+}
 function bonificacaoConfigJson(c) {
   return {
     ativo: c.ativo,
     tokenPublico: c.tokenPublico || null,
+    slugPublico: c.slugPublico || null,
     tetoAssiduidade: Number(c.tetoAssiduidade), tetoDesempenho: Number(c.tetoDesempenho), tetoColetiva: Number(c.tetoColetiva),
     bonusTop1: Number(c.bonusTop1), bonusTop2: Number(c.bonusTop2), bonusTop3: Number(c.bonusTop3),
     xpPorNivel: c.xpPorNivel ?? 500,
@@ -531,6 +537,15 @@ app.put('/api/bonificacao/config', async (req, res) => {
       moedasPorReal: Math.max(0, num(b.moedasPorReal, 1)),
     };
     const existente = await prisma.bonificacaoConfig.findFirst();
+    // Slug amigável do link público (opcional; único global).
+    if (b.slugPublico !== undefined) {
+      const slug = sanitizarSlugBonif(b.slugPublico);
+      if (slug) {
+        const conflito = await prisma.bonificacaoConfig.findFirst({ where: { slugPublico: slug, ...(existente ? { NOT: { id: existente.id } } : {}) } });
+        if (conflito) return res.status(409).json({ error: 'Esse endereço já está em uso. Escolha outro.' });
+      }
+      data.slugPublico = slug;
+    }
     const c = existente
       ? await prisma.bonificacaoConfig.update({ where: { id: existente.id }, data })
       : await prisma.bonificacaoConfig.create({ data });
@@ -1103,7 +1118,8 @@ const rowPublicoBonif = (r) => ({
 });
 app.get('/api/public/bonificacao/:token', async (req, res) => {
   try {
-    const cfg = await prisma.bonificacaoConfig.findFirst({ where: { tokenPublico: String(req.params.token) } });
+    const chave = String(req.params.token);
+    const cfg = await prisma.bonificacaoConfig.findFirst({ where: { OR: [{ slugPublico: chave }, { tokenPublico: chave }] } });
     if (!cfg) return res.status(404).json({ error: 'Página não encontrada.' });
     if (!cfg.ativo) return res.status(404).json({ error: 'A bonificação não está ativa nesta loja.' });
     const empresaId = cfg.empresaId; // rota pública: sem tenantStore → filtro manual

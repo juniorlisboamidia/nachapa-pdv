@@ -1158,17 +1158,17 @@ function AbaConfig({ cfg, setCfg, tipos, setTipos, niveis, setNiveis, salvar, sa
   const setNivel = (key, nome) => setNiveis((ns) => ns.map((n) => ((n.id ?? n._tmp) === key ? { ...n, nome } : n)))
   const rmNivel = (key) => setNiveis((ns) => ns.filter((n) => (n.id ?? n._tmp) !== key))
   const totalMax = Number(cfg.tetoAssiduidade || 0) + Number(cfg.tetoDesempenho || 0) + Number(cfg.tetoColetiva || 0) + Number(cfg.bonusTop1 || 0)
-  const linkPublico = cfg.tokenPublico ? `${window.location.origin}/bonificacao/${cfg.tokenPublico}` : ''
+  const identificador = cfg.slugPublico || cfg.tokenPublico || ''
+  const linkPublico = identificador ? `${window.location.origin}/bonificacao/${identificador}` : ''
+  const origemCurta = window.location.origin.replace(/^https?:\/\//, '')
+  const limparSlug = (v) => v.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9-]+/g, '-').replace(/-{2,}/g, '-')
   const copiar = () => { try { navigator.clipboard.writeText(linkPublico) } catch { /* noop */ } toast?.({ message: 'Link copiado.', type: 'success' }) }
-  async function rotacionar() {
-    try { const r = await api.post('/bonificacao/token/rotacionar'); setCfg((c) => ({ ...c, tokenPublico: r.data.tokenPublico })); toast?.({ message: 'Novo link gerado — o anterior parou de funcionar.', type: 'success' }) }
-    catch (err) { toast?.({ message: err?.response?.data?.error ?? 'Erro ao gerar o link.', type: 'error' }) }
-  }
+  const abrir = () => { if (linkPublico) window.open(linkPublico, '_blank', 'noopener') }
 
   const somaTetos = Number(cfg.tetoAssiduidade || 0) + Number(cfg.tetoDesempenho || 0) + Number(cfg.tetoColetiva || 0)
 
   return (
-    <div style={{ maxWidth: 780 }}>
+    <div>
       {/* Barra: status (switch) + salvar */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
         <button type="button" role="switch" aria-checked={cfg.ativo} onClick={() => set('ativo', !cfg.ativo)}
@@ -1182,10 +1182,20 @@ function AbaConfig({ cfg, setCfg, tipos, setTipos, niveis, setNiveis, salvar, sa
       </div>
 
       <SecaoConfig titulo="Link público da equipe" descricao="Compartilhe com a equipe para acompanharem o ranking do mês, sem login.">
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <input className="form-input" readOnly value={linkPublico} onFocus={(e) => e.target.select()} style={{ flex: 1, minWidth: 220 }} placeholder="Salve a configuração para gerar o link" />
-          <button type="button" className="btn btn-secondary btn-sm" onClick={copiar} disabled={!linkPublico}>Copiar</button>
-          <button type="button" className="btn btn-secondary btn-sm" onClick={rotacionar}>Gerar novo</button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div>
+            <label className="form-label">Endereço do link</label>
+            <div style={{ display: 'flex', alignItems: 'stretch', border: '1px solid var(--app-border, #d4d4d4)', borderRadius: 8, overflow: 'hidden', maxWidth: 520 }}>
+              <span style={{ display: 'flex', alignItems: 'center', padding: '0 4px 0 11px', fontSize: 13, color: 'var(--app-text-soft, #999)', background: 'rgba(0,0,0,0.03)', whiteSpace: 'nowrap' }}>{origemCurta}/bonificacao/</span>
+              <input className="form-input" style={{ border: 'none', borderRadius: 0, flex: 1 }} value={cfg.slugPublico || ''} placeholder="ranking" onChange={(e) => set('slugPublico', limparSlug(e.target.value))} />
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--app-text-soft, #999)', marginTop: 5 }}>Um apelido curto e fácil (ex.: ranking). Deixe em branco para usar o link automático. Salve a configuração para aplicar.</div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input className="form-input" readOnly value={linkPublico} onFocus={(e) => e.target.select()} style={{ flex: 1, minWidth: 220 }} placeholder="Salve a configuração para gerar o link" />
+            <button type="button" className="btn btn-secondary btn-sm" onClick={copiar} disabled={!linkPublico}>Copiar</button>
+            <button type="button" className="btn btn-primary btn-sm" onClick={abrir} disabled={!linkPublico}>Abrir</button>
+          </div>
         </div>
       </SecaoConfig>
 

@@ -757,6 +757,7 @@ model BonificacaoConfig {
   id               Int      @id @default(autoincrement())
   empresaId        Int      @unique
   tokenPublico     String?  @unique // link público p/ a equipe acompanhar o ranking
+  slugPublico      String?  @unique // apelido amigável do link (ex.: "ranking")
   ativo            Boolean  @default(true)
   tetoAssiduidade  Decimal  @default(100) @db.Decimal(10, 2)
   tetoDesempenho   Decimal  @default(100) @db.Decimal(10, 2)
