@@ -235,15 +235,19 @@ function dadosFuncionario(body) {
   if (!nome) return { error: 'Informe o nome.' };
   const status = FUNCIONARIO_STATUS.has(body?.status) ? body.status : 'ATIVO';
   const only = (v, max) => (v == null || String(v).trim() === '' ? null : String(v).trim().slice(0, max));
-  return {
-    campos: {
-      nome: nome.slice(0, 160),
-      funcao: only(body?.funcao, 80),
-      cpf: only(body?.cpf, 20),
-      whatsapp: only(body?.whatsapp, 30),
-      status,
-    },
+  const campos = {
+    nome: nome.slice(0, 160),
+    funcao: only(body?.funcao, 80),
+    cpf: only(body?.cpf, 20),
+    whatsapp: only(body?.whatsapp, 30),
+    status,
   };
+  // Folga fixa por dia da semana (0=dom..6=sáb). Só grava se o campo veio no body.
+  if (body?.folgaSemana !== undefined) {
+    const arr = Array.isArray(body.folgaSemana) ? body.folgaSemana : [];
+    campos.folgaSemana = [...new Set(arr.map((n) => parseInt(n, 10)).filter((n) => n >= 0 && n <= 6))].sort((a, b) => a - b);
+  }
+  return { campos };
 }
 
 app.get('/api/funcionarios', async (req, res) => {
@@ -5128,6 +5132,7 @@ app.get('/api/ponto/colaboradores', async (req, res) => {
       biometriaStatus: f.biometriaStatus, biometriaEm: f.biometriaEm, temPin: !!f.pinPonto, ultimaMarcacao: uMap.get(f.id) || null,
       jornadaId: f.jornadaId || null, jornadaNome: f.jornadaId ? (jMap.get(f.jornadaId) || null) : null,
       enrollidColetor: f.enrollidColetor ?? null,
+      folgaSemana: Array.isArray(f.folgaSemana) ? f.folgaSemana : [],
     })));
   } catch (err) { console.error('[ponto/colaboradores]', err); res.status(500).json({ error: 'Erro ao carregar colaboradores.' }); }
 });
@@ -5360,8 +5365,10 @@ async function calcularEspelho(funcionarioId, ano, mes) {
     const futuro = Date.UTC(ano, mes - 1, d) > hojeNum;
     const batidas = porDia.get(`${ano}-${mes - 1}-${d}`) || [];
 
+    // Folga fixa do colaborador sobrepõe a jornada: o dia vira folga mesmo que a jornada previsse trabalho.
+    const folgaColab = Array.isArray(func.folgaSemana) && func.folgaSemana.includes(dow);
     let previstoMin = 0, entradaPrevMs = null, folga = true;
-    if (cfg && !cfg.folga && cfg.entrada && cfg.saida) {
+    if (cfg && !cfg.folga && cfg.entrada && cfg.saida && !folgaColab) {
       folga = false;
       const em = hmToMin(cfg.entrada), sm = hmToMin(cfg.saida);
       entradaPrevMs = brToUtcMs(ano, mes - 1, d, Math.floor(em / 60), em % 60);

@@ -421,7 +421,12 @@ function Painel() {
 }
 
 // ===================== COLABORADORES =====================
-const FORM_VAZIO = { nome: '', funcao: '', cpf: '', whatsapp: '', status: 'ATIVO' }
+const FORM_VAZIO = { nome: '', funcao: '', cpf: '', whatsapp: '', status: 'ATIVO', folgaSemana: [] }
+// Resumo curto das folgas ([1,4] -> "Seg, Qui")
+function resumoFolga(dias) {
+  if (!Array.isArray(dias) || !dias.length) return null
+  return [...dias].sort((a, b) => a - b).map((i) => DIAS_ABREV[i]).join(', ')
+}
 function Colaboradores({ notify }) {
   const [lista, setLista] = useState([])
   const [loading, setLoading] = useState(true)
@@ -484,7 +489,7 @@ function Colaboradores({ notify }) {
   })
 
   const abrirNovo = () => setModal({ id: null, form: { ...FORM_VAZIO } })
-  const abrirEditar = (f) => setModal({ id: f.id, form: { nome: f.nome ?? '', funcao: f.funcao ?? '', cpf: mascararCPF(f.cpf ?? ''), whatsapp: f.whatsapp ?? '', status: f.status ?? 'ATIVO' } })
+  const abrirEditar = (f) => setModal({ id: f.id, form: { nome: f.nome ?? '', funcao: f.funcao ?? '', cpf: mascararCPF(f.cpf ?? ''), whatsapp: f.whatsapp ?? '', status: f.status ?? 'ATIVO', folgaSemana: Array.isArray(f.folgaSemana) ? f.folgaSemana : [] } })
   const upd = (campo, valor) => setModal((m) => ({ ...m, form: { ...m.form, [campo]: valor } }))
 
   async function salvar() {
@@ -587,6 +592,7 @@ function Colaboradores({ notify }) {
                       <option value="">Sem jornada</option>
                       {jornadas.map((j) => <option key={j.id} value={j.id}>{j.nome}</option>)}
                     </select>
+                    {resumoFolga(f.folgaSemana) && <div style={{ fontSize: 11.5, color: 'var(--app-text-soft, #737373)', marginTop: 3 }}>Folga: {resumoFolga(f.folgaSemana)}</div>}
                   </td>
                   <td onClick={(e) => e.stopPropagation()}>
                     <input
@@ -650,6 +656,25 @@ function Colaboradores({ notify }) {
                   <option value="INATIVO">Inativo</option>
                 </select>
               </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Folga semanal</label>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {DIAS_ABREV.map((lbl, i) => {
+                  const on = (modal.form.folgaSemana || []).includes(i)
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => upd('folgaSemana', on ? modal.form.folgaSemana.filter((d) => d !== i) : [...(modal.form.folgaSemana || []), i])}
+                      style={{ padding: '6px 12px', borderRadius: 999, border: '1px solid ' + (on ? '#2563eb' : 'var(--app-border, #d4d4d4)'), background: on ? '#2563eb' : 'transparent', color: on ? '#fff' : 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
+                    >
+                      {lbl}
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="page-header-sub" style={{ marginTop: 6 }}>Dias em que folga toda semana. Sobrepõe a jornada — nesses dias não conta falta. Deixe vazio para seguir só a jornada.</div>
             </div>
             <div className="modal-actions">
               <button type="button" className="btn btn-secondary" onClick={() => setModal(null)} disabled={salvando}>Cancelar</button>

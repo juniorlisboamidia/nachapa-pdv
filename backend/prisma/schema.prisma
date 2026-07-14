@@ -613,6 +613,7 @@ model Funcionario {
   biometriaEm     DateTime? // quando o rosto foi cadastrado
   termoBiometriaEm DateTime? // aceite do termo LGPD de uso da biometria
   enrollidColetor Int?     // ID do usuário no coletor DIXI (casa as batidas). Auto-aprendido pelo nome.
+  folgaSemana  Int[]    @default([]) // dias de folga fixa (0=dom..6=sáb). Sobrepõe a jornada. Vazio = usa só a jornada.
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
