@@ -123,7 +123,7 @@ function ModalProgressoEnvio({ envio, onClose }) {
         </div>
         {!finalizado && (
           <div className="page-header-sub" style={{ margin: 0 }}>
-            Aguardando o coletor receber — costuma levar alguns segundos (o aparelho avisa o servidor a cada ~20s).
+            Aguardando o coletor receber — costuma levar alguns segundos.
             {total > 1 && <> <strong>{enviados} de {total}</strong> confirmados.</>}
           </div>
         )}
