@@ -32,17 +32,17 @@ function ModuloCard({ m }) {
       onMouseLeave={() => setHover(false)}
       style={{
         textDecoration: 'none', color: 'inherit', padding: 16, borderRadius: 14,
-        border: '1px solid ' + (hover ? '#93c5fd' : '#eee'), background: '#fff',
+        border: '1px solid ' + (hover ? 'var(--brand-gold)' : 'var(--app-border)'), background: 'var(--app-surface)',
         display: 'flex', flexDirection: 'column', gap: 6,
-        boxShadow: hover ? '0 4px 14px rgba(37,99,235,0.10)' : 'none', transition: 'border-color .14s, box-shadow .14s',
+        boxShadow: hover ? '0 4px 14px rgba(234,184,2,0.18)' : 'none', transition: 'border-color .14s, box-shadow .14s',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontSize: 26 }}>{m.emoji}</span>
-        <span style={{ color: '#a17c00', fontSize: 18, fontWeight: 800, transform: hover ? 'translateX(2px)' : 'none', transition: 'transform .14s' }}>→</span>
+        <span style={{ color: 'var(--brand-gold-deep)', fontSize: 18, fontWeight: 800, transform: hover ? 'translateX(2px)' : 'none', transition: 'transform .14s' }}>→</span>
       </div>
-      <div style={{ fontWeight: 700, fontSize: 15 }}>{m.nome}</div>
-      <div style={{ fontSize: 12.5, color: '#888', lineHeight: 1.4 }}>{m.desc}</div>
+      <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--app-text)' }}>{m.nome}</div>
+      <div style={{ fontSize: 12.5, color: 'var(--app-text-3)', lineHeight: 1.4 }}>{m.desc}</div>
     </Link>
   )
 }
@@ -70,13 +70,13 @@ export default function Inicio() {
       </div>
 
       {/* Hero da loja */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 20, borderRadius: 16, border: '1px solid #eee', background: 'linear-gradient(135deg, #fdf6da, #ffffff)', marginBottom: 22 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 20, borderRadius: 16, border: '1px solid var(--app-border)', background: 'linear-gradient(135deg, var(--app-highlight), var(--app-surface))', marginBottom: 22 }}>
         <div style={{ width: 56, height: 56, borderRadius: 14, background: 'linear-gradient(150deg,#eab802,#d4a600)', display: 'grid', placeItems: 'center', color: '#0e1319', fontSize: 26, fontWeight: 800, overflow: 'hidden', flexShrink: 0 }}>
           {loja?.logoDataUrl ? <img src={loja.logoDataUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (nomeLoja.charAt(0).toUpperCase())}
         </div>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 13, color: '#999', fontWeight: 600 }}>{primeiro ? `Olá, ${primeiro}!` : 'Bem-vindo!'}</div>
-          <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em' }}>{nomeLoja}</div>
+          <div style={{ fontSize: 13, color: 'var(--app-text-3)', fontWeight: 600 }}>{primeiro ? `Olá, ${primeiro}!` : 'Bem-vindo!'}</div>
+          <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--app-text)' }}>{nomeLoja}</div>
         </div>
       </div>
 
@@ -88,14 +88,14 @@ export default function Inicio() {
 
       {GRUPOS.map((g) => (
         <div key={g.titulo} style={{ marginBottom: 22 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: '#666', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>{g.titulo}</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--app-text-2)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12 }}>{g.titulo}</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
             {g.itens.map((m) => <ModuloCard key={m.to} m={m} />)}
           </div>
         </div>
       ))}
 
-      <div style={{ fontSize: 12.5, color: '#999', lineHeight: 1.6 }}>
+      <div style={{ fontSize: 12.5, color: 'var(--app-text-3)', lineHeight: 1.6 }}>
         Todos os módulos já estão disponíveis, com os dados da sua loja. Clique num card acima ou use o menu à esquerda.
       </div>
     </div>

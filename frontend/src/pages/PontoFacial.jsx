@@ -961,7 +961,7 @@ function MenuAcoes({ children }) {
     <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
       <button type="button" className="btn btn-secondary btn-sm" onClick={() => setAberto((a) => !a)} aria-label="Ações" style={{ padding: '4px 11px', fontSize: 17, lineHeight: 1 }}>⋮</button>
       {aberto && (
-        <div onClick={() => setAberto(false)} style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: '#fff', border: '1px solid var(--app-border, #e5e5e5)', borderRadius: 10, boxShadow: '0 12px 32px -12px rgba(0,0,0,0.3)', zIndex: 30, minWidth: 172, padding: 4 }}>
+        <div onClick={() => setAberto(false)} style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: 'var(--app-surface, #fff)', border: '1px solid var(--app-border, #e5e5e5)', borderRadius: 10, boxShadow: '0 12px 32px -12px rgba(0,0,0,0.4)', zIndex: 30, minWidth: 172, padding: 4 }}>
           {children}
         </div>
       )}
@@ -971,8 +971,8 @@ function MenuAcoes({ children }) {
 function ItemMenu({ onClick, danger, children }) {
   return (
     <button type="button" onClick={onClick}
-      style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', fontSize: 13.5, background: 'transparent', border: 'none', borderRadius: 7, cursor: 'pointer', color: danger ? '#dc2626' : '#111' }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.05)' }}
+      style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', fontSize: 13.5, background: 'transparent', border: 'none', borderRadius: 7, cursor: 'pointer', color: danger ? '#dc2626' : 'var(--app-text)' }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--app-highlight)' }}
       onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}>
       {children}
     </button>
