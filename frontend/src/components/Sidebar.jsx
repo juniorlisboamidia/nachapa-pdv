@@ -37,6 +37,13 @@ const ICONS = {
       <path d="M3 10.5h18" />
     </>
   ),
+  financeiro: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v10" />
+      <path d="M14.6 9.2a2.4 2.4 0 0 0-2.6-1.2c-1.3 0-2.4.8-2.4 1.9s1.1 1.7 2.4 2 2.6.8 2.6 2-1.1 1.9-2.6 1.9a2.5 2.5 0 0 1-2.6-1.3" />
+    </>
+  ),
   faturamento: (
     <>
       <path d="M4 20h16" />
@@ -184,6 +191,7 @@ const grupos = [
       { to: '/estoque', label: 'Estoque', icon: 'produtos' },
     ]
   },
+  { label: 'Financeiro', icon: 'financeiro', to: '/financeiro' },
   { label: 'Relatórios', icon: 'relatorios', to: '/relatorios' },
   {
     label: 'Ponto Facial', icon: 'ponto',

@@ -67,8 +67,9 @@ export default function App() {
             <Route path="custos-variaveis" element={<CustosVariaveis />} />
             <Route path="ponto-equilibrio" element={<PontoEquilibrio />} />
             <Route path="faturamento" element={<Faturamento />} />
-            {/* Produtos / Relatórios (Estoque e Relatórios em construção) */}
+            {/* Produtos / Financeiro / Relatórios (em construção) */}
             <Route path="estoque" element={<EmConstrucao titulo="Estoque" descricao="Controle de estoque dos insumos e produtos." />} />
+            <Route path="financeiro" element={<EmConstrucao titulo="Financeiro" descricao="Fluxo de caixa, contas a pagar e a receber." />} />
             <Route path="relatorios" element={<EmConstrucao titulo="Relatórios" descricao="Relatórios e análises da operação." />} />
             {/* Dep. Pessoal — abas viram subitens da sidebar (a página lê a aba da URL) */}
             <Route path="rh/ponto-facial" element={<PontoFacial />} />
