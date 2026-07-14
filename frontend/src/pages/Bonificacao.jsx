@@ -38,14 +38,14 @@ function AbaMes({ tipos, toast }) {
   const [confirmFechar, setConfirmFechar] = useState(false)
   const [confirmReabrir, setConfirmReabrir] = useState(false)
   const [acao, setAcao] = useState(false)
-  const [coletivaEdit, setColetivaEdit] = useState('')
+  const [coletivaModal, setColetivaModal] = useState(false)
 
   const [ano, mesN] = mes.split('-').map(Number)
 
   function carregar() {
     setLoading(true)
     api.get('/bonificacao/mensal', { params: { ano, mes: mesN } })
-      .then((r) => { setData(r.data); setColetivaEdit(String(r.data.coletivaPct ?? 0)) })
+      .then((r) => setData(r.data))
       .catch((err) => toast({ message: err?.response?.data?.error ?? 'Erro ao carregar o mês.', type: 'error' }))
       .finally(() => setLoading(false))
   }
@@ -54,14 +54,9 @@ function AbaMes({ tipos, toast }) {
   const fechado = !!data?.fechado
   const funcs = data?.funcionarios || []
   const fSel = funcs.find((f) => f.funcionarioId === funcSel) || null
+  const tiposColetivos = (tipos || []).filter((t) => t.pilar === 'COLETIVA')
+  const coletivas = data?.coletivas || []
 
-  async function salvarColetiva() {
-    if (fechado) return
-    const v = Math.max(0, Math.min(100, Number(coletivaEdit) || 0))
-    if (v === Number(data.coletivaPct)) return
-    try { await api.put('/bonificacao/coletiva', { ano, mes: mesN, percentual: v }); carregar() }
-    catch (err) { toast({ message: err?.response?.data?.error ?? 'Erro ao salvar a nota coletiva.', type: 'error' }) }
-  }
   async function excluirOc(id) {
     try { await api.delete(`/bonificacao/ocorrencias/${id}`); carregar() }
     catch (err) { toast({ message: err?.response?.data?.error ?? 'Erro ao excluir.', type: 'error' }) }
@@ -103,18 +98,37 @@ function AbaMes({ tipos, toast }) {
             </div>
           )}
 
-          {/* Nota coletiva da loja */}
-          <div className="table-card" style={{ padding: 14, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 13 }}>Nota Coletiva da loja</div>
-              <div style={{ fontSize: 11.5, color: '#999' }}>Aplicada igual a todos os funcionários.</div>
+          {/* Nota coletiva da equipe — 100% e desce por ocorrência coletiva */}
+          <div className="table-card" style={{ padding: 14, marginBottom: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 13 }}>Nota Coletiva da equipe</div>
+                <div style={{ fontSize: 11.5, color: '#999' }}>Começa em 100% e desce por ocorrência da equipe. Aplicada igual a todos.</div>
+              </div>
+              <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontSize: 22, fontWeight: 800, color: Number(data.coletivaPct) >= 100 ? '#16a34a' : Number(data.coletivaPct) >= 70 ? '#d97706' : '#dc2626' }}>{pct(data.coletivaPct)}</span>
+                {!fechado && (
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => setColetivaModal(true)} disabled={!tiposColetivos.length}
+                    title={tiposColetivos.length ? 'Lançar ocorrência da equipe' : 'Cadastre tipos coletivos na Configuração'}>+ Ocorrência</button>
+                )}
+              </div>
             </div>
-            <div style={{ position: 'relative', width: 120, marginLeft: 'auto' }}>
-              <input type="number" className="form-input" min="0" max="100" step="1" disabled={fechado}
-                style={{ paddingRight: 26 }} value={coletivaEdit}
-                onChange={(e) => setColetivaEdit(e.target.value)} onBlur={salvarColetiva} />
-              <span style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', color: '#999', fontSize: 13 }}>%</span>
-            </div>
+            {coletivas.length > 0 && (
+              <div style={{ marginTop: 10, borderTop: '1px solid var(--app-border, #eee)', paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {coletivas.map((o) => (
+                  <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
+                    <span style={{ color: '#999', width: 42, flexShrink: 0 }}>{dataCurta(o.data)}</span>
+                    <span style={{ fontWeight: 600 }}>{o.nomeTipo}</span>
+                    <span style={{ color: '#dc2626', fontWeight: 600 }}>−{o.percentual}%</span>
+                    {o.observacao && <span style={{ color: '#999', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>· {o.observacao}</span>}
+                    {!fechado && <button type="button" className="btn btn-danger btn-sm" style={{ marginLeft: 'auto', flexShrink: 0 }} onClick={() => excluirOc(o.id)} title="Remover">✕</button>}
+                  </div>
+                ))}
+              </div>
+            )}
+            {!fechado && tiposColetivos.length === 0 && (
+              <div style={{ marginTop: 8, fontSize: 11.5, color: '#999' }}>Cadastre tipos de ocorrência coletiva na aba <strong>Configuração</strong> para poder lançar.</div>
+            )}
           </div>
 
           {funcs.length === 0 ? (
@@ -171,6 +185,16 @@ function AbaMes({ tipos, toast }) {
         />
       )}
 
+      {/* Modal: ocorrência coletiva (da equipe) */}
+      {coletivaModal && (
+        <ColetivaModal
+          tipos={tiposColetivos} ano={ano} mes={mesN}
+          onClose={() => setColetivaModal(false)}
+          onLancou={carregar}
+          toast={toast}
+        />
+      )}
+
       <ConfirmDialog open={confirmFechar} title="Fechar o mês" message={`Fechar ${mes.split('-')[1]}/${mes.split('-')[0]}?`}
         description="Os valores serão congelados para o relatório de pagamento. Você poderá reabrir se precisar ajustar."
         confirmLabel="Fechar mês" cancelLabel="Cancelar" loading={acao} onConfirm={fecharMes} onCancel={() => setConfirmFechar(false)} />
@@ -182,7 +206,8 @@ function AbaMes({ tipos, toast }) {
 }
 
 function OcorrenciasModal({ func, tipos, ano, mes, onClose, onExcluir, onLancou, toast }) {
-  const [tipoId, setTipoId] = useState(tipos[0]?.id ? String(tipos[0].id) : '')
+  const tiposInd = (tipos || []).filter((t) => t.pilar !== 'COLETIVA') // coletivos só na aba da equipe
+  const [tipoId, setTipoId] = useState(tiposInd[0]?.id ? String(tiposInd[0].id) : '')
   const [data, setData] = useState(() => new Date().toISOString().slice(0, 10))
   const [obs, setObs] = useState('')
   const [salvando, setSalvando] = useState(false)
@@ -217,7 +242,7 @@ function OcorrenciasModal({ func, tipos, ano, mes, onClose, onExcluir, onLancou,
             <div className="form-group">
               <label className="form-label">Tipo</label>
               <select className="form-input" value={tipoId} onChange={(e) => setTipoId(e.target.value)}>
-                {tipos.map((t) => <option key={t.id} value={t.id}>{t.pilar === 'ASSIDUIDADE' ? 'Assiduidade' : 'Desempenho'} · {t.nome} (−{t.percentual}%)</option>)}
+                {tiposInd.map((t) => <option key={t.id} value={t.id}>{t.pilar === 'ASSIDUIDADE' ? 'Assiduidade' : 'Desempenho'} · {t.nome} (−{t.percentual}%)</option>)}
               </select>
             </div>
             <div className="form-group">
@@ -256,6 +281,53 @@ function OcorrenciasModal({ func, tipos, ano, mes, onClose, onExcluir, onLancou,
             </table>
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+// Lança uma ocorrência COLETIVA (da equipe) — desce a Nota Coletiva do mês.
+function ColetivaModal({ tipos, ano, mes, onClose, onLancou, toast }) {
+  const [tipoId, setTipoId] = useState(tipos[0]?.id ? String(tipos[0].id) : '')
+  const [data, setData] = useState(() => new Date().toISOString().slice(0, 10))
+  const [obs, setObs] = useState('')
+  const [salvando, setSalvando] = useState(false)
+
+  async function lancar() {
+    if (!tipoId) return toast({ message: 'Escolha o tipo de ocorrência.', type: 'error' })
+    setSalvando(true)
+    try {
+      await api.post('/bonificacao/ocorrencias', { ano, mes, tipoId: Number(tipoId), data, observacao: obs })
+      onLancou(); onClose()
+    } catch (err) { toast({ message: err?.response?.data?.error ?? 'Erro ao lançar.', type: 'error' }) }
+    finally { setSalvando(false) }
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-title">Ocorrência coletiva</div>
+        <div className="page-header-sub" style={{ marginTop: -4, marginBottom: 12 }}>Desce a Nota Coletiva de toda a equipe neste mês.</div>
+        <div className="form-grid-2">
+          <div className="form-group">
+            <label className="form-label">Tipo</label>
+            <select className="form-input" value={tipoId} onChange={(e) => setTipoId(e.target.value)}>
+              {tipos.map((t) => <option key={t.id} value={t.id}>{t.nome} (−{t.percentual}%)</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Data</label>
+            <input type="date" className="form-input" value={data} onChange={(e) => setData(e.target.value)} />
+          </div>
+        </div>
+        <div className="form-group">
+          <label className="form-label">Observação (opcional)</label>
+          <input className="form-input" value={obs} onChange={(e) => setObs(e.target.value)} maxLength={300} placeholder="Ex.: meta de julho não batida" />
+        </div>
+        <div className="modal-actions">
+          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={salvando}>Cancelar</button>
+          <button type="button" className="btn btn-primary" onClick={lancar} disabled={salvando || !tipoId}>{salvando ? 'Lançando…' : 'Lançar'}</button>
+        </div>
       </div>
     </div>
   )
@@ -1018,9 +1090,25 @@ function MercadoResgates({ toast }) {
 
 /* ───────────── Aba: Configuração ───────────── */
 const PILARES = [
-  { id: 'ASSIDUIDADE', label: 'Assiduidade', hint: 'presença — falta, atraso, atestado…' },
-  { id: 'DESEMPENHO', label: 'Desempenho', hint: 'trabalho — advertência, erro…' }
+  { id: 'ASSIDUIDADE', label: 'Assiduidade', hint: 'presença — falta, atraso, atestado…', cor: '#2563eb' },
+  { id: 'DESEMPENHO', label: 'Desempenho', hint: 'trabalho — advertência, erro…', cor: '#7c3aed' },
+  { id: 'COLETIVA', label: 'Coletiva (equipe)', hint: 'da loja toda — meta não batida, inspeção reprovada…', cor: '#0d9488' },
 ]
+// Card de seção padronizado da Configuração (título forte + descrição + slot à direita).
+function SecaoConfig({ titulo, descricao, right, children }) {
+  return (
+    <div className="table-card" style={{ padding: 18, marginBottom: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: 14.5 }}>{titulo}</div>
+          {descricao && <div style={{ fontSize: 12.5, color: 'var(--app-text-soft, #737373)', marginTop: 3, lineHeight: 1.45 }}>{descricao}</div>}
+        </div>
+        {right}
+      </div>
+      {children}
+    </div>
+  )
+}
 function AbaConfig({ cfg, setCfg, tipos, setTipos, niveis, setNiveis, salvar, salvando, toast }) {
   const set = (campo, v) => setCfg((c) => ({ ...c, [campo]: v }))
   const addTipo = (pilar) => setTipos((ts) => [...ts, { _tmp: `t${++tmpSeq}`, nome: '', pilar, percentual: '' }])
@@ -1037,78 +1125,84 @@ function AbaConfig({ cfg, setCfg, tipos, setTipos, niveis, setNiveis, salvar, sa
     catch (err) { toast?.({ message: err?.response?.data?.error ?? 'Erro ao gerar o link.', type: 'error' }) }
   }
 
+  const somaTetos = Number(cfg.tetoAssiduidade || 0) + Number(cfg.tetoDesempenho || 0) + Number(cfg.tetoColetiva || 0)
+
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+    <div style={{ maxWidth: 780 }}>
+      {/* Barra: status (switch) + salvar */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+        <button type="button" role="switch" aria-checked={cfg.ativo} onClick={() => set('ativo', !cfg.ativo)}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 10, padding: '8px 14px', borderRadius: 10, border: '1px solid var(--app-border, #e5e5e5)', background: cfg.ativo ? 'rgba(22,163,74,0.08)' : 'transparent', cursor: 'pointer' }}>
+          <span style={{ width: 38, height: 22, borderRadius: 999, background: cfg.ativo ? '#16a34a' : '#cbd5e1', position: 'relative', flexShrink: 0, transition: 'background .15s' }}>
+            <span style={{ position: 'absolute', top: 2, left: cfg.ativo ? 18 : 2, width: 18, height: 18, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 2px rgba(0,0,0,.25)', transition: 'left .15s' }} />
+          </span>
+          <span style={{ fontWeight: 600, fontSize: 13.5, color: cfg.ativo ? '#166534' : 'var(--app-text-soft, #737373)' }}>{cfg.ativo ? 'Bonificação ativa nesta loja' : 'Bonificação desativada'}</span>
+        </button>
         <button type="button" className="btn btn-primary" onClick={salvar} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar configuração'}</button>
       </div>
-      <label style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 18px', cursor: 'pointer' }}>
-        <input type="checkbox" checked={cfg.ativo} onChange={(e) => set('ativo', e.target.checked)} />
-        <span>Bonificação ativa nesta loja</span>
-      </label>
 
-      <div className="table-card" style={{ padding: 16, marginBottom: 16 }}>
-        <div className="section-title" style={{ marginTop: 0 }}>Link público da equipe</div>
-        <div style={{ fontSize: 12.5, color: '#777', marginBottom: 10 }}>Compartilhe com a equipe para acompanharem o ranking do mês (sem login).</div>
+      <SecaoConfig titulo="Link público da equipe" descricao="Compartilhe com a equipe para acompanharem o ranking do mês, sem login.">
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <input className="form-input" readOnly value={linkPublico} onFocus={(e) => e.target.select()} style={{ flex: 1, minWidth: 220 }} />
+          <input className="form-input" readOnly value={linkPublico} onFocus={(e) => e.target.select()} style={{ flex: 1, minWidth: 220 }} placeholder="Salve a configuração para gerar o link" />
           <button type="button" className="btn btn-secondary btn-sm" onClick={copiar} disabled={!linkPublico}>Copiar</button>
           <button type="button" className="btn btn-secondary btn-sm" onClick={rotacionar}>Gerar novo</button>
         </div>
-      </div>
+      </SecaoConfig>
 
-      <div className="table-card" style={{ padding: 16, marginBottom: 16 }}>
-        <div className="section-title" style={{ marginTop: 0 }}>Valor máximo de cada pilar (R$)</div>
-        <div style={gridAuto(160)}>
+      <SecaoConfig titulo="Valor de cada pilar" descricao="Quanto cada pilar paga, em reais, quando fica em 100%."
+        right={<span style={{ fontSize: 12.5, color: 'var(--app-text-soft, #737373)', background: 'rgba(0,0,0,0.04)', padding: '5px 11px', borderRadius: 8, whiteSpace: 'nowrap' }}>Soma: <strong style={{ color: 'var(--app-text)' }}>{brl(somaTetos)}</strong></span>}>
+        <div style={gridAuto(150)}>
           <CampoNum label="Assiduidade" prefixo="R$" valor={cfg.tetoAssiduidade} onChange={(v) => set('tetoAssiduidade', v)} />
           <CampoNum label="Desempenho" prefixo="R$" valor={cfg.tetoDesempenho} onChange={(v) => set('tetoDesempenho', v)} />
           <CampoNum label="Coletiva" prefixo="R$" valor={cfg.tetoColetiva} onChange={(v) => set('tetoColetiva', v)} />
         </div>
-      </div>
+      </SecaoConfig>
 
-      <div className="table-card" style={{ padding: 16, marginBottom: 16 }}>
-        <div className="section-title" style={{ marginTop: 0 }}>Bônus da Classificação — Top 3 (R$)</div>
-        <div style={gridAuto(140)}>
+      <SecaoConfig titulo="Bônus da Classificação" descricao="Prêmio extra, em reais, para o Top 3 do ranking do mês.">
+        <div style={gridAuto(130)}>
           <CampoNum label="1º lugar" prefixo="R$" valor={cfg.bonusTop1} onChange={(v) => set('bonusTop1', v)} />
           <CampoNum label="2º lugar" prefixo="R$" valor={cfg.bonusTop2} onChange={(v) => set('bonusTop2', v)} />
           <CampoNum label="3º lugar" prefixo="R$" valor={cfg.bonusTop3} onChange={(v) => set('bonusTop3', v)} />
         </div>
-      </div>
+      </SecaoConfig>
 
-      <div className="table-card" style={{ padding: 16, marginBottom: 16 }}>
-        <div className="section-title" style={{ marginTop: 0 }}>Tipos de ocorrência (cada pilar começa em 100% e desce por ocorrência)</div>
-        {PILARES.map((p) => (
-          <div key={p.id} style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 2 }}>{p.label}</div>
-            <div style={{ fontSize: 11.5, color: '#999', marginBottom: 8 }}>{p.hint}</div>
-            {tipos.filter((t) => t.pilar === p.id).map((t) => {
-              const key = t.id ?? t._tmp
-              return (
-                <div key={key} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
-                  <input className="form-input" style={{ flex: 1 }} placeholder="Nome da ocorrência" value={t.nome} onChange={(e) => setTipo(key, { nome: e.target.value })} />
-                  <div style={{ position: 'relative', width: 110 }}>
-                    <input type="number" className="form-input" min="0" max="100" step="0.5" style={{ paddingRight: 26 }} value={t.percentual} onChange={(e) => setTipo(key, { percentual: e.target.value })} />
-                    <span style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', color: '#999', fontSize: 13, pointerEvents: 'none' }}>%</span>
-                  </div>
-                  <button type="button" className="btn btn-danger btn-sm" onClick={() => rmTipo(key)} title="Remover">✕</button>
-                </div>
-              )
-            })}
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => addTipo(p.id)}>+ Adicionar tipo</button>
-          </div>
-        ))}
-      </div>
+      <SecaoConfig titulo="Tipos de ocorrência" descricao="Cada pilar começa em 100% e desce o percentual de cada ocorrência lançada no mês.">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {PILARES.map((p) => {
+            const doPilar = tipos.filter((t) => t.pilar === p.id)
+            return (
+              <div key={p.id} style={{ borderLeft: `3px solid ${p.cor}`, paddingLeft: 12 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: p.cor }}>{p.label}</div>
+                <div style={{ fontSize: 11.5, color: 'var(--app-text-soft, #999)', marginBottom: 8 }}>{p.hint}</div>
+                {doPilar.length === 0 && <div style={{ fontSize: 12, color: '#bbb', marginBottom: 6 }}>Nenhum tipo cadastrado.</div>}
+                {doPilar.map((t) => {
+                  const key = t.id ?? t._tmp
+                  return (
+                    <div key={key} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
+                      <input className="form-input" style={{ flex: 1 }} placeholder="Nome da ocorrência" value={t.nome} onChange={(e) => setTipo(key, { nome: e.target.value })} />
+                      <div style={{ position: 'relative', width: 104 }}>
+                        <input type="number" className="form-input" min="0" max="100" step="0.5" style={{ paddingRight: 26 }} value={t.percentual} onChange={(e) => setTipo(key, { percentual: e.target.value })} />
+                        <span style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', color: '#999', fontSize: 13, pointerEvents: 'none' }}>%</span>
+                      </div>
+                      <button type="button" className="btn btn-danger btn-sm" onClick={() => rmTipo(key)} title="Remover">✕</button>
+                    </div>
+                  )
+                })}
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => addTipo(p.id)}>+ Adicionar tipo</button>
+              </div>
+            )
+          })}
+        </div>
+      </SecaoConfig>
 
-      <div className="table-card" style={{ padding: 16, marginBottom: 16 }}>
-        <div className="section-title" style={{ marginTop: 0 }}>Níveis e XP (gamificação)</div>
-        <div style={{ fontSize: 12, color: '#999', marginBottom: 12 }}>Ao fechar o mês, cada funcionário ganha XP igual ao prêmio (R$) e moedas para gastar no Mercado. Ao juntar XP suficiente, sobe de nível.</div>
+      <SecaoConfig titulo="Níveis e XP" descricao="Ao fechar o mês, cada funcionário ganha XP igual ao prêmio (R$) e moedas para o Mercado. Juntando XP, sobe de nível.">
         <div style={gridAuto(200)}>
           <CampoNum label="XP para subir de nível" sufixo="XP" step="50" valor={cfg.xpPorNivel} onChange={(v) => set('xpPorNivel', v)} />
           <CampoNum label="Moedas por R$ (no fechamento)" sufixo="🪙" step="0.5" valor={cfg.moedasPorReal} onChange={(v) => set('moedasPorReal', v)} />
         </div>
-        <div style={{ height: 14 }} />
+        <div style={{ height: 16 }} />
         <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 2 }}>Nomes dos níveis</div>
-        <div style={{ fontSize: 11.5, color: '#999', marginBottom: 8 }}>Na ordem — o 1º nome é o Nível 1, o 2º é o Nível 2, e assim por diante. Acima do último nome, aparece “Nível N”.</div>
+        <div style={{ fontSize: 11.5, color: 'var(--app-text-soft, #999)', marginBottom: 8 }}>Na ordem: o 1º nome é o Nível 1, o 2º é o Nível 2… acima do último, aparece “Nível N”.</div>
         {niveis.map((n, i) => {
           const key = n.id ?? n._tmp
           return (
@@ -1120,17 +1214,25 @@ function AbaConfig({ cfg, setCfg, tipos, setTipos, niveis, setNiveis, salvar, sa
           )
         })}
         <button type="button" className="btn btn-secondary btn-sm" onClick={addNivel}>+ Adicionar nível</button>
-      </div>
+      </SecaoConfig>
 
-      <div style={{ fontSize: 13, color: '#777' }}>
-        Bonificação máxima possível por funcionário (incluindo 1º lugar): <strong>{brl(totalMax)}</strong>.
+      <div className="table-card" style={{ padding: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', background: 'linear-gradient(135deg, rgba(37,99,235,0.06), rgba(13,148,136,0.06))' }}>
+        <div style={{ fontSize: 13, color: 'var(--app-text-soft, #666)' }}>Bonificação máxima por funcionário <span style={{ color: '#999' }}>(pilares + 1º lugar)</span></div>
+        <div style={{ fontSize: 20, fontWeight: 800 }}>{brl(totalMax)}</div>
       </div>
     </div>
   )
 }
 
 /* ───────────── Container ───────────── */
-const BONI_ABAS = ['mes', 'equipe', 'conquistas', 'mercado', 'config']
+const BONI_TABS = {
+  mes: { label: 'Mês atual', sub: 'Ranking e prêmios do mês' },
+  equipe: { label: 'Equipe & Coins', sub: 'Progresso e coins da equipe' },
+  conquistas: { label: 'Conquistas', sub: 'Medalhas e desafios' },
+  mercado: { label: 'Mercado', sub: 'Loja de recompensas' },
+  config: { label: 'Configuração', sub: 'Regras, pilares e prêmios' },
+}
+const BONI_ABAS = Object.keys(BONI_TABS)
 export default function Bonificacao() {
   const { aba: abaParam } = useParams()
   const aba = BONI_ABAS.includes(abaParam) ? abaParam : 'mes'
@@ -1168,8 +1270,8 @@ export default function Bonificacao() {
     <div>
       <div className="page-header">
         <div>
-          <h1>Bonificação</h1>
-          <div className="page-header-sub">Bonificação mensal da equipe — lançamentos, cálculo e fechamento.</div>
+          <h1>{BONI_TABS[aba].label}</h1>
+          <div className="page-header-sub">{BONI_TABS[aba].sub}</div>
         </div>
       </div>
 

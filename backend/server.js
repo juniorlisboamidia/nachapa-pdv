@@ -310,7 +310,7 @@ app.delete('/api/funcionarios/:id', async (req, res) => {
 });
 
 // ===== Dep. Pessoal › Bonificação — configuração por loja (ADMIN) =====
-const BONI_PILARES = new Set(['ASSIDUIDADE', 'DESEMPENHO']);
+const BONI_PILARES = new Set(['ASSIDUIDADE', 'DESEMPENHO', 'COLETIVA']);
 // Tipos de ocorrência padrão (seed na 1ª vez): Assiduidade = presença; Desempenho = trabalho.
 const BONI_TIPOS_PADRAO = [
   { nome: 'Falta', pilar: 'ASSIDUIDADE', percentual: 25, ordem: 0 },
@@ -532,10 +532,20 @@ app.put('/api/bonificacao/config', async (req, res) => {
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const ocorrenciaJson = (o) => ({ id: o.id, funcionarioId: o.funcionarioId, tipoId: o.tipoId, nomeTipo: o.nomeTipo, pilar: o.pilar, percentual: Number(o.percentual), data: o.data, observacao: o.observacao || null });
 
+// Separa as ocorrências individuais das coletivas (da equipe) e calcula a Nota
+// Coletiva do mês: começa em 100% e desce a soma dos % das ocorrências coletivas.
+function separarOcorrenciasBonif(ocorrencias) {
+  const coletivas = ocorrencias.filter((o) => o.pilar === 'COLETIVA');
+  const individuais = ocorrencias.filter((o) => o.pilar !== 'COLETIVA' && o.funcionarioId != null);
+  const coletivaPct = Math.max(0, r2(100 - coletivas.reduce((s, o) => s + Number(o.percentual), 0)));
+  return { individuais, coletivas, coletivaPct };
+}
+
 // Calcula as linhas do mês (por funcionário) a partir das ocorrências + coletiva + tetos.
 function calcularLinhasBonificacao(funcionarios, ocorrencias, coletivaPct, t) {
   const porFunc = new Map();
   for (const o of ocorrencias) {
+    if (o.funcionarioId == null || o.pilar === 'COLETIVA') continue; // coletivas entram via coletivaPct
     const g = porFunc.get(o.funcionarioId) || { assidPen: 0, desPen: 0, ocorrencias: [] };
     const pct = Number(o.percentual);
     if (o.pilar === 'ASSIDUIDADE') g.assidPen += pct;
@@ -584,12 +594,11 @@ app.get('/api/bonificacao/mensal', async (req, res) => {
     if (fech) {
       return res.json({ fechado: true, fechadoEm: fech.fechadoEm, fechadoPor: fech.fechadoPor, coletivaPct: Number(fech.coletivaPct), totalGeral: Number(fech.totalGeral), funcionarios: fech.itensJson, config: configOut });
     }
-    const col = await prisma.bonificacaoColetiva.findFirst({ where: { ano: am.ano, mes: am.mes } });
-    const coletivaPct = col ? Number(col.percentual) : 0;
     const funcionarios = await prisma.funcionario.findMany({ where: { status: 'ATIVO' }, orderBy: { nome: 'asc' } });
-    const ocorrencias = await prisma.bonificacaoOcorrencia.findMany({ where: { ano: am.ano, mes: am.mes }, orderBy: { data: 'desc' } });
-    const rows = calcularLinhasBonificacao(funcionarios, ocorrencias, coletivaPct, t);
-    res.json({ fechado: false, coletivaPct, totalGeral: r2(rows.reduce((s, r) => s + r.totalRs, 0)), funcionarios: rows, config: configOut });
+    const ocorrenciasTodas = await prisma.bonificacaoOcorrencia.findMany({ where: { ano: am.ano, mes: am.mes }, orderBy: { data: 'desc' } });
+    const { individuais, coletivas, coletivaPct } = separarOcorrenciasBonif(ocorrenciasTodas);
+    const rows = calcularLinhasBonificacao(funcionarios, individuais, coletivaPct, t);
+    res.json({ fechado: false, coletivaPct, coletivas: coletivas.map(ocorrenciaJson), totalGeral: r2(rows.reduce((s, r) => s + r.totalRs, 0)), funcionarios: rows, config: configOut });
   } catch (err) { console.error('[bonificacao/mensal]', err); res.status(500).json({ error: 'Erro ao carregar o mês.' }); }
 });
 
@@ -613,12 +622,17 @@ app.post('/api/bonificacao/ocorrencias', async (req, res) => {
   const am = lerAnoMesBonif(req, res); if (!am) return;
   try {
     if (await prisma.bonificacaoFechamento.findFirst({ where: { ano: am.ano, mes: am.mes } })) return res.status(400).json({ error: 'O mês já está fechado.' });
-    const funcionarioId = parseInt(req.body?.funcionarioId, 10);
     const tipoId = parseInt(req.body?.tipoId, 10);
-    const func = await prisma.funcionario.findFirst({ where: { id: funcionarioId } });
-    if (!func) return res.status(404).json({ error: 'Funcionário não encontrado.' });
     const tipo = await prisma.bonificacaoTipoOcorrencia.findFirst({ where: { id: tipoId } });
     if (!tipo) return res.status(400).json({ error: 'Tipo de ocorrência inválido.' });
+    // Ocorrência coletiva (pilar COLETIVA) é da loja — não tem funcionário.
+    const ehColetiva = tipo.pilar === 'COLETIVA';
+    let funcionarioId = null;
+    if (!ehColetiva) {
+      funcionarioId = parseInt(req.body?.funcionarioId, 10);
+      const func = await prisma.funcionario.findFirst({ where: { id: funcionarioId } });
+      if (!func) return res.status(404).json({ error: 'Funcionário não encontrado.' });
+    }
     const data = req.body?.data ? new Date(req.body.data) : new Date();
     if (isNaN(data.getTime())) return res.status(400).json({ error: 'Data inválida.' });
     const oc = await prisma.bonificacaoOcorrencia.create({
@@ -648,11 +662,10 @@ app.post('/api/bonificacao/fechar', async (req, res) => {
     if (await prisma.bonificacaoFechamento.findFirst({ where: { ano: am.ano, mes: am.mes } })) return res.status(400).json({ error: 'Este mês já está fechado.' });
     const t = await tetosBonificacao();
     const cfgFech = await prisma.bonificacaoConfig.findFirst();
-    const col = await prisma.bonificacaoColetiva.findFirst({ where: { ano: am.ano, mes: am.mes } });
-    const coletivaPct = col ? Number(col.percentual) : 0;
     const funcionarios = await prisma.funcionario.findMany({ where: { status: 'ATIVO' }, orderBy: { nome: 'asc' } });
-    const ocorrencias = await prisma.bonificacaoOcorrencia.findMany({ where: { ano: am.ano, mes: am.mes }, orderBy: { data: 'desc' } });
-    const rows = calcularLinhasBonificacao(funcionarios, ocorrencias, coletivaPct, t);
+    const ocorrenciasTodas = await prisma.bonificacaoOcorrencia.findMany({ where: { ano: am.ano, mes: am.mes }, orderBy: { data: 'desc' } });
+    const { individuais, coletivaPct } = separarOcorrenciasBonif(ocorrenciasTodas);
+    const rows = calcularLinhasBonificacao(funcionarios, individuais, coletivaPct, t);
     const totalGeral = r2(rows.reduce((s, r) => s + r.totalRs, 0));
     const f = await prisma.bonificacaoFechamento.create({
       data: { ano: am.ano, mes: am.mes, coletivaPct, itensJson: rows, totalGeral, fechadoPor: req.user?.nome || null },
@@ -1056,11 +1069,11 @@ app.get('/api/public/bonificacao/:token', async (req, res) => {
       funcionarios = (Array.isArray(fech.itensJson) ? fech.itensJson : []).map(rowPublicoBonif);
       coletivaPct = Number(fech.coletivaPct); fechado = true;
     } else {
-      const col = await prisma.bonificacaoColetiva.findFirst({ where: { empresaId, ano, mes } });
-      coletivaPct = col ? Number(col.percentual) : 0;
       const fs = await prisma.funcionario.findMany({ where: { empresaId, status: 'ATIVO' }, orderBy: { nome: 'asc' } });
       const ocs = await prisma.bonificacaoOcorrencia.findMany({ where: { empresaId, ano, mes } });
-      funcionarios = calcularLinhasBonificacao(fs, ocs, coletivaPct, t).map(rowPublicoBonif);
+      const sep = separarOcorrenciasBonif(ocs);
+      coletivaPct = sep.coletivaPct;
+      funcionarios = calcularLinhasBonificacao(fs, sep.individuais, coletivaPct, t).map(rowPublicoBonif);
     }
     res.json({
       loja: { nome: loja?.nome || 'Loja', logoDataUrl: loja?.logoDataUrl || null },

@@ -773,7 +773,7 @@ model BonificacaoTipoOcorrencia {
   id           Int      @id @default(autoincrement())
   empresaId    Int
   nome         String
-  pilar        String   // ASSIDUIDADE | DESEMPENHO
+  pilar        String   // ASSIDUIDADE | DESEMPENHO | COLETIVA
   percentual   Decimal  @db.Decimal(5, 2) // % descontado por ocorrência
   ordem        Int      @default(0)
   ativo        Boolean  @default(true)
@@ -785,15 +785,16 @@ model BonificacaoTipoOcorrencia {
 
 // Ocorrência lançada no mês (desconta % de um pilar de um funcionário). Snapshot do
 // tipo (nome/pilar/%) p/ o histórico ficar imutável mesmo se o tipo mudar depois.
+// funcionarioId é null quando a ocorrência é COLETIVA (da loja/equipe, sem dono).
 model BonificacaoOcorrencia {
   id            Int      @id @default(autoincrement())
   empresaId     Int
-  funcionarioId Int
+  funcionarioId Int?
   ano           Int
   mes           Int
   tipoId        Int?
   nomeTipo      String
-  pilar         String   // ASSIDUIDADE | DESEMPENHO
+  pilar         String   // ASSIDUIDADE | DESEMPENHO | COLETIVA
   percentual    Decimal  @db.Decimal(5, 2)
   data          DateTime @db.Date
   observacao    String?
