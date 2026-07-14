@@ -251,7 +251,7 @@ function itemClass({ isActive }) {
 
 export default function Sidebar() {
   const location = useLocation()
-  const { usuario, logout, lojas, empresaAtual, trocarLoja, recarregarLojas } = useAuth()
+  const { usuario, logout, lojas, empresaAtual } = useAuth()
   // Nível atual da sidebar: grupo aberto e subgrupo aberto (ou null = lista de
   // grupos). Inicia no caminho da rota atual.
   const [grupoAberto, setGrupoAberto] = useState(() => localizarRota(location.pathname).grupo)
@@ -309,32 +309,25 @@ export default function Sidebar() {
 
   const avatarInicial = empresa.nome.trim().charAt(0).toUpperCase() || 'H'
 
-  // Seletor de loja (multi-tenant): troca entre as lojas que o usuario pode ver.
-  const [menuLojas, setMenuLojas] = useState(false)
+  // Loja atual — o PDV não alterna entre lojas (sem seletor/dropdown).
   const lojaAtual = lojas.find((l) => String(l.id) === String(empresaAtual))
   const nomeLojaAtual = lojaAtual?.nome || empresa.nome || 'Hamburgueria'
-  // Seta/dropdown so aparece quando ha o que fazer nele: trocar de loja (2+ lojas)
-  // ou as acoes exclusivas do ADMIN (editar/criar loja).
-  const podeAbrirMenu = lojas.length > 1 || usuario?.papel === 'ADMIN'
-  async function criarLoja() {
-    const nome = window.prompt('Nome da nova loja:')
-    if (!nome || !nome.trim()) return
-    try {
-      const { data } = await api.post('/lojas', { nome: nome.trim() })
-      await recarregarLojas()
-      setMenuLojas(false)
-      if (data?.id) trocarLoja(data.id)
-    } catch (e) {
-      alert(e?.response?.data?.error || 'Nao foi possivel criar a loja.')
-    }
-  }
 
   return (
     <aside className={'sidebar' + (collapsed ? ' collapsed' : '')}>
-      <div className="sidebar-head">
-        <span className="sidebar-brand" style={{ fontWeight: 800, fontSize: 19, letterSpacing: '-0.02em', color: '#fff', display: 'flex', alignItems: 'center' }}>
-          Operação
-        </span>
+      {/* Card da loja + botão de recolher (PDV não alterna entre lojas). */}
+      <div className="sidebar-company">
+        {empresa.logoDataUrl ? (
+          <img className="sidebar-company-avatar sidebar-company-logo" src={empresa.logoDataUrl} alt="" />
+        ) : (
+          <div className="sidebar-company-avatar">{avatarInicial}</div>
+        )}
+        <div className="sidebar-company-info">
+          <div className="sidebar-company-name">{nomeLojaAtual}</div>
+          {lojaAtual?.clienteNome
+            && lojaAtual.clienteNome.trim().toLowerCase() !== nomeLojaAtual.trim().toLowerCase()
+            && <div className="sidebar-company-sub">{lojaAtual.clienteNome}</div>}
+        </div>
         <button
           type="button"
           className="sidebar-collapse"
@@ -355,65 +348,6 @@ export default function Sidebar() {
             {ICONS.chevron}
           </svg>
         </button>
-      </div>
-
-      <div style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
-        <button
-          type="button"
-          className="sidebar-company"
-          onClick={() => { if (podeAbrirMenu) setMenuLojas((v) => !v) }}
-          title={collapsed ? nomeLojaAtual : undefined}
-          style={{ boxSizing: 'border-box', appearance: 'none', cursor: podeAbrirMenu ? 'pointer' : 'default', textAlign: 'left', font: 'inherit' }}
-        >
-          {empresa.logoDataUrl ? (
-            <img className="sidebar-company-avatar sidebar-company-logo" src={empresa.logoDataUrl} alt="" />
-          ) : (
-            <div className="sidebar-company-avatar">{avatarInicial}</div>
-          )}
-          <div className="sidebar-company-info">
-            <div className="sidebar-company-name">{nomeLojaAtual}</div>
-            {lojaAtual?.clienteNome
-              && lojaAtual.clienteNome.trim().toLowerCase() !== nomeLojaAtual.trim().toLowerCase()
-              && <div className="sidebar-company-sub">{lojaAtual.clienteNome}</div>}
-          </div>
-          {podeAbrirMenu && <Icon name="caret" />}
-        </button>
-
-        {menuLojas && !collapsed && (
-          <>
-            <div onClick={() => setMenuLojas(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
-            <div style={{ position: 'absolute', top: '100%', left: 8, right: 8, zIndex: 50, background: 'var(--app-surface)', color: 'var(--app-text)', borderRadius: 10, boxShadow: '0 12px 30px rgba(0,0,0,0.28)', overflow: 'hidden', marginTop: 4 }}>
-              <div style={{ maxHeight: 260, overflowY: 'auto' }}>
-                {lojas.length === 0 && (
-                  <div style={{ padding: '12px', fontSize: 13, color: '#777' }}>Nenhuma loja disponivel.</div>
-                )}
-                {lojas.map((l) => {
-                  const ativa = String(l.id) === String(empresaAtual)
-                  return (
-                    <button
-                      key={l.id}
-                      type="button"
-                      onClick={() => { setMenuLojas(false); if (!ativa) trocarLoja(l.id) }}
-                      style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 12px', border: 'none', background: ativa ? '#fdf6da' : '#fff', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}
-                    >
-                      {l.logoDataUrl ? (
-                        <img src={l.logoDataUrl} alt="" style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'cover', flexShrink: 0, background: 'var(--app-surface)' }} />
-                      ) : (
-                        <span style={{ width: 28, height: 28, borderRadius: 6, flexShrink: 0, background: '#a17c00', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700 }}>
-                          {(l.nome || '?').charAt(0).toUpperCase()}
-                        </span>
-                      )}
-                      <span style={{ flex: 1, minWidth: 0, fontWeight: ativa ? 700 : 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.nome}</span>
-                      {ativa && (
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a17c00" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          </>
-        )}
       </div>
 
       <nav className="sidebar-nav">

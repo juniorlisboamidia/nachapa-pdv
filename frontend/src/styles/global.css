@@ -229,8 +229,10 @@ body.sidebar-collapsed .main-area { margin-left: 76px; }
 .sidebar.collapsed .sidebar-section-label,
 .sidebar.collapsed .sidebar-company-info,
 .sidebar.collapsed .sidebar-company > .sidebar-icon,
+.sidebar.collapsed .sidebar-company-avatar,
 .sidebar.collapsed .sidebar-user-info { display: none; }
-.sidebar.collapsed .sidebar-company { justify-content: center; padding: 10px; margin: 12px 12px 6px; }
+/* Recolhida: o card da loja mostra só o botão de expandir (centralizado). */
+.sidebar.collapsed .sidebar-company { justify-content: center; padding: 8px; margin: 14px 12px 6px; }
 .sidebar.collapsed .sidebar-nav { padding: 8px 10px; }
 .sidebar.collapsed .sidebar-group { margin-bottom: 8px; }
 .sidebar.collapsed .sidebar-item,
