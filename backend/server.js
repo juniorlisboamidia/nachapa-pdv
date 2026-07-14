@@ -233,6 +233,9 @@ const FUNCIONARIO_STATUS = new Set(['ATIVO', 'INATIVO']);
 function dadosFuncionario(body) {
   const nome = typeof body?.nome === 'string' ? body.nome.trim() : '';
   if (!nome) return { error: 'Informe o nome.' };
+  // Nome, CPF e WhatsApp são obrigatórios no cadastro do colaborador.
+  if (String(body?.cpf ?? '').replace(/\D/g, '').length !== 11) return { error: 'Informe o CPF completo (11 dígitos).' };
+  if (String(body?.whatsapp ?? '').replace(/\D/g, '').length < 10) return { error: 'Informe o WhatsApp com DDD.' };
   const status = FUNCIONARIO_STATUS.has(body?.status) ? body.status : 'ATIVO';
   const only = (v, max) => (v == null || String(v).trim() === '' ? null : String(v).trim().slice(0, max));
   const campos = {
@@ -5290,8 +5293,19 @@ app.get('/api/ponto/marcacoes', async (req, res) => {
   try {
     const where = {};
     if (req.query.funcionarioId) where.funcionarioId = parseInt(req.query.funcionarioId, 10);
-    if (req.query.data) { const de = new Date(req.query.data + 'T00:00:00'); if (!isNaN(de)) { const ate = new Date(de); ate.setDate(ate.getDate() + 1); where.dataHora = { gte: de, lt: ate }; } }
-    const regs = await prisma.pontoRegistro.findMany({ where, orderBy: { dataHora: 'desc' }, take: 300 });
+    // Filtro por intervalo (de/ate = YYYY-MM-DD, inclusivo), no fuso BR fixo. `data` (dia único) mantido por compat.
+    const ymd = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || '')); return m ? { y: +m[1], mo: +m[2] - 1, d: +m[3] } : null; };
+    const de = ymd(req.query.de), ate = ymd(req.query.ate);
+    if (de || ate) {
+      const cond = {};
+      if (de) cond.gte = new Date(brToUtcMs(de.y, de.mo, de.d, 0, 0));
+      if (ate) cond.lt = new Date(brToUtcMs(ate.y, ate.mo, ate.d + 1, 0, 0)); // dia seguinte (exclusivo)
+      where.dataHora = cond;
+    } else if (req.query.data) {
+      const d0 = ymd(req.query.data);
+      if (d0) where.dataHora = { gte: new Date(brToUtcMs(d0.y, d0.mo, d0.d, 0, 0)), lt: new Date(brToUtcMs(d0.y, d0.mo, d0.d + 1, 0, 0)) };
+    }
+    const regs = await prisma.pontoRegistro.findMany({ where, orderBy: { dataHora: 'desc' }, take: 1000 });
     const fs = new Map((await prisma.funcionario.findMany()).map((f) => [f.id, f.nome]));
     res.json(regs.map((r) => ({ id: r.id, funcionarioId: r.funcionarioId, funcionarioNome: fs.get(r.funcionarioId) || '—', tipo: r.tipo, tipoLabel: PONTO_LABEL[r.tipo] || r.tipo, dataHora: r.dataHora, origem: r.origem, distancia: r.distancia })));
   } catch (err) { console.error('[ponto/marcacoes]', err); res.status(500).json({ error: 'Erro ao carregar marcações.' }); }

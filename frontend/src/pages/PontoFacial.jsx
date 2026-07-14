@@ -40,10 +40,40 @@ function agoraLocal() {
   d.setMinutes(d.getMinutes() - d.getTimezoneOffset())
   return d.toISOString().slice(0, 16)
 }
-function hojeISO() {
-  const d = new Date()
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset())
-  return d.toISOString().slice(0, 10)
+// Presets de período da aba Marcações. Datas calculadas no fuso local (BR).
+const PERIODOS = [
+  { id: 'hoje', label: 'Hoje' },
+  { id: 'ontem', label: 'Ontem' },
+  { id: '7d', label: 'Últimos 7 dias' },
+  { id: '30d', label: 'Últimos 30 dias' },
+  { id: 'mes', label: 'Mês atual' },
+  { id: 'mespassado', label: 'Mês passado' },
+  { id: 'max', label: 'Período máximo' },
+]
+function ymdLocal(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+function rangePreset(preset) {
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0)
+  const somaDias = (base, n) => { const x = new Date(base); x.setDate(x.getDate() + n); return x }
+  switch (preset) {
+    case 'hoje': return { de: ymdLocal(hoje), ate: ymdLocal(hoje) }
+    case 'ontem': { const o = somaDias(hoje, -1); return { de: ymdLocal(o), ate: ymdLocal(o) } }
+    case '7d': return { de: ymdLocal(somaDias(hoje, -6)), ate: ymdLocal(hoje) }
+    case '30d': return { de: ymdLocal(somaDias(hoje, -29)), ate: ymdLocal(hoje) }
+    case 'mespassado': {
+      const p = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1)
+      const u = new Date(hoje.getFullYear(), hoje.getMonth(), 0)
+      return { de: ymdLocal(p), ate: ymdLocal(u) }
+    }
+    case 'max': return { de: null, ate: null }
+    case 'mes':
+    default: {
+      const p = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
+      const u = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0)
+      return { de: ymdLocal(p), ate: ymdLocal(u) }
+    }
+  }
 }
 
 const SITUACAO = {
@@ -155,13 +185,13 @@ function Pill({ meta }) {
 }
 
 const TABS = [
-  { id: 'painel', label: 'Painel' },
-  { id: 'colaboradores', label: 'Colaboradores' },
-  { id: 'jornadas', label: 'Jornadas e Escalas' },
-  { id: 'marcacoes', label: 'Marcações' },
-  { id: 'espelho', label: 'Espelho' },
-  { id: 'fechamento', label: 'Fechamento' },
-  { id: 'coletor', label: 'Coletor' }
+  { id: 'painel', label: 'Painel', sub: 'Situação do dia' },
+  { id: 'colaboradores', label: 'Colaboradores', sub: 'Cadastro da equipe' },
+  { id: 'jornadas', label: 'Jornadas e Escalas', sub: 'Horários e folgas' },
+  { id: 'marcacoes', label: 'Marcações', sub: 'Batidas de ponto' },
+  { id: 'espelho', label: 'Espelho', sub: 'Previsto × realizado do mês' },
+  { id: 'fechamento', label: 'Fechamento', sub: 'Consolidação do mês' },
+  { id: 'coletor', label: 'Coletor', sub: 'Aparelho de biometria' }
 ]
 
 // Aba controlada pela URL (/rh/ponto-facial/:tab); a navegação é pela sidebar.
@@ -169,7 +199,7 @@ const PF_IDS = TABS.map((t) => t.id)
 export default function PontoFacial() {
   const { tab: tabParam } = useParams()
   const tab = PF_IDS.includes(tabParam) ? tabParam : 'painel'
-  const tabLabel = TABS.find((t) => t.id === tab)?.label || 'Ponto Facial'
+  const tabDef = TABS.find((t) => t.id === tab) || TABS[0]
   const [toast, setToast] = useState(null)
   const notify = (message, type = 'success') => setToast({ message, type })
 
@@ -177,8 +207,8 @@ export default function PontoFacial() {
     <div>
       <div className="page-header">
         <div>
-          <h1>Ponto Facial · {tabLabel}</h1>
-          <div className="page-header-sub">Controle de ponto da equipe — alimenta a Presença da Bonificação.</div>
+          <h1>{tabDef.label}</h1>
+          <div className="page-header-sub">{tabDef.sub}</div>
         </div>
       </div>
 
@@ -495,6 +525,8 @@ function Colaboradores({ notify }) {
   async function salvar() {
     const f = modal.form
     if (!f.nome.trim()) return notify('Informe o nome.', 'error')
+    if (String(f.cpf).replace(/\D/g, '').length !== 11) return notify('Informe o CPF completo (11 dígitos).', 'error')
+    if (String(f.whatsapp).replace(/\D/g, '').length < 10) return notify('Informe o WhatsApp com DDD.', 'error')
     setSalvando(true)
     try {
       if (modal.id) await api.put(`/funcionarios/${modal.id}`, f)
@@ -544,10 +576,6 @@ function Colaboradores({ notify }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
         <input className="form-input" placeholder="Buscar por nome, função, CPF…" value={busca} onChange={(e) => setBusca(e.target.value)} style={{ maxWidth: 320 }} />
         <button type="button" className="btn btn-primary" style={{ marginLeft: 'auto' }} onClick={abrirNovo}>Novo colaborador</button>
-      </div>
-
-      <div className="alert" style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '10px 12px', marginBottom: 12, fontSize: 13, color: '#1e40af' }}>
-        O <strong>CPF</strong> é o identificador que casa cada batida do coletor com o colaborador. Mantenha-o preenchido.
       </div>
 
       {erro ? (
@@ -632,7 +660,7 @@ function Colaboradores({ notify }) {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-title">{modal.id ? 'Editar colaborador' : 'Novo colaborador'}</div>
             <div className="form-group">
-              <label className="form-label">Nome</label>
+              <label className="form-label">Nome <span style={{ color: '#dc2626' }}>*</span></label>
               <input className="form-input" value={modal.form.nome} onChange={(e) => upd('nome', e.target.value)} autoFocus />
             </div>
             <div className="form-grid-2">
@@ -642,11 +670,11 @@ function Colaboradores({ notify }) {
                 <datalist id="pf-funcoes">{FUNCOES_SUGERIDAS.map((f) => <option key={f} value={f} />)}</datalist>
               </div>
               <div className="form-group">
-                <label className="form-label">CPF</label>
+                <label className="form-label">CPF <span style={{ color: '#dc2626' }}>*</span></label>
                 <input className="form-input" value={modal.form.cpf} onChange={(e) => upd('cpf', mascararCPF(e.target.value))} placeholder="000.000.000-00" inputMode="numeric" />
               </div>
               <div className="form-group">
-                <label className="form-label">WhatsApp</label>
+                <label className="form-label">WhatsApp <span style={{ color: '#dc2626' }}>*</span></label>
                 <input className="form-input" value={mascararTelefone(modal.form.whatsapp)} onChange={(e) => upd('whatsapp', mascararTelefone(e.target.value))} placeholder="(00) 00000-0000" inputMode="numeric" />
               </div>
               <div className="form-group">
@@ -728,7 +756,7 @@ function Marcacoes({ notify }) {
   const [colabs, setColabs] = useState([])
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState(null)
-  const [data, setData] = useState(hojeISO())
+  const [periodo, setPeriodo] = useState('mes') // default: mês atual
   const [funcId, setFuncId] = useState('')
 
   const [modal, setModal] = useState(null) // { funcionarioId, tipo, dataHora }
@@ -737,11 +765,12 @@ function Marcacoes({ notify }) {
   const carregar = useCallback(() => {
     setLoading(true)
     setErro(null)
-    api.get('/ponto/marcacoes', { params: { data: data || undefined, funcionarioId: funcId || undefined } })
+    const { de, ate } = rangePreset(periodo)
+    api.get('/ponto/marcacoes', { params: { de: de || undefined, ate: ate || undefined, funcionarioId: funcId || undefined } })
       .then((r) => setLista(Array.isArray(r.data) ? r.data : []))
       .catch((e) => setErro(e?.response?.data?.error ?? 'Não foi possível carregar as marcações.'))
       .finally(() => setLoading(false))
-  }, [data, funcId])
+  }, [periodo, funcId])
   useEffect(() => { carregar() }, [carregar])
   useEffect(() => { api.get('/ponto/colaboradores').then((r) => setColabs(Array.isArray(r.data) ? r.data : [])).catch(() => {}) }, [])
 
@@ -766,8 +795,10 @@ function Marcacoes({ notify }) {
     <div>
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
         <div className="form-group" style={{ margin: 0 }}>
-          <label className="form-label">Data</label>
-          <input type="date" className="form-input" value={data} onChange={(e) => setData(e.target.value)} style={{ maxWidth: 170 }} />
+          <label className="form-label">Período</label>
+          <select className="form-input" value={periodo} onChange={(e) => setPeriodo(e.target.value)} style={{ maxWidth: 180 }}>
+            {PERIODOS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+          </select>
         </div>
         <div className="form-group" style={{ margin: 0 }}>
           <label className="form-label">Colaborador</label>
@@ -776,7 +807,6 @@ function Marcacoes({ notify }) {
             {colabs.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
           </select>
         </div>
-        {data && <button type="button" className="btn btn-secondary btn-sm" onClick={() => setData('')}>Limpar data</button>}
         <button type="button" className="btn btn-primary" style={{ marginLeft: 'auto' }} onClick={abrirManual}>Lançar manual</button>
       </div>
 
