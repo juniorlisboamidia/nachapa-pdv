@@ -1,7 +1,7 @@
 // Dep. Pessoal › Ponto Facial — controle de ponto da equipe.
 // Alimenta a Presença da Bonificação. As batidas podem vir do coletor facial
 // (casadas pelo CPF), de importação, ou de lançamento manual. Restrito ao ADMIN.
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import api from '../services/api'
 import Toast from '../components/Toast'
@@ -65,6 +65,86 @@ const TIPOS = [
 ]
 const FUNCOES_SUGERIDAS = ['Cozinha', 'Atendimento', 'Caixa', 'Gerência', 'Chapa', 'Montagem']
 
+// --- envio ao coletor (com barra de progresso) -----------------------------
+// O cadastro entra numa fila (PENDENTE) e só vira ENVIADO quando o coletor dá o
+// próximo "sinal" (~20s). O hook faz polling do status pra mostrar o progresso
+// REAL — igual à barrinha da DIXI, que espera o aparelho responder.
+function useEnvioColetor(notify) {
+  const [envio, setEnvio] = useState(null) // { total, enviados, inicio, concluido, erro }
+  const timerRef = useRef(null)
+  const parar = useCallback(() => { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null } }, [])
+  useEffect(() => () => parar(), [parar]) // limpa ao desmontar
+  const fechar = useCallback(() => { parar(); setEnvio(null) }, [parar])
+
+  const enviar = useCallback(async (payload) => {
+    parar()
+    let ids
+    try {
+      const r = await api.post('/ponto/coletor/enviar', payload)
+      ids = r.data?.comandoIds || []
+    } catch (e) {
+      notify(e?.response?.data?.error ?? 'Não foi possível enviar ao coletor.', 'error')
+      return false
+    }
+    if (!ids.length) { notify('Nenhum coletor ativo pra receber.', 'error'); return false }
+    const inicio = Date.now()
+    setEnvio({ total: ids.length, enviados: 0, inicio, concluido: false, erro: null })
+    timerRef.current = setInterval(async () => {
+      let enviados = 0
+      try {
+        const s = await api.get('/ponto/coletor/enviar/status', { params: { ids: ids.join(',') } })
+        enviados = s.data?.enviados || 0
+      } catch { /* mantém tentando no próximo tick */ }
+      if (enviados >= ids.length) { parar(); setEnvio((e) => e && { ...e, enviados, concluido: true }) }
+      else if (Date.now() - inicio > 60000) { parar(); setEnvio((e) => e && { ...e, enviados, erro: 'O coletor não respondeu agora. O cadastro fica na fila e vai assim que ele der sinal.' }) }
+      else setEnvio((e) => e && { ...e, enviados })
+    }, 1500)
+    return true
+  }, [parar, notify])
+
+  return { envio, enviar, fechar }
+}
+
+// Modal-barra do envio. Não fecha ao clicar fora (só no botão).
+function ModalProgressoEnvio({ envio, onClose }) {
+  if (!envio) return null
+  const { total, enviados, concluido, erro, inicio } = envio
+  let pct, cor
+  if (concluido) { pct = 100; cor = '#16a34a' }
+  else if (erro) { pct = 100; cor = '#d97706' }
+  else { pct = Math.max(6, Math.min(92, Math.round(((Date.now() - inicio) / 18000) * 100))); cor = '#2563eb' }
+  const finalizado = concluido || erro
+  return (
+    <div className="modal-overlay">
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 430 }}>
+        <div className="modal-title">{concluido ? 'Enviado ao coletor' : erro ? 'Ainda não chegou' : 'Enviando ao coletor…'}</div>
+        <div style={{ height: 10, borderRadius: 999, background: 'var(--app-border, #e5e5e5)', overflow: 'hidden', margin: '2px 0 12px' }}>
+          <div style={{ height: '100%', width: pct + '%', background: cor, borderRadius: 999, transition: 'width 1.4s linear' }} />
+        </div>
+        {!finalizado && (
+          <div className="page-header-sub" style={{ margin: 0 }}>
+            Aguardando o coletor receber — costuma levar alguns segundos (o aparelho avisa o servidor a cada ~20s).
+            {total > 1 && <> <strong>{enviados} de {total}</strong> confirmados.</>}
+          </div>
+        )}
+        {concluido && (
+          <div className="page-header-sub" style={{ margin: 0 }}>
+            {total > 1 ? `${total} cadastros chegaram no coletor.` : 'Cadastro criado no coletor.'} Agora, no aparelho, cadastre a face: <strong>Menu › Usuários</strong> → selecione o usuário (pelo ID/nome) → <strong>Face</strong>.
+          </div>
+        )}
+        {erro && (
+          <div className="page-header-sub" style={{ margin: 0, color: '#92400e' }}>
+            {erro}{total > 1 && enviados > 0 ? ` (${enviados} de ${total} já foram)` : ''}
+          </div>
+        )}
+        <div className="modal-actions">
+          <button type="button" className={'btn ' + (finalizado ? 'btn-primary' : 'btn-secondary')} onClick={onClose}>{finalizado ? 'OK' : 'Fechar'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function Pill({ meta }) {
   if (!meta) return <span>—</span>
   return (
@@ -125,6 +205,7 @@ function Coletor({ notify }) {
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState(null)
   const [sel, setSel] = useState({}) // { enrollid: funcionarioId } em edição
+  const { envio, enviar, fechar } = useEnvioColetor(notify)
 
   const carregar = useCallback(() => {
     setLoading(true); setErro(null)
@@ -159,10 +240,8 @@ function Coletor({ notify }) {
   }
   // Envia todos os colaboradores ativos pro coletor (carga inicial).
   async function enviarTodos() {
-    try {
-      const r = await api.post('/ponto/coletor/enviar', { todos: true })
-      notify(`${r.data.funcionarios} colaborador(es) enviado(s). Cadastre as faces no aparelho.`)
-    } catch (e) { notify(e?.response?.data?.error ?? 'Não foi possível enviar.', 'error') }
+    const ok = await enviar({ todos: true })
+    if (ok) carregar() // enrollids foram atribuídos no envio
   }
 
   // Agrupa pendências por enrollid (1 linha por ID do coletor).
@@ -256,6 +335,8 @@ function Coletor({ notify }) {
           </table>
         </div>
       )}
+
+      <ModalProgressoEnvio envio={envio} onClose={fechar} />
     </div>
   )
 }
@@ -353,6 +434,7 @@ function Colaboradores({ notify }) {
   const [salvandoPin, setSalvandoPin] = useState(false)
   const [confirmExcluir, setConfirmExcluir] = useState(null)
   const [excluindo, setExcluindo] = useState(false)
+  const { envio, enviar, fechar } = useEnvioColetor(notify)
 
   const carregar = useCallback(() => {
     setLoading(true)
@@ -388,14 +470,11 @@ function Colaboradores({ notify }) {
   }
 
   // Envia o cadastro (ID + nome) do colaborador pro coletor. A face é cadastrada
-  // depois no aparelho. Chega no coletor no próximo "sinal" dele (~20s).
+  // depois no aparelho. Chega no coletor no próximo "sinal" dele (~20s) — a barra
+  // de progresso acompanha até o aparelho confirmar.
   async function enviarColetor(f) {
-    try {
-      const r = await api.post('/ponto/coletor/enviar', { funcionarioIds: [f.id] })
-      if (!r.data?.enfileirados) { notify('Nenhum coletor ativo pra receber.', 'error'); return }
-      notify(`${f.nome} enviado ao coletor. Cadastre a face no aparelho (Menu › Usuários).`)
-      carregar()
-    } catch (e) { notify(e?.response?.data?.error ?? 'Não foi possível enviar ao coletor.', 'error') }
+    const ok = await enviar({ funcionarioIds: [f.id] })
+    if (ok) carregar() // enrollid pode ter sido atribuído no envio
   }
 
   const filtrada = lista.filter((f) => {
@@ -612,6 +691,8 @@ function Colaboradores({ notify }) {
         onConfirm={excluir}
         onCancel={() => setConfirmExcluir(null)}
       />
+
+      <ModalProgressoEnvio envio={envio} onClose={fechar} />
     </div>
   )
 }

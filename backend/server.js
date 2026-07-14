@@ -5667,18 +5667,29 @@ app.post('/api/ponto/coletor/enviar', async (req, res) => {
     const agg = await prisma.funcionario.aggregate({ _max: { enrollidColetor: true } });
     let proximo = (agg._max.enrollidColetor || 0) + 1;
 
-    let enfileirados = 0;
+    const comandoIds = [];
     for (const f of funcionarios) {
       let enrollid = f.enrollidColetor;
       if (!enrollid) { enrollid = proximo++; await prisma.funcionario.update({ where: { id: f.id }, data: { enrollidColetor: enrollid } }).catch(() => {}); }
       const payload = montarSetUserInfo(enrollid, f.nome);
       for (const c of coletores) {
-        await prisma.coletorComando.create({ data: { serial: c.serialColetor, funcionarioId: f.id, enrollid, cmd: 'setuserinfo', payload } });
-        enfileirados++;
+        const cmd = await prisma.coletorComando.create({ data: { serial: c.serialColetor, funcionarioId: f.id, enrollid, cmd: 'setuserinfo', payload } });
+        comandoIds.push(cmd.id);
       }
     }
-    res.json({ ok: true, enfileirados, funcionarios: funcionarios.length });
+    res.json({ ok: true, enfileirados: comandoIds.length, funcionarios: funcionarios.length, comandoIds });
   } catch (err) { console.error('[coletor enviar]', err); res.status(500).json({ error: 'Erro ao enfileirar o envio.' }); }
+});
+
+// Status dos comandos enfileirados (p/ a barra de progresso do envio).
+app.get('/api/ponto/coletor/enviar/status', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const ids = String(req.query.ids || '').split(',').map((x) => parseInt(x, 10)).filter(Number.isInteger);
+    if (!ids.length) return res.json({ total: 0, enviados: 0 });
+    const cmds = await prisma.coletorComando.findMany({ where: { id: { in: ids } }, select: { status: true } });
+    res.json({ total: cmds.length, enviados: cmds.filter((c) => c.status === 'ENVIADO').length });
+  } catch (err) { console.error('[coletor enviar/status]', err); res.status(500).json({ error: 'Erro ao consultar o status.' }); }
 });
 
 app.listen(PORT, () => console.log(`Operação (PDV) API rodando em http://localhost:${PORT}`));
