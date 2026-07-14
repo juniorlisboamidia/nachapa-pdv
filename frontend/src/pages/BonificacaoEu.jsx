@@ -10,7 +10,7 @@ const num = (n) => new Intl.NumberFormat('pt-BR').format(Math.round(Number(n) ||
 const MEDAL = { 1: 'g1', 2: 'g2', 3: 'g3' }
 const RAR = {
   COMUM: { label: 'Comum', cor: '#64748b' },
-  RARO: { label: 'Raro', cor: '#3b82f6' },
+  RARO: { label: 'Raro', cor: '#eab802' },
   EPICO: { label: 'Épico', cor: '#8b5cf6' },
   LENDARIO: { label: 'Lendário', cor: '#f59e0b' },
 }
@@ -121,7 +121,7 @@ const CSS = `
 
 const STAT = {
   PENDENTE: { label: 'Pendente', cor: '#b45309' },
-  APROVADO: { label: 'Aprovado', cor: '#2563eb' },
+  APROVADO: { label: 'Aprovado', cor: '#a17c00' },
   ENTREGUE: { label: 'Entregue', cor: '#0F8A54' },
   REJEITADO: { label: 'Rejeitado', cor: '#dc2626' },
 }

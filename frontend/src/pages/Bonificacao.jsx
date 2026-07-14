@@ -495,7 +495,7 @@ function MoedasModal({ func, onClose, onMudou, toast }) {
                     <td>{dataHora(x.criadoEm)}</td>
                     <td style={{ color: '#666', fontSize: 12 }}>{x.motivo || '—'}</td>
                     <td><span className="badge badge-gray">{ORIGEM[x.origem] || x.origem}</span></td>
-                    <td style={{ textAlign: 'right', fontWeight: 700, color: x.pontos < 0 ? '#1d4ed8' : '#0F8A54' }}>{x.pontos > 0 ? '+' : ''}{nf.format(x.pontos)}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700, color: x.pontos < 0 ? '#7f6300' : '#0F8A54' }}>{x.pontos > 0 ? '+' : ''}{nf.format(x.pontos)}</td>
                     <td style={{ textAlign: 'right' }}>{x.origem === 'MANUAL' && <button type="button" className="btn btn-danger btn-sm" onClick={() => excluir(x.id)}>Excluir</button>}</td>
                   </tr>
                 ))}
@@ -579,7 +579,7 @@ function XpModal({ func, onClose, onMudou, toast }) {
                     <td>{dataHora(x.criadoEm)}</td>
                     <td style={{ color: '#666', fontSize: 12 }}>{x.motivo || '—'}</td>
                     <td>{x.origem === 'FECHAMENTO' ? <span className="badge badge-gray">Fechamento</span> : <span className="badge">Manual</span>}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 700, color: x.pontos < 0 ? '#1d4ed8' : '#0F8A54' }}>{x.pontos > 0 ? '+' : ''}{new Intl.NumberFormat('pt-BR').format(x.pontos)}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700, color: x.pontos < 0 ? '#7f6300' : '#0F8A54' }}>{x.pontos > 0 ? '+' : ''}{new Intl.NumberFormat('pt-BR').format(x.pontos)}</td>
                     <td style={{ textAlign: 'right' }}>{x.origem === 'MANUAL' && <button type="button" className="btn btn-danger btn-sm" onClick={() => excluir(x.id)}>Excluir</button>}</td>
                   </tr>
                 ))}
@@ -595,7 +595,7 @@ function XpModal({ func, onClose, onMudou, toast }) {
 /* ───────────── Aba: Conquistas (cards) ───────────── */
 const RARIDADES = [
   { id: 'COMUM', label: 'Comum', cor: '#64748b', bg: '#f1f5f9' },
-  { id: 'RARO', label: 'Raro', cor: '#2563eb', bg: '#eff6ff' },
+  { id: 'RARO', label: 'Raro', cor: '#a17c00', bg: '#fdf6da' },
   { id: 'EPICO', label: 'Épico', cor: '#7c3aed', bg: '#f5f3ff' },
   { id: 'LENDARIO', label: 'Lendário', cor: '#d97706', bg: '#fffbeb' },
 ]
@@ -851,7 +851,7 @@ function ConcederModal({ conquista, onClose, onMudou, toast }) {
 /* ───────────── Aba: Mercado (itens + resgates) ───────────── */
 const STATUS_RESGATE = {
   PENDENTE: { label: 'Pendente', cor: '#b45309', bg: '#fffbeb' },
-  APROVADO: { label: 'Aprovado', cor: '#2563eb', bg: '#eff6ff' },
+  APROVADO: { label: 'Aprovado', cor: '#a17c00', bg: '#fdf6da' },
   ENTREGUE: { label: 'Entregue', cor: '#059669', bg: '#ecfdf5' },
   REJEITADO: { label: 'Rejeitado', cor: '#dc2626', bg: '#fef2f2' },
 }
@@ -1090,7 +1090,7 @@ function MercadoResgates({ toast }) {
 
 /* ───────────── Aba: Configuração ───────────── */
 const PILARES = [
-  { id: 'ASSIDUIDADE', label: 'Assiduidade', hint: 'presença — falta, atraso, atestado…', cor: '#2563eb' },
+  { id: 'ASSIDUIDADE', label: 'Assiduidade', hint: 'presença — falta, atraso, atestado…', cor: '#a17c00' },
   { id: 'DESEMPENHO', label: 'Desempenho', hint: 'trabalho — advertência, erro…', cor: '#7c3aed' },
   { id: 'COLETIVA', label: 'Coletiva (equipe)', hint: 'da loja toda — meta não batida, inspeção reprovada…', cor: '#0d9488' },
 ]

@@ -39,7 +39,7 @@ function ModuloCard({ m }) {
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ fontSize: 26 }}>{m.emoji}</span>
-        <span style={{ color: '#2563eb', fontSize: 18, fontWeight: 800, transform: hover ? 'translateX(2px)' : 'none', transition: 'transform .14s' }}>→</span>
+        <span style={{ color: '#a17c00', fontSize: 18, fontWeight: 800, transform: hover ? 'translateX(2px)' : 'none', transition: 'transform .14s' }}>→</span>
       </div>
       <div style={{ fontWeight: 700, fontSize: 15 }}>{m.nome}</div>
       <div style={{ fontSize: 12.5, color: '#888', lineHeight: 1.4 }}>{m.desc}</div>
@@ -70,8 +70,8 @@ export default function Inicio() {
       </div>
 
       {/* Hero da loja */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 20, borderRadius: 16, border: '1px solid #eee', background: 'linear-gradient(135deg, #eff6ff, #ffffff)', marginBottom: 22 }}>
-        <div style={{ width: 56, height: 56, borderRadius: 14, background: 'linear-gradient(150deg,#3b82f6,#1d4ed8)', display: 'grid', placeItems: 'center', color: '#fff', fontSize: 26, fontWeight: 800, overflow: 'hidden', flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 20, borderRadius: 16, border: '1px solid #eee', background: 'linear-gradient(135deg, #fdf6da, #ffffff)', marginBottom: 22 }}>
+        <div style={{ width: 56, height: 56, borderRadius: 14, background: 'linear-gradient(150deg,#eab802,#d4a600)', display: 'grid', placeItems: 'center', color: '#0e1319', fontSize: 26, fontWeight: 800, overflow: 'hidden', flexShrink: 0 }}>
           {loja?.logoDataUrl ? <img src={loja.logoDataUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (nomeLoja.charAt(0).toUpperCase())}
         </div>
         <div style={{ minWidth: 0 }}>

@@ -386,18 +386,18 @@ export default function Sidebar() {
                       key={l.id}
                       type="button"
                       onClick={() => { setMenuLojas(false); if (!ativa) trocarLoja(l.id) }}
-                      style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 12px', border: 'none', background: ativa ? '#eff6ff' : '#fff', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 12px', border: 'none', background: ativa ? '#fdf6da' : '#fff', cursor: 'pointer', textAlign: 'left', font: 'inherit' }}
                     >
                       {l.logoDataUrl ? (
                         <img src={l.logoDataUrl} alt="" style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'cover', flexShrink: 0, background: 'var(--app-surface)' }} />
                       ) : (
-                        <span style={{ width: 28, height: 28, borderRadius: 6, flexShrink: 0, background: '#2563eb', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700 }}>
+                        <span style={{ width: 28, height: 28, borderRadius: 6, flexShrink: 0, background: '#a17c00', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700 }}>
                           {(l.nome || '?').charAt(0).toUpperCase()}
                         </span>
                       )}
                       <span style={{ flex: 1, minWidth: 0, fontWeight: ativa ? 700 : 600, fontSize: 13, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.nome}</span>
                       {ativa && (
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#a17c00" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
                       )}
                     </button>
                   )

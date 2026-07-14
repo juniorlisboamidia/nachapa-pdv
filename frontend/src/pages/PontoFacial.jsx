@@ -136,7 +136,7 @@ function ModalProgressoEnvio({ envio, onClose }) {
   let pct, cor
   if (concluido) { pct = 100; cor = '#16a34a' }
   else if (erro) { pct = 100; cor = '#d97706' }
-  else { pct = Math.max(6, Math.min(92, Math.round(((Date.now() - inicio) / 18000) * 100))); cor = '#2563eb' }
+  else { pct = Math.max(6, Math.min(92, Math.round(((Date.now() - inicio) / 18000) * 100))); cor = '#a17c00' }
   const finalizado = concluido || erro
   return (
     <div className="modal-overlay">
@@ -738,7 +738,7 @@ function Colaboradores({ notify }) {
                       key={i}
                       type="button"
                       onClick={() => upd('folgaSemana', on ? modal.form.folgaSemana.filter((d) => d !== i) : [...(modal.form.folgaSemana || []), i])}
-                      style={{ padding: '6px 12px', borderRadius: 999, border: '1px solid ' + (on ? '#2563eb' : 'var(--app-border, #d4d4d4)'), background: on ? '#2563eb' : 'transparent', color: on ? '#fff' : 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
+                      style={{ padding: '6px 12px', borderRadius: 999, border: '1px solid ' + (on ? '#a17c00' : 'var(--app-border, #d4d4d4)'), background: on ? '#a17c00' : 'transparent', color: on ? '#fff' : 'inherit', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}
                     >
                       {lbl}
                     </button>
@@ -1253,7 +1253,7 @@ function Jornadas({ notify }) {
                     <>
                       <input type="time" className="form-input" value={d.entrada} onChange={(e) => setDia(i, { entrada: e.target.value })} />
                       <input type="time" className="form-input" value={d.saida} onChange={(e) => setDia(i, { saida: e.target.value })} />
-                      <span style={{ fontSize: 11, fontWeight: 600, color: cruzaMeiaNoite(d) ? '#2563eb' : 'transparent' }}>+1 dia</span>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: cruzaMeiaNoite(d) ? '#a17c00' : 'transparent' }}>+1 dia</span>
                     </>
                   )}
                 </div>
@@ -1495,7 +1495,7 @@ function Fechamento({ notify }) {
             </div>
           )}
           {dados.jaLancadas > 0 && !dados.bonificacaoFechada && (
-            <div className="alert" style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 10, padding: '10px 12px', marginBottom: 12, fontSize: 13, color: '#1e40af' }}>
+            <div className="alert" style={{ background: '#fdf6da', border: '1px solid #bfdbfe', borderRadius: 10, padding: '10px 12px', marginBottom: 12, fontSize: 13, color: '#1e40af' }}>
               O ponto já lançou <strong>{dados.jaLancadas}</strong> ocorrência(s) neste mês. Lançar de novo substitui essas (as manuais são preservadas).
             </div>
           )}
