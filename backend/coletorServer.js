@@ -70,7 +70,7 @@ async function lerPontoConfigColetor(prisma, empresaId) {
 async function proximoTipoPontoNaData(prisma, empresaId, funcionarioId, dataHora, usaIntervalo) {
   const { ini, fim } = brDiaRange(dataHora);
   const regs = await prisma.pontoRegistro.findMany({
-    where: { empresaId, funcionarioId, dataHora: { gte: ini, lt: fim } },
+    where: { empresaId, funcionarioId, invalidada: false, dataHora: { gte: ini, lt: fim } },
     orderBy: { dataHora: 'asc' }, select: { tipo: true },
   });
   const ultimo = regs.length ? regs[regs.length - 1].tipo : null;
@@ -88,7 +88,7 @@ export async function gravarPontoColetor(prisma, empresaId, funcionarioId, { dat
   if (cfg.dedupeMin > 0) {
     const desde = new Date(new Date(dataHora).getTime() - cfg.dedupeMin * 60000);
     const recente = await prisma.pontoRegistro.findFirst({
-      where: { empresaId, funcionarioId, dataHora: { gte: desde, lte: dataHora } }, select: { id: true },
+      where: { empresaId, funcionarioId, invalidada: false, dataHora: { gte: desde, lte: dataHora } }, select: { id: true },
     });
     if (recente) return null; // batida repetida por engano — ignora
   }

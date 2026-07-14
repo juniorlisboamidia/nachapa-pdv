@@ -5085,7 +5085,7 @@ const inicioDoDia = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return
 // Próxima marcação esperada (auto-sequência entrada→intervalo→retorno→saída).
 async function proximoTipoPonto(funcionarioId, empresaId) {
   const de = inicioDoDia(); const ate = new Date(de); ate.setDate(ate.getDate() + 1);
-  const regs = await prisma.pontoRegistro.findMany({ where: { funcionarioId, empresaId, dataHora: { gte: de, lt: ate } }, orderBy: { dataHora: 'asc' } });
+  const regs = await prisma.pontoRegistro.findMany({ where: { funcionarioId, empresaId, invalidada: false, dataHora: { gte: de, lt: ate } }, orderBy: { dataHora: 'asc' } });
   const ultimo = regs.length ? regs[regs.length - 1].tipo : null;
   const seq = { ENTRADA: 'SAIDA_INTERVALO', SAIDA_INTERVALO: 'RETORNO_INTERVALO', RETORNO_INTERVALO: 'SAIDA', SAIDA: null };
   return ultimo ? seq[ultimo] : 'ENTRADA';
@@ -5320,8 +5320,32 @@ app.get('/api/ponto/marcacoes', async (req, res) => {
     }
     const regs = await prisma.pontoRegistro.findMany({ where, orderBy: { dataHora: 'desc' }, take: 1000 });
     const fs = new Map((await prisma.funcionario.findMany()).map((f) => [f.id, f.nome]));
-    res.json(regs.map((r) => ({ id: r.id, funcionarioId: r.funcionarioId, funcionarioNome: fs.get(r.funcionarioId) || '—', tipo: r.tipo, tipoLabel: PONTO_LABEL[r.tipo] || r.tipo, dataHora: r.dataHora, origem: r.origem, distancia: r.distancia })));
+    res.json(regs.map((r) => ({ id: r.id, funcionarioId: r.funcionarioId, funcionarioNome: fs.get(r.funcionarioId) || '—', tipo: r.tipo, tipoLabel: PONTO_LABEL[r.tipo] || r.tipo, dataHora: r.dataHora, origem: r.origem, distancia: r.distancia, invalidada: r.invalidada, observacao: r.observacao || null })));
   } catch (err) { console.error('[ponto/marcacoes]', err); res.status(500).json({ error: 'Erro ao carregar marcações.' }); }
+});
+
+// Edita/desconsidera uma marcação (dataHora, tipo, observação, invalidada).
+app.put('/api/ponto/marcacoes/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const id = parseInt(req.params.id, 10);
+    const reg = await prisma.pontoRegistro.findFirst({ where: { id } });
+    if (!reg) return res.status(404).json({ error: 'Marcação não encontrada.' });
+    const data = {};
+    if (req.body?.tipo !== undefined) {
+      if (!PONTO_TIPOS.includes(req.body.tipo)) return res.status(400).json({ error: 'Tipo inválido.' });
+      data.tipo = req.body.tipo;
+    }
+    if (req.body?.dataHora !== undefined) {
+      const dh = parseDataHoraBr(req.body.dataHora);
+      if (isNaN(dh.getTime())) return res.status(400).json({ error: 'Data/hora inválida.' });
+      data.dataHora = dh;
+    }
+    if (req.body?.observacao !== undefined) data.observacao = req.body.observacao ? String(req.body.observacao).slice(0, 300) : null;
+    if (req.body?.invalidada !== undefined) data.invalidada = !!req.body.invalidada;
+    const r = await prisma.pontoRegistro.update({ where: { id }, data });
+    res.json({ id: r.id, tipo: r.tipo, tipoLabel: PONTO_LABEL[r.tipo] || r.tipo, dataHora: r.dataHora, invalidada: r.invalidada, observacao: r.observacao || null });
+  } catch (err) { console.error('[ponto/marcacoes PUT]', err); res.status(500).json({ error: 'Erro ao salvar a marcação.' }); }
 });
 
 app.get('/api/ponto/painel', async (req, res) => {
@@ -5329,7 +5353,7 @@ app.get('/api/ponto/painel', async (req, res) => {
   try {
     const de = inicioDoDia(); const ate = new Date(de); ate.setDate(ate.getDate() + 1);
     const fs = await prisma.funcionario.findMany({ where: { status: 'ATIVO' }, orderBy: { nome: 'asc' } });
-    const regs = await prisma.pontoRegistro.findMany({ where: { dataHora: { gte: de, lt: ate } }, orderBy: { dataHora: 'asc' } });
+    const regs = await prisma.pontoRegistro.findMany({ where: { invalidada: false, dataHora: { gte: de, lt: ate } }, orderBy: { dataHora: 'asc' } });
     const porFunc = new Map();
     for (const r of regs) { const a = porFunc.get(r.funcionarioId) || []; a.push(r); porFunc.set(r.funcionarioId, a); }
     const linhas = fs.map((f) => {
@@ -5374,7 +5398,7 @@ async function calcularEspelho(funcionarioId, ano, mes) {
   // Batidas do mês com margem (pega madrugadas da virada do 1º dia e do fim do mês).
   const de = new Date(brToUtcMs(ano, mes - 1, 0, 0, 0));
   const ate = new Date(brToUtcMs(ano, mes - 1, 32, 12, 0));
-  const regs = await prisma.pontoRegistro.findMany({ where: { funcionarioId, dataHora: { gte: de, lt: ate } }, orderBy: { dataHora: 'asc' } });
+  const regs = await prisma.pontoRegistro.findMany({ where: { funcionarioId, invalidada: false, dataHora: { gte: de, lt: ate } }, orderBy: { dataHora: 'asc' } });
   const porDia = new Map();
   for (const r of regs) { const k = diaExpedienteKey(r.dataHora); const a = porDia.get(k) || []; a.push(r); porDia.set(k, a); }
 

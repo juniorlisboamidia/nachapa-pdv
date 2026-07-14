@@ -82,11 +82,6 @@ const SITUACAO = {
   encerrado: { label: 'Encerrado', bg: '#dbeafe', fg: '#1e40af' },
   ausente: { label: 'Ausente', bg: '#f4f4f5', fg: '#52525b' }
 }
-const ORIGEM = {
-  FACIAL: { label: 'Facial', bg: '#dbeafe', fg: '#1e40af' },
-  PIN: { label: 'PIN', bg: '#f3e8ff', fg: '#6b21a8' },
-  MANUAL: { label: 'Manual', bg: '#fef3c7', fg: '#92400e' }
-}
 const TIPOS = [
   { id: 'ENTRADA', label: 'Entrada' },
   { id: 'SAIDA_INTERVALO', label: 'Saída p/ intervalo' },
@@ -804,6 +799,10 @@ function Marcacoes({ notify }) {
   const [funcId, setFuncId] = useState('')
 
   const [modal, setModal] = useState(null) // { funcionarioId, tipo, dataHora }
+  const [editar, setEditar] = useState(null)         // marcação em edição
+  const [observar, setObservar] = useState(null)     // marcação p/ observação
+  const [ocorrencia, setOcorrencia] = useState(null) // marcação p/ lançar ocorrência na Bonificação
+  const [tiposBonif, setTiposBonif] = useState([])   // tipos de ocorrência (Bonificação, sem coletiva)
   const [salvando, setSalvando] = useState(false)
 
   const carregar = useCallback(() => {
@@ -817,8 +816,17 @@ function Marcacoes({ notify }) {
   }, [periodo, funcId])
   useEffect(() => { carregar() }, [carregar])
   useEffect(() => { api.get('/ponto/colaboradores').then((r) => setColabs(Array.isArray(r.data) ? r.data : [])).catch(() => {}) }, [])
+  useEffect(() => { api.get('/bonificacao/config').then((r) => setTiposBonif((r.data?.tipos || []).filter((t) => t.pilar !== 'COLETIVA'))).catch(() => {}) }, [])
 
   const abrirManual = () => setModal({ funcionarioId: '', tipo: 'ENTRADA', dataHora: agoraLocal() })
+
+  async function invalidar(r) {
+    try {
+      await api.put(`/ponto/marcacoes/${r.id}`, { invalidada: !r.invalidada })
+      notify(r.invalidada ? 'Marcação reativada — volta a contar.' : 'Marcação desconsiderada — não conta mais.')
+      carregar()
+    } catch (e) { notify(e?.response?.data?.error ?? 'Erro ao atualizar.', 'error') }
+  }
 
   async function salvarManual() {
     if (!modal.funcionarioId) return notify('Selecione o colaborador.', 'error')
@@ -868,16 +876,27 @@ function Marcacoes({ notify }) {
                 <th>Colaborador</th>
                 <th>Marcação</th>
                 <th>Data / Hora</th>
-                <th>Origem</th>
+                <th aria-hidden="true"></th>
               </tr>
             </thead>
             <tbody>
               {lista.map((r) => (
-                <tr key={r.id}>
-                  <td><strong>{r.funcionarioNome}</strong></td>
-                  <td>{r.tipoLabel}</td>
+                <tr key={r.id} style={r.invalidada ? { opacity: 0.55 } : undefined}>
+                  <td><strong style={r.invalidada ? { textDecoration: 'line-through' } : undefined}>{r.funcionarioNome}</strong></td>
+                  <td>
+                    {r.tipoLabel}
+                    {r.invalidada && <span className="badge badge-gray" style={{ marginLeft: 8 }}>Desconsiderada</span>}
+                    {r.observacao && <div style={{ fontSize: 11.5, color: 'var(--app-text-soft, #999)', marginTop: 2 }}>Obs.: {r.observacao}</div>}
+                  </td>
                   <td>{fmtDataHora(r.dataHora)}</td>
-                  <td><Pill meta={ORIGEM[r.origem]} /></td>
+                  <td style={{ textAlign: 'right' }}>
+                    <MenuAcoes>
+                      <ItemMenu onClick={() => invalidar(r)}>{r.invalidada ? 'Reativar' : 'Desconsiderar'}</ItemMenu>
+                      <ItemMenu onClick={() => setEditar(r)}>Editar</ItemMenu>
+                      <ItemMenu onClick={() => setOcorrencia(r)}>Ocorrência</ItemMenu>
+                      <ItemMenu onClick={() => setObservar(r)}>Observação</ItemMenu>
+                    </MenuAcoes>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -916,6 +935,172 @@ function Marcacoes({ notify }) {
           </div>
         </div>
       )}
+
+      {editar && <EditarMarcacaoModal reg={editar} onClose={() => setEditar(null)} onSalvou={() => { setEditar(null); carregar() }} notify={notify} />}
+      {observar && <ObsMarcacaoModal reg={observar} onClose={() => setObservar(null)} onSalvou={() => { setObservar(null); carregar() }} notify={notify} />}
+      {ocorrencia && <OcorrenciaMarcacaoModal reg={ocorrencia} tipos={tiposBonif} onClose={() => setOcorrencia(null)} onSalvou={() => setOcorrencia(null)} notify={notify} />}
+    </div>
+  )
+}
+
+// ---- menu de ações (kebab) + itens --------------------------------------
+function MenuAcoes({ children }) {
+  const [aberto, setAberto] = useState(false)
+  const ref = useRef(null)
+  useEffect(() => {
+    if (!aberto) return
+    const fora = (e) => { if (ref.current && !ref.current.contains(e.target)) setAberto(false) }
+    document.addEventListener('mousedown', fora)
+    return () => document.removeEventListener('mousedown', fora)
+  }, [aberto])
+  return (
+    <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
+      <button type="button" className="btn btn-secondary btn-sm" onClick={() => setAberto((a) => !a)} aria-label="Ações" style={{ padding: '4px 11px', fontSize: 17, lineHeight: 1 }}>⋮</button>
+      {aberto && (
+        <div onClick={() => setAberto(false)} style={{ position: 'absolute', right: 0, top: '100%', marginTop: 4, background: '#fff', border: '1px solid var(--app-border, #e5e5e5)', borderRadius: 10, boxShadow: '0 12px 32px -12px rgba(0,0,0,0.3)', zIndex: 30, minWidth: 172, padding: 4 }}>
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+function ItemMenu({ onClick, danger, children }) {
+  return (
+    <button type="button" onClick={onClick}
+      style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', fontSize: 13.5, background: 'transparent', border: 'none', borderRadius: 7, cursor: 'pointer', color: danger ? '#dc2626' : '#111' }}
+      onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(0,0,0,0.05)' }}
+      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}>
+      {children}
+    </button>
+  )
+}
+
+// datetime-local a partir de um ISO (fuso local, p/ o input de edição)
+function isoParaLocal(iso) {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return agoraLocal()
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset())
+  return d.toISOString().slice(0, 16)
+}
+
+// Editar a marcação (tipo + data/hora)
+function EditarMarcacaoModal({ reg, onClose, onSalvou, notify }) {
+  const [tipo, setTipo] = useState(reg.tipo)
+  const [dataHora, setDataHora] = useState(() => isoParaLocal(reg.dataHora))
+  const [salvando, setSalvando] = useState(false)
+  async function salvar() {
+    setSalvando(true)
+    try {
+      await api.put(`/ponto/marcacoes/${reg.id}`, { tipo, dataHora })
+      notify('Marcação atualizada.')
+      onSalvou()
+    } catch (e) { notify(e?.response?.data?.error ?? 'Erro ao salvar.', 'error') }
+    finally { setSalvando(false) }
+  }
+  return (
+    <div className="modal-overlay">
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
+        <div className="modal-title">Editar marcação — {reg.funcionarioNome}</div>
+        <div className="form-grid-2">
+          <div className="form-group">
+            <label className="form-label">Tipo</label>
+            <select className="form-input" value={tipo} onChange={(e) => setTipo(e.target.value)}>
+              {TIPOS.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Data e hora</label>
+            <input type="datetime-local" className="form-input" value={dataHora} onChange={(e) => setDataHora(e.target.value)} />
+          </div>
+        </div>
+        <div className="modal-actions">
+          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={salvando}>Cancelar</button>
+          <button type="button" className="btn btn-primary" onClick={salvar} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Observação livre na marcação
+function ObsMarcacaoModal({ reg, onClose, onSalvou, notify }) {
+  const [obs, setObs] = useState(reg.observacao || '')
+  const [salvando, setSalvando] = useState(false)
+  async function salvar() {
+    setSalvando(true)
+    try {
+      await api.put(`/ponto/marcacoes/${reg.id}`, { observacao: obs })
+      notify('Observação salva.')
+      onSalvou()
+    } catch (e) { notify(e?.response?.data?.error ?? 'Erro ao salvar.', 'error') }
+    finally { setSalvando(false) }
+  }
+  return (
+    <div className="modal-overlay">
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
+        <div className="modal-title">Observação — {reg.funcionarioNome}</div>
+        <div className="form-group">
+          <label className="form-label">Nota da batida ({fmtDataHora(reg.dataHora)})</label>
+          <textarea className="form-input" rows={3} value={obs} maxLength={300} onChange={(e) => setObs(e.target.value)} placeholder="Ex.: bateu adiantado, liberado pela gerência" autoFocus style={{ resize: 'vertical' }} />
+        </div>
+        <div className="modal-actions">
+          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={salvando}>Cancelar</button>
+          <button type="button" className="btn btn-primary" onClick={salvar} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Lança uma ocorrência da Bonificação p/ o colaborador da marcação
+function OcorrenciaMarcacaoModal({ reg, tipos, onClose, onSalvou, notify }) {
+  const [tipoId, setTipoId] = useState(tipos[0]?.id ? String(tipos[0].id) : '')
+  const [data, setData] = useState(() => new Date(reg.dataHora).toISOString().slice(0, 10))
+  const [obs, setObs] = useState('')
+  const [salvando, setSalvando] = useState(false)
+  async function lancar() {
+    if (!tipoId) return notify('Escolha o tipo de ocorrência.', 'error')
+    const d = new Date(data + 'T12:00:00')
+    setSalvando(true)
+    try {
+      await api.post('/bonificacao/ocorrencias', { funcionarioId: reg.funcionarioId, ano: d.getFullYear(), mes: d.getMonth() + 1, tipoId: Number(tipoId), data, observacao: obs })
+      notify('Ocorrência lançada na Bonificação.')
+      onSalvou()
+    } catch (e) { notify(e?.response?.data?.error ?? 'Erro ao lançar.', 'error') }
+    finally { setSalvando(false) }
+  }
+  return (
+    <div className="modal-overlay">
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 440 }}>
+        <div className="modal-title">Ocorrência — {reg.funcionarioNome}</div>
+        <div className="page-header-sub" style={{ marginTop: -4, marginBottom: 12 }}>Desconta no prêmio da Bonificação do colaborador.</div>
+        {tipos.length === 0 ? (
+          <div className="empty-state" style={{ padding: '18px 16px' }}>Nenhum tipo de ocorrência cadastrado. Configure na Bonificação › Configuração.</div>
+        ) : (
+          <>
+            <div className="form-grid-2">
+              <div className="form-group">
+                <label className="form-label">Tipo</label>
+                <select className="form-input" value={tipoId} onChange={(e) => setTipoId(e.target.value)}>
+                  {tipos.map((t) => <option key={t.id} value={t.id}>{t.pilar === 'ASSIDUIDADE' ? 'Assiduidade' : 'Desempenho'} · {t.nome} (−{t.percentual}%)</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Data</label>
+                <input type="date" className="form-input" value={data} onChange={(e) => setData(e.target.value)} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Observação (opcional)</label>
+              <input className="form-input" value={obs} maxLength={300} onChange={(e) => setObs(e.target.value)} placeholder="Ex.: chegou 40 min atrasado" />
+            </div>
+          </>
+        )}
+        <div className="modal-actions">
+          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={salvando}>Cancelar</button>
+          <button type="button" className="btn btn-primary" onClick={lancar} disabled={salvando || !tipos.length || !tipoId}>{salvando ? 'Lançando…' : 'Lançar'}</button>
+        </div>
+      </div>
     </div>
   )
 }

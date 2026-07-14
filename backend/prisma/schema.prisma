@@ -646,6 +646,8 @@ model PontoRegistro {
   dispositivoId Int?
   distancia     Float?   // distância do match facial (quanto menor, mais confiante)
   coletorRef    String?  @unique // dedup das batidas do coletor: "sn:enrollid:time"
+  observacao    String?  // nota livre do admin sobre a batida
+  invalidada    Boolean  @default(false) // desconsiderada: fica no histórico mas não conta no cálculo
   criadoEm      DateTime @default(now())
 
   @@index([empresaId, dataHora])
