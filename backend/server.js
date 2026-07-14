@@ -32,7 +32,7 @@ const MODELS_TENANT = new Set([
   'bonificacaoNivel', 'bonificacaoXp',
   'conquista', 'conquistaDesbloqueada',
   'bonificacaoMoeda', 'mercadoItem', 'mercadoResgate',
-  'funcionarioFace', 'pontoRegistro', 'dispositivo', 'jornada', 'coletorBatidaPendente', 'coletorComando', 'pontoConfig',
+  'funcionarioFace', 'pontoRegistro', 'dispositivo', 'jornada', 'coletorBatidaPendente', 'coletorComando', 'pontoConfig', 'funcao',
 ]);
 const OPS_WHERE = new Set([
   'findMany', 'findFirst', 'findFirstOrThrow', 'findUnique', 'findUniqueOrThrow',
@@ -307,6 +307,59 @@ app.delete('/api/funcionarios/:id', async (req, res) => {
     await prisma.funcionario.delete({ where: { id } });
     res.json({ ok: true });
   } catch (err) { console.error('[funcionarios DELETE]', err); res.status(500).json({ error: 'Erro ao excluir o funcionário.' }); }
+});
+
+// ===== Funções/cargos da equipe (lista escolhida no cadastro + flag de bonificação) =====
+const FUNCOES_PADRAO = [
+  { nome: 'Aux. de Cozinha', bonificavel: true, ordem: 0 },
+  { nome: 'Atendente', bonificavel: true, ordem: 1 },
+  { nome: 'Caixa', bonificavel: true, ordem: 2 },
+  { nome: 'Gerente', bonificavel: true, ordem: 3 },
+  { nome: 'Entregador', bonificavel: false, ordem: 4 },
+];
+const funcaoJson = (f) => ({ id: f.id, nome: f.nome, bonificavel: f.bonificavel, ordem: f.ordem });
+// Nomes das funções que NÃO participam da bonificação (p/ excluir do cálculo).
+async function nomesFuncoesNaoBonif(empresaId) {
+  const where = empresaId != null ? { empresaId, bonificavel: false } : { bonificavel: false };
+  const fs = await prisma.funcao.findMany({ where, select: { nome: true } });
+  return new Set(fs.map((f) => f.nome));
+}
+app.get('/api/funcoes', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    let fs = await prisma.funcao.findMany({ orderBy: [{ ordem: 'asc' }, { nome: 'asc' }] });
+    if (fs.length === 0) {
+      await prisma.funcao.createMany({ data: FUNCOES_PADRAO });
+      fs = await prisma.funcao.findMany({ orderBy: [{ ordem: 'asc' }, { nome: 'asc' }] });
+    }
+    res.json(fs.map(funcaoJson));
+  } catch (err) { console.error('[funcoes GET]', err); res.status(500).json({ error: 'Erro ao carregar as funções.' }); }
+});
+app.put('/api/funcoes', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const entrada = Array.isArray(req.body?.funcoes) ? req.body.funcoes : [];
+    const atuais = await prisma.funcao.findMany();
+    const norm = [];
+    const vistos = new Set();
+    entrada.forEach((f, i) => {
+      const nome = String(f?.nome ?? '').trim().slice(0, 60);
+      if (!nome) return;
+      const chave = nome.toLowerCase();
+      if (vistos.has(chave)) return; // sem nomes duplicados
+      vistos.add(chave);
+      const idExist = Number.isInteger(f?.id) ? f.id : (atuais.find((a) => a.nome.toLowerCase() === chave)?.id ?? null);
+      norm.push({ id: idExist, nome, bonificavel: f?.bonificavel !== false, ordem: i });
+    });
+    const manter = norm.filter((f) => f.id != null).map((f) => f.id);
+    await prisma.$transaction([
+      prisma.funcao.deleteMany(manter.length ? { where: { id: { notIn: manter } } } : {}),
+      ...norm.filter((f) => f.id != null).map((f) => prisma.funcao.update({ where: { id: f.id }, data: { nome: f.nome, bonificavel: f.bonificavel, ordem: f.ordem } })),
+      ...norm.filter((f) => f.id == null).map((f) => prisma.funcao.create({ data: { nome: f.nome, bonificavel: f.bonificavel, ordem: f.ordem } })),
+    ]);
+    const fs = await prisma.funcao.findMany({ orderBy: [{ ordem: 'asc' }, { nome: 'asc' }] });
+    res.json(fs.map(funcaoJson));
+  } catch (err) { console.error('[funcoes PUT]', err); res.status(500).json({ error: 'Erro ao salvar as funções.' }); }
 });
 
 // ===== Dep. Pessoal › Bonificação — configuração por loja (ADMIN) =====
@@ -594,7 +647,8 @@ app.get('/api/bonificacao/mensal', async (req, res) => {
     if (fech) {
       return res.json({ fechado: true, fechadoEm: fech.fechadoEm, fechadoPor: fech.fechadoPor, coletivaPct: Number(fech.coletivaPct), totalGeral: Number(fech.totalGeral), funcionarios: fech.itensJson, config: configOut });
     }
-    const funcionarios = await prisma.funcionario.findMany({ where: { status: 'ATIVO' }, orderBy: { nome: 'asc' } });
+    const exclFuncoes = await nomesFuncoesNaoBonif();
+    const funcionarios = (await prisma.funcionario.findMany({ where: { status: 'ATIVO' }, orderBy: { nome: 'asc' } })).filter((f) => !exclFuncoes.has(f.funcao));
     const ocorrenciasTodas = await prisma.bonificacaoOcorrencia.findMany({ where: { ano: am.ano, mes: am.mes }, orderBy: { data: 'desc' } });
     const { individuais, coletivas, coletivaPct } = separarOcorrenciasBonif(ocorrenciasTodas);
     const rows = calcularLinhasBonificacao(funcionarios, individuais, coletivaPct, t);
@@ -662,7 +716,8 @@ app.post('/api/bonificacao/fechar', async (req, res) => {
     if (await prisma.bonificacaoFechamento.findFirst({ where: { ano: am.ano, mes: am.mes } })) return res.status(400).json({ error: 'Este mês já está fechado.' });
     const t = await tetosBonificacao();
     const cfgFech = await prisma.bonificacaoConfig.findFirst();
-    const funcionarios = await prisma.funcionario.findMany({ where: { status: 'ATIVO' }, orderBy: { nome: 'asc' } });
+    const exclFuncoes = await nomesFuncoesNaoBonif();
+    const funcionarios = (await prisma.funcionario.findMany({ where: { status: 'ATIVO' }, orderBy: { nome: 'asc' } })).filter((f) => !exclFuncoes.has(f.funcao));
     const ocorrenciasTodas = await prisma.bonificacaoOcorrencia.findMany({ where: { ano: am.ano, mes: am.mes }, orderBy: { data: 'desc' } });
     const { individuais, coletivaPct } = separarOcorrenciasBonif(ocorrenciasTodas);
     const rows = calcularLinhasBonificacao(funcionarios, individuais, coletivaPct, t);
@@ -1069,7 +1124,8 @@ app.get('/api/public/bonificacao/:token', async (req, res) => {
       funcionarios = (Array.isArray(fech.itensJson) ? fech.itensJson : []).map(rowPublicoBonif);
       coletivaPct = Number(fech.coletivaPct); fechado = true;
     } else {
-      const fs = await prisma.funcionario.findMany({ where: { empresaId, status: 'ATIVO' }, orderBy: { nome: 'asc' } });
+      const exclFuncoes = await nomesFuncoesNaoBonif(empresaId);
+      const fs = (await prisma.funcionario.findMany({ where: { empresaId, status: 'ATIVO' }, orderBy: { nome: 'asc' } })).filter((f) => !exclFuncoes.has(f.funcao));
       const ocs = await prisma.bonificacaoOcorrencia.findMany({ where: { empresaId, ano, mes } });
       const sep = separarOcorrenciasBonif(ocs);
       coletivaPct = sep.coletivaPct;

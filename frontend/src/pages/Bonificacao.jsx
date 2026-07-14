@@ -1109,6 +1109,46 @@ function SecaoConfig({ titulo, descricao, right, children }) {
     </div>
   )
 }
+
+// Funções da equipe: a lista do cadastro do colaborador + flag "recebe bonificação".
+function SecaoFuncoes({ toast }) {
+  const [funcoes, setFuncoes] = useState([])
+  const [salvando, setSalvando] = useState(false)
+  useEffect(() => { api.get('/funcoes').then((r) => setFuncoes((r.data || []).map((f) => ({ ...f })))).catch(() => {}) }, [])
+  const set = (key, patch) => setFuncoes((fs) => fs.map((f) => ((f.id ?? f._tmp) === key ? { ...f, ...patch } : f)))
+  const add = () => setFuncoes((fs) => [...fs, { _tmp: `f${++tmpSeq}`, nome: '', bonificavel: true }])
+  const rm = (key) => setFuncoes((fs) => fs.filter((f) => (f.id ?? f._tmp) !== key))
+  async function salvar() {
+    setSalvando(true)
+    try {
+      const r = await api.put('/funcoes', { funcoes: funcoes.filter((f) => (f.nome || '').trim()).map((f) => ({ id: f.id, nome: f.nome, bonificavel: f.bonificavel !== false })) })
+      setFuncoes((r.data || []).map((f) => ({ ...f })))
+      toast?.({ message: 'Funções salvas.', type: 'success' })
+    } catch (err) { toast?.({ message: err?.response?.data?.error ?? 'Erro ao salvar as funções.', type: 'error' }) }
+    finally { setSalvando(false) }
+  }
+  return (
+    <SecaoConfig titulo="Funções da equipe" descricao="A lista que aparece no cadastro do colaborador. Desmarque “recebe bonificação” para tirar a função inteira do cálculo (ex.: Entregador)."
+      right={<button type="button" className="btn btn-primary btn-sm" onClick={salvar} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar funções'}</button>}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {funcoes.map((f) => {
+          const key = f.id ?? f._tmp
+          return (
+            <div key={key} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input className="form-input" style={{ flex: 1 }} placeholder="Nome da função" value={f.nome} onChange={(e) => set(key, { nome: e.target.value })} />
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--app-text-soft, #737373)', whiteSpace: 'nowrap', cursor: 'pointer' }}>
+                <input type="checkbox" checked={f.bonificavel !== false} onChange={(e) => set(key, { bonificavel: e.target.checked })} /> recebe bonificação
+              </label>
+              <button type="button" className="btn btn-danger btn-sm" onClick={() => rm(key)} title="Remover">✕</button>
+            </div>
+          )
+        })}
+      </div>
+      <button type="button" className="btn btn-secondary btn-sm" style={{ marginTop: 8 }} onClick={add}>+ Adicionar função</button>
+    </SecaoConfig>
+  )
+}
+
 function AbaConfig({ cfg, setCfg, tipos, setTipos, niveis, setNiveis, salvar, salvando, toast }) {
   const set = (campo, v) => setCfg((c) => ({ ...c, [campo]: v }))
   const addTipo = (pilar) => setTipos((ts) => [...ts, { _tmp: `t${++tmpSeq}`, nome: '', pilar, percentual: '' }])
@@ -1165,6 +1205,8 @@ function AbaConfig({ cfg, setCfg, tipos, setTipos, niveis, setNiveis, salvar, sa
           <CampoNum label="3º lugar" prefixo="R$" valor={cfg.bonusTop3} onChange={(v) => set('bonusTop3', v)} />
         </div>
       </SecaoConfig>
+
+      <SecaoFuncoes toast={toast} />
 
       <SecaoConfig titulo="Tipos de ocorrência" descricao="Cada pilar começa em 100% e desce o percentual de cada ocorrência lançada no mês.">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>

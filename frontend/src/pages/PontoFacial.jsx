@@ -88,7 +88,6 @@ const TIPOS = [
   { id: 'RETORNO_INTERVALO', label: 'Retorno do intervalo' },
   { id: 'SAIDA', label: 'Saída' }
 ]
-const FUNCOES_SUGERIDAS = ['Cozinha', 'Atendimento', 'Caixa', 'Gerência', 'Chapa', 'Montagem']
 
 // --- envio ao coletor (com barra de progresso) -----------------------------
 // O cadastro entra numa fila (PENDENTE) e só vira ENVIADO quando o coletor dá o
@@ -522,6 +521,8 @@ function Colaboradores({ notify }) {
 
   const [jornadas, setJornadas] = useState([])
   useEffect(() => { api.get('/ponto/jornadas').then((r) => setJornadas(Array.isArray(r.data) ? r.data : [])).catch(() => {}) }, [])
+  const [funcoes, setFuncoes] = useState([])
+  useEffect(() => { api.get('/funcoes').then((r) => setFuncoes(Array.isArray(r.data) ? r.data : [])).catch(() => {}) }, [])
 
   async function atribuirJornada(f, value) {
     const jornadaId = value === '' ? null : Number(value)
@@ -705,8 +706,11 @@ function Colaboradores({ notify }) {
             <div className="form-grid-2">
               <div className="form-group">
                 <label className="form-label">Função</label>
-                <input className="form-input" list="pf-funcoes" value={modal.form.funcao} onChange={(e) => upd('funcao', e.target.value)} placeholder="Ex.: Cozinha" />
-                <datalist id="pf-funcoes">{FUNCOES_SUGERIDAS.map((f) => <option key={f} value={f} />)}</datalist>
+                <select className="form-input" value={modal.form.funcao} onChange={(e) => upd('funcao', e.target.value)}>
+                  <option value="">Selecione…</option>
+                  {funcoes.map((f) => <option key={f.id} value={f.nome}>{f.nome}{f.bonificavel ? '' : ' · sem bonificação'}</option>)}
+                  {modal.form.funcao && !funcoes.some((f) => f.nome === modal.form.funcao) && <option value={modal.form.funcao}>{modal.form.funcao}</option>}
+                </select>
               </div>
               <div className="form-group">
                 <label className="form-label">CPF <span style={{ color: '#dc2626' }}>*</span></label>

@@ -622,6 +622,22 @@ model Funcionario {
   @@index([empresaId, status])
 }
 
+// Funções/cargos da equipe (lista pré-definida escolhida no cadastro do
+// colaborador). `bonificavel` controla se essa função participa da Bonificação
+// (ex.: Entregador fica de fora).
+model Funcao {
+  id           Int      @id @default(autoincrement())
+  empresaId    Int
+  nome         String
+  bonificavel  Boolean  @default(true)
+  ordem        Int      @default(0)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@unique([empresaId, nome])
+  @@index([empresaId])
+}
+
 // Ponto Facial — vetor(es) faciais do funcionário. SÓ o descritor (128 floats),
 // NUNCA a foto (decisão de privacidade). Usado só pra matching no servidor.
 model FuncionarioFace {
