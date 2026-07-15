@@ -1003,6 +1003,7 @@ model BonificacaoFechamento {
   coletivaPct     Decimal  @default(0) @db.Decimal(5, 2)
   itensJson       Json
   indicadoresJson Json?    // snapshot dos indicadores coletivos do mês (Bloco 3)
+  regrasJson      Json?    // snapshot das regras vigentes no fechamento (tetos/bônus/pesos) (Bloco 5)
   totalGeral      Decimal  @default(0) @db.Decimal(12, 2)
   fechadoPor      String?
   fechadoEm       DateTime @default(now())
@@ -1071,6 +1072,7 @@ model MercadoItem {
   nome         String
   descricao    String?
   emoji        String   @default("🎁")
+  tipo         String   @default("PRODUTO") // PRODUTO | FOLGA (folga/reserva pede data desejada)
   custo        Int      @default(100) // moedas
   estoque      Int?     // null = ilimitado
   ativo        Boolean  @default(true)
@@ -1089,6 +1091,8 @@ model MercadoResgate {
   itemId        Int?
   itemNome      String
   itemEmoji     String    @default("🎁")
+  tipoItem      String    @default("PRODUTO") // snapshot do tipo (PRODUTO | FOLGA)
+  dataDesejada  DateTime? // data pedida quando o item é uma FOLGA/reserva
   custo         Int
   status        String    @default("PENDENTE") // PENDENTE | APROVADO | ENTREGUE | REJEITADO
   observacao    String?

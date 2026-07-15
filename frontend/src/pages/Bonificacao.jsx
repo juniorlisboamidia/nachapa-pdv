@@ -94,9 +94,12 @@ function AbaMes({ tipos, toast }) {
         <>
           {fechado && (
             <div className="alert" style={{ marginBottom: 12 }}>
-              <div className="alert-msg">Fechado em {new Date(data.fechadoEm).toLocaleDateString('pt-BR')}{data.fechadoPor ? ` por ${data.fechadoPor}` : ''}. Este é o relatório de pagamento (valores congelados).</div>
+              <div className="alert-msg">Fechado em {new Date(data.fechadoEm).toLocaleDateString('pt-BR')}{data.fechadoPor ? ` por ${data.fechadoPor}` : ''}. Este é o relatório de pagamento (valores e regras congelados).</div>
             </div>
           )}
+
+          {/* Pendências do gestor */}
+          {!fechado && <SecaoPendencias ano={ano} mes={mesN} />}
 
           {/* Indicadores coletivos do mês (base da Nota Coletiva) */}
           <SecaoIndicadoresMes coletivo={data.coletivo} fechado={fechado} ano={ano} mes={mesN} onSalvou={carregar} toast={toast} />
@@ -213,6 +216,25 @@ function AbaMes({ tipos, toast }) {
       <ConfirmDialog open={confirmReabrir} title="Reabrir o mês" message="Reabrir para novos ajustes?"
         description="O fechamento atual será descartado; um novo cálculo será gerado ao fechar de novo." variant="danger"
         confirmLabel="Reabrir" cancelLabel="Cancelar" loading={acao} onConfirm={reabrirMes} onCancel={() => setConfirmReabrir(false)} />
+    </div>
+  )
+}
+
+/* Painel de pendências do gestor — o que precisa de ação neste mês. (Bloco 5) */
+function SecaoPendencias({ ano, mes }) {
+  const [p, setP] = useState(null)
+  useEffect(() => { api.get('/bonificacao/pendencias', { params: { ano, mes } }).then((r) => setP(r.data)).catch(() => setP(null)) }, [ano, mes])
+  if (!p) return null
+  const itens = []
+  if (p.reconhecimentosPendentes > 0) itens.push({ t: `${p.reconhecimentosPendentes} reconhecimento(s) p/ aprovar`, c: '#7c3aed' })
+  if (p.ouvidoriaAberta > 0) itens.push({ t: `${p.ouvidoriaAberta} mensagem(ns) na ouvidoria`, c: '#2563eb' })
+  if (p.resgatesPendentes > 0) itens.push({ t: `${p.resgatesPendentes} resgate(s) pendente(s)`, c: '#B8860B' })
+  if (p.indicadoresPendentes) itens.push({ t: 'Indicadores do mês sem lançamento', c: '#dc2626' })
+  if (itens.length === 0) return null
+  return (
+    <div className="table-card" style={{ padding: '10px 14px', marginBottom: 12, background: 'linear-gradient(135deg, rgba(234,88,12,0.07), rgba(37,99,235,0.05))', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+      <span style={{ fontWeight: 800, fontSize: 12.5 }}>⚡ Pendências</span>
+      {itens.map((it, i) => <span key={i} className="badge" style={{ background: it.c + '1f', color: it.c }}>{it.t}</span>)}
     </div>
   )
 }
@@ -950,7 +972,7 @@ function MercadoItens({ toast }) {
 function ItemModal({ item, onClose, onSalvou, toast }) {
   const nova = !item.id
   const [f, setF] = useState({
-    emoji: item.emoji || '🎁', nome: item.nome || '', descricao: item.descricao || '',
+    emoji: item.emoji || '🎁', nome: item.nome || '', descricao: item.descricao || '', tipo: item.tipo || 'PRODUTO',
     custo: item.custo ?? 100, estoque: item.estoque ?? '', ativo: item.ativo !== false,
   })
   const [salvando, setSalvando] = useState(false)
@@ -987,6 +1009,14 @@ function ItemModal({ item, onClose, onSalvou, toast }) {
         <div className="form-group">
           <label className="form-label">Descrição (opcional)</label>
           <input className="form-input" value={f.descricao} onChange={(e) => set('descricao', e.target.value)} placeholder="O que o funcionário ganha" />
+        </div>
+        <div className="form-group">
+          <label className="form-label">Tipo</label>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" className={'btn btn-sm ' + (f.tipo !== 'FOLGA' ? 'btn-primary' : 'btn-secondary')} onClick={() => set('tipo', 'PRODUTO')}>🎁 Produto</button>
+            <button type="button" className={'btn btn-sm ' + (f.tipo === 'FOLGA' ? 'btn-primary' : 'btn-secondary')} onClick={() => set('tipo', 'FOLGA')}>🏖️ Folga / reserva</button>
+          </div>
+          {f.tipo === 'FOLGA' && <div style={{ fontSize: 11.5, color: 'var(--app-text-soft, #999)', marginTop: 5 }}>Ao resgatar, o colaborador escolhe a data desejada; a liderança aprova.</div>}
         </div>
         <div className="form-grid-2">
           <CampoNum label="Custo (Coins)" sufixo="🪙" step="10" valor={f.custo} onChange={(v) => set('custo', v)} />
@@ -1059,7 +1089,7 @@ function MercadoResgates({ toast }) {
                 return (
                   <tr key={r.id}>
                     <td><div style={{ fontWeight: 600 }}>{r.funcionarioNome}</div><div style={{ fontSize: 11, color: '#999' }}>{dataHora(r.criadoEm)}</div></td>
-                    <td>{r.itemEmoji} {r.itemNome}</td>
+                    <td>{r.itemEmoji} {r.itemNome}{r.tipoItem === 'FOLGA' && r.dataDesejada && <div style={{ fontSize: 11, color: '#2563eb', fontWeight: 600, marginTop: 1 }}>🏖️ {new Date(r.dataDesejada).toLocaleDateString('pt-BR')}</div>}</td>
                     <td style={{ textAlign: 'right', fontWeight: 700, color: '#B8860B' }}>🪙 {moeda(r.custo)}</td>
                     <td><span className="badge" style={{ color: s.cor, background: s.bg }}>{s.label || r.status}</span>{r.observacao && r.status === 'REJEITADO' && <div style={{ fontSize: 10.5, color: '#999', marginTop: 2 }}>{r.observacao}</div>}</td>
                     <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
@@ -1373,6 +1403,40 @@ function SecaoIndicadores({ toast }) {
   )
 }
 
+// Auditoria do Programa de Benefícios — registro das ações (Bloco 5).
+const AUDIT_ACAO = {
+  OCORRENCIA_LANCADA: 'Ocorrência lançada', OCORRENCIA_EXCLUIDA: 'Ocorrência excluída',
+  SEVERIDADES_ALTERADAS: 'Severidades alteradas', INDICADORES_ALTERADOS: 'Indicadores alterados',
+  INDICADORES_VALORES_LANCADOS: 'Valores de indicadores', CONTRIBUICAO_LANCADA: 'Contribuição lançada',
+  CONTRIBUICAO_EXCLUIDA: 'Contribuição excluída', RECONHECIMENTO_APROVADO: 'Reconhecimento aprovado',
+  RECONHECIMENTO_REJEITADO: 'Reconhecimento rejeitado', MES_FECHADO: 'Mês fechado', MES_REABERTO: 'Mês reaberto',
+  CONFIG_ALTERADA: 'Configuração alterada', MERCADO_RESGATE_APROVADO: 'Resgate aprovado',
+  MERCADO_RESGATE_ENTREGUE: 'Resgate entregue', MERCADO_RESGATE_REJEITADO: 'Resgate rejeitado',
+}
+function SecaoAuditoria() {
+  const [log, setLog] = useState(null)
+  const [aberto, setAberto] = useState(false)
+  useEffect(() => { if (aberto && !log) api.get('/bonificacao/auditoria').then((r) => setLog(r.data)).catch(() => setLog([])) }, [aberto, log])
+  const dt = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) }
+  return (
+    <SecaoConfig titulo="Auditoria" descricao="Registro das ações no Programa de Benefícios (quem fez o quê, quando)."
+      right={<button type="button" className="btn btn-secondary btn-sm" onClick={() => setAberto((a) => !a)}>{aberto ? 'Ocultar' : 'Ver registro'}</button>}>
+      {aberto && (!log ? <div className="loading-state">Carregando…</div> : log.length === 0 ? <div style={{ fontSize: 12, color: 'var(--app-text-soft, #999)' }}>Nenhum registro ainda.</div> : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, maxHeight: 320, overflowY: 'auto' }}>
+          {log.map((a) => (
+            <div key={a.id} style={{ display: 'flex', gap: 8, fontSize: 12, alignItems: 'baseline', borderTop: '1px solid var(--app-border, #f0f0f0)', padding: '4px 0' }}>
+              <span style={{ color: '#999', width: 92, flexShrink: 0 }}>{dt(a.criadoEm)}</span>
+              <span style={{ fontWeight: 600 }}>{AUDIT_ACAO[a.acao] || a.acao}</span>
+              {a.justificativa && <span style={{ color: '#666' }}>· {a.justificativa}</span>}
+              <span style={{ marginLeft: 'auto', color: '#aaa', flexShrink: 0 }}>{a.usuarioNome || ''}</span>
+            </div>
+          ))}
+        </div>
+      ))}
+    </SecaoConfig>
+  )
+}
+
 function AbaConfig({ cfg, setCfg, tipos, setTipos, salvar, salvando, toast }) {
   const set = (campo, v) => setCfg((c) => ({ ...c, [campo]: v }))
   const addTipo = (pilar) => setTipos((ts) => [...ts, { _tmp: `t${++tmpSeq}`, nome: '', pilar, percentual: '', tipoImpacto: 'PERCENTUAL' }])
@@ -1498,6 +1562,8 @@ function AbaConfig({ cfg, setCfg, tipos, setTipos, salvar, salvando, toast }) {
         <div style={{ fontSize: 13, color: 'var(--app-text-soft, #666)' }}>Bonificação máxima por funcionário <span style={{ color: '#999' }}>(pilares + 1º lugar)</span></div>
         <div style={{ fontSize: 20, fontWeight: 800 }}>{brl(totalMax)}</div>
       </div>
+
+      <SecaoAuditoria />
 
       {regraSel && <RegraAvancadaModal regra={regraSel} severidades={severidades} onPatch={(patch) => setTipo(regraKey, patch)} onClose={() => setRegraKey(null)} toast={toast} />}
     </div>

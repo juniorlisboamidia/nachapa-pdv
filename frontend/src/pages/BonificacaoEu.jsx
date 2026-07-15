@@ -94,6 +94,14 @@ const CSS = `
 .be-ouv-row{padding:9px 0;border-top:1px dashed var(--line)}
 .be-ouv-msg{font-size:13px;color:var(--ink);white-space:pre-wrap}
 .be-ouv-resp{margin-top:5px;padding:7px 10px;background:rgba(15,138,84,.1);border-radius:9px;font-size:12.5px;color:var(--ink-soft)}
+/* Evolução (histórico) */
+.be-hist{display:flex;gap:6px;align-items:flex-end;margin-top:8px}
+.be-hist-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0}
+.be-hist-val{font-size:10px;color:var(--muted);font-weight:700;white-space:nowrap}
+.be-hist-bar{width:100%;max-width:42px;height:72px;background:var(--surface-2);border:1px solid var(--line);border-radius:8px 8px 4px 4px;display:flex;align-items:flex-end;overflow:hidden}
+.be-hist-bar i{display:block;width:100%;background:linear-gradient(180deg,var(--brand),var(--brand-deep));border-radius:6px 6px 0 0;min-height:3px}
+.be-hist-lbl{font-size:10.5px;color:var(--ink-soft);font-weight:650;text-align:center}
+.be-hist-pos{color:var(--gold);font-weight:800}
 /* Conquistas */
 .be-ach{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .be-ach-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:13px;box-shadow:var(--sh-sm);display:flex;flex-direction:column;gap:5px;position:relative;overflow:hidden}
@@ -151,6 +159,7 @@ export default function BonificacaoEu() {
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState(null)
   const [confirmar, setConfirmar] = useState(null) // item a resgatar
+  const [dataFolga, setDataFolga] = useState('')   // data desejada quando o item é FOLGA
   const [resgatando, setResgatando] = useState(false)
   const [aviso, setAviso] = useState(null)
 
@@ -166,19 +175,20 @@ export default function BonificacaoEu() {
 
   async function resgatar() {
     if (!confirmar) return
+    if (confirmar.tipo === 'FOLGA' && !dataFolga) { setAviso('Escolha a data desejada para a folga.'); return }
     setResgatando(true)
     try {
-      await api.post(`/public/eu/${token}/resgatar`, { itemId: confirmar.id })
-      setConfirmar(null); setAviso('Resgate solicitado! A liderança vai avaliar e te entregar o prêmio. 🎉')
+      await api.post(`/public/eu/${token}/resgatar`, { itemId: confirmar.id, dataDesejada: confirmar.tipo === 'FOLGA' ? dataFolga : undefined })
+      setConfirmar(null); setDataFolga(''); setAviso('Resgate solicitado! A liderança vai avaliar e te entregar o prêmio. 🎉')
       carregar(true)
-    } catch (err) { setAviso(err?.response?.data?.error ?? 'Não foi possível resgatar.') ; setConfirmar(null) }
+    } catch (err) { setAviso(err?.response?.data?.error ?? 'Não foi possível resgatar.') ; setConfirmar(null); setDataFolga('') }
     finally { setResgatando(false) }
   }
 
   if (loading && !data) return <div className="be-root"><style>{CSS}</style><div className="be-state">Carregando…</div></div>
   if (erro) return <div className="be-root"><style>{CSS}</style><div className="be-state">{erro}</div></div>
 
-  const { loja, funcionario, meu, ranking = [], conquistas = [], conquistasResumo = { total: 0, desbloqueadas: 0 }, coins, moedas = 0, mercado = [], meusResgates = [], colegas = [], reconhecimento = null, ouvidoria = [], contribuicoes = [], ano, mes } = data || {}
+  const { loja, funcionario, meu, ranking = [], conquistas = [], conquistasResumo = { total: 0, desbloqueadas: 0 }, coins, moedas = 0, mercado = [], meusResgates = [], colegas = [], reconhecimento = null, ouvidoria = [], contribuicoes = [], historico = [], ano, mes } = data || {}
   const saldoCoins = Number(coins ?? moedas ?? 0)
   const mesNome = new Date(ano, (mes || 1) - 1, 1).toLocaleDateString('pt-BR', { month: 'long' })
   const pos = meu?.posicao
@@ -240,9 +250,12 @@ export default function BonificacaoEu() {
             ) : (
               <div className="be-emptybox">Seu resultado deste mês ainda não foi lançado.</div>
             )}
-            <p className="be-hint">O <b>Destaque do Mês</b> (Top 3, que leva o Extra) é por <b>Índice de Excelência</b>: 59% Assiduidade + 41% Desempenho. E a cada fechamento você ganha <b>🪙 Coins</b> pra trocar por prêmios. 🚀</p>
+            <p className="be-hint">O <b>Destaque do Mês</b> (Top 3, que leva o Extra) é por <b>Índice de Excelência</b>: 50% Assiduidade + 35% Desempenho + 15% Contribuições. E a cada fechamento você ganha <b>🪙 Coins</b> pra trocar por prêmios. 🚀</p>
           </div>
         </section>
+
+        {/* Comparação pessoal entre ciclos */}
+        {historico.length > 1 && <SecaoHistorico historico={historico} />}
 
         {/* Conquistas */}
         {conquistas.length > 0 && (
@@ -290,7 +303,7 @@ export default function BonificacaoEu() {
                 return (
                   <div key={i.id} className="be-shop-card">
                     <span className="be-shop-emo">{i.emoji}</span>
-                    <div className="be-shop-nm">{i.nome}</div>
+                    <div className="be-shop-nm">{i.nome}{i.tipo === 'FOLGA' && <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--brand-deep)', marginLeft: 4 }}>🏖️ folga</span>}</div>
                     {i.descricao && <div className="be-shop-ds">{i.descricao}</div>}
                     <div className="be-shop-cost be-tnum">🪙 {num(i.custo)}</div>
                     <button type="button" className="be-shop-btn" disabled={!podeResgatar} onClick={() => setConfirmar(i)}>
@@ -307,7 +320,7 @@ export default function BonificacaoEu() {
                   return (
                     <div key={r.id} className="be-resg-row">
                       <span style={{ fontSize: 18 }}>{r.itemEmoji}</span>
-                      <span className="nm">{r.itemNome}</span>
+                      <span className="nm">{r.itemNome}{r.tipoItem === 'FOLGA' && r.dataDesejada && <span style={{ fontSize: 11, color: 'var(--brand-deep)', fontWeight: 700, marginLeft: 6 }}>🏖️ {new Date(r.dataDesejada).toLocaleDateString('pt-BR')}</span>}</span>
                       <span className="be-tnum" style={{ fontSize: 12, color: '#B8860B', fontWeight: 800 }}>🪙 {num(r.custo)}</span>
                       <span className="be-st" style={{ color: st.cor, background: st.cor + '22' }}>{st.label}</span>
                     </div>
@@ -354,13 +367,19 @@ export default function BonificacaoEu() {
 
       {/* Confirmar resgate */}
       {confirmar && (
-        <div className="be-ov" onClick={() => !resgatando && setConfirmar(null)}>
+        <div className="be-ov" onClick={() => !resgatando && (setConfirmar(null), setDataFolga(''))}>
           <div className="be-dlg" onClick={(e) => e.stopPropagation()}>
             <div style={{ fontSize: 38, marginBottom: 6 }}>{confirmar.emoji}</div>
             <h3>Resgatar {confirmar.nome}?</h3>
             <p>Vão sair <b className="be-tnum">🪙 {num(confirmar.custo)} Coins</b> do seu saldo. A liderança avalia e te entrega o prêmio.</p>
+            {confirmar.tipo === 'FOLGA' && (
+              <div style={{ margin: '4px 0 14px', textAlign: 'left' }}>
+                <label style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: 'var(--muted)', marginBottom: 5 }}>Data desejada para a folga 🏖️</label>
+                <input type="date" className="be-input" value={dataFolga} onChange={(e) => setDataFolga(e.target.value)} />
+              </div>
+            )}
             <div className="be-dlg-row">
-              <button type="button" className="no" onClick={() => setConfirmar(null)} disabled={resgatando}>Cancelar</button>
+              <button type="button" className="no" onClick={() => { setConfirmar(null); setDataFolga('') }} disabled={resgatando}>Cancelar</button>
               <button type="button" className="ok" onClick={resgatar} disabled={resgatando}>{resgatando ? 'Resgatando…' : 'Confirmar'}</button>
             </div>
           </div>
@@ -471,6 +490,42 @@ function SecaoOuvidoria({ token, ouvidoria, onFeito, setAviso }) {
             ))}
           </div>
         )}
+      </div>
+    </section>
+  )
+}
+
+/* Comparação pessoal entre ciclos — evolução do prêmio nos últimos meses. (Bloco 5) */
+const MES_CURTO = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
+function SecaoHistorico({ historico }) {
+  const brl = (n) => (Number(n) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+  const max = Math.max(1, ...historico.map((h) => Number(h.totalRs) || 0))
+  const ult = historico[historico.length - 1]
+  const penult = historico[historico.length - 2]
+  const delta = ult && penult ? (Number(ult.totalRs) || 0) - (Number(penult.totalRs) || 0) : 0
+  return (
+    <section>
+      <h2 className="be-sec-title">Sua evolução</h2>
+      <div className="be-card">
+        {penult && (
+          <p className="be-hint" style={{ marginTop: 0 }}>
+            {delta > 0 ? <>📈 Seu prêmio <b>subiu {brl(delta)}</b> em relação ao mês anterior. Mandou bem!</>
+              : delta < 0 ? <>📉 Seu prêmio caiu {brl(Math.abs(delta))} vs. o mês anterior. Bora recuperar! 💪</>
+                : <>➡️ Seu prêmio ficou estável em relação ao mês anterior.</>}
+          </p>
+        )}
+        <div className="be-hist">
+          {historico.map((h, i) => {
+            const v = Number(h.totalRs) || 0
+            return (
+              <div key={i} className="be-hist-col">
+                <div className="be-hist-val be-tnum">{v > 0 ? brl(v).replace('R$', '').trim() : '—'}</div>
+                <div className="be-hist-bar"><i style={{ height: `${Math.round((v / max) * 100)}%` }} /></div>
+                <div className="be-hist-lbl">{MES_CURTO[(h.mes || 1) - 1]}{h.posicao ? <span className="be-hist-pos"> · {h.posicao}º</span> : ''}</div>
+              </div>
+            )
+          })}
+        </div>
       </div>
     </section>
   )

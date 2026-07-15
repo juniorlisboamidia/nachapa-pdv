@@ -516,7 +516,7 @@ const MERCADO_ITENS_PADRAO = [
   { emoji: '💵', nome: 'Bônus de R$ 50', descricao: 'R$ 50 no seu pagamento.', custo: 400, estoque: null, ordem: 2 },
   { emoji: '🎫', nome: 'Folga extra (1 dia)', descricao: 'Um dia de folga combinado com a liderança.', custo: 600, estoque: null, ordem: 3 },
 ];
-const mercadoItemJson = (i, extra = {}) => ({ id: i.id, nome: i.nome, descricao: i.descricao || null, emoji: i.emoji, custo: i.custo, estoque: i.estoque, ativo: i.ativo, ordem: i.ordem, ...extra });
+const mercadoItemJson = (i, extra = {}) => ({ id: i.id, nome: i.nome, descricao: i.descricao || null, emoji: i.emoji, tipo: i.tipo || 'PRODUTO', custo: i.custo, estoque: i.estoque, ativo: i.ativo, ordem: i.ordem, ...extra });
 
 app.get('/api/bonificacao/config', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
@@ -609,6 +609,7 @@ app.put('/api/bonificacao/config', async (req, res) => {
 
     const tipos = await prisma.bonificacaoTipoOcorrencia.findMany({ orderBy: [{ pilar: 'asc' }, { ordem: 'asc' }, { id: 'asc' }] });
     const niveis = await prisma.bonificacaoNivel.findMany({ orderBy: [{ ordem: 'asc' }, { id: 'asc' }] });
+    auditarBonif(req, 'CONFIG_ALTERADA', { entidade: 'BonificacaoConfig' });
     res.json({ config: bonificacaoConfigJson(c), tipos: tipos.map(bonificacaoTipoJson), niveis: niveis.map((n) => ({ id: n.id, nome: n.nome, ordem: n.ordem })) });
   } catch (err) { console.error('[bonificacao/config PUT]', err); res.status(500).json({ error: 'Erro ao salvar a configuração.' }); }
 });
@@ -791,7 +792,7 @@ app.get('/api/bonificacao/mensal', async (req, res) => {
     const configOut = { tetoAssiduidade: t.tetoA, tetoDesempenho: t.tetoD, tetoColetiva: t.tetoC, bonusTop1: t.b1, bonusTop2: t.b2, bonusTop3: t.b3 };
     const fech = await prisma.bonificacaoFechamento.findFirst({ where: { ano: am.ano, mes: am.mes } });
     if (fech) {
-      return res.json({ fechado: true, fechadoEm: fech.fechadoEm, fechadoPor: fech.fechadoPor, coletivaPct: Number(fech.coletivaPct), coletivo: fech.indicadoresJson || null, totalGeral: Number(fech.totalGeral), funcionarios: fech.itensJson, config: configOut });
+      return res.json({ fechado: true, fechadoEm: fech.fechadoEm, fechadoPor: fech.fechadoPor, coletivaPct: Number(fech.coletivaPct), coletivo: fech.indicadoresJson || null, regras: fech.regrasJson || null, totalGeral: Number(fech.totalGeral), funcionarios: fech.itensJson, config: configOut });
     }
     const exclFuncoes = await nomesFuncoesNaoBonif();
     const funcionarios = (await prisma.funcionario.findMany({ where: { status: 'ATIVO' }, orderBy: { nome: 'asc' } })).filter((f) => !exclFuncoes.has(f.funcao));
@@ -1092,6 +1093,38 @@ app.patch('/api/bonificacao/reconhecimentos/:id', async (req, res) => {
   } catch (err) { console.error('[bonificacao/reconhecimentos PATCH]', err); res.status(500).json({ error: 'Erro ao avaliar.' }); }
 });
 
+// ===== Bonificação — Auditoria (ADMIN) (Bloco 5) =====
+app.get('/api/bonificacao/auditoria', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const lista = await prisma.bonificacaoAuditoria.findMany({ orderBy: { criadoEm: 'desc' }, take: 150 });
+    res.json(lista.map((a) => ({ id: a.id, acao: a.acao, entidade: a.entidade || null, entidadeId: a.entidadeId || null, usuarioNome: a.usuarioNome || null, justificativa: a.justificativa || null, valorDepois: a.valorDepois || null, criadoEm: a.criadoEm })));
+  } catch (err) { console.error('[bonificacao/auditoria GET]', err); res.status(500).json({ error: 'Erro ao carregar a auditoria.' }); }
+});
+
+// ===== Bonificação — Pendências do gestor (ADMIN) (Bloco 5) =====
+app.get('/api/bonificacao/pendencias', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const am = lerAnoMesBonif(req, res); if (!am) return;
+  try {
+    const [fech, recPend, ouvAberta, resgPend, indicadores, indicScore] = await Promise.all([
+      prisma.bonificacaoFechamento.findFirst({ where: { ano: am.ano, mes: am.mes } }),
+      prisma.bonificacaoReconhecimento.count({ where: { status: 'PENDENTE' } }),
+      prisma.bonificacaoOuvidoria.count({ where: { status: 'ABERTA' } }),
+      prisma.mercadoResgate.count({ where: { status: 'PENDENTE' } }),
+      prisma.bonificacaoIndicador.count({ where: { ativo: true } }),
+      scoreColetivoDoMes(am.ano, am.mes),
+    ]);
+    res.json({
+      mesFechado: !!fech,
+      reconhecimentosPendentes: recPend,
+      ouvidoriaAberta: ouvAberta,
+      resgatesPendentes: resgPend,
+      indicadoresPendentes: indicadores > 0 && !indicScore.temIndicadores, // há indicadores mas nenhum valor lançado no mês
+    });
+  } catch (err) { console.error('[bonificacao/pendencias GET]', err); res.status(500).json({ error: 'Erro ao carregar as pendências.' }); }
+});
+
 // Simula o impacto de uma regra num cenário, SEM gravar (M5).
 // body: { regra:{...campos da regra...}, ocorrencias?, minutos?, severidadePct? }
 app.post('/api/bonificacao/simular', async (req, res) => {
@@ -1128,9 +1161,18 @@ app.post('/api/bonificacao/fechar', async (req, res) => {
     const { individuais, coletivaPct } = separarOcorrenciasBonif(ocorrenciasTodas, score.scoreIndicadores);
     const rows = calcularLinhasBonificacao(funcionarios, individuais, coletivaPct, t, contribMap);
     const totalGeral = r2(rows.reduce((s, r) => s + r.totalRs, 0));
+    // Snapshot das regras vigentes (congela tetos/bônus/pesos p/ o relatório histórico). (Bloco 5)
+    const regrasSnapshot = {
+      tetoAssiduidade: t.tetoA, tetoDesempenho: t.tetoD, tetoColetiva: t.tetoC,
+      bonusTop1: t.b1, bonusTop2: t.b2, bonusTop3: t.b3,
+      indice: { assid: INDICE_PESO_ASSID, desemp: INDICE_PESO_DESEMP, contrib: INDICE_PESO_CONTRIB },
+      coletivoComIndicadores: !!score.temIndicadores,
+      congeladoEm: new Date().toISOString(),
+    };
     const f = await prisma.bonificacaoFechamento.create({
-      data: { ano: am.ano, mes: am.mes, coletivaPct, itensJson: rows, indicadoresJson: score, totalGeral, fechadoPor: req.user?.nome || null },
+      data: { ano: am.ano, mes: am.mes, coletivaPct, itensJson: rows, indicadoresJson: score, regrasJson: regrasSnapshot, totalGeral, fechadoPor: req.user?.nome || null },
     });
+    auditarBonif(req, 'MES_FECHADO', { entidade: 'BonificacaoFechamento', entidadeId: f.id, justificativa: `${String(am.mes).padStart(2, '0')}/${am.ano}`, valorDepois: { totalGeral } });
     // Credita COINS do mês (permanentes — 1x só; reabrir NÃO estorna, pois podem já ter sido gastas).
     const moedasPorReal = Number(cfgFech?.moedasPorReal ?? 1);
     if (moedasPorReal > 0 && !(await prisma.bonificacaoMoeda.findFirst({ where: { origem: 'FECHAMENTO', ano: am.ano, mes: am.mes } }))) {
@@ -1151,6 +1193,7 @@ app.post('/api/bonificacao/reabrir', async (req, res) => {
   try {
     await prisma.bonificacaoFechamento.deleteMany({ where: { ano: am.ano, mes: am.mes } });
     // Coins do fechamento NÃO são estornados na reabertura (podem já ter sido gastos no Mercado).
+    auditarBonif(req, 'MES_REABERTO', { entidade: 'BonificacaoFechamento', justificativa: `${String(am.mes).padStart(2, '0')}/${am.ano}` });
     res.json({ ok: true });
   } catch (err) { console.error('[bonificacao/reabrir]', err); res.status(500).json({ error: 'Erro ao reabrir o mês.' }); }
 });
@@ -1225,7 +1268,8 @@ function lerMercadoItemBody(b) {
   const descricao = typeof b?.descricao === 'string' ? b.descricao.trim().slice(0, 240) || null : null;
   const estoqueRaw = b?.estoque;
   const estoque = (estoqueRaw === '' || estoqueRaw == null) ? null : Math.max(0, Math.round(Number(estoqueRaw) || 0));
-  return { data: { nome, descricao, emoji, custo, estoque, ativo: b?.ativo !== false, ordem: Math.round(Number(b?.ordem) || 0) } };
+  const tipo = b?.tipo === 'FOLGA' ? 'FOLGA' : 'PRODUTO';
+  return { data: { nome, descricao, emoji, tipo, custo, estoque, ativo: b?.ativo !== false, ordem: Math.round(Number(b?.ordem) || 0) } };
 }
 
 app.post('/api/bonificacao/mercado/itens', async (req, res) => {
@@ -1272,7 +1316,8 @@ app.get('/api/bonificacao/mercado/resgates', async (req, res) => {
     const funcs = new Map((await prisma.funcionario.findMany()).map((f) => [f.id, f]));
     res.json(lista.map((r) => ({
       id: r.id, funcionarioId: r.funcionarioId, funcionarioNome: funcs.get(r.funcionarioId)?.nome || '—',
-      itemNome: r.itemNome, itemEmoji: r.itemEmoji, custo: r.custo, status: r.status, observacao: r.observacao || null,
+      itemNome: r.itemNome, itemEmoji: r.itemEmoji, tipoItem: r.tipoItem || 'PRODUTO', dataDesejada: r.dataDesejada || null,
+      custo: r.custo, status: r.status, observacao: r.observacao || null,
       decididoPor: r.decididoPor || null, decididoEm: r.decididoEm, criadoEm: r.criadoEm,
     })));
   } catch (err) { console.error('[mercado/resgates GET]', err); res.status(500).json({ error: 'Erro ao carregar os resgates.' }); }
@@ -1287,6 +1332,7 @@ app.post('/api/bonificacao/mercado/resgates/:id/aprovar', async (req, res) => {
     if (!r) return res.status(404).json({ error: 'Resgate não encontrado.' });
     if (r.status !== 'PENDENTE') return res.status(400).json({ error: 'Este resgate não está pendente.' });
     await prisma.mercadoResgate.update({ where: { id }, data: { status: 'APROVADO', decididoPor: req.user?.nome || null, decididoEm: new Date() } });
+    auditarBonif(req, 'MERCADO_RESGATE_APROVADO', { entidade: 'MercadoResgate', entidadeId: id });
     res.json({ ok: true });
   } catch (err) { console.error('[mercado/resgates aprovar]', err); res.status(500).json({ error: 'Erro ao aprovar.' }); }
 });
@@ -1300,6 +1346,7 @@ app.post('/api/bonificacao/mercado/resgates/:id/entregar', async (req, res) => {
     if (!r) return res.status(404).json({ error: 'Resgate não encontrado.' });
     if (!['PENDENTE', 'APROVADO'].includes(r.status)) return res.status(400).json({ error: 'Este resgate não pode ser entregue.' });
     await prisma.mercadoResgate.update({ where: { id }, data: { status: 'ENTREGUE', decididoPor: req.user?.nome || null, decididoEm: new Date() } });
+    auditarBonif(req, 'MERCADO_RESGATE_ENTREGUE', { entidade: 'MercadoResgate', entidadeId: id });
     res.json({ ok: true });
   } catch (err) { console.error('[mercado/resgates entregar]', err); res.status(500).json({ error: 'Erro ao marcar como entregue.' }); }
 });
@@ -1315,6 +1362,7 @@ app.post('/api/bonificacao/mercado/resgates/:id/rejeitar', async (req, res) => {
     await prisma.bonificacaoMoeda.create({ data: { funcionarioId: r.funcionarioId, pontos: r.custo, motivo: `Estorno: ${r.itemNome}`, origem: 'ESTORNO', resgateId: r.id } });
     if (r.itemId != null) { const it = await prisma.mercadoItem.findFirst({ where: { id: r.itemId } }); if (it && it.estoque != null) await prisma.mercadoItem.update({ where: { id: it.id }, data: { estoque: it.estoque + 1 } }); }
     await prisma.mercadoResgate.update({ where: { id }, data: { status: 'REJEITADO', observacao: req.body?.motivo ? String(req.body.motivo).slice(0, 240) : r.observacao, decididoPor: req.user?.nome || null, decididoEm: new Date() } });
+    auditarBonif(req, 'MERCADO_RESGATE_REJEITADO', { entidade: 'MercadoResgate', entidadeId: id, valorDepois: { estornado: r.custo } });
     res.json({ ok: true });
   } catch (err) { console.error('[mercado/resgates rejeitar]', err); res.status(500).json({ error: 'Erro ao rejeitar.' }); }
 });
@@ -1554,6 +1602,12 @@ app.get('/api/public/eu/:token', async (req, res) => {
     const enviadosMes = recRaw.filter((r) => r.deFuncionarioId === func.id && r.ano === ano && r.mes === mes && r.status !== 'REJEITADO').length;
     const minhasMsgs = await prisma.bonificacaoOuvidoria.findMany({ where: { empresaId, funcionarioId: func.id, anonimo: false }, orderBy: { criadoEm: 'desc' }, take: 20 });
     const minhasContrib = await prisma.bonificacaoContribuicao.findMany({ where: { empresaId, funcionarioId: func.id, ano, mes }, orderBy: { criadoEm: 'desc' } });
+    // Bloco 5: comparação pessoal entre ciclos (últimos fechamentos).
+    const fechs = await prisma.bonificacaoFechamento.findMany({ where: { empresaId }, orderBy: [{ ano: 'desc' }, { mes: 'desc' }], take: 6 });
+    const historico = fechs.map((fc) => {
+      const linha = (Array.isArray(fc.itensJson) ? fc.itensJson : []).find((x) => x.funcionarioId === func.id);
+      return { ano: fc.ano, mes: fc.mes, totalRs: linha ? Number(linha.totalRs) : 0, indice: linha && linha.indice != null ? Number(linha.indice) : null, posicao: linha ? linha.posicao : null };
+    }).reverse();
     res.json({
       loja: { nome: loja?.nome || 'Loja', logoDataUrl: loja?.logoDataUrl || null },
       ano, mes, coletivaPct, coletivo,
@@ -1564,8 +1618,9 @@ app.get('/api/public/eu/:token', async (req, res) => {
       conquistasResumo: { total: conquistasOut.length, desbloqueadas: desbMap.size },
       coins: saldoMoedas,
       moedas: saldoMoedas,
-      mercado: itens.map((i) => ({ id: i.id, nome: i.nome, descricao: i.descricao || null, emoji: i.emoji, custo: i.custo, esgotado: i.estoque != null && i.estoque <= 0 })),
-      meusResgates: meusResgates.map((r) => ({ id: r.id, itemNome: r.itemNome, itemEmoji: r.itemEmoji, custo: r.custo, status: r.status, criadoEm: r.criadoEm })),
+      mercado: itens.map((i) => ({ id: i.id, nome: i.nome, descricao: i.descricao || null, emoji: i.emoji, tipo: i.tipo || 'PRODUTO', custo: i.custo, esgotado: i.estoque != null && i.estoque <= 0 })),
+      meusResgates: meusResgates.map((r) => ({ id: r.id, itemNome: r.itemNome, itemEmoji: r.itemEmoji, tipoItem: r.tipoItem || 'PRODUTO', dataDesejada: r.dataDesejada || null, custo: r.custo, status: r.status, criadoEm: r.criadoEm })),
+      historico,
       colegas: colegasRaw.map((c) => ({ id: c.id, nome: c.nome, funcao: c.funcao || null })),
       reconhecimento: {
         maxMes: cfg.reconhecimentoMaxMes ?? 3, coins: cfg.reconhecimentoCoins ?? 10, enviadosMes,
@@ -1593,9 +1648,20 @@ app.post('/api/public/eu/:token/resgatar', async (req, res) => {
     if (!item || !item.ativo) return res.status(404).json({ error: 'Item indisponível.' });
     if (item.estoque != null && item.estoque <= 0) return res.status(400).json({ error: 'Item esgotado.' });
     const saldo = await saldoMoedasDe(func.id, empresaId);
-    if (saldo < item.custo) return res.status(400).json({ error: 'Moedas insuficientes para este resgate.' });
+    if (saldo < item.custo) return res.status(400).json({ error: 'Coins insuficientes para este resgate.' });
+    // Folga/reserva: exige uma data desejada (hoje ou futura).
+    let dataDesejada = null;
+    if (item.tipo === 'FOLGA') {
+      const raw = String(req.body?.dataDesejada || '').slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return res.status(400).json({ error: 'Escolha a data desejada para a folga.' });
+      const d = new Date(`${raw}T12:00:00-03:00`);
+      if (isNaN(d)) return res.status(400).json({ error: 'Data inválida.' });
+      const hojeBrStr = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); // YYYY-MM-DD
+      if (raw < hojeBrStr) return res.status(400).json({ error: 'A data da folga não pode ser no passado.' });
+      dataDesejada = d;
+    }
     // Cria o pedido, debita as moedas e reserva o estoque.
-    const resg = await prisma.mercadoResgate.create({ data: { funcionarioId: func.id, empresaId, itemId: item.id, itemNome: item.nome, itemEmoji: item.emoji, custo: item.custo, status: 'PENDENTE' } });
+    const resg = await prisma.mercadoResgate.create({ data: { funcionarioId: func.id, empresaId, itemId: item.id, itemNome: item.nome, itemEmoji: item.emoji, tipoItem: item.tipo || 'PRODUTO', dataDesejada, custo: item.custo, status: 'PENDENTE' } });
     await prisma.bonificacaoMoeda.create({ data: { funcionarioId: func.id, empresaId, pontos: -item.custo, motivo: `Resgate: ${item.nome}`, origem: 'RESGATE', resgateId: resg.id } });
     if (item.estoque != null) await prisma.mercadoItem.update({ where: { id: item.id }, data: { estoque: Math.max(0, item.estoque - 1) } });
     res.status(201).json({ ok: true, saldo: await saldoMoedasDe(func.id, empresaId) });
