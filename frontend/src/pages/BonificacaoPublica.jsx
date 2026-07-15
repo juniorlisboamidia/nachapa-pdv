@@ -75,10 +75,15 @@ const CSS = `
 .bp-chip{font-size:11px;background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:2px 8px;color:var(--muted)}
 .bp-chip b{color:var(--ink)}
 .bp-row .tot{font-weight:850;font-size:15px;color:var(--money);white-space:nowrap}
-.bp-tips{background:var(--surface);border:1px solid var(--line);border-radius:var(--rd);padding:16px 16px 6px;box-shadow:var(--sh-sm)}
-.bp-tips h2{font-size:15px;font-weight:800;margin-bottom:10px}
-.bp-tip{display:flex;gap:10px;padding-bottom:12px;font-size:13.5px;color:var(--ink-soft)}
-.bp-tip .dot{width:7px;height:7px;border-radius:50%;background:var(--brand);flex-shrink:0;margin-top:6px}
+.bp-tips{background:var(--surface);border:1px solid var(--line);border-radius:var(--rd);padding:18px;box-shadow:var(--sh-sm)}
+.bp-tips h2{font-size:15px;font-weight:800;margin-bottom:14px;letter-spacing:-.01em}
+.bp-tip{display:flex;gap:12px;align-items:center;padding:11px 0;border-top:1px dashed var(--line)}
+.bp-tip:first-of-type{border-top:none;padding-top:0}
+.bp-tip:last-of-type{padding-bottom:0}
+.bp-tip-emo{width:36px;height:36px;border-radius:12px;background:var(--brand-tint);display:grid;place-items:center;font-size:17px;flex-shrink:0;line-height:1}
+.bp-tip-txt{min-width:0}
+.bp-tip-t{font-size:13.5px;font-weight:800;line-height:1.3;color:var(--ink)}
+.bp-tip-d{font-size:12.5px;color:var(--muted);line-height:1.45;margin-top:2px}
 .bp-foot{text-align:center;font-size:11.5px;color:var(--muted);line-height:1.6}
 .bp-state{min-height:60vh;display:grid;place-items:center;text-align:center;color:var(--muted);padding:24px}
 `
@@ -114,7 +119,6 @@ export default function BonificacaoPublica() {
   // Só o pódio é exposto publicamente (o backend também só devolve o Top 3).
   const podio = ordenados.filter((f) => f.posicao <= 3)
   const podOrder = [podio.find((f) => f.posicao === 2), podio.find((f) => f.posicao === 1), podio.find((f) => f.posicao === 3)].filter(Boolean)
-  const lider = ordenados.find((f) => f.posicao === 1)
 
   return (
     <div className="bp-root">
@@ -168,20 +172,19 @@ export default function BonificacaoPublica() {
           </div>
         </section>
 
-        {lider && lider.totalRs > 0 && (
-          <section>
-            <h2 className="bp-sec-title">Exemplo do mês</h2>
-            <div className="bp-ex">
-              <div className="eh">{lider.nome} está em 1º 🏆</div>
-              <div className="es">Veja como o prêmio está montado:</div>
-              <div className="bp-el"><span className="l">Assiduidade <small>· {lider.assidPct}%</small></span><span className="r bp-tnum">{brl(lider.assidRs)}</span></div>
-              <div className="bp-el"><span className="l">Desempenho <small>· {lider.desPct}%</small></span><span className="r bp-tnum">{brl(lider.desRs)}</span></div>
-              <div className="bp-el"><span className="l">Coletivo <small>· {lider.coletivaPct}%</small></span><span className="r bp-tnum">{brl(lider.colRs)}</span></div>
-              {lider.classificacaoRs > 0 && <div className="bp-el"><span className="l">Extra <small>· destaque do mês</small></span><span className="r bp-tnum">{brl(lider.classificacaoRs)}</span></div>}
-              <div className="bp-et"><span className="l">Total</span><span className="r bp-tnum">{brl(lider.totalRs)}</span></div>
-            </div>
-          </section>
-        )}
+        {/* Exemplo ilustrativo (nome fictício) — não expõe o resultado de ninguém. */}
+        <section>
+          <h2 className="bp-sec-title">Exemplo do mês</h2>
+          <div className="bp-ex">
+            <div className="eh">Junior Lisboa está em 1º 🏆</div>
+            <div className="es">Exemplo de como o prêmio é montado:</div>
+            <div className="bp-el"><span className="l">Assiduidade <small>· 100%</small></span><span className="r bp-tnum">{brl(c.tetoAssiduidade)}</span></div>
+            <div className="bp-el"><span className="l">Desempenho <small>· 100%</small></span><span className="r bp-tnum">{brl(c.tetoDesempenho)}</span></div>
+            <div className="bp-el"><span className="l">Coletivo <small>· 100%</small></span><span className="r bp-tnum">{brl(c.tetoColetiva)}</span></div>
+            <div className="bp-el"><span className="l">Extra <small>· destaque do mês</small></span><span className="r bp-tnum">{brl(c.bonusTop1)}</span></div>
+            <div className="bp-et"><span className="l">Total</span><span className="r bp-tnum">{brl(maxPossivel)}</span></div>
+          </div>
+        </section>
 
         <section>
           <h2 className="bp-sec-title">Ranking de {new Date(ano, mes - 1, 1).toLocaleDateString('pt-BR', { month: 'long' })}</h2>
@@ -206,10 +209,20 @@ export default function BonificacaoPublica() {
 
         <section className="bp-tips">
           <h2>Como ir bem</h2>
-          <div className="bp-tip"><span className="dot"></span><span>Chegue no horário e não falte — cada ocorrência tira % da sua Assiduidade.</span></div>
-          <div className="bp-tip"><span className="dot"></span><span>Capriche no serviço — advertências e erros pesam no Desempenho.</span></div>
-          <div className="bp-tip"><span className="dot"></span><span>Jogue pela equipe — a nota Coletiva da loja vale igual pra todo mundo.</span></div>
-          <div className="bp-tip"><span className="dot"></span><span>Seja o Destaque do mês — o 1º lugar leva o Extra.</span></div>
+          {[
+            ['❤️', 'Chegue no horário e não falte', 'Cada ocorrência tira % da sua Assiduidade.'],
+            ['👊', 'Capriche no serviço', 'Advertências e erros pesam no Desempenho.'],
+            ['🤝', 'Juntos vão mais longe', 'A nota Coletiva da loja vale igual pra todo mundo.'],
+            ['🏆', 'Seja o Destaque do mês', 'O 1º lugar leva o Extra.'],
+          ].map(([emo, titulo, desc]) => (
+            <div className="bp-tip" key={titulo}>
+              <span className="bp-tip-emo">{emo}</span>
+              <div className="bp-tip-txt">
+                <div className="bp-tip-t">{titulo}</div>
+                <div className="bp-tip-d">{desc}</div>
+              </div>
+            </div>
+          ))}
         </section>
 
         <footer className="bp-foot">Feito por Agência Na Chapa 🚀</footer>

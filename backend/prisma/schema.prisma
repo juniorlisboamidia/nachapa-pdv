@@ -424,6 +424,9 @@ model Empresa {
   endereco     String?
   // Logo em dataURL base64 (png/jpeg/webp). Sem upload de arquivo no servidor.
   logoDataUrl  String?
+  // Logo SEM FUNDO (PNG transparente) usada nas páginas públicas de fundo claro
+  // (ranking da equipe, Área do Colaborador). Vazio = cai na logoDataUrl.
+  logoPublicaDataUrl String?
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 

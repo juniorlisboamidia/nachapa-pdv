@@ -255,13 +255,14 @@ app.put('/api/empresa', async (req, res) => {
     if (req.user.papel !== 'ADMIN') return res.status(403).json({ error: 'Apenas o administrador pode editar os dados da loja.' });
     const empresa = await getEmpresa();
     if (!empresa) return res.status(404).json({ error: 'Loja não encontrada' });
-    const { nome, whatsapp, endereco, logoDataUrl } = req.body ?? {};
+    const { nome, whatsapp, endereco, logoDataUrl, logoPublicaDataUrl } = req.body ?? {};
     const data = {};
     if (nome !== undefined) { const v = String(nome).trim(); if (!v) return res.status(400).json({ error: 'O nome da empresa é obrigatório.' }); data.nome = v; }
     for (const [campo, valor] of Object.entries({ whatsapp, endereco })) {
       if (valor !== undefined) { const v = String(valor).trim(); data[campo] = v === '' ? null : v; }
     }
     if (logoDataUrl !== undefined) data.logoDataUrl = logoDataUrl || null;
+    if (logoPublicaDataUrl !== undefined) data.logoPublicaDataUrl = logoPublicaDataUrl || null;
     const upd = await prisma.empresa.update({ where: { id: empresa.id }, data });
     res.json(upd);
   } catch (err) { console.error(err); res.status(500).json({ error: 'Erro ao atualizar empresa' }); }
@@ -1702,7 +1703,7 @@ app.get('/api/public/bonificacao/:token', async (req, res) => {
     if (!cfg) return res.status(404).json({ error: 'Página não encontrada.' });
     if (!cfg.ativo) return res.status(404).json({ error: 'A bonificação não está ativa nesta loja.' });
     const empresaId = cfg.empresaId; // rota pública: sem tenantStore → filtro manual
-    const loja = await prisma.empresa.findUnique({ where: { id: empresaId }, select: { nome: true, logoDataUrl: true } });
+    const loja = await prisma.empresa.findUnique({ where: { id: empresaId }, select: { nome: true, logoDataUrl: true, logoPublicaDataUrl: true } });
     const tiposRaw = await prisma.bonificacaoTipoOcorrencia.findMany({ where: { empresaId }, orderBy: [{ pilar: 'asc' }, { ordem: 'asc' }, { id: 'asc' }] });
     const tipos = tiposRaw.map((tp) => ({ nome: tp.nome, pilar: tp.pilar, percentual: Number(tp.percentual) }));
     const now = new Date();
@@ -1732,7 +1733,7 @@ app.get('/api/public/bonificacao/:token', async (req, res) => {
     // daqui nem no JSON — cada um vê o próprio resultado na Área do Colaborador.
     const podio = funcionarios.filter((f) => f.posicao && f.posicao <= 3);
     res.json({
-      loja: { nome: loja?.nome || 'Loja', logoDataUrl: loja?.logoDataUrl || null },
+      loja: { nome: loja?.nome || 'Loja', logoDataUrl: loja?.logoPublicaDataUrl || loja?.logoDataUrl || null },
       ano, mes, fechado, coletivaPct,
       config: { tetoAssiduidade: t.tetoA, tetoDesempenho: t.tetoD, tetoColetiva: t.tetoC, bonusTop1: t.b1, bonusTop2: t.b2, bonusTop3: t.b3 },
       tipos, funcionarios: podio,
@@ -1746,8 +1747,8 @@ app.get('/api/public/colaborador/:slug/loja', async (req, res) => {
   try {
     const cfg = await prisma.bonificacaoConfig.findFirst({ where: { OR: [{ slugPublico: String(req.params.slug) }, { tokenPublico: String(req.params.slug) }] } });
     if (!cfg || !cfg.ativo) return res.status(404).json({ error: 'Loja não encontrada.' });
-    const loja = await prisma.empresa.findUnique({ where: { id: cfg.empresaId }, select: { nome: true, logoDataUrl: true } });
-    res.json({ nome: loja?.nome || 'Loja', logoDataUrl: loja?.logoDataUrl || null });
+    const loja = await prisma.empresa.findUnique({ where: { id: cfg.empresaId }, select: { nome: true, logoDataUrl: true, logoPublicaDataUrl: true } });
+    res.json({ nome: loja?.nome || 'Loja', logoDataUrl: loja?.logoPublicaDataUrl || loja?.logoDataUrl || null });
   } catch (err) { console.error('[colaborador/loja]', err); res.status(500).json({ error: 'Erro ao carregar.' }); }
 });
 
@@ -1807,7 +1808,7 @@ app.get('/api/public/colaborador/me', async (req, res) => {
     const empresaId = func.empresaId;
     const cfg = await prisma.bonificacaoConfig.findFirst({ where: { empresaId } });
     if (!cfg || !cfg.ativo) return res.status(404).json({ error: 'A bonificação não está ativa nesta loja.' });
-    const loja = await prisma.empresa.findUnique({ where: { id: empresaId }, select: { nome: true, logoDataUrl: true } });
+    const loja = await prisma.empresa.findUnique({ where: { id: empresaId }, select: { nome: true, logoDataUrl: true, logoPublicaDataUrl: true } });
     const now = new Date();
     const ano = now.getFullYear(), mes = now.getMonth() + 1;
     const t = { tetoA: Number(cfg.tetoAssiduidade), tetoD: Number(cfg.tetoDesempenho), tetoC: Number(cfg.tetoColetiva), b1: Number(cfg.bonusTop1), b2: Number(cfg.bonusTop2), b3: Number(cfg.bonusTop3) };
@@ -1866,7 +1867,7 @@ app.get('/api/public/colaborador/me', async (req, res) => {
       ponto = { marcacoes: marc, resumo: { diasTrabalhados: esp.totais.diasTrabalhados, atrasos: esp.totais.atrasos, faltas: esp.totais.faltas } };
     } catch (e) { console.error('[colaborador/me ponto]', e?.msg || e); }
     res.json({
-      loja: { nome: loja?.nome || 'Loja', logoDataUrl: loja?.logoDataUrl || null },
+      loja: { nome: loja?.nome || 'Loja', logoDataUrl: loja?.logoPublicaDataUrl || loja?.logoDataUrl || null },
       ano, mes, coletivaPct, coletivo,
       funcionario: { id: func.id, nome: func.nome, funcao: func.funcao || null },
       meu: meu ? rowPublicoBonif(meu) : null,

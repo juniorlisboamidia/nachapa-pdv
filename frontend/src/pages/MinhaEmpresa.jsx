@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import api from '../services/api'
 import Toast from '../components/Toast'
 
-const CAMPOS_VAZIOS = { nome: '', whatsapp: '', email: '', endereco: '', logoDataUrl: null }
+const CAMPOS_VAZIOS = { nome: '', whatsapp: '', email: '', endereco: '', logoDataUrl: null, logoPublicaDataUrl: null }
 const TIPOS_LOGO = ['image/png', 'image/jpeg', 'image/webp']
 const LIMITE_LOGO_BYTES = 2 * 1024 * 1024 // 2 MB
 const AREA_LABEL = {
@@ -66,11 +66,14 @@ function AbaEmpresa() {
   const [modalMaps, setModalMaps] = useState(false)
   const [linkMaps, setLinkMaps] = useState('')
   const fileRef = useRef(null)
+  const filePubRef = useRef(null)
   const logoOriginalRef = useRef(null)
+  const logoPubOriginalRef = useRef(null)
 
   function aplicar(data) {
-    setForm({ nome: data?.nome ?? '', whatsapp: data?.whatsapp ?? '', email: data?.email ?? '', endereco: data?.endereco ?? '', logoDataUrl: data?.logoDataUrl ?? null })
+    setForm({ nome: data?.nome ?? '', whatsapp: data?.whatsapp ?? '', email: data?.email ?? '', endereco: data?.endereco ?? '', logoDataUrl: data?.logoDataUrl ?? null, logoPublicaDataUrl: data?.logoPublicaDataUrl ?? null })
     logoOriginalRef.current = data?.logoDataUrl ?? null
+    logoPubOriginalRef.current = data?.logoPublicaDataUrl ?? null
   }
   useEffect(() => {
     api.get('/empresa').then((r) => aplicar(r.data))
@@ -78,16 +81,20 @@ function AbaEmpresa() {
       .finally(() => setLoading(false))
   }, [])
   const onChange = (campo, valor) => setForm((f) => ({ ...f, [campo]: valor }))
-  function handleLogoSelect(file) {
+  function handleLogoSelect(file, campo = 'logoDataUrl') {
     if (!file) return
     if (!TIPOS_LOGO.includes(file.type)) return setToast({ message: 'Formato inválido. Use PNG, JPG ou WEBP.', type: 'error' })
     if (file.size > LIMITE_LOGO_BYTES) return setToast({ message: 'Imagem muito grande. Use uma logo de até 2 MB.', type: 'error' })
+    if (campo === 'logoPublicaDataUrl' && file.type !== 'image/png' && file.type !== 'image/webp') {
+      setToast({ message: 'Para fundo transparente use PNG (ou WEBP). JPG não tem transparência.', type: 'error' }); return
+    }
     const reader = new FileReader()
-    reader.onload = (e) => onChange('logoDataUrl', String(e.target.result))
+    reader.onload = (e) => onChange(campo, String(e.target.result))
     reader.onerror = () => setToast({ message: 'Não foi possível ler a imagem.', type: 'error' })
     reader.readAsDataURL(file)
   }
   function handleRemoverLogo() { onChange('logoDataUrl', null); if (fileRef.current) fileRef.current.value = '' }
+  function handleRemoverLogoPub() { onChange('logoPublicaDataUrl', null); if (filePubRef.current) filePubRef.current.value = '' }
   async function importarEndereco() {
     const url = linkMaps.trim()
     if (!url) return setToast({ message: 'Cole o link do Google Maps primeiro.', type: 'error' })
@@ -105,6 +112,7 @@ function AbaEmpresa() {
     try {
       const payload = { nome: form.nome, whatsapp: form.whatsapp, endereco: form.endereco }
       if (form.logoDataUrl !== logoOriginalRef.current) payload.logoDataUrl = form.logoDataUrl
+      if (form.logoPublicaDataUrl !== logoPubOriginalRef.current) payload.logoPublicaDataUrl = form.logoPublicaDataUrl
       const r = await api.put('/empresa', payload)
       aplicar(r.data)
       window.dispatchEvent(new CustomEvent('empresa-atualizada', { detail: r.data }))
@@ -145,8 +153,29 @@ function AbaEmpresa() {
                 <button type="button" className="me-logo-btn" onClick={() => fileRef.current?.click()}><IcoUpload />{form.logoDataUrl ? 'Trocar' : 'Selecionar'}</button>
                 {form.logoDataUrl && <button type="button" className="me-logo-btn me-logo-btn-danger" onClick={handleRemoverLogo}><IcoTrash />Remover</button>}
               </div>
+              <div className="me-hint" style={{ marginTop: 6 }}>Usada no menu do sistema (fundo escuro).</div>
             </div>
           </div>
+
+          <div className="me-divider" />
+
+          {/* Logo sem fundo — páginas públicas (fundo claro) */}
+          <div className="me-section-title">Logo sem fundo <span style={{ fontWeight: 400, color: 'var(--app-text-soft, #999)', fontSize: 12 }}>· páginas da equipe</span></div>
+          <div className="me-logo-row">
+            {form.logoPublicaDataUrl
+              ? <img className="me-logo" src={form.logoPublicaDataUrl} alt="Logo sem fundo" style={{ background: 'repeating-conic-gradient(#e9e9e9 0% 25%, #fff 0% 50%) 50% / 14px 14px', objectFit: 'contain' }} />
+              : <div className="me-logo me-logo-empty">{inicial(form.nome)}</div>}
+            <div className="me-logo-main">
+              <div className="me-logo-name">{form.logoPublicaDataUrl ? 'Logo transparente' : 'Nenhuma — usaremos a de cima'}</div>
+              <div className="me-logo-buttons">
+                <input ref={filePubRef} type="file" accept="image/png,image/webp" style={{ display: 'none' }} onChange={(e) => { handleLogoSelect(e.target.files?.[0], 'logoPublicaDataUrl'); e.target.value = '' }} />
+                <button type="button" className="me-logo-btn" onClick={() => filePubRef.current?.click()}><IcoUpload />{form.logoPublicaDataUrl ? 'Trocar' : 'Selecionar PNG'}</button>
+                {form.logoPublicaDataUrl && <button type="button" className="me-logo-btn me-logo-btn-danger" onClick={handleRemoverLogoPub}><IcoTrash />Remover</button>}
+              </div>
+              <div className="me-hint" style={{ marginTop: 6 }}>PNG <strong>com fundo transparente</strong>, usada no ranking público e na Área do Colaborador (fundo claro). Se ficar vazia, usamos a logo de cima.</div>
+            </div>
+          </div>
+
           <div className="me-divider" />
           <div className="me-field">
             <label className="me-label">Nome do estabelecimento</label>
