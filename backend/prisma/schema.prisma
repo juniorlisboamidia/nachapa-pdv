@@ -914,11 +914,29 @@ model BonificacaoIndicadorValor {
   @@index([empresaId, ano, mes])
 }
 
-// Código de acesso (OTP) da Área do Colaborador — enviado por WhatsApp (UAZAPI).
+// Operador (ex.: gerente) com acesso limitado ao PDV, login por WhatsApp (OTP).
+// `areas` = grupos liberados (ponto, bonificacao, produtos, gestao, financeiro,
+// relatorios, talentos, checklist, etiquetas, automacoes). Config/Acessos = só o dono.
+model AcessoOperador {
+  id           Int       @id @default(autoincrement())
+  empresaId    Int
+  nome         String
+  whatsapp     String    // dígitos canônicos (DDD+número, sem DDI)
+  areas        String[]  @default([])
+  ativo        Boolean   @default(true)
+  ultimoAcesso DateTime?
+  criadoEm     DateTime  @default(now())
+  atualizadoEm DateTime  @updatedAt
+
+  @@index([empresaId])
+}
+
+// Código de acesso (OTP) — Área do Colaborador (funcionarioId) OU login de operador
+// (funcionarioId null). Enviado por WhatsApp (UAZAPI).
 model ColaboradorOtp {
   id            Int      @id @default(autoincrement())
   empresaId     Int
-  funcionarioId Int
+  funcionarioId Int?     // null quando é login de operador
   telefone      String   // dígitos canônicos (DDD+número, sem DDI)
   codigoHash    String
   expiraEm      DateTime

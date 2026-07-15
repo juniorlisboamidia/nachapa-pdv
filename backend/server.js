@@ -33,6 +33,7 @@ const MODELS_TENANT = new Set([
   'bonificacaoNivel', 'bonificacaoXp', 'bonificacaoAuditoria', 'bonificacaoSeveridade',
   'bonificacaoIndicador', 'bonificacaoIndicadorValor',
   'bonificacaoOuvidoria', 'bonificacaoContribuicao', 'bonificacaoReconhecimento',
+  'acessoOperador',
   'conquista', 'conquistaDesbloqueada',
   'bonificacaoMoeda', 'mercadoItem', 'mercadoResgate',
   'funcionarioFace', 'pontoRegistro', 'dispositivo', 'jornada', 'coletorBatidaPendente', 'coletorComando', 'pontoConfig', 'funcao',
@@ -109,6 +110,13 @@ function autenticar(req, res, next) {
   let payload;
   try { payload = jwt.verify(token, JWT_SECRET); }
   catch { return res.status(401).json({ error: 'Sessao invalida ou expirada' }); }
+  // Token emitido pelo PRÓPRIO PDV (login de operador por WhatsApp): acesso limitado
+  // por área (checado no middleware de permissão). Nunca é ADMIN.
+  if (payload?.tipo === 'operador') {
+    if (!payload.oid || !payload.eid) return res.status(401).json({ error: 'Sessao invalida' });
+    req.user = { tipo: 'operador', papel: 'GERENTE', operadorId: payload.oid, empresaId: payload.eid, nome: payload.nome || 'Operador', areas: Array.isArray(payload.areas) ? payload.areas : [] };
+    return next();
+  }
   if (!podeAcessarPDV(payload)) return res.status(403).json({ error: 'Acesso ao Operação restrito ao administrador' });
   req.user = payload;
   next();
@@ -135,6 +143,7 @@ function clientesPermitidos(u) {
 // Resolve a LOJA (empresaId) da request: header X-Empresa-Id (validado) ou a 1ª loja.
 async function resolverLoja(req) {
   const u = req.user;
+  if (u.tipo === 'operador') return u.empresaId; // operador é preso à sua loja
   const permitidos = clientesPermitidos(u); // null = todas
   const pedido = Number(req.headers['x-empresa-id']) || null;
   if (pedido) {
@@ -161,14 +170,46 @@ app.use('/api', (req, res, next) => {
     .catch((err) => res.status(err?.http || 500).json({ error: err?.msg || 'Erro ao resolver a loja' }));
 });
 
+// Permissão por área (só para operadores; ADMIN vê tudo). Mapa rota→área, FAIL-CLOSED:
+// rota não mapeada = negada. Config/Acessos/WhatsApp não estão no mapa → só o dono.
+const AREAS_DISPONIVEIS = ['ponto', 'bonificacao', 'produtos', 'gestao', 'financeiro', 'relatorios', 'talentos', 'checklist', 'etiquetas', 'automacoes'];
+const AREA_PREFIXOS = [
+  ['/bonificacao', 'bonificacao'],
+  ['/funcionarios', 'ponto'], ['/ponto', 'ponto'], ['/jornadas', 'ponto'], ['/funcoes', 'ponto'], ['/dispositivos', 'ponto'], ['/coletor', 'ponto'],
+  ['/produtos', 'produtos'], ['/insumos', 'produtos'], ['/estoque', 'produtos'], ['/ficha-tecnica', 'produtos'], ['/fichas', 'produtos'],
+  ['/custos', 'gestao'], ['/faturamento', 'gestao'], ['/ponto-equilibrio', 'gestao'],
+  ['/financeiro', 'financeiro'],
+  ['/relatorios', 'relatorios'],
+  ['/candidatos', 'talentos'], ['/vagas', 'talentos'], ['/recrutamento', 'talentos'], ['/talentos', 'talentos'], ['/banco-talentos', 'talentos'],
+  ['/checklist', 'checklist'], ['/etiquetas', 'etiquetas'], ['/automacoes', 'automacoes'],
+];
+const OPERADOR_LIBERADO = new Set(['/auth/me', '/lojas', '/empresa']); // meta + logo (GET); PUT /empresa exige ADMIN no handler
+function areaDoPath(path) {
+  for (const [pre, area] of AREA_PREFIXOS) { if (path === pre || path.startsWith(pre + '/')) return area; }
+  return null;
+}
+app.use('/api', (req, res, next) => {
+  if (req.method === 'OPTIONS') return next();
+  const u = req.user;
+  if (!u || u.tipo !== 'operador') return next(); // ADMIN e público seguem
+  if (req.path === '/health' || req.path.startsWith('/public/')) return next();
+  if (OPERADOR_LIBERADO.has(req.path) || req.path.startsWith('/lojas/')) return next();
+  const area = areaDoPath(req.path);
+  if (!area || !(u.areas || []).includes(area)) return res.status(403).json({ error: 'Você não tem acesso a esta área.' });
+  next();
+});
+
 app.get('/api/health', (req, res) => res.json({ status: 'ok', app: 'operacao-pdv' }));
 
-// Perfil do usuário logado, lido do JWT do HUB.
+// Perfil do usuário logado (JWT do HUB ou operador do PDV).
 app.get('/api/auth/me', (req, res) => {
   const u = req.user;
+  if (u.tipo === 'operador') {
+    return res.json({ nome: u.nome, papel: 'GERENTE', tipo: 'operador', podePDV: true, areas: u.areas || [] });
+  }
   res.json({
     id: u.membroId, nome: u.nome, email: u.email, role: u.role,
-    papel: u.papel, clienteId: u.clienteId ?? null, podePDV: podeAcessarPDV(u),
+    papel: u.papel, clienteId: u.clienteId ?? null, podePDV: podeAcessarPDV(u), tipo: 'admin', areas: null,
   });
 });
 
@@ -178,9 +219,13 @@ async function getEmpresa() {
   return prisma.empresa.findFirst({ orderBy: { id: 'asc' } });
 }
 
-// Lojas que o usuário pode ver (ADMIN: todas).
+// Lojas que o usuário pode ver (ADMIN: todas; operador: só a dele).
 app.get('/api/lojas', async (req, res) => {
   try {
+    if (req.user.tipo === 'operador') {
+      const loja = await prisma.empresa.findUnique({ where: { id: req.user.empresaId }, select: { id: true, nome: true, clienteId: true, clienteNome: true, logoDataUrl: true } });
+      return res.json(loja ? [loja] : []);
+    }
     const permitidos = clientesPermitidos(req.user);
     const where = permitidos === null ? {} : { clienteId: { in: permitidos.length ? permitidos : ['__nenhum__'] } };
     const lojas = await prisma.empresa.findMany({ where, orderBy: { id: 'asc' }, select: { id: true, nome: true, clienteId: true, clienteNome: true, logoDataUrl: true } });
@@ -228,8 +273,16 @@ app.put('/api/empresa', async (req, res) => {
 // ===== Dep. Pessoal › Equipe (cadastro de funcionários internos) =====
 // Área RESTRITA a ADMIN (Dep. Pessoal inteiro é só do administrador). Escopo por
 // loja é automático (funcionario está em MODELS_TENANT).
+// Acesso ao PDV (dono ADMIN ou operador). Operadores já foram filtrados por ÁREA no
+// middleware de permissão antes de chegar aqui — então basta serem PDV staff.
 function exigirAdmin(req, res) {
-  if (req.user?.papel !== 'ADMIN') { res.status(403).json({ error: 'Apenas o administrador acessa o Departamento Pessoal.' }); return false; }
+  const u = req.user;
+  if (u?.papel === 'ADMIN' || u?.tipo === 'operador') return true;
+  res.status(403).json({ error: 'Apenas o administrador acessa o Departamento Pessoal.' }); return false;
+}
+// Só o DONO (ADMIN do HUB). Config, Acessos, WhatsApp — nunca operador.
+function exigirDono(req, res) {
+  if (req.user?.papel !== 'ADMIN') { res.status(403).json({ error: 'Apenas o administrador (dono) pode acessar isto.' }); return false; }
   return true;
 }
 
@@ -548,26 +601,107 @@ const MERCADO_ITENS_PADRAO = [
 ];
 const mercadoItemJson = (i, extra = {}) => ({ id: i.id, nome: i.nome, descricao: i.descricao || null, emoji: i.emoji, tipo: i.tipo || 'PRODUTO', custo: i.custo, estoque: i.estoque, ativo: i.ativo, ordem: i.ordem, ...extra });
 
-// ===== WhatsApp do PDV (UAZAPI) — número que envia os códigos de acesso (ADMIN) =====
+// ===== WhatsApp do PDV (UAZAPI) — número que envia os códigos de acesso (DONO) =====
 app.get('/api/pdv/whatsapp/status', async (req, res) => {
-  if (!exigirAdmin(req, res)) return;
+  if (!exigirDono(req, res)) return;
   if (!zapiConfigurado()) return res.json({ configurado: false, connected: false });
   try { res.json({ configurado: true, ...(await zapiStatus()) }); }
   catch (err) { res.status(err?.http || 500).json({ error: err?.msg || 'Erro ao consultar o WhatsApp.' }); }
 });
 app.post('/api/pdv/whatsapp/conectar', async (req, res) => {
-  if (!exigirAdmin(req, res)) return;
+  if (!exigirDono(req, res)) return;
   try { res.json({ qrcode: await zapiQrCode() }); }
   catch (err) { res.status(err?.http || 500).json({ error: err?.msg || 'Erro ao gerar o QR Code.' }); }
 });
 app.post('/api/pdv/whatsapp/instancia', async (req, res) => {
-  if (!exigirAdmin(req, res)) return;
+  if (!exigirDono(req, res)) return;
   try {
     const nome = (String(req.body?.nome || '').trim() || 'nachapa-pdv').slice(0, 40);
     const data = await zapiCriarInstancia(nome);
     const token = data?.token || data?.instance?.token || data?.instanceToken || data?.hash || null;
     res.status(201).json({ ok: true, token, raw: data });
   } catch (err) { res.status(err?.http || 500).json({ error: err?.msg || 'Erro ao criar a instância.' }); }
+});
+
+// ===== Acessos (operadores/gerentes) — CRUD só do DONO =====
+const operadorJson = (o) => ({ id: o.id, nome: o.nome, whatsapp: o.whatsapp, areas: o.areas || [], ativo: o.ativo, ultimoAcesso: o.ultimoAcesso || null });
+app.get('/api/acessos', async (req, res) => {
+  if (!exigirDono(req, res)) return;
+  try {
+    const lista = await prisma.acessoOperador.findMany({ orderBy: [{ ativo: 'desc' }, { nome: 'asc' }] });
+    res.json({ operadores: lista.map(operadorJson), areas: AREAS_DISPONIVEIS });
+  } catch (err) { console.error('[acessos GET]', err); res.status(500).json({ error: 'Erro ao carregar os acessos.' }); }
+});
+app.post('/api/acessos', async (req, res) => {
+  if (!exigirDono(req, res)) return;
+  try {
+    const nome = String(req.body?.nome || '').trim().slice(0, 80);
+    const canon = foneCanonico(req.body?.whatsapp);
+    if (!nome) return res.status(400).json({ error: 'Informe o nome.' });
+    if (canon.length < 10) return res.status(400).json({ error: 'Informe o WhatsApp com DDD.' });
+    const areas = (Array.isArray(req.body?.areas) ? req.body.areas : []).filter((a) => AREAS_DISPONIVEIS.includes(a));
+    const o = await prisma.acessoOperador.create({ data: { nome, whatsapp: canon, areas, ativo: req.body?.ativo !== false } });
+    res.status(201).json(operadorJson(o));
+  } catch (err) { console.error('[acessos POST]', err); res.status(500).json({ error: 'Erro ao criar o acesso.' }); }
+});
+app.put('/api/acessos/:id', async (req, res) => {
+  if (!exigirDono(req, res)) return;
+  try {
+    const id = parseInt(req.params.id, 10);
+    const ex = await prisma.acessoOperador.findFirst({ where: { id } });
+    if (!ex) return res.status(404).json({ error: 'Acesso não encontrado.' });
+    const data = {};
+    if (req.body?.nome !== undefined) data.nome = String(req.body.nome).trim().slice(0, 80);
+    if (req.body?.whatsapp !== undefined) data.whatsapp = foneCanonico(req.body.whatsapp);
+    if (Array.isArray(req.body?.areas)) data.areas = req.body.areas.filter((a) => AREAS_DISPONIVEIS.includes(a));
+    if (req.body?.ativo !== undefined) data.ativo = !!req.body.ativo;
+    const o = await prisma.acessoOperador.update({ where: { id }, data });
+    res.json(operadorJson(o));
+  } catch (err) { console.error('[acessos PUT]', err); res.status(500).json({ error: 'Erro ao salvar o acesso.' }); }
+});
+app.delete('/api/acessos/:id', async (req, res) => {
+  if (!exigirDono(req, res)) return;
+  try { await prisma.acessoOperador.deleteMany({ where: { id: parseInt(req.params.id, 10) } }); res.json({ ok: true }); }
+  catch (err) { console.error('[acessos DELETE]', err); res.status(500).json({ error: 'Erro ao excluir.' }); }
+});
+
+// ===== Login de OPERADOR por WhatsApp (público) — mesma mecânica do colaborador =====
+app.post('/api/public/operador/solicitar', async (req, res) => {
+  try {
+    const canon = foneCanonico(req.body?.telefone);
+    if (canon.length < 10) return res.status(400).json({ error: 'Informe seu WhatsApp com DDD.' });
+    const op = (await prisma.acessoOperador.findMany({ where: { ativo: true } })).find((o) => foneCanonico(o.whatsapp) === canon);
+    if (!op) return res.status(404).json({ error: 'Número não encontrado nos acessos. Fale com o administrador.' });
+    const recente = await prisma.colaboradorOtp.findFirst({ where: { empresaId: op.empresaId, telefone: canon, funcionarioId: null }, orderBy: { criadoEm: 'desc' } });
+    if (recente && (Date.now() - new Date(recente.criadoEm).getTime()) < 45000) return res.status(429).json({ error: 'Aguarde alguns segundos para pedir um novo código.' });
+    if (!zapiConfigurado()) return res.status(503).json({ error: 'O envio por WhatsApp ainda não está configurado.' });
+    const codigo = gerarOtp();
+    await prisma.colaboradorOtp.create({ data: { empresaId: op.empresaId, funcionarioId: null, telefone: canon, codigoHash: hashOtp(codigo), expiraEm: new Date(Date.now() + 10 * 60000) } });
+    const loja = await prisma.empresa.findUnique({ where: { id: op.empresaId }, select: { nome: true } });
+    const msg = `*${loja?.nome || 'PDV'}* — Acesso ao sistema\n\nSeu código de acesso é *${codigo}*\nVale por 10 minutos. Não compartilhe. 🔒`;
+    try { await zapiEnviarTexto(foneParaEnvio(canon), msg); }
+    catch (e) { console.error('[operador/solicitar zapi]', e?.msg || e); return res.status(502).json({ error: 'Não consegui enviar o código pelo WhatsApp agora.' }); }
+    res.json({ ok: true, telefoneMascara: canon.slice(0, 2) + '••••' + canon.slice(-2) });
+  } catch (err) { console.error('[operador/solicitar]', err); res.status(500).json({ error: 'Erro ao solicitar o código.' }); }
+});
+app.post('/api/public/operador/verificar', async (req, res) => {
+  try {
+    if (!JWT_SECRET) return res.status(500).json({ error: 'Configuração de sessão ausente.' });
+    const canon = foneCanonico(req.body?.telefone);
+    const codigo = soDigitos(req.body?.codigo).slice(0, 6);
+    if (codigo.length !== 6) return res.status(400).json({ error: 'Informe o código de 6 dígitos.' });
+    const op = (await prisma.acessoOperador.findMany({ where: { ativo: true } })).find((o) => foneCanonico(o.whatsapp) === canon);
+    if (!op) return res.status(404).json({ error: 'Número não encontrado nos acessos.' });
+    const otp = await prisma.colaboradorOtp.findFirst({ where: { empresaId: op.empresaId, telefone: canon, funcionarioId: null, usado: false }, orderBy: { criadoEm: 'desc' } });
+    if (!otp) return res.status(400).json({ error: 'Peça um novo código.' });
+    if (new Date(otp.expiraEm).getTime() < Date.now()) return res.status(400).json({ error: 'Código expirado. Peça um novo.' });
+    if (otp.tentativas >= 5) return res.status(429).json({ error: 'Muitas tentativas. Peça um novo código.' });
+    if (otp.codigoHash !== hashOtp(codigo)) { await prisma.colaboradorOtp.update({ where: { id: otp.id }, data: { tentativas: otp.tentativas + 1 } }); return res.status(400).json({ error: 'Código incorreto.' }); }
+    await prisma.colaboradorOtp.update({ where: { id: otp.id }, data: { usado: true } });
+    await prisma.acessoOperador.update({ where: { id: op.id }, data: { ultimoAcesso: new Date() } });
+    const token = jwt.sign({ tipo: 'operador', oid: op.id, eid: op.empresaId, nome: op.nome, areas: op.areas || [] }, JWT_SECRET, { expiresIn: '30d' });
+    res.json({ ok: true, token });
+  } catch (err) { console.error('[operador/verificar]', err); res.status(500).json({ error: 'Erro ao verificar o código.' }); }
 });
 
 app.get('/api/bonificacao/config', async (req, res) => {

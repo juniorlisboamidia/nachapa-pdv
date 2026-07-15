@@ -3,7 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom'
 import api from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 
-const PAPEL_LABEL = { ADMIN: 'Administrador', AGENCIA: 'Agência', CLIENTE: 'Cliente' }
+const PAPEL_LABEL = { ADMIN: 'Administrador', AGENCIA: 'Agência', CLIENTE: 'Cliente', GERENTE: 'Gerente' }
 function iniciais(nome) {
   return (nome || '?').trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || 'U'
 }
@@ -177,24 +177,24 @@ function Icon({ name, extra }) {
 // link direto no nível raiz — usado nos "em construção".
 const grupos = [
   {
-    label: 'Gestão', icon: 'gestao',
+    label: 'Gestão', icon: 'gestao', area: 'gestao',
     itens: [
       { to: '/custos', label: 'Custos', icon: 'custos' },
       { to: '/faturamento', label: 'Faturamento', icon: 'faturamento' },
     ]
   },
   {
-    label: 'Produtos', icon: 'produtos',
+    label: 'Produtos', icon: 'produtos', area: 'produtos',
     itens: [
       { to: '/produtos', label: 'Ficha técnica', icon: 'ficha' },
       { to: '/insumos', label: 'Insumos', icon: 'insumos' },
       { to: '/estoque', label: 'Estoque', icon: 'produtos' },
     ]
   },
-  { label: 'Financeiro', icon: 'financeiro', to: '/financeiro' },
-  { label: 'Relatórios', icon: 'relatorios', to: '/relatorios' },
+  { label: 'Financeiro', icon: 'financeiro', to: '/financeiro', area: 'financeiro' },
+  { label: 'Relatórios', icon: 'relatorios', to: '/relatorios', area: 'relatorios' },
   {
-    label: 'Ponto Facial', icon: 'ponto',
+    label: 'Ponto Facial', icon: 'ponto', area: 'ponto',
     itens: [
       { to: '/rh/ponto-facial/painel', label: 'Painel', icon: 'ponto' },
       { to: '/rh/ponto-facial/colaboradores', label: 'Colaboradores', icon: 'clientes' },
@@ -206,7 +206,7 @@ const grupos = [
     ]
   },
   {
-    label: 'Bonificação', icon: 'faturamento',
+    label: 'Bonificação', icon: 'faturamento', area: 'bonificacao',
     itens: [
       { to: '/rh/bonificacao/mes', label: 'Mês atual', icon: 'calendario' },
       { to: '/rh/bonificacao/equipe', label: 'Equipe & Coins', icon: 'clientes' },
@@ -215,18 +215,24 @@ const grupos = [
       { to: '/rh/bonificacao/config', label: 'Configuração', icon: 'gestao' },
     ]
   },
-  { label: 'Checklist', icon: 'ficha', to: '/checklist' },
-  { label: 'Etiquetas', icon: 'ficha', to: '/etiquetas' },
+  { label: 'Checklist', icon: 'ficha', to: '/checklist', area: 'checklist' },
+  { label: 'Etiquetas', icon: 'ficha', to: '/etiquetas', area: 'etiquetas' },
   {
-    label: 'Banco de talentos', icon: 'clientes',
+    label: 'Banco de talentos', icon: 'clientes', area: 'talentos',
     itens: [
       { to: '/rh/banco-de-talentos/banco', label: 'Cadastros', icon: 'clientes' },
       { to: '/rh/banco-de-talentos/vagas', label: 'Vagas abertas', icon: 'ficha' },
       { to: '/rh/banco-de-talentos/formulario', label: 'Formulário permanente', icon: 'ficha' },
     ]
   },
-  { label: 'Automações', icon: 'gestao', to: '/automacoes' },
+  { label: 'Automações', icon: 'gestao', to: '/automacoes', area: 'automacoes' },
 ]
+// Operador (gerente) vê só as áreas liberadas; ADMIN vê tudo.
+function gruposVisiveis(usuario) {
+  if (!usuario || usuario.tipo !== 'operador') return grupos
+  const areas = new Set(usuario.areas || [])
+  return grupos.filter((g) => !g.area || areas.has(g.area))
+}
 
 // Casa a rota atual e devolve o caminho { grupo, sub } para abrir a sidebar já
 // dentro dele. Suporta subgrupos aninhados (ex.: Marketing › Indicação).
@@ -252,6 +258,7 @@ function itemClass({ isActive }) {
 export default function Sidebar() {
   const location = useLocation()
   const { usuario, logout, lojas, empresaAtual } = useAuth()
+  const visiveis = gruposVisiveis(usuario) // operador vê só as áreas liberadas
   // Nível atual da sidebar: grupo aberto e subgrupo aberto (ou null = lista de
   // grupos). Inicia no caminho da rota atual.
   const [grupoAberto, setGrupoAberto] = useState(() => localizarRota(location.pathname).grupo)
@@ -353,7 +360,8 @@ export default function Sidebar() {
       <nav className="sidebar-nav">
         {grupoAberto ? (
           (() => {
-            const g = grupos.find((x) => x.label === grupoAberto) ?? grupos[0]
+            const g = visiveis.find((x) => x.label === grupoAberto) ?? visiveis[0]
+            if (!g) return null
             const sub = subAberto ? g.itens.find((x) => x.label === subAberto && x.itens) : null
             // Nível 3: itens de um subgrupo (ex.: Marketing › Indicação › ...)
             if (sub) {
@@ -407,7 +415,7 @@ export default function Sidebar() {
               <Icon name="dashboard" />
               <span className="sidebar-item-label">Visão Geral</span>
             </NavLink>
-            {grupos.map((g) => {
+            {visiveis.map((g) => {
               // Grupo-folha (link direto) — usado nos "em construção".
               if (g.to) {
                 return (

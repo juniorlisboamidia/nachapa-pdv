@@ -63,6 +63,12 @@ export function AuthProvider({ children }) {
     return { twoFactorRequired: false }
   }
 
+  // Login de operador (gerente) por WhatsApp — o token já vem do /public/operador/verificar.
+  const loginOperador = async (token) => {
+    localStorage.setItem(TOKEN_KEY, token)
+    await carregar()
+  }
+
   // Segundo fator (quando o login exige). Também delegado ao HUB.
   const verificar2fa = async ({ ticket, code }) => {
     const { data } = await hubApi.post('/auth/2fa/verify', { ticket, code })
@@ -81,7 +87,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ usuario, lojas, empresaAtual, carregando, semAcesso, login, verificar2fa, logout, trocarLoja, recarregarLojas }}>
+    <AuthContext.Provider value={{ usuario, lojas, empresaAtual, carregando, semAcesso, login, loginOperador, verificar2fa, logout, trocarLoja, recarregarLojas }}>
       {children}
     </AuthContext.Provider>
   )
