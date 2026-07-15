@@ -101,12 +101,18 @@ const CSS = `
 .bp-state{min-height:60vh;display:grid;place-items:center;text-align:center;color:var(--muted);padding:24px}
 `
 
-// Etiquetas do Resultado coletivo quando a loja ainda não cadastrou indicadores.
-// Assim que houver indicadores (Bonificação › Configuração), estes dão lugar aos reais.
-const COLETIVO_PADRAO = ['Google', 'NPS', 'Metas']
+// Etiquetas das frentes: CATEGORIAS fixas (curtas e estáveis). Não são a lista de
+// regras — com muitos tipos cadastrados isso viraria etiqueta demais num espaço
+// pequeno. O detalhe real e dinâmico do ciclo fica em "Ver regras deste ciclo".
+const TAGS = {
+  assiduidade: ['Faltas', 'Atrasos', 'Saídas antecipadas'],
+  desempenho: ['Falhas leves', 'Falhas médias', 'Falhas graves'],
+  coletivo: ['Google', 'NPS', 'Metas'],
+  destaque: ['Índice de Excelência', '1º lugar do mês'],
+}
 
 // Uma frente da bonificação: nome (principal) + valor como selo + descrição + etiquetas
-// (geradas das regras/indicadores do ciclo — sem percentual fixo no layout).
+// (categorias fixas; o detalhe do ciclo fica no modal "Ver regras deste ciclo").
 function Frente({ emo, nome, selo, desc, tags }) {
   return (
     <article className="bp-frente">
@@ -183,8 +189,6 @@ export default function BonificacaoPublica() {
   const { loja, funcionarios = [], config = {}, coletivaPct = 0, tipos = [], indicadores = [], ano, mes } = data || {}
   const c = config
   const maxPossivel = Number(c.tetoAssiduidade || 0) + Number(c.tetoDesempenho || 0) + Number(c.tetoColetiva || 0) + Number(c.bonusTop1 || 0)
-  const tAssid = tipos.filter((t) => t.pilar === 'ASSIDUIDADE')
-  const tDesemp = tipos.filter((t) => t.pilar === 'DESEMPENHO')
   const ordenados = [...funcionarios].sort((a, b) => (a.posicao || 99) - (b.posicao || 99))
   // Só o pódio é exposto publicamente (o backend também só devolve o Top 3).
   const podio = ordenados.filter((f) => f.posicao <= 3)
@@ -224,16 +228,16 @@ export default function BonificacaoPublica() {
           <div className="bp-detail">
             <Frente emo="❤️" nome="Assiduidade" selo={`até ${brl(c.tetoAssiduidade)}`}
               desc="Reconhece sua presença e pontualidade durante o mês."
-              tags={tAssid.map((t) => t.nome)} />
+              tags={TAGS.assiduidade} />
             <Frente emo="👊" nome="Desempenho" selo={`até ${brl(c.tetoDesempenho)}`}
               desc="Representa a qualidade da sua execução no dia a dia."
-              tags={tDesemp.map((t) => t.nome)} />
+              tags={TAGS.desempenho} />
             <Frente emo="🤝" nome="Resultado coletivo" selo={`até ${brl(c.tetoColetiva)}`}
               desc="Mostra o desempenho geral da loja durante o ciclo."
-              tags={indicadores.length ? indicadores : COLETIVO_PADRAO} />
+              tags={TAGS.coletivo} />
             <Frente emo="🏆" nome="Destaque do mês" selo={brl(c.bonusTop1)}
               desc="Reconhece o colaborador com o melhor resultado geral no ciclo."
-              tags={['Índice de Excelência', '1º lugar do mês']} />
+              tags={TAGS.destaque} />
           </div>
           <button type="button" className="bp-regras-btn" onClick={() => setVerRegras(true)}>Ver regras deste ciclo</button>
         </section>
