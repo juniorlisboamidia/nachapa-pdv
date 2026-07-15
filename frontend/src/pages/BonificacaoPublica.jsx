@@ -38,14 +38,27 @@ const CSS = `
 .bp-banner .bs{font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;opacity:.85}
 .bp-banner .bb{font-size:26px;font-weight:850;letter-spacing:-.02em}
 .bp-detail{display:flex;flex-direction:column;gap:10px}
-.bp-drow{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;gap:12px;box-shadow:var(--sh-sm)}
+.bp-frente{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;gap:12px;box-shadow:var(--sh-sm)}
 .bp-de{width:40px;height:40px;border-radius:11px;background:var(--brand-tint);display:grid;place-items:center;font-size:21px;flex-shrink:0}
-.bp-drow h4{font-size:15px;font-weight:800;display:flex;align-items:baseline;gap:8px}
-.bp-drow h4 .v{font-size:12.5px;font-weight:800;color:var(--money)}
-.bp-drow p{font-size:12.8px;color:var(--muted);margin-top:3px;line-height:1.45}
-.bp-pen{display:flex;gap:6px;flex-wrap:wrap;margin-top:7px}
-.bp-pen span{font-size:11px;background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:2px 8px;color:var(--ink-soft)}
-.bp-pen b{color:#8a6d00}
+.bp-frente-txt{flex:1;min-width:0}
+.bp-frente-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.bp-frente-top h4{font-size:15px;font-weight:800;letter-spacing:-.01em;line-height:1.25;min-width:0}
+.bp-selo{font-size:11px;font-weight:800;color:var(--money);background:rgba(15,138,84,.1);border:1px solid rgba(15,138,84,.16);border-radius:999px;padding:3px 9px;white-space:nowrap;flex-shrink:0}
+.bp-frente p{font-size:12.8px;color:var(--muted);margin-top:4px;line-height:1.45}
+.bp-pen{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
+.bp-pen span{font-size:11px;font-weight:650;background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:3px 9px;color:var(--ink-soft)}
+.bp-regras-btn{display:block;margin:14px auto 0;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:9px 18px;font-family:inherit;font-size:12.5px;font-weight:750;color:var(--ink-soft);cursor:pointer;box-shadow:var(--sh-sm)}
+/* Modal "Ver regras deste ciclo" */
+.bp-ov{position:fixed;inset:0;background:rgba(0,0,0,.55);display:grid;place-items:center;padding:18px;z-index:50}
+.bp-modal{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:20px;max-width:420px;width:100%;max-height:82vh;overflow-y:auto;box-shadow:var(--sh-md)}
+.bp-modal h3{font-size:17px;font-weight:850;margin-bottom:3px}
+.bp-modal .sub{font-size:12.5px;color:var(--muted);margin-bottom:16px}
+.bp-rg{margin-bottom:16px}
+.bp-rg-h{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--brand-deep);margin-bottom:4px}
+.bp-rg-row{display:flex;justify-content:space-between;gap:10px;align-items:baseline;font-size:13px;padding:6px 0;border-top:1px dashed var(--line)}
+.bp-rg-row .imp{font-weight:750;color:#c0392b;white-space:nowrap;font-size:12.5px}
+.bp-rg-vazio{font-size:12px;color:var(--muted);padding:5px 0}
+.bp-modal-fechar{width:100%;border:none;border-radius:11px;padding:11px;font-size:13.5px;font-weight:850;cursor:pointer;background:linear-gradient(135deg,#F2C63A,var(--brand));color:#0e1319;font-family:inherit}
 .bp-ex{background:var(--surface);border:1px solid var(--line);border-radius:var(--rd);padding:16px;box-shadow:var(--sh-sm)}
 .bp-ex .eh{font-size:14px;font-weight:800}
 .bp-ex .es{font-size:12.5px;color:var(--muted);margin-bottom:12px}
@@ -88,9 +101,61 @@ const CSS = `
 .bp-state{min-height:60vh;display:grid;place-items:center;text-align:center;color:var(--muted);padding:24px}
 `
 
-function Pen({ tipos }) {
-  if (!tipos.length) return null
-  return <div className="bp-pen">{tipos.map((t, i) => <span key={i}>{t.nome} <b>−{t.percentual}%</b></span>)}</div>
+// Uma frente da bonificação: nome (principal) + valor como selo + descrição + etiquetas
+// (geradas das regras/indicadores do ciclo — sem percentual fixo no layout).
+function Frente({ emo, nome, selo, desc, tags }) {
+  return (
+    <article className="bp-frente">
+      <span className="bp-de">{emo}</span>
+      <div className="bp-frente-txt">
+        <div className="bp-frente-top">
+          <h4>{nome}</h4>
+          <span className="bp-selo">{selo}</span>
+        </div>
+        <p>{desc}</p>
+        {tags?.length > 0 && <div className="bp-pen">{tags.map((t, i) => <span key={i}>{t}</span>)}</div>}
+      </div>
+    </article>
+  )
+}
+
+// Detalhe opcional: as faixas/impactos reais do ciclo (nada fixo no layout).
+function ModalRegras({ tipos, indicadores, coletivaPct, onClose }) {
+  const porPilar = [
+    ['Assiduidade', tipos.filter((t) => t.pilar === 'ASSIDUIDADE')],
+    ['Desempenho', tipos.filter((t) => t.pilar === 'DESEMPENHO')],
+    ['Resultado coletivo', tipos.filter((t) => t.pilar === 'COLETIVA')],
+  ]
+  return (
+    <div className="bp-ov" onClick={onClose}>
+      <div className="bp-modal" onClick={(e) => e.stopPropagation()}>
+        <h3>Regras deste ciclo</h3>
+        <div className="sub">O que desconta de cada frente neste mês.</div>
+        {porPilar.map(([titulo, lista]) => (
+          <div className="bp-rg" key={titulo}>
+            <div className="bp-rg-h">{titulo}</div>
+            {lista.length === 0
+              ? <div className="bp-rg-vazio">Nenhuma ocorrência cadastrada nesta frente.</div>
+              : lista.map((t, i) => (
+                <div className="bp-rg-row" key={i}><span>{t.nome}</span><span className="imp">−{t.percentual}%</span></div>
+              ))}
+          </div>
+        ))}
+        {indicadores.length > 0 && (
+          <div className="bp-rg">
+            <div className="bp-rg-h">Indicadores da loja</div>
+            {indicadores.map((n, i) => <div className="bp-rg-row" key={i}><span>{n}</span></div>)}
+          </div>
+        )}
+        <div className="bp-rg">
+          <div className="bp-rg-h">Destaque do mês</div>
+          <div className="bp-rg-row"><span>Índice de Excelência</span><span className="imp" style={{ color: 'var(--ink-soft)' }}>50% Assiduidade + 35% Desempenho + 15% Contribuições</span></div>
+        </div>
+        <div style={{ fontSize: 11.5, color: 'var(--muted)', marginBottom: 12 }}>Nota coletiva deste mês: <b>{coletivaPct}%</b>.</div>
+        <button type="button" className="bp-modal-fechar" onClick={onClose}>Entendi</button>
+      </div>
+    </div>
+  )
 }
 
 export default function BonificacaoPublica() {
@@ -98,6 +163,7 @@ export default function BonificacaoPublica() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState(null)
+  const [verRegras, setVerRegras] = useState(false)
 
   useEffect(() => {
     setLoading(true); setErro(null)
@@ -110,7 +176,7 @@ export default function BonificacaoPublica() {
   if (loading && !data) return <div className="bp-root"><style>{CSS}</style><div className="bp-state">Carregando…</div></div>
   if (erro) return <div className="bp-root"><style>{CSS}</style><div className="bp-state">{erro}</div></div>
 
-  const { loja, funcionarios = [], config = {}, coletivaPct = 0, tipos = [], ano, mes } = data || {}
+  const { loja, funcionarios = [], config = {}, coletivaPct = 0, tipos = [], indicadores = [], ano, mes } = data || {}
   const c = config
   const maxPossivel = Number(c.tetoAssiduidade || 0) + Number(c.tetoDesempenho || 0) + Number(c.tetoColetiva || 0) + Number(c.bonusTop1 || 0)
   const tAssid = tipos.filter((t) => t.pilar === 'ASSIDUIDADE')
@@ -143,33 +209,29 @@ export default function BonificacaoPublica() {
             <article className="bp-pillar"><div className="bp-pt"><span className="bp-emo">❤️</span><span className="bp-val">{brl(c.tetoAssiduidade)}</span></div><h3>Assiduidade</h3><span className="bp-cat">Presença e pontualidade</span></article>
             <article className="bp-pillar"><div className="bp-pt"><span className="bp-emo">👊</span><span className="bp-val">{brl(c.tetoDesempenho)}</span></div><h3>Desempenho</h3><span className="bp-cat">Qualidade do trabalho</span></article>
             <article className="bp-pillar"><div className="bp-pt"><span className="bp-emo">🤝</span><span className="bp-val">{brl(c.tetoColetiva)}</span></div><h3>Coletivo</h3><span className="bp-cat">Equipe</span></article>
-            <article className="bp-pillar"><div className="bp-pt"><span className="bp-emo">🏆</span><span className="bp-val">{brl(c.bonusTop1)}</span></div><h3>Extra</h3><span className="bp-cat">Destaque do mês</span></article>
+            <article className="bp-pillar"><div className="bp-pt"><span className="bp-emo">🏆</span><span className="bp-val">{brl(c.bonusTop1)}</span></div><h3>Destaque do mês</h3><span className="bp-cat">1º lugar do ciclo</span></article>
           </div>
           <div className="bp-banner"><div className="bs">Ganhe até</div><div className="bb bp-tnum">{brl(maxPossivel)} a mais</div></div>
         </section>
 
         <section>
-          <h2 className="bp-sec-title">Entenda cada frente</h2>
+          <h2 className="bp-sec-title">Como sua bonificação é formada</h2>
+          <p className="bp-intro">Acompanhe o que compõe seu resultado no mês e quais fatores influenciam cada parte da bonificação.</p>
           <div className="bp-detail">
-            <div className="bp-drow"><span className="bp-de">❤️</span><div>
-              <h4>Assiduidade <span className="v">até {brl(c.tetoAssiduidade)}</span></h4>
-              <p>Você começa o mês com <span className="bp-b">100%</span>. Cada ocorrência desconta uma parte.</p>
-              <Pen tipos={tAssid} />
-            </div></div>
-            <div className="bp-drow"><span className="bp-de">👊</span><div>
-              <h4>Desempenho <span className="v">até {brl(c.tetoDesempenho)}</span></h4>
-              <p>Começa em <span className="bp-b">100%</span>. Falhas no trabalho descontam pontos.</p>
-              <Pen tipos={tDesemp} />
-            </div></div>
-            <div className="bp-drow"><span className="bp-de">🤝</span><div>
-              <h4>Coletivo <span className="v">até {brl(c.tetoColetiva)}</span></h4>
-              <p>A nota da <span className="bp-b">loja</span> no mês (avaliações e metas). Vale igual para todos. Este mês: <span className="bp-b">{coletivaPct}%</span>.</p>
-            </div></div>
-            <div className="bp-drow"><span className="bp-de">🏆</span><div>
-              <h4>Extra <span className="v">{brl(c.bonusTop1)}</span></h4>
-              <p>O <span className="bp-b">destaque do mês</span> — o 1º colocado no ranking — leva um bônus extra.</p>
-            </div></div>
+            <Frente emo="❤️" nome="Assiduidade" selo={`até ${brl(c.tetoAssiduidade)}`}
+              desc="Reconhece sua presença e pontualidade durante o mês."
+              tags={tAssid.map((t) => t.nome)} />
+            <Frente emo="👊" nome="Desempenho" selo={`até ${brl(c.tetoDesempenho)}`}
+              desc="Representa a qualidade da sua execução no dia a dia."
+              tags={tDesemp.map((t) => t.nome)} />
+            <Frente emo="🤝" nome="Resultado coletivo" selo={`até ${brl(c.tetoColetiva)}`}
+              desc="Mostra o desempenho geral da loja durante o ciclo."
+              tags={indicadores.length ? indicadores : tipos.filter((t) => t.pilar === 'COLETIVA').map((t) => t.nome)} />
+            <Frente emo="🏆" nome="Destaque do mês" selo={brl(c.bonusTop1)}
+              desc="Reconhece o colaborador com o melhor resultado geral no ciclo."
+              tags={['Índice de Excelência', '1º lugar do mês']} />
           </div>
+          <button type="button" className="bp-regras-btn" onClick={() => setVerRegras(true)}>Ver regras deste ciclo</button>
         </section>
 
         {/* Exemplo ilustrativo (nome fictício) — não expõe o resultado de ninguém. */}
@@ -181,7 +243,7 @@ export default function BonificacaoPublica() {
             <div className="bp-el"><span className="l">Assiduidade <small>· 100%</small></span><span className="r bp-tnum">{brl(c.tetoAssiduidade)}</span></div>
             <div className="bp-el"><span className="l">Desempenho <small>· 100%</small></span><span className="r bp-tnum">{brl(c.tetoDesempenho)}</span></div>
             <div className="bp-el"><span className="l">Coletivo <small>· 100%</small></span><span className="r bp-tnum">{brl(c.tetoColetiva)}</span></div>
-            <div className="bp-el"><span className="l">Extra <small>· destaque do mês</small></span><span className="r bp-tnum">{brl(c.bonusTop1)}</span></div>
+            <div className="bp-el"><span className="l">Destaque do mês <small>· 1º lugar</small></span><span className="r bp-tnum">{brl(c.bonusTop1)}</span></div>
             <div className="bp-et"><span className="l">Total</span><span className="r bp-tnum">{brl(maxPossivel)}</span></div>
           </div>
         </section>
@@ -213,7 +275,7 @@ export default function BonificacaoPublica() {
             ['❤️', 'Chegue no horário e não falte', 'Cada ocorrência tira % da sua Assiduidade.'],
             ['👊', 'Capriche no serviço', 'Advertências e erros pesam no Desempenho.'],
             ['🤝', 'Juntos vão mais longe', 'A nota Coletiva da loja vale igual pra todo mundo.'],
-            ['🏆', 'Seja o Destaque do mês', 'O 1º lugar leva o Extra.'],
+            ['🏆', 'Seja o Destaque do mês', 'O 1º lugar do ciclo leva o bônus.'],
           ].map(([emo, titulo, desc]) => (
             <div className="bp-tip" key={titulo}>
               <span className="bp-tip-emo">{emo}</span>
@@ -228,6 +290,8 @@ export default function BonificacaoPublica() {
         <footer className="bp-foot">Feito por Agência Na Chapa 🚀</footer>
 
       </main>
+
+      {verRegras && <ModalRegras tipos={tipos} indicadores={indicadores} coletivaPct={coletivaPct} onClose={() => setVerRegras(false)} />}
     </div>
   )
 }

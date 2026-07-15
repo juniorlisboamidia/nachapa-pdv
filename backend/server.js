@@ -1732,11 +1732,13 @@ app.get('/api/public/bonificacao/:token', async (req, res) => {
     // Link PÚBLICO: expõe SÓ o pódio (Top 3). As posições de 4º em diante não saem
     // daqui nem no JSON — cada um vê o próprio resultado na Área do Colaborador.
     const podio = funcionarios.filter((f) => f.posicao && f.posicao <= 3);
+    // Indicadores do coletivo (Google/NPS/metas) — nomes p/ as etiquetas da página.
+    const indicadores = (await prisma.bonificacaoIndicador.findMany({ where: { empresaId, ativo: true }, orderBy: [{ ordem: 'asc' }, { id: 'asc' }], select: { nome: true } })).map((i) => i.nome);
     res.json({
       loja: { nome: loja?.nome || 'Loja', logoDataUrl: loja?.logoPublicaDataUrl || loja?.logoDataUrl || null },
       ano, mes, fechado, coletivaPct,
       config: { tetoAssiduidade: t.tetoA, tetoDesempenho: t.tetoD, tetoColetiva: t.tetoC, bonusTop1: t.b1, bonusTop2: t.b2, bonusTop3: t.b3 },
-      tipos, funcionarios: podio,
+      tipos, indicadores, funcionarios: podio,
     });
   } catch (err) { console.error('[public/bonificacao]', err); res.status(500).json({ error: 'Erro ao carregar a página.' }); }
 });
