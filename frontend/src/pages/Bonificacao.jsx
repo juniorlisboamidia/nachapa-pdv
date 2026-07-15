@@ -733,8 +733,9 @@ function AbaConquistas({ toast }) {
           {visiveis.map((c) => {
             const r = RAR[c.raridade] || RAR.COMUM
             const d = DESBLOQUEIO[c.desbloqueio] || DESBLOQUEIO.AUTOMATICA
+            // table-card-form = overflow visible: sem isso o card corta o menu ⋯
             return (
-              <div key={c.id} className="table-card" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 8, opacity: c.ativo && !c.arquivada ? 1 : 0.5, borderTop: `3px solid ${r.cor}`, position: 'relative' }}>
+              <div key={c.id} className="table-card table-card-form" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 8, opacity: c.ativo && !c.arquivada ? 1 : 0.5, borderTop: `3px solid ${r.cor}`, position: 'relative', zIndex: menu === c.id ? 6 : undefined }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                   <span style={{ fontSize: 30, lineHeight: 1 }}>{c.emoji}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>

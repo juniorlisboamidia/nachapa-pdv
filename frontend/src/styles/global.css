@@ -521,7 +521,7 @@ body.sidebar-collapsed .main-area { margin-left: 76px; }
 
 /* Tabela */
 .table-card { background: #fff; border: 0.5px solid #e8e8e8; border-radius: 12px; overflow: hidden; overflow-x: auto; }
-/* Variante para cards que contêm formulário com dropdown (autocomplete):
+/* Variante para cards que contêm dropdown/menu flutuante (autocomplete, menu ⋯):
    o card não corta o menu; a rolagem horizontal fica só no wrapper da tabela */
 .table-card-form { overflow: visible; }
 .table-scroll { overflow-x: auto; border-radius: 12px 12px 0 0; }
