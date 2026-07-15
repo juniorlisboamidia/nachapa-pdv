@@ -1058,9 +1058,19 @@ model Conquista {
   descricao    String?
   emoji        String   @default("🏅")
   raridade     String   @default("COMUM")  // COMUM | RARO | EPICO | LENDARIO
-  regra        String   @default("MANUAL") // XP_TOTAL | NIVEL | VITORIAS | PODIOS | MESES_ATIVOS | PRESENCA_100 | SCORE_100 | MANUAL
-  meta         Int      @default(1)        // limiar da regra (ignorado p/ MANUAL)
-  xpBonus      Int      @default(0)        // XP creditado ao desbloquear
+  // VITORIAS | PODIOS | MESES_ATIVOS | PRESENCA_100 | SCORE_100 (automáticas)
+  // SUGESTOES_IMPLEMENTADAS | RECONHECIMENTOS_RECEBIDOS (por validação)
+  // CICLOS_CONSECUTIVOS_95 | COLECAO (automáticas) | MANUAL
+  regra        String   @default("MANUAL")
+  meta         Int      @default(1)        // limiar da regra (ignorado p/ MANUAL e PROGRESSIVA)
+  xpBonus      Int      @default(0)        // Coins creditados ao desbloquear
+  // Que comportamento a medalha reconhece (filtros e leitura do catálogo).
+  categoria    String   @default("JORNADA") // JORNADA | ASSIDUIDADE | DESEMPENHO | EXCELENCIA | COLABORACAO | INOVACAO | COLECAO
+  // UNICA = desbloqueia 1x | PROGRESSIVA = níveis (niveisJson) | REPETIVEL = a cada ciclo
+  tipo         String   @default("UNICA")
+  niveisJson   Json?    // PROGRESSIVA: [{ nome, meta, coins }] em ordem crescente
+  acumulavel   Boolean  @default(true)  // Coins somam aos do evento de origem?
+  arquivada    Boolean  @default(false) // arquivar em vez de excluir (preserva histórico)
   ativo        Boolean  @default(true)
   ordem        Int      @default(0)
   criadoEm     DateTime @default(now())
@@ -1076,11 +1086,14 @@ model ConquistaDesbloqueada {
   conquistaId    Int
   funcionarioId  Int
   origem         String   @default("AUTO") // AUTO | MANUAL
+  nivel          Int      @default(0)  // 0 = única; 1..N = nível da PROGRESSIVA
+  motivo         String?  // por que foi concedida (obrigatório na concessão manual)
+  concedidoPor   String?  // quem concedeu (manual)
   ano            Int?
   mes            Int?
   desbloqueadoEm DateTime @default(now())
 
-  @@unique([conquistaId, funcionarioId])
+  @@unique([conquistaId, funcionarioId, nivel])
   @@index([empresaId, funcionarioId])
   @@index([funcionarioId])
 }

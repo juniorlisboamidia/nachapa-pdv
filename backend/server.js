@@ -463,69 +463,170 @@ const BONI_NIVEIS_PADRAO = ['Aprendiz', 'Chapeiro', 'Chapa de Bronze', 'Chapa de
 
 // Conquistas (cards) padrão — semeadas na 1ª vez. Regras automáticas mapeáveis ao histórico.
 const BONI_RARIDADES = new Set(['COMUM', 'RARO', 'EPICO', 'LENDARIO']);
-const BONI_REGRAS = new Set(['VITORIAS', 'PODIOS', 'MESES_ATIVOS', 'PRESENCA_100', 'SCORE_100', 'MANUAL']);
+const BONI_CATEGORIAS = ['JORNADA', 'ASSIDUIDADE', 'DESEMPENHO', 'EXCELENCIA', 'COLABORACAO', 'INOVACAO', 'COLECAO'];
+const BONI_TIPOS_CONQUISTA = new Set(['UNICA', 'REPETIVEL', 'PROGRESSIVA']);
+// Regras automáticas + por validação. O "tipo de desbloqueio" do card é DERIVADO daqui.
+const BONI_REGRAS = new Set([
+  'VITORIAS', 'PODIOS', 'MESES_ATIVOS', 'PRESENCA_100', 'SCORE_100',
+  'CICLOS_CONSECUTIVOS_95', 'COLECAO',
+  'SUGESTOES_IMPLEMENTADAS', 'RECONHECIMENTOS_RECEBIDOS',
+  'MANUAL',
+]);
+const REGRAS_VALIDACAO = new Set(['SUGESTOES_IMPLEMENTADAS', 'RECONHECIMENTOS_RECEBIDOS']);
+const desbloqueioDe = (regra) => (regra === 'MANUAL' ? 'MANUAL' : REGRAS_VALIDACAO.has(regra) ? 'VALIDACAO' : 'AUTOMATICA');
+// Faixas sugeridas de Coins por raridade (orientativas — o backend não bloqueia).
+const FAIXA_COINS = { COMUM: [25, 75], RARO: [75, 200], EPICO: [200, 400], LENDARIO: [400, 750] };
 const BONI_CONQUISTAS_PADRAO = [
-  { emoji: '🔥', nome: 'Primeira Chama', descricao: 'Participou do primeiro fechamento do mês.', raridade: 'COMUM', regra: 'MESES_ATIVOS', meta: 1, xpBonus: 50, ordem: 0 },
-  { emoji: '💯', nome: 'Assiduidade Perfeita', descricao: 'Fechou um mês inteiro sem faltas nem atrasos (Assiduidade 100%).', raridade: 'RARO', regra: 'PRESENCA_100', meta: 1, xpBonus: 100, ordem: 1 },
-  { emoji: '🎯', nome: 'Trabalho Impecável', descricao: 'Fechou um mês com Desempenho 100%, sem nenhuma ocorrência.', raridade: 'RARO', regra: 'SCORE_100', meta: 1, xpBonus: 100, ordem: 2 },
-  { emoji: '⭐', nome: 'Destaque do Mês', descricao: 'Ficou em 1º lugar no ranking pela primeira vez.', raridade: 'RARO', regra: 'VITORIAS', meta: 1, xpBonus: 150, ordem: 3 },
-  { emoji: '🥇', nome: 'Pódio Frequente', descricao: 'Chegou ao Top 3 em 5 meses.', raridade: 'EPICO', regra: 'PODIOS', meta: 5, xpBonus: 200, ordem: 4 },
-  { emoji: '🏆', nome: 'Tricampeão', descricao: 'Foi o destaque do mês 3 vezes.', raridade: 'EPICO', regra: 'VITORIAS', meta: 3, xpBonus: 300, ordem: 5 },
-  { emoji: '🚀', nome: 'Veterano', descricao: 'Está há 6 meses somando pontos com a equipe.', raridade: 'EPICO', regra: 'MESES_ATIVOS', meta: 6, xpBonus: 200, ordem: 6 },
-  { emoji: '👑', nome: 'Lenda da Chapa', descricao: 'Está há 1 ano somando resultados com a equipe.', raridade: 'LENDARIO', regra: 'MESES_ATIVOS', meta: 12, xpBonus: 500, ordem: 7 },
+  { emoji: '🔥', nome: 'Primeira Chama', descricao: 'Concluiu seu primeiro ciclo no programa.', raridade: 'COMUM', regra: 'MESES_ATIVOS', meta: 1, xpBonus: 50, categoria: 'JORNADA', ordem: 0 },
+  { emoji: '🚀', nome: 'Veterano', descricao: 'Completou seis ciclos no programa.', raridade: 'RARO', regra: 'MESES_ATIVOS', meta: 6, xpBonus: 200, categoria: 'JORNADA', ordem: 1 },
+  { emoji: '💯', nome: 'Assiduidade Perfeita', descricao: 'Concluiu um ciclo com 100% em Assiduidade.', raridade: 'RARO', regra: 'PRESENCA_100', meta: 1, xpBonus: 100, categoria: 'ASSIDUIDADE', ordem: 2 },
+  { emoji: '🎯', nome: 'Trabalho Impecável', descricao: 'Concluiu um ciclo com 100% em Desempenho.', raridade: 'RARO', regra: 'SCORE_100', meta: 1, xpBonus: 100, categoria: 'DESEMPENHO', ordem: 3 },
+  { emoji: '📈', nome: 'Consistência em Chamas', descricao: 'Finalizou três ciclos consecutivos com Assiduidade e Desempenho acima de 95%.', raridade: 'EPICO', regra: 'CICLOS_CONSECUTIVOS_95', meta: 3, xpBonus: 250, categoria: 'EXCELENCIA', ordem: 4 },
+  { emoji: '⭐', nome: 'Destaque do Mês', descricao: 'Conquistou o 1º lugar no Índice de Excelência pela primeira vez.', raridade: 'RARO', regra: 'VITORIAS', meta: 1, xpBonus: 150, categoria: 'EXCELENCIA', ordem: 5 },
+  { emoji: '🥇', nome: 'Pódio Frequente', descricao: 'Alcançou o Top 3 em cinco ciclos diferentes.', raridade: 'EPICO', regra: 'PODIOS', meta: 5, xpBonus: 200, categoria: 'EXCELENCIA', ordem: 6 },
+  { emoji: '🏆', nome: 'Tripla Coroa', descricao: 'Foi Destaque do Mês em três ciclos diferentes.', raridade: 'EPICO', regra: 'VITORIAS', meta: 3, xpBonus: 300, categoria: 'EXCELENCIA', ordem: 7 },
+  { emoji: '💡', nome: 'Ideia em Ação', descricao: 'Teve sua primeira sugestão de melhoria implementada pela empresa.', raridade: 'RARO', regra: 'SUGESTOES_IMPLEMENTADAS', meta: 1, xpBonus: 100, categoria: 'INOVACAO', ordem: 8 },
+  { emoji: '🔍', nome: 'Olhar de Dono', descricao: 'Teve três sugestões de melhoria implementadas.', raridade: 'EPICO', regra: 'SUGESTOES_IMPLEMENTADAS', meta: 3, xpBonus: 250, categoria: 'INOVACAO', ordem: 9 },
+  { emoji: '🤝', nome: 'Parceiro de Time', descricao: 'Recebeu reconhecimentos de colegas aprovados pela gestão.', raridade: 'RARO', regra: 'RECONHECIMENTOS_RECEBIDOS', meta: 5, xpBonus: 150, categoria: 'COLABORACAO', tipo: 'PROGRESSIVA', niveisJson: [{ nome: 'Bronze', meta: 5, coins: 150 }, { nome: 'Prata', meta: 15, coins: 250 }, { nome: 'Ouro', meta: 30, coins: 400 }], ordem: 10 },
+  { emoji: '👑', nome: 'Lenda da Chapa', descricao: 'Desbloqueou todas as conquistas principais do programa.', raridade: 'LENDARIO', regra: 'COLECAO', meta: 0, xpBonus: 500, categoria: 'COLECAO', ordem: 11 },
 ];
-const conquistaJson = (c, extra = {}) => ({ id: c.id, nome: c.nome, descricao: c.descricao || null, emoji: c.emoji, raridade: c.raridade, regra: c.regra, meta: c.meta, xpBonus: c.xpBonus, ativo: c.ativo, ordem: c.ordem, ...extra });
+// Níveis de uma conquista: PROGRESSIVA usa niveisJson; as demais têm o nível 0 (única).
+function niveisDaConquista(c) {
+  if (c.tipo === 'PROGRESSIVA' && Array.isArray(c.niveisJson) && c.niveisJson.length) {
+    return c.niveisJson.map((n, i) => ({ nivel: i + 1, meta: Number(n?.meta) || 0, coins: Number(n?.coins) || 0, nome: n?.nome || `Nível ${i + 1}` }));
+  }
+  return [{ nivel: 0, meta: c.meta, coins: c.xpBonus, nome: null }];
+}
+const conquistaJson = (c, extra = {}) => ({
+  id: c.id, nome: c.nome, descricao: c.descricao || null, emoji: c.emoji, raridade: c.raridade,
+  regra: c.regra, meta: c.meta, xpBonus: c.xpBonus, ativo: c.ativo, ordem: c.ordem,
+  categoria: c.categoria || 'JORNADA', tipo: c.tipo || 'UNICA',
+  niveisJson: Array.isArray(c.niveisJson) ? c.niveisJson : null,
+  acumulavel: c.acumulavel !== false, arquivada: !!c.arquivada,
+  desbloqueio: desbloqueioDe(c.regra), ...extra,
+});
 
 // Métricas de conquista por funcionário, a partir de TODOS os fechamentos da loja.
 function metricasConquista(fechamentos) {
   const m = new Map();
-  const get = (id) => { let x = m.get(id); if (!x) { x = { vitorias: 0, podios: 0, mesesAtivos: 0, presenca100: 0, score100: 0 }; m.set(id, x); } return x; };
-  for (const f of fechamentos) {
+  const get = (id) => { let x = m.get(id); if (!x) { x = { vitorias: 0, podios: 0, mesesAtivos: 0, presenca100: 0, score100: 0, consecutivos95: 0 }; m.set(id, x); } return x; };
+  // Ordena por ciclo — necessário p/ medir sequência (CICLOS_CONSECUTIVOS_95).
+  const ord = [...fechamentos].sort((a, b) => (a.ano - b.ano) || (a.mes - b.mes));
+  const streak = new Map(); // funcionarioId → sequência atual de ciclos ≥95% em Assid E Desemp
+  for (const f of ord) {
     const itens = Array.isArray(f.itensJson) ? f.itensJson : [];
+    const noCiclo = new Set();
     for (const r of itens) {
       if (r?.funcionarioId == null) continue;
       const x = get(r.funcionarioId);
+      noCiclo.add(r.funcionarioId);
       x.mesesAtivos += 1;
       if (Number(r.posicao) === 1) x.vitorias += 1;
       if (Number(r.posicao) <= 3) x.podios += 1;
       if (Number(r.assidPct) >= 100) x.presenca100 += 1;
       if (Number(r.desPct) >= 100) x.score100 += 1;
+      const ok = Number(r.assidPct) >= 95 && Number(r.desPct) >= 95;
+      const s = ok ? (streak.get(r.funcionarioId) || 0) + 1 : 0;
+      streak.set(r.funcionarioId, s);
+      if (s > x.consecutivos95) x.consecutivos95 = s;
     }
+    // Quem não participou do ciclo quebra a sequência.
+    for (const fid of streak.keys()) if (!noCiclo.has(fid)) streak.set(fid, 0);
   }
   return m;
 }
-// XP e nível saíram: conquistas dessas regras (se existirem) só por concessão manual.
-const valorRegraConquista = (regra, met) => ({
-  VITORIAS: met.vitorias, PODIOS: met.podios,
-  MESES_ATIVOS: met.mesesAtivos, PRESENCA_100: met.presenca100, SCORE_100: met.score100,
-}[regra]);
+// Sugestões da Ouvidoria marcadas como IMPLEMENTADAS, por funcionário (regra de validação).
+async function sugestoesImplementadasPorFunc() {
+  const g = await prisma.bonificacaoOuvidoria.groupBy({ by: ['funcionarioId'], _count: { _all: true }, where: { tipo: 'SUGESTAO', status: 'IMPLEMENTADA', funcionarioId: { not: null } } });
+  return new Map(g.map((r) => [r.funcionarioId, r._count._all]));
+}
+// Reconhecimentos de colegas APROVADOS pela gestão, por funcionário que recebeu.
+async function reconhecimentosRecebidosPorFunc() {
+  const g = await prisma.bonificacaoReconhecimento.groupBy({ by: ['paraFuncionarioId'], _count: { _all: true }, where: { status: 'APROVADO' } });
+  return new Map(g.map((r) => [r.paraFuncionarioId, r._count._all]));
+}
+const MET_VAZIA = { vitorias: 0, podios: 0, mesesAtivos: 0, presenca100: 0, score100: 0, consecutivos95: 0 };
+// Valor atual do critério de uma regra p/ um funcionário. null = regra não automática.
+function valorRegraConquista(regra, ctx) {
+  const m = ctx.met || MET_VAZIA;
+  switch (regra) {
+    case 'VITORIAS': return m.vitorias;
+    case 'PODIOS': return m.podios;
+    case 'MESES_ATIVOS': return m.mesesAtivos;
+    case 'PRESENCA_100': return m.presenca100;
+    case 'SCORE_100': return m.score100;
+    case 'CICLOS_CONSECUTIVOS_95': return m.consecutivos95;
+    case 'SUGESTOES_IMPLEMENTADAS': return ctx.sugestoes || 0;
+    case 'RECONHECIMENTOS_RECEBIDOS': return ctx.reconhecimentos || 0;
+    case 'COLECAO': return ctx.principaisDesbloqueadas || 0;
+    default: return null;
+  }
+}
 
-// Avalia conquistas automáticas p/ a loja atual (tenantStore). Concede as recém-atingidas
-// e credita o bônus em COINS (bonificacaoMoeda). Uma passada basta (sem cascata de XP).
-async function avaliarConquistas() {
-  const conquistas = await prisma.conquista.findMany({ where: { ativo: true } });
+// DRY-RUN: calcula os desbloqueios que ACONTECERIAM, sem gravar nada. Base da prévia
+// do "Verificar conquistas" e reusado pelo fechamento. Escopo = loja atual (tenantStore).
+async function calcularNovasConquistas() {
+  const conquistas = await prisma.conquista.findMany({ where: { ativo: true, arquivada: false } });
   const autos = conquistas.filter((c) => c.regra !== 'MANUAL' && BONI_REGRAS.has(c.regra));
-  if (!autos.length) return 0;
-  const funcs = await prisma.funcionario.findMany();
+  if (!autos.length) return [];
+  const funcs = await prisma.funcionario.findMany({ where: { status: 'ATIVO' } });
   const met = metricasConquista(await prisma.bonificacaoFechamento.findMany());
-  const jaTem = new Set((await prisma.conquistaDesbloqueada.findMany()).map((d) => `${d.conquistaId}:${d.funcionarioId}`));
-  const VAZIO = { vitorias: 0, podios: 0, mesesAtivos: 0, presenca100: 0, score100: 0 };
-  let total = 0;
-  for (const f of funcs) {
-    const mf = met.get(f.id) || VAZIO;
-    for (const c of autos) {
-      const chave = `${c.id}:${f.id}`;
-      if (jaTem.has(chave)) continue;
-      const val = valorRegraConquista(c.regra, mf);
-      if (val != null && val >= c.meta) {
-        jaTem.add(chave);
-        await prisma.conquistaDesbloqueada.create({ data: { conquistaId: c.id, funcionarioId: f.id, origem: 'AUTO' } });
-        if (c.xpBonus > 0) await prisma.bonificacaoMoeda.create({ data: { funcionarioId: f.id, pontos: c.xpBonus, motivo: `Conquista: ${c.nome}`, origem: 'CONQUISTA' } });
-        total += 1;
+  const sug = await sugestoesImplementadasPorFunc();
+  const rec = await reconhecimentosRecebidosPorFunc();
+  const desb = await prisma.conquistaDesbloqueada.findMany();
+  const jaTem = new Set(desb.map((d) => `${d.conquistaId}:${d.funcionarioId}:${d.nivel}`));
+  // "Principais" = tudo que não é de coleção (a Lenda não conta como requisito dela mesma).
+  const idsPrincipais = new Set(conquistas.filter((c) => c.categoria !== 'COLECAO').map((c) => c.id));
+  const totalPrincipais = idsPrincipais.size;
+  const principaisPorFunc = new Map(); // funcionarioId → Set(conquistaId)
+  for (const d of desb) if (idsPrincipais.has(d.conquistaId)) {
+    if (!principaisPorFunc.has(d.funcionarioId)) principaisPorFunc.set(d.funcionarioId, new Set());
+    principaisPorFunc.get(d.funcionarioId).add(d.conquistaId);
+  }
+  const novos = [];
+  // 2 passadas: as normais primeiro; a COLEÇÃO depois (depende do resultado das outras).
+  for (const grupo of [autos.filter((c) => c.regra !== 'COLECAO'), autos.filter((c) => c.regra === 'COLECAO')]) {
+    for (const f of funcs) {
+      for (const c of grupo) {
+        const ctx = { met: met.get(f.id), sugestoes: sug.get(f.id), reconhecimentos: rec.get(f.id), principaisDesbloqueadas: principaisPorFunc.get(f.id)?.size || 0 };
+        const val = valorRegraConquista(c.regra, ctx);
+        if (val == null) continue;
+        for (const nv of niveisDaConquista(c)) {
+          const chave = `${c.id}:${f.id}:${nv.nivel}`;
+          if (jaTem.has(chave)) continue;
+          const meta = c.regra === 'COLECAO' ? totalPrincipais : nv.meta;
+          if (meta <= 0 || val < meta) continue;
+          jaTem.add(chave);
+          if (idsPrincipais.has(c.id)) {
+            if (!principaisPorFunc.has(f.id)) principaisPorFunc.set(f.id, new Set());
+            principaisPorFunc.get(f.id).add(c.id); // conta já p/ a passada da coleção
+          }
+          novos.push({ conquistaId: c.id, conquistaNome: c.nome, emoji: c.emoji, funcionarioId: f.id, funcionarioNome: f.apelido || f.nome, nivel: nv.nivel, nivelNome: nv.nome, coins: nv.coins });
+        }
       }
     }
   }
-  return total;
+  return novos;
+}
+
+// Grava os desbloqueios calculados e credita os Coins. Idempotente pela unique
+// (conquista+funcionário+nível) — um novo cálculo não concede nada duas vezes.
+async function aplicarConquistas(novos) {
+  for (const n of novos) {
+    try {
+      await prisma.conquistaDesbloqueada.create({ data: { conquistaId: n.conquistaId, funcionarioId: n.funcionarioId, nivel: n.nivel, origem: 'AUTO' } });
+      if (n.coins > 0) {
+        const motivo = `Conquista: ${n.conquistaNome}${n.nivelNome ? ' (' + n.nivelNome + ')' : ''}`;
+        await prisma.bonificacaoMoeda.create({ data: { funcionarioId: n.funcionarioId, pontos: n.coins, motivo: motivo.slice(0, 200), origem: 'CONQUISTA' } });
+      }
+    } catch (e) { console.error('[conquistas/aplicar]', e?.message || e); } // unique = já tinha
+  }
+  return novos.length;
+}
+
+// Avalia + concede (usado no fechamento do mês).
+async function avaliarConquistas() {
+  return aplicarConquistas(await calcularNovasConquistas());
 }
 function sanitizarSlugBonif(v) {
   const s = String(v ?? '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
@@ -1175,7 +1276,8 @@ app.post('/api/bonificacao/indicadores/valores', async (req, res) => {
 });
 
 // ===== Bonificação — Ouvidoria / Sugestões (ADMIN) (Bloco 4) =====
-const OUVIDORIA_STATUS = new Set(['ABERTA', 'EM_ANALISE', 'RESPONDIDA', 'ARQUIVADA']);
+// IMPLEMENTADA = a sugestão virou realidade (alimenta as conquistas de Inovação).
+const OUVIDORIA_STATUS = new Set(['ABERTA', 'EM_ANALISE', 'RESPONDIDA', 'IMPLEMENTADA', 'ARQUIVADA']);
 const OUVIDORIA_TIPOS = new Set(['RECLAMACAO', 'SUGESTAO', 'ELOGIO', 'DENUNCIA', 'OUTRO']);
 app.get('/api/bonificacao/ouvidoria', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
@@ -1599,11 +1701,22 @@ function lerConquistaBody(b) {
   if (!nome) return { erro: 'Informe o nome da conquista.' };
   const raridade = BONI_RARIDADES.has(b?.raridade) ? b.raridade : 'COMUM';
   const regra = BONI_REGRAS.has(b?.regra) ? b.regra : 'MANUAL';
-  const meta = Math.max(1, Math.round(Number(b?.meta) || 1));
+  // COLECAO calcula a meta sozinha (total de conquistas principais).
+  const meta = regra === 'COLECAO' ? 0 : Math.max(1, Math.round(Number(b?.meta) || 1));
   const xpBonus = Math.max(0, Math.round(Number(b?.xpBonus) || 0));
   const emoji = (typeof b?.emoji === 'string' && b.emoji.trim()) ? Array.from(b.emoji.trim())[0] : '🏅';
   const descricao = typeof b?.descricao === 'string' ? b.descricao.trim().slice(0, 240) || null : null;
-  return { data: { nome, descricao, emoji, raridade, regra, meta, xpBonus, ativo: b?.ativo !== false, ordem: Math.round(Number(b?.ordem) || 0) } };
+  const categoria = BONI_CATEGORIAS.includes(b?.categoria) ? b.categoria : 'JORNADA';
+  const tipo = BONI_TIPOS_CONQUISTA.has(b?.tipo) ? b.tipo : 'UNICA';
+  let niveisJson = null;
+  if (tipo === 'PROGRESSIVA' && Array.isArray(b?.niveisJson)) {
+    niveisJson = b.niveisJson
+      .map((n) => ({ nome: String(n?.nome ?? '').trim().slice(0, 30) || null, meta: Math.max(1, Math.round(Number(n?.meta) || 0)), coins: Math.max(0, Math.round(Number(n?.coins) || 0)) }))
+      .filter((n) => n.nome && n.meta > 0)
+      .sort((a, z) => a.meta - z.meta); // níveis sempre em ordem crescente
+    if (!niveisJson.length) return { erro: 'Uma conquista progressiva precisa de pelo menos um nível.' };
+  }
+  return { data: { nome, descricao, emoji, raridade, regra, meta, xpBonus, categoria, tipo, niveisJson, acumulavel: b?.acumulavel !== false, ativo: b?.ativo !== false, ordem: Math.round(Number(b?.ordem) || 0) } };
 }
 
 app.post('/api/bonificacao/conquistas', async (req, res) => {
@@ -1636,18 +1749,68 @@ app.delete('/api/bonificacao/conquistas/:id', async (req, res) => {
     const id = parseInt(req.params.id, 10);
     const ex = await prisma.conquista.findFirst({ where: { id } });
     if (!ex) return res.status(404).json({ error: 'Conquista não encontrada.' });
-    await prisma.conquista.delete({ where: { id } }); // desbloqueios caem em cascata
+    // Conquista já concedida NÃO se apaga (apagaria o histórico e os Coins ficariam órfãos):
+    // nesse caso só dá pra arquivar.
+    const concedidas = await prisma.conquistaDesbloqueada.count({ where: { conquistaId: id } });
+    if (concedidas > 0) return res.status(409).json({ error: `Esta conquista já foi concedida a ${concedidas} colaborador(es). Arquive em vez de excluir — assim o histórico é preservado.` });
+    await prisma.conquista.delete({ where: { id } });
+    auditarBonif(req, 'CONQUISTA_EXCLUIDA', { entidade: 'Conquista', entidadeId: id, justificativa: ex.nome });
     res.json({ ok: true });
   } catch (err) { console.error('[bonificacao/conquistas DELETE]', err); res.status(500).json({ error: 'Erro ao excluir a conquista.' }); }
 });
 
-// Recalcula todas as conquistas automáticas (concede as recém-atingidas).
-app.post('/api/bonificacao/conquistas/recalcular', async (req, res) => {
+// Verificar conquistas — PRÉVIA (não grava): quem cumpriu critério e ainda não recebeu.
+app.get('/api/bonificacao/conquistas/verificar', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
   try {
-    const novas = await avaliarConquistas();
-    res.json({ ok: true, novas });
-  } catch (err) { console.error('[bonificacao/conquistas/recalcular]', err); res.status(500).json({ error: 'Erro ao recalcular as conquistas.' }); }
+    const novos = await calcularNovasConquistas();
+    res.json({
+      novos,
+      total: novos.length,
+      colaboradores: new Set(novos.map((n) => n.funcionarioId)).size,
+      coins: novos.reduce((s, n) => s + (n.coins || 0), 0),
+    });
+  } catch (err) { console.error('[conquistas/verificar GET]', err); res.status(500).json({ error: 'Erro ao verificar as conquistas.' }); }
+});
+// Confirma e concede o que a prévia encontrou (recalcula na hora — nada de confiar no cliente).
+app.post('/api/bonificacao/conquistas/verificar', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const novos = await calcularNovasConquistas();
+    const total = await aplicarConquistas(novos);
+    auditarBonif(req, 'CONQUISTAS_CONCEDIDAS', { entidade: 'ConquistaDesbloqueada', valorDepois: { total, coins: novos.reduce((s, n) => s + (n.coins || 0), 0) } });
+    res.json({ ok: true, total });
+  } catch (err) { console.error('[conquistas/verificar POST]', err); res.status(500).json({ error: 'Erro ao conceder as conquistas.' }); }
+});
+// Arquivar/desarquivar — preserva o histórico (não apaga desbloqueios concedidos).
+app.patch('/api/bonificacao/conquistas/:id/arquivar', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const id = parseInt(req.params.id, 10);
+    const ex = await prisma.conquista.findFirst({ where: { id } });
+    if (!ex) return res.status(404).json({ error: 'Conquista não encontrada.' });
+    const arquivada = req.body?.arquivada !== false;
+    await prisma.conquista.update({ where: { id }, data: { arquivada } });
+    auditarBonif(req, arquivada ? 'CONQUISTA_ARQUIVADA' : 'CONQUISTA_DESARQUIVADA', { entidade: 'Conquista', entidadeId: id });
+    res.json({ ok: true, arquivada });
+  } catch (err) { console.error('[conquistas/arquivar]', err); res.status(500).json({ error: 'Erro ao arquivar.' }); }
+});
+// Duplicar — nasce inativa p/ o gestor ajustar antes de valer.
+app.post('/api/bonificacao/conquistas/:id/duplicar', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const id = parseInt(req.params.id, 10);
+    const ex = await prisma.conquista.findFirst({ where: { id } });
+    if (!ex) return res.status(404).json({ error: 'Conquista não encontrada.' });
+    const c = await prisma.conquista.create({
+      data: {
+        nome: `${ex.nome} (cópia)`.slice(0, 80), descricao: ex.descricao, emoji: ex.emoji, raridade: ex.raridade,
+        regra: ex.regra, meta: ex.meta, xpBonus: ex.xpBonus, categoria: ex.categoria, tipo: ex.tipo,
+        niveisJson: ex.niveisJson ?? undefined, acumulavel: ex.acumulavel, ativo: false, ordem: ex.ordem + 1,
+      },
+    });
+    res.status(201).json(conquistaJson(c, { desbloqueada: 0 }));
+  } catch (err) { console.error('[conquistas/duplicar]', err); res.status(500).json({ error: 'Erro ao duplicar.' }); }
 });
 
 // Quem já desbloqueou uma conquista (p/ o modal de conceder manual).
@@ -1656,7 +1819,14 @@ app.get('/api/bonificacao/conquistas/:id/desbloqueios', async (req, res) => {
   try {
     const conquistaId = parseInt(req.params.id, 10);
     const lista = await prisma.conquistaDesbloqueada.findMany({ where: { conquistaId }, orderBy: { desbloqueadoEm: 'desc' } });
-    res.json(lista.map((d) => ({ id: d.id, funcionarioId: d.funcionarioId, origem: d.origem, desbloqueadoEm: d.desbloqueadoEm })));
+    const nomes = new Map((await prisma.funcionario.findMany({ select: { id: true, nome: true, apelido: true } })).map((f) => [f.id, f.apelido || f.nome]));
+    const conq = await prisma.conquista.findFirst({ where: { id: conquistaId } });
+    const niveis = conq ? niveisDaConquista(conq) : [];
+    res.json(lista.map((d) => ({
+      id: d.id, funcionarioId: d.funcionarioId, funcionario: nomes.get(d.funcionarioId) || '—',
+      origem: d.origem, nivel: d.nivel, nivelNome: niveis.find((n) => n.nivel === d.nivel)?.nome || null,
+      motivo: d.motivo || null, concedidoPor: d.concedidoPor || null, desbloqueadoEm: d.desbloqueadoEm,
+    })));
   } catch (err) { console.error('[bonificacao/conquistas/desbloqueios]', err); res.status(500).json({ error: 'Erro ao carregar.' }); }
 });
 
@@ -1671,8 +1841,14 @@ app.post('/api/bonificacao/conquistas/:id/conceder', async (req, res) => {
     const func = await prisma.funcionario.findFirst({ where: { id: funcionarioId } });
     if (!func) return res.status(404).json({ error: 'Funcionário não encontrado.' });
     if (await prisma.conquistaDesbloqueada.findFirst({ where: { conquistaId, funcionarioId } })) return res.json({ ok: true, jaTinha: true });
-    await prisma.conquistaDesbloqueada.create({ data: { conquistaId, funcionarioId, origem: 'MANUAL' } });
-    if (c.xpBonus > 0) await prisma.bonificacaoMoeda.create({ data: { funcionarioId, pontos: c.xpBonus, motivo: `Conquista: ${c.nome}`, origem: 'CONQUISTA' } });
+    // Concessão manual exige justificativa (fica no histórico de quem concedeu).
+    const motivo = String(req.body?.motivo || '').trim().slice(0, 300);
+    if (!motivo) return res.status(400).json({ error: 'Descreva o motivo da concessão.' });
+    const ano = Number.isInteger(parseInt(req.body?.ano, 10)) ? parseInt(req.body.ano, 10) : null;
+    const mes = Number.isInteger(parseInt(req.body?.mes, 10)) ? parseInt(req.body.mes, 10) : null;
+    await prisma.conquistaDesbloqueada.create({ data: { conquistaId, funcionarioId, origem: 'MANUAL', motivo, ano, mes, concedidoPor: req.user?.nome || null } });
+    if (c.xpBonus > 0) await prisma.bonificacaoMoeda.create({ data: { funcionarioId, pontos: c.xpBonus, motivo: `Conquista: ${c.nome}`, origem: 'CONQUISTA', ano, mes } });
+    auditarBonif(req, 'CONQUISTA_CONCEDIDA', { entidade: 'Conquista', entidadeId: conquistaId, justificativa: motivo, valorDepois: { funcionarioId, coins: c.xpBonus } });
     res.status(201).json({ ok: true });
   } catch (err) { console.error('[bonificacao/conquistas/conceder]', err); res.status(500).json({ error: 'Erro ao conceder a conquista.' }); }
 });
@@ -1828,17 +2004,39 @@ app.get('/api/public/colaborador/me', async (req, res) => {
     }
     const meu = rows.find((r) => r.funcionarioId === func.id) || null;
     // Mural de conquistas: desbloqueadas + bloqueadas com progresso (métricas do histórico da loja).
-    const conquistas = await prisma.conquista.findMany({ where: { empresaId, ativo: true }, orderBy: [{ ordem: 'asc' }, { id: 'asc' }] });
-    const desbMap = new Map((await prisma.conquistaDesbloqueada.findMany({ where: { empresaId, funcionarioId: func.id } })).map((d) => [d.conquistaId, d.desbloqueadoEm]));
-    const mf = metricasConquista(await prisma.bonificacaoFechamento.findMany({ where: { empresaId } })).get(func.id) || { vitorias: 0, podios: 0, mesesAtivos: 0, presenca100: 0, score100: 0 };
+    const conquistas = await prisma.conquista.findMany({ where: { empresaId, ativo: true, arquivada: false }, orderBy: [{ ordem: 'asc' }, { id: 'asc' }] });
+    const desbTodos = await prisma.conquistaDesbloqueada.findMany({ where: { empresaId, funcionarioId: func.id } });
+    const desbMap = new Map(desbTodos.map((d) => [d.conquistaId, d.desbloqueadoEm])); // qualquer nível
+    const nivelMax = new Map(); // conquistaId → maior nível já desbloqueado
+    for (const d of desbTodos) if ((nivelMax.get(d.conquistaId) ?? -1) < d.nivel) nivelMax.set(d.conquistaId, d.nivel);
+    const mfMap = metricasConquista(await prisma.bonificacaoFechamento.findMany({ where: { empresaId } }));
+    const idsPrincipais = new Set(conquistas.filter((c) => c.categoria !== 'COLECAO').map((c) => c.id));
+    const ctxMeu = {
+      met: mfMap.get(func.id),
+      sugestoes: await prisma.bonificacaoOuvidoria.count({ where: { empresaId, funcionarioId: func.id, tipo: 'SUGESTAO', status: 'IMPLEMENTADA' } }),
+      reconhecimentos: await prisma.bonificacaoReconhecimento.count({ where: { empresaId, paraFuncionarioId: func.id, status: 'APROVADO' } }),
+      principaisDesbloqueadas: desbTodos.filter((d) => idsPrincipais.has(d.conquistaId)).length,
+    };
     const conquistasOut = conquistas.map((c) => {
       const unlocked = desbMap.has(c.id);
-      let progresso = null;
-      if (!unlocked && c.regra !== 'MANUAL') {
-        const val = valorRegraConquista(c.regra, mf) || 0;
-        progresso = { atual: Math.min(val, c.meta), meta: c.meta };
+      const niveis = niveisDaConquista(c);
+      const feito = nivelMax.get(c.id) ?? -1;
+      // Progressiva: o "próximo" é o 1º nível ainda não desbloqueado.
+      const proximo = niveis.find((n) => n.nivel > feito) || null;
+      const completa = c.tipo === 'PROGRESSIVA' ? !proximo : unlocked;
+      let progresso = null
+      if (!completa && c.regra !== 'MANUAL') {
+        const val = valorRegraConquista(c.regra, ctxMeu) || 0;
+        const meta = c.regra === 'COLECAO' ? idsPrincipais.size : (proximo?.meta ?? c.meta);
+        if (meta > 0) progresso = { atual: Math.min(val, meta), meta, nivelNome: proximo?.nome || null };
       }
-      return { id: c.id, nome: c.nome, descricao: c.descricao || null, emoji: c.emoji, raridade: c.raridade, coinsBonus: c.xpBonus, desbloqueada: unlocked, desbloqueadoEm: unlocked ? desbMap.get(c.id) : null, progresso };
+      return {
+        id: c.id, nome: c.nome, descricao: c.descricao || null, emoji: c.emoji, raridade: c.raridade,
+        categoria: c.categoria || 'JORNADA', coinsBonus: proximo?.coins ?? c.xpBonus,
+        desbloqueada: completa || unlocked, desbloqueadoEm: unlocked ? desbMap.get(c.id) : null,
+        nivelAtual: c.tipo === 'PROGRESSIVA' && feito > 0 ? (niveis[feito - 1]?.nome || null) : null,
+        progresso,
+      };
     });
     // Mercado: saldo de Coins, itens à venda e histórico de resgates do funcionário.
     const saldoMoedas = await saldoMoedasDe(func.id, empresaId);
