@@ -1609,12 +1609,23 @@ app.get('/api/public/eu/:token', async (req, res) => {
       const linha = (Array.isArray(fc.itensJson) ? fc.itensJson : []).find((x) => x.funcionarioId === func.id);
       return { ano: fc.ano, mes: fc.mes, totalRs: linha ? Number(linha.totalRs) : 0, indice: linha && linha.indice != null ? Number(linha.indice) : null, posicao: linha ? linha.posicao : null };
     }).reverse();
+    // Área do Colaborador: minhas marcações de ponto do mês (reaproveita o espelho).
+    let ponto = { marcacoes: [], resumo: { diasTrabalhados: 0, atrasos: 0, faltas: 0 } };
+    try {
+      const esp = await calcularEspelho(func.id, ano, mes);
+      const marc = (esp.dias || [])
+        .filter((d) => !d.futuro && (d.entradaHm || d.situacao === 'falta' || d.situacao === 'incompleto'))
+        .map((d) => ({ dia: d.dia, dow: d.dow, entrada: d.entradaHm, saida: d.saidaHm, situacao: d.situacao, atrasoMin: d.atrasoMin }))
+        .reverse();
+      ponto = { marcacoes: marc, resumo: { diasTrabalhados: esp.totais.diasTrabalhados, atrasos: esp.totais.atrasos, faltas: esp.totais.faltas } };
+    } catch (e) { console.error('[public/eu ponto]', e?.msg || e); }
     res.json({
       loja: { nome: loja?.nome || 'Loja', logoDataUrl: loja?.logoDataUrl || null },
       ano, mes, coletivaPct, coletivo,
       funcionario: { id: func.id, nome: func.nome, funcao: func.funcao || null },
       meu: meu ? rowPublicoBonif(meu) : null,
-      ranking: rows.map(rowPublicoBonif).sort((a, b) => (a.posicao || 99) - (b.posicao || 99)),
+      totalEquipe: rows.length, // p/ "Xº de N", sem expor a pontuação dos colegas
+      ponto,
       conquistas: conquistasOut,
       conquistasResumo: { total: conquistasOut.length, desbloqueadas: desbMap.size },
       coins: saldoMoedas,
