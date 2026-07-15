@@ -17,18 +17,14 @@ const CSS = `
 .bp-tnum{font-variant-numeric:tabular-nums}
 .bp-sec-title{font-size:12.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin-bottom:12px}
 .bp-b{font-weight:700;color:var(--ink)}
-.bp-store{display:flex;align-items:center;gap:9px}
-.bp-store .lg{width:30px;height:30px;border-radius:9px;background:linear-gradient(150deg,var(--brand),var(--brand-deep));display:grid;place-items:center;font-size:16px;color:#0e1319;font-weight:800;overflow:hidden}
-.bp-store .lg img{width:100%;height:100%;object-fit:cover}
-.bp-store .nm{font-size:14px;font-weight:750}
-.bp-hero{background:radial-gradient(130% 130% at 88% -10%,rgba(234,184,2,.18),transparent 56%),linear-gradient(180deg,var(--surface),var(--surface-2));border:1px solid var(--line);border-radius:22px;padding:24px 22px 26px;box-shadow:var(--sh-md);text-align:center}
+.bp-hero{background:radial-gradient(130% 130% at 88% -10%,rgba(234,184,2,.18),transparent 56%),linear-gradient(180deg,var(--surface),var(--surface-2));border:1px solid var(--line);border-radius:22px;padding:26px 22px;box-shadow:var(--sh-md);text-align:center}
+/* Marca em destaque no topo do cartão */
+.bp-marca{display:flex;justify-content:center;margin-bottom:16px}
+.bp-marca-img{max-width:190px;max-height:96px;width:auto;height:auto;object-fit:contain;display:block}
+.bp-marca-fb{width:88px;height:88px;border-radius:24px;background:linear-gradient(150deg,var(--brand),var(--brand-deep));display:grid;place-items:center;font-size:40px;font-weight:850;color:#0e1319}
 .bp-eyebrow{font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--brand-deep)}
 .bp-hero h1{font-size:34px;font-weight:850;letter-spacing:-.025em;margin:4px 0 10px;text-wrap:balance}
-.bp-tag{font-size:14px;color:var(--ink-soft);max-width:34ch;margin:0 auto 18px;line-height:1.5}
-.bp-prize{display:inline-flex;flex-direction:column;gap:2px;background:var(--brand-tint);border-radius:14px;padding:12px 22px}
-.bp-prize .p1{font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--brand-deep)}
-.bp-prize .p2{font-size:28px;font-weight:850;letter-spacing:-.02em;color:var(--brand-deep)}
-.bp-prize .p3{font-size:11px;color:var(--brand-deep);opacity:.75}
+.bp-tag{font-size:14px;color:var(--ink-soft);max-width:34ch;margin:0 auto;line-height:1.5}
 .bp-mes{display:flex;justify-content:center}
 .bp-intro{font-size:14px;color:var(--ink-soft);margin-bottom:12px;line-height:1.5}
 .bp-pillars{display:grid;grid-template-columns:1fr 1fr;gap:11px}
@@ -70,7 +66,6 @@ const CSS = `
 .bp-pod .stand{width:100%;margin-top:9px;border-radius:12px 12px 0 0;background:var(--surface);border:1px solid var(--line);border-bottom:none;box-shadow:var(--sh-sm)}
 .bp-pod.g1 .stand{height:62px;background:linear-gradient(180deg,var(--brand-tint),var(--surface))}
 .bp-pod.g2 .stand{height:44px} .bp-pod.g3 .stand{height:34px}
-.bp-podium-nota{font-size:11.5px;color:var(--muted);text-align:center;line-height:1.5;margin-top:14px}
 .bp-list{display:flex;flex-direction:column;gap:8px}
 .bp-row{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:11px 13px;display:flex;align-items:center;gap:12px;box-shadow:var(--sh-sm)}
 .bp-pos{width:28px;height:28px;border-radius:8px;background:var(--surface-2);border:1px solid var(--line);display:grid;place-items:center;font-weight:800;font-size:13px;color:var(--muted);flex-shrink:0}
@@ -126,19 +121,15 @@ export default function BonificacaoPublica() {
       <style>{CSS}</style>
       <main className="bp-wrap">
 
-        <div className="bp-store">
-          <span className="lg">{loja?.logoDataUrl ? <img src={loja.logoDataUrl} alt="" /> : (loja?.nome || 'L').charAt(0).toUpperCase()}</span>
-          <span className="nm">{loja?.nome}</span>
-        </div>
-
         <header className="bp-hero">
-          <div className="bp-eyebrow">Programa de Bonificação</div>
-          <h1>Destaque do Mês</h1>
-          <p className="bp-tag">Cada mês é uma nova oportunidade de acumular pontos, subir de rank e disputar prêmios junto à equipe!</p>
-          <div className="bp-prize">
-            <span className="p1">Ganhe até</span>
-            <span className="p2 bp-tnum">{brl(maxPossivel)}/mês</span>
+          <div className="bp-marca">
+            {loja?.logoDataUrl
+              ? <img className="bp-marca-img" src={loja.logoDataUrl} alt={loja?.nome || 'Logo'} />
+              : <span className="bp-marca-fb">{(loja?.nome || 'L').charAt(0).toUpperCase()}</span>}
           </div>
+          <div className="bp-eyebrow">Programa de Performance</div>
+          <h1>Destaque do Mês</h1>
+          <p className="bp-tag">Cada mês é uma nova oportunidade de se destacar, acumular coins e disputar prêmios junto à equipe!</p>
         </header>
 
         <section>
@@ -209,7 +200,6 @@ export default function BonificacaoPublica() {
                 ))}
               </div>
               {/* Só o pódio: as posições de 4º em diante não são expostas (evita constrangimento). */}
-              <p className="bp-podium-nota">Só o pódio é divulgado. O seu resultado completo fica na sua Área do Colaborador. 🔒</p>
             </>
           )}
         </section>
