@@ -29,7 +29,7 @@ const MODELS_TENANT = new Set([
   'avaliacaoCandidato', 'contatoCandidato', 'entrevistaCandidato', 'recrutamentoTag', 'recrutamentoConfig', 'scoreHistorico',
   'funcionario', 'bonificacaoConfig', 'bonificacaoTipoOcorrencia',
   'bonificacaoOcorrencia', 'bonificacaoColetiva', 'bonificacaoFechamento',
-  'bonificacaoNivel', 'bonificacaoXp',
+  'bonificacaoNivel', 'bonificacaoXp', 'bonificacaoAuditoria',
   'conquista', 'conquistaDesbloqueada',
   'bonificacaoMoeda', 'mercadoItem', 'mercadoResgate',
   'funcionarioFace', 'pontoRegistro', 'dispositivo', 'jornada', 'coletorBatidaPendente', 'coletorComando', 'pontoConfig', 'funcao',
@@ -598,7 +598,28 @@ app.put('/api/bonificacao/config', async (req, res) => {
 
 // ===== Bonificação — motor mensal (lançamentos, coletiva, cálculo, fechamento) =====
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
-const ocorrenciaJson = (o) => ({ id: o.id, funcionarioId: o.funcionarioId, tipoId: o.tipoId, nomeTipo: o.nomeTipo, pilar: o.pilar, percentual: Number(o.percentual), data: o.data, observacao: o.observacao || null });
+const ocorrenciaJson = (o) => ({ id: o.id, funcionarioId: o.funcionarioId, tipoId: o.tipoId, nomeTipo: o.nomeTipo, pilar: o.pilar, percentual: Number(o.percentual), data: o.data, observacao: o.observacao || null, explicacao: o.explicacao || null, severidade: o.severidade || null, minutosEvento: o.minutosEvento ?? null, status: o.status || 'VALIDADA' });
+
+// ── Motor de Regras (M1) ─────────────────────────────────────────────────
+// Dado uma regra (tipo de ocorrência) e um evento, calcula o impacto (%) e a
+// explicação. Na M1 só o modo PERCENTUAL (fixo) está ativo — faixas de minutos
+// (M2), severidade (M3) e progressividade/tetos (M4) entram depois e por
+// enquanto caem no % base da regra. Assim o cálculo continua idêntico ao atual.
+function calcularImpactoRegra(regra, evento = {}) {
+  const base = Number(regra.percentual) || 0;
+  // M2+: if (regra.tipoImpacto === 'FAIXA_MINUTOS' && evento.minutos != null) { ... }
+  // M3+: if (regra.tipoImpacto === 'SEVERIDADE') { ... }
+  return { percentual: base, severidade: regra.severidade || null, explicacao: regra.nome };
+}
+
+// Auditoria best-effort do módulo (empresaId injetado pela extension no create).
+function auditarBonif(req, acao, { entidade = null, entidadeId = null, antes = null, depois = null, justificativa = null } = {}) {
+  try {
+    prisma.bonificacaoAuditoria.create({
+      data: { usuarioId: req?.user?.id ?? null, usuarioNome: req?.user?.nome ?? null, acao, entidade, entidadeId, valorAntes: antes, valorDepois: depois, justificativa },
+    }).catch(() => {});
+  } catch { /* best-effort — nunca bloqueia o fluxo */ }
+}
 
 // Separa as ocorrências individuais das coletivas (da equipe) e calcula a Nota
 // Coletiva do mês: começa em 100% e desce a soma dos % das ocorrências coletivas.
@@ -704,9 +725,26 @@ app.post('/api/bonificacao/ocorrencias', async (req, res) => {
     }
     const data = req.body?.data ? new Date(req.body.data) : new Date();
     if (isNaN(data.getTime())) return res.status(400).json({ error: 'Data inválida.' });
+    // Evento (M1: só minutos, quando vier) → Motor de Regras → impacto (% + explicação).
+    const evento = {};
+    let minutosEvento = null;
+    if (req.body?.minutosEvento != null) { const m = parseInt(req.body.minutosEvento, 10); if (Number.isInteger(m)) { minutosEvento = m; evento.minutos = m; } }
+    const impacto = calcularImpactoRegra(tipo, evento);
+    // Idempotência opcional: mesmo evento reenviado não gera impacto duplicado.
+    const idemp = req.body?.idempotencyKey ? String(req.body.idempotencyKey).slice(0, 160) : null;
+    if (idemp) {
+      const ja = await prisma.bonificacaoOcorrencia.findFirst({ where: { idempotencyKey: idemp } });
+      if (ja) return res.status(200).json({ ...ocorrenciaJson(ja), jaExistia: true });
+    }
     const oc = await prisma.bonificacaoOcorrencia.create({
-      data: { funcionarioId, ano: am.ano, mes: am.mes, tipoId: tipo.id, nomeTipo: tipo.nome, pilar: tipo.pilar, percentual: tipo.percentual, data, observacao: req.body?.observacao ? String(req.body.observacao).slice(0, 300) : null },
+      data: {
+        funcionarioId, ano: am.ano, mes: am.mes, tipoId: tipo.id, nomeTipo: tipo.nome, pilar: tipo.pilar,
+        percentual: impacto.percentual, severidade: impacto.severidade, explicacao: impacto.explicacao, minutosEvento,
+        data, observacao: req.body?.observacao ? String(req.body.observacao).slice(0, 300) : null,
+        status: 'VALIDADA', lancadoPor: req.user?.id ?? null, idempotencyKey: idemp,
+      },
     });
+    auditarBonif(req, 'OCORRENCIA_LANCADA', { entidade: 'BonificacaoOcorrencia', entidadeId: oc.id, depois: { funcionarioId, pilar: tipo.pilar, percentual: Number(impacto.percentual), nomeTipo: tipo.nome, ano: am.ano, mes: am.mes } });
     res.status(201).json(ocorrenciaJson(oc));
   } catch (err) { console.error('[bonificacao/ocorrencias POST]', err); res.status(500).json({ error: 'Erro ao lançar a ocorrência.' }); }
 });
@@ -719,6 +757,7 @@ app.delete('/api/bonificacao/ocorrencias/:id', async (req, res) => {
     if (!oc) return res.status(404).json({ error: 'Ocorrência não encontrada.' });
     if (await prisma.bonificacaoFechamento.findFirst({ where: { ano: oc.ano, mes: oc.mes } })) return res.status(400).json({ error: 'O mês já está fechado.' });
     await prisma.bonificacaoOcorrencia.delete({ where: { id } });
+    auditarBonif(req, 'OCORRENCIA_EXCLUIDA', { entidade: 'BonificacaoOcorrencia', entidadeId: id, antes: { funcionarioId: oc.funcionarioId, pilar: oc.pilar, percentual: Number(oc.percentual), nomeTipo: oc.nomeTipo, ano: oc.ano, mes: oc.mes } });
     res.json({ ok: true });
   } catch (err) { console.error('[bonificacao/ocorrencias DELETE]', err); res.status(500).json({ error: 'Erro ao excluir a ocorrência.' }); }
 });

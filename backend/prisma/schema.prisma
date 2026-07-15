@@ -800,14 +800,31 @@ model BonificacaoXp {
 
 // Tipos de ocorrência que descontam % de um pilar (Assiduidade ou Desempenho).
 // Configuráveis por loja — os dois pilares começam em 100% e caem por ocorrências.
+// Tipo de ocorrência = REGRA do Motor de Regras. Na M1 os campos de motor são
+// aditivos (default preserva o comportamento atual: impacto = percentual fixo).
+// A lógica de faixas/severidade/progressividade entra em M2–M4.
 model BonificacaoTipoOcorrencia {
   id           Int      @id @default(autoincrement())
   empresaId    Int
   nome         String
   pilar        String   // ASSIDUIDADE | DESEMPENHO | COLETIVA
-  percentual   Decimal  @db.Decimal(5, 2) // % descontado por ocorrência
+  percentual   Decimal  @db.Decimal(5, 2) // % base descontado por ocorrência (regra simples)
   ordem        Int      @default(0)
   ativo        Boolean  @default(true)
+  // ── Motor de Regras ──
+  tipoImpacto       String    @default("PERCENTUAL") // PERCENTUAL | FAIXA_MINUTOS | SEVERIDADE
+  evento            String?   // categoria do evento que dispara a regra (ex.: ATRASO, FALTA)
+  severidade        String?   // LEVE | MEDIA | GRAVE | CRITICA (Desempenho) — M3
+  toleranciaMin     Int?      // tolerância antes de aplicar (min) — M2
+  faixaMinMin       Int?      // faixa de minutos: início inclusivo — M2
+  faixaMaxMin       Int?      // faixa de minutos: fim inclusivo — M2
+  reincidenciaAPartir Int?    // progressividade a partir da N-ésima ocorrência no ciclo — M4
+  incrementoPct     Decimal?  @db.Decimal(5, 2) // incremento por reincidência — M4
+  tetoOcorrenciaPct Decimal?  @db.Decimal(5, 2) // teto do impacto por ocorrência — M4
+  tetoCicloPct      Decimal?  @db.Decimal(5, 2) // teto acumulado no ciclo — M4
+  prioridade        Int       @default(0)        // ordem de avaliação das regras
+  vigenciaInicio    DateTime?
+  vigenciaFim       DateTime?
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
@@ -823,17 +840,43 @@ model BonificacaoOcorrencia {
   funcionarioId Int?
   ano           Int
   mes           Int
-  tipoId        Int?
+  tipoId        Int?     // regra que gerou o impacto
   nomeTipo      String
   pilar         String   // ASSIDUIDADE | DESEMPENHO | COLETIVA
-  percentual    Decimal  @db.Decimal(5, 2)
+  percentual    Decimal  @db.Decimal(5, 2) // impacto final (calculado pelo motor)
   data          DateTime @db.Date
   observacao    String?
   origem        String   @default("MANUAL") // MANUAL | PONTO (lançada pelo Ponto Facial)
+  // ── Motor de Regras (evento + impacto explicável) ──
+  minutosEvento  Int?     // dado do evento (ex.: minutos de atraso)
+  dadosEvento    Json?    // dados adicionais do evento (flexível)
+  explicacao     String?  // por que este impacto foi aplicado (regra/faixa/reincidência)
+  severidade     String?  // severidade aplicada (snapshot)
+  status         String   @default("VALIDADA") // VALIDADA | PENDENTE | REJEITADA
+  lancadoPor     Int?     // usuário que lançou
+  validadoPor    Int?     // usuário que validou
+  idempotencyKey String?  @unique // evita lançar o mesmo evento duas vezes
   criadoEm      DateTime @default(now())
 
   @@index([empresaId, ano, mes])
   @@index([funcionarioId, ano, mes])
+}
+
+// Auditoria mínima do Programa de Benefícios (M1) — quem fez o quê, quando.
+model BonificacaoAuditoria {
+  id            Int      @id @default(autoincrement())
+  empresaId     Int
+  usuarioId     Int?
+  usuarioNome   String?
+  acao          String   // OCORRENCIA_LANCADA | OCORRENCIA_EXCLUIDA | ...
+  entidade      String?  // ex.: BonificacaoOcorrencia
+  entidadeId    Int?
+  valorAntes    Json?
+  valorDepois   Json?
+  justificativa String?
+  criadoEm      DateTime @default(now())
+
+  @@index([empresaId, criadoEm])
 }
 
 // Nota Coletiva da LOJA no mês (0–100%), aplicada igual a todos.
