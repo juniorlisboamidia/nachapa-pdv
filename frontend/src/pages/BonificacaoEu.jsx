@@ -221,8 +221,8 @@ export default function BonificacaoEu() {
             </div>
             {meu ? (
               <>
-                <div className="be-el"><span className="l">Presença <small>· {meu.assidPct}%</small></span><span className="r be-tnum">{brl(meu.assidRs)}</span></div>
-                <div className="be-el"><span className="l">Score <small>· {meu.desPct}%</small></span><span className="r be-tnum">{brl(meu.desRs)}</span></div>
+                <div className="be-el"><span className="l">Assiduidade <small>· {meu.assidPct}%</small></span><span className="r be-tnum">{brl(meu.assidRs)}</span></div>
+                <div className="be-el"><span className="l">Desempenho <small>· {meu.desPct}%</small></span><span className="r be-tnum">{brl(meu.desRs)}</span></div>
                 <div className="be-el"><span className="l">Coletivo <small>· {meu.coletivaPct}%</small></span><span className="r be-tnum">{brl(meu.colRs)}</span></div>
                 <div className={'be-el' + (meu.classificacaoRs > 0 ? '' : ' zero')}><span className="l">Extra <small>· destaque do mês</small></span><span className="r be-tnum">{brl(meu.classificacaoRs)}</span></div>
               </>

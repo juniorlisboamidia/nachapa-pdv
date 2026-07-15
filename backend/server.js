@@ -1367,11 +1367,11 @@ app.get('/api/public/eu/:token', async (req, res) => {
     let rows, coletivaPct;
     if (fech) { rows = Array.isArray(fech.itensJson) ? fech.itensJson : []; coletivaPct = Number(fech.coletivaPct); }
     else {
-      const col = await prisma.bonificacaoColetiva.findFirst({ where: { empresaId, ano, mes } });
-      coletivaPct = col ? Number(col.percentual) : 0;
       const fs = await prisma.funcionario.findMany({ where: { empresaId, status: 'ATIVO' }, orderBy: { nome: 'asc' } });
       const ocs = await prisma.bonificacaoOcorrencia.findMany({ where: { empresaId, ano, mes } });
-      rows = calcularLinhasBonificacao(fs, ocs, coletivaPct, t);
+      const sep = separarOcorrenciasBonif(ocs); // coletiva = 100% − ocorrências COLETIVA (igual aos outros fluxos)
+      coletivaPct = sep.coletivaPct;
+      rows = calcularLinhasBonificacao(fs, sep.individuais, coletivaPct, t);
     }
     const meu = rows.find((r) => r.funcionarioId === func.id) || null;
     const niveis = (await prisma.bonificacaoNivel.findMany({ where: { empresaId }, orderBy: [{ ordem: 'asc' }, { id: 'asc' }] })).map((n) => n.nome);

@@ -144,8 +144,8 @@ export default function BonificacaoPublica() {
           <h2 className="bp-sec-title">Como participar</h2>
           <p className="bp-intro">Todo dia 1º um novo ciclo se inicia. Existem <span className="bp-b">4 maneiras</span> de ganhar:</p>
           <div className="bp-pillars">
-            <article className="bp-pillar"><div className="bp-pt"><span className="bp-emo">❤️</span><span className="bp-val">{brl(c.tetoAssiduidade)}</span></div><h3>Presença</h3><span className="bp-cat">Assiduidade</span></article>
-            <article className="bp-pillar"><div className="bp-pt"><span className="bp-emo">👊</span><span className="bp-val">{brl(c.tetoDesempenho)}</span></div><h3>Score</h3><span className="bp-cat">Desempenho</span></article>
+            <article className="bp-pillar"><div className="bp-pt"><span className="bp-emo">❤️</span><span className="bp-val">{brl(c.tetoAssiduidade)}</span></div><h3>Assiduidade</h3><span className="bp-cat">Presença e pontualidade</span></article>
+            <article className="bp-pillar"><div className="bp-pt"><span className="bp-emo">👊</span><span className="bp-val">{brl(c.tetoDesempenho)}</span></div><h3>Desempenho</h3><span className="bp-cat">Qualidade do trabalho</span></article>
             <article className="bp-pillar"><div className="bp-pt"><span className="bp-emo">🤝</span><span className="bp-val">{brl(c.tetoColetiva)}</span></div><h3>Coletivo</h3><span className="bp-cat">Equipe</span></article>
             <article className="bp-pillar"><div className="bp-pt"><span className="bp-emo">🏆</span><span className="bp-val">{brl(c.bonusTop1)}</span></div><h3>Extra</h3><span className="bp-cat">Destaque do mês</span></article>
           </div>
@@ -156,12 +156,12 @@ export default function BonificacaoPublica() {
           <h2 className="bp-sec-title">Entenda cada frente</h2>
           <div className="bp-detail">
             <div className="bp-drow"><span className="bp-de">❤️</span><div>
-              <h4>Presença <span className="v">até {brl(c.tetoAssiduidade)}</span></h4>
+              <h4>Assiduidade <span className="v">até {brl(c.tetoAssiduidade)}</span></h4>
               <p>Você começa o mês com <span className="bp-b">100%</span>. Cada ocorrência desconta uma parte.</p>
               <Pen tipos={tAssid} />
             </div></div>
             <div className="bp-drow"><span className="bp-de">👊</span><div>
-              <h4>Score <span className="v">até {brl(c.tetoDesempenho)}</span></h4>
+              <h4>Desempenho <span className="v">até {brl(c.tetoDesempenho)}</span></h4>
               <p>Começa em <span className="bp-b">100%</span>. Falhas no trabalho descontam pontos.</p>
               <Pen tipos={tDesemp} />
             </div></div>
@@ -182,8 +182,8 @@ export default function BonificacaoPublica() {
             <div className="bp-ex">
               <div className="eh">{lider.nome} está em 1º 🏆</div>
               <div className="es">Veja como o prêmio está montado:</div>
-              <div className="bp-el"><span className="l">Presença <small>· {lider.assidPct}%</small></span><span className="r bp-tnum">{brl(lider.assidRs)}</span></div>
-              <div className="bp-el"><span className="l">Score <small>· {lider.desPct}%</small></span><span className="r bp-tnum">{brl(lider.desRs)}</span></div>
+              <div className="bp-el"><span className="l">Assiduidade <small>· {lider.assidPct}%</small></span><span className="r bp-tnum">{brl(lider.assidRs)}</span></div>
+              <div className="bp-el"><span className="l">Desempenho <small>· {lider.desPct}%</small></span><span className="r bp-tnum">{brl(lider.desRs)}</span></div>
               <div className="bp-el"><span className="l">Coletivo <small>· {lider.coletivaPct}%</small></span><span className="r bp-tnum">{brl(lider.colRs)}</span></div>
               {lider.classificacaoRs > 0 && <div className="bp-el"><span className="l">Extra <small>· destaque do mês</small></span><span className="r bp-tnum">{brl(lider.classificacaoRs)}</span></div>}
               <div className="bp-et"><span className="l">Total</span><span className="r bp-tnum">{brl(lider.totalRs)}</span></div>
@@ -217,8 +217,8 @@ export default function BonificacaoPublica() {
                       <div className="name">
                         <div className="n">{f.nome}</div>
                         <div className="bp-chips">
-                          <span className="bp-chip">Presença <b>{f.assidPct}%</b></span>
-                          <span className="bp-chip">Score <b>{f.desPct}%</b></span>
+                          <span className="bp-chip">Assiduidade <b>{f.assidPct}%</b></span>
+                          <span className="bp-chip">Desempenho <b>{f.desPct}%</b></span>
                           <span className="bp-chip">Coletivo <b>{f.coletivaPct}%</b></span>
                         </div>
                       </div>
@@ -233,8 +233,8 @@ export default function BonificacaoPublica() {
 
         <section className="bp-tips">
           <h2>Como ir bem</h2>
-          <div className="bp-tip"><span className="dot"></span><span>Chegue no horário e não falte — cada ocorrência tira % da sua Presença.</span></div>
-          <div className="bp-tip"><span className="dot"></span><span>Capriche no serviço — advertências e erros pesam no Score.</span></div>
+          <div className="bp-tip"><span className="dot"></span><span>Chegue no horário e não falte — cada ocorrência tira % da sua Assiduidade.</span></div>
+          <div className="bp-tip"><span className="dot"></span><span>Capriche no serviço — advertências e erros pesam no Desempenho.</span></div>
           <div className="bp-tip"><span className="dot"></span><span>Jogue pela equipe — a nota Coletiva da loja vale igual pra todo mundo.</span></div>
           <div className="bp-tip"><span className="dot"></span><span>Seja o Destaque do mês — o 1º lugar leva o Extra.</span></div>
         </section>
