@@ -60,12 +60,12 @@ const CSS = `
 .bp-et{margin-top:10px;padding-top:11px;border-top:2px solid var(--line);display:flex;justify-content:space-between;align-items:center}
 .bp-et .l{font-weight:800} .bp-et .r{font-weight:850;font-size:19px;color:var(--money)}
 .bp-podium{display:grid;grid-template-columns:1fr 1.14fr 1fr;align-items:end;gap:9px;margin-bottom:14px}
-.bp-pod{display:flex;flex-direction:column;align-items:center;text-align:center}
+.bp-pod{display:flex;flex-direction:column;align-items:center;text-align:center;min-width:0}
 .bp-pod .medal{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-weight:850;font-size:15px;color:#fff;box-shadow:var(--sh-sm);margin-bottom:8px}
 .bp-pod.g1 .medal{background:linear-gradient(150deg,#F3B53C,var(--gold));width:48px;height:48px;font-size:17px}
 .bp-pod.g2 .medal{background:linear-gradient(150deg,#AEB8C2,var(--silver))}
 .bp-pod.g3 .medal{background:linear-gradient(150deg,#D08A54,var(--bronze))}
-.bp-pod .who{font-size:13px;font-weight:750;line-height:1.2;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bp-pod .who{font-size:13px;font-weight:750;line-height:1.2;width:100%;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bp-pod .tot{font-size:14px;font-weight:850;color:var(--money);margin-top:1px}
 .bp-pod .stand{width:100%;margin-top:9px;border-radius:12px 12px 0 0;background:var(--surface);border:1px solid var(--line);border-bottom:none;box-shadow:var(--sh-sm)}
 .bp-pod.g1 .stand{height:62px;background:linear-gradient(180deg,var(--brand-tint),var(--surface))}
