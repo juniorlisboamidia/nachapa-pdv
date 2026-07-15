@@ -32,32 +32,33 @@ const SIT = {
   trabalhado: { l: 'Trabalhado', c: '#2563eb' },
 }
 const OUV_TIPOS_PUB = [['SUGESTAO', 'Sugestão'], ['ELOGIO', 'Elogio'], ['RECLAMACAO', 'Reclamação'], ['DENUNCIA', 'Denúncia'], ['OUTRO', 'Outro']]
-const TABS = [['inicio', 'Início', '🏠'], ['ponto', 'Ponto', '🕐'], ['premios', 'Prêmios', '🎁'], ['voz', 'Voz', '💬']]
+const TABS = [['inicio', 'Início', '🏠'], ['ponto', 'Ponto', '🕐'], ['premios', 'Prêmios', '🎁'], ['voz', 'Sugestões', '💬']]
 
 const CSS = `
-.be-root{--bg:#F4EFE7;--surface:#FFFFFF;--surface-2:#FAF6EF;--ink:#211913;--ink-soft:#4E4339;--muted:#8C7C6D;--line:#EAE0D3;--brand:#E85D1B;--brand-deep:#B8430E;--brand-tint:#FBEADF;--money:#0F8A54;--gold:#E0A21A;--silver:#94A0AC;--bronze:#BE7043;--sh-sm:0 1px 2px rgba(46,32,18,.06);--sh-md:0 3px 8px rgba(46,32,18,.06),0 16px 34px rgba(46,32,18,.08);--rd:18px;
+.be-root{--bg:#F4F1EA;--surface:#FFFFFF;--surface-2:#EFEADF;--ink:#0E1319;--ink-soft:#474D55;--muted:#8A8E94;--line:#E5DFD2;--brand:#EAB802;--brand-deep:#C79A05;--brand-tint:#FBF2CC;--money:#0F8A54;--gold:#EAB802;--gold-text:#8A6A00;--silver:#94A0AC;--bronze:#BE7043;--dark:#0E1319;--sh-sm:0 1px 2px rgba(14,19,25,.06);--sh-md:0 3px 8px rgba(14,19,25,.07),0 16px 34px rgba(14,19,25,.08);--rd:18px;
   min-height:100dvh;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;-webkit-font-smoothing:antialiased;line-height:1.45}
-@media (prefers-color-scheme:dark){.be-root{--bg:#140E08;--surface:#20180F;--surface-2:#1A130C;--ink:#F4EBE1;--ink-soft:#D8CABB;--muted:#A5937F;--line:#332619;--brand:#FB7A3B;--brand-deep:#E85D1B;--brand-tint:#38220F;--money:#3FBE82;--gold:#E7B23E;--sh-sm:0 1px 2px rgba(0,0,0,.4);--sh-md:0 3px 8px rgba(0,0,0,.4),0 18px 36px rgba(0,0,0,.5)}}
+@media (prefers-color-scheme:dark){.be-root{--bg:#0E1319;--surface:#171E27;--surface-2:#121821;--ink:#F3EEE3;--ink-soft:#CFC9BD;--muted:#8F97A1;--line:#28313C;--brand:#EAB802;--brand-deep:#C79A05;--brand-tint:#2C2A14;--money:#3FBE82;--gold:#F0C42E;--gold-text:#F0C42E;--sh-sm:0 1px 2px rgba(0,0,0,.4);--sh-md:0 3px 8px rgba(0,0,0,.4),0 18px 36px rgba(0,0,0,.5)}}
 .be-root *{box-sizing:border-box}
 .be-app{max-width:480px;margin:0 auto;min-height:100dvh;position:relative;display:flex;flex-direction:column}
 .be-tnum{font-variant-numeric:tabular-nums}
 
 /* Hero */
-.be-hero{position:sticky;top:0;z-index:20;background:linear-gradient(150deg,#F0692A 0%,#D24A12 55%,#A63A0C 100%);color:#fff;padding:14px 18px 18px;border-radius:0 0 24px 24px;box-shadow:0 10px 26px rgba(150,58,12,.28)}
-.be-hero-loja{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:rgba(255,255,255,.9)}
-.be-hero-loja .lg{width:22px;height:22px;border-radius:7px;background:rgba(255,255,255,.22);display:grid;place-items:center;font-size:12px;font-weight:800;overflow:hidden}
+.be-hero{position:sticky;top:0;z-index:20;color:#fff;padding:16px 20px 18px;border-radius:0 0 26px 26px;background:radial-gradient(120% 80% at 86% -12%,rgba(234,184,2,.20),transparent 58%),linear-gradient(165deg,#1B2532 0%,#0E1319 62%);box-shadow:0 12px 30px rgba(14,19,25,.32)}
+.be-hero-loja{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:750;color:rgba(255,255,255,.9)}
+.be-hero-loja .lg{width:24px;height:24px;border-radius:7px;background:linear-gradient(135deg,#F5CE3A,#EAB802);display:grid;place-items:center;font-size:12px;font-weight:850;color:#0E1319;overflow:hidden}
 .be-hero-loja .lg img{width:100%;height:100%;object-fit:cover}
-.be-hero-main{display:flex;align-items:center;gap:13px;margin-top:12px}
-.be-avatar{width:52px;height:52px;border-radius:16px;flex-shrink:0;background:rgba(255,255,255,.18);border:1.5px solid rgba(255,255,255,.35);display:grid;place-items:center;font-size:22px;font-weight:850;color:#fff}
+.be-hero-main{display:flex;align-items:center;gap:14px;margin-top:16px}
+.be-avatar{width:54px;height:54px;border-radius:16px;flex-shrink:0;background:linear-gradient(145deg,#F5CE3A,#E0A800);display:grid;place-items:center;font-size:23px;font-weight:850;color:#0E1319;box-shadow:0 6px 16px rgba(234,184,2,.28)}
 .be-hero-id{min-width:0}
-.be-hero-id .oi{font-size:10.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.72)}
-.be-hero-id h1{font-size:23px;font-weight:850;letter-spacing:-.02em;margin:1px 0;text-wrap:balance;line-height:1.1}
-.be-hero-id .fx{font-size:12.5px;color:rgba(255,255,255,.8);font-weight:600}
-.be-hero-chips{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
-.be-chip{display:inline-flex;align-items:baseline;gap:5px;font-size:15px;font-weight:850;padding:7px 13px;border-radius:999px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.28);color:#fff}
-.be-chip small{font-size:10px;font-weight:700;opacity:.82;text-transform:uppercase;letter-spacing:.04em}
-.be-chip.gold{background:linear-gradient(135deg,#FBD24E,#E0A21A);color:#4A2F00;border:none;box-shadow:0 3px 10px rgba(0,0,0,.15)}
-.be-chip.gold small{opacity:.7}
+.be-hero-id .oi{font-size:10px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--gold)}
+.be-hero-id h1{font-size:24px;font-weight:850;letter-spacing:-.02em;margin:2px 0 1px;text-wrap:balance;line-height:1.08;color:#fff}
+.be-hero-id .fx{font-size:12.5px;color:rgba(255,255,255,.66);font-weight:600}
+.be-hero-stats{display:flex;align-items:stretch;margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,.1)}
+.be-stat{flex:1;text-align:center}
+.be-stat .v{font-size:20px;font-weight:850;letter-spacing:-.01em;line-height:1}
+.be-stat.coins .v{color:var(--gold)}
+.be-stat .k{font-size:10px;font-weight:750;letter-spacing:.07em;text-transform:uppercase;color:rgba(255,255,255,.55);margin-top:3px}
+.be-stat-div{width:1px;background:rgba(255,255,255,.12);margin:2px 0}
 
 /* Corpo + abas */
 .be-body{flex:1;padding:18px 16px calc(88px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:18px}
@@ -65,7 +66,7 @@ const CSS = `
 .be-tab{flex:1;background:none;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;border-radius:13px;color:var(--muted);font-family:inherit}
 .be-tab .ic{font-size:20px;line-height:1;filter:grayscale(.4);opacity:.7;transition:.15s}
 .be-tab .lb{font-size:10.5px;font-weight:750}
-.be-tab.on{color:var(--brand-deep)}
+.be-tab.on{color:var(--ink)}
 .be-tab.on .ic{filter:none;opacity:1;transform:translateY(-1px)}
 .be-tab.on{background:var(--brand-tint)}
 
@@ -73,7 +74,7 @@ const CSS = `
 .be-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--rd);padding:18px;box-shadow:var(--sh-sm)}
 .be-b{font-weight:700;color:var(--ink)}
 .be-hint{font-size:12px;color:var(--muted);margin-top:12px;line-height:1.5}
-.be-hint b{color:var(--brand-deep)}
+.be-hint b{color:var(--ink)}
 .be-empty{text-align:center;padding:26px 16px;color:var(--muted);font-size:13px;background:var(--surface);border:1px dashed var(--line);border-radius:var(--rd)}
 .be-emptybox{text-align:center;padding:10px 0 4px;color:var(--muted);font-size:13px}
 .be-state{min-height:70vh;display:grid;place-items:center;text-align:center;color:var(--muted);padding:24px}
@@ -93,12 +94,12 @@ const CSS = `
 .be-el .l{color:var(--ink-soft)} .be-el .l small{color:var(--muted)}
 .be-el .r{font-weight:750;color:var(--money)}
 .be-el.zero .r{color:var(--muted);font-weight:650}
-.be-idx{margin-top:14px;padding:13px;border-radius:14px;background:var(--brand-tint);border:1px solid rgba(232,93,27,.18)}
-.be-idx-top{display:flex;align-items:center;justify-content:space-between;font-size:13px;font-weight:800;color:var(--brand-deep)}
+.be-idx{margin-top:14px;padding:13px;border-radius:14px;background:var(--brand-tint);border:1px solid rgba(234,184,2,.32)}
+.be-idx-top{display:flex;align-items:center;justify-content:space-between;font-size:13px;font-weight:800;color:var(--ink)}
 .be-idx-top b{font-size:18px}
-.be-idx-bar{height:9px;border-radius:999px;background:rgba(232,93,27,.14);overflow:hidden;margin-top:8px}
-.be-idx-bar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,var(--brand),var(--brand-deep))}
-.be-idx-sub{font-size:11px;color:var(--brand-deep);opacity:.8;margin-top:7px;font-weight:600}
+.be-idx-bar{height:9px;border-radius:999px;background:rgba(234,184,2,.2);overflow:hidden;margin-top:8px}
+.be-idx-bar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#F2C63A,var(--brand))}
+.be-idx-sub{font-size:11px;color:var(--ink-soft);margin-top:7px;font-weight:600}
 
 /* Ponto */
 .be-ptres{display:flex;gap:8px;margin-bottom:12px}
@@ -122,7 +123,7 @@ const CSS = `
 .be-hist-bar{width:100%;max-width:42px;height:72px;background:var(--surface-2);border:1px solid var(--line);border-radius:8px 8px 4px 4px;display:flex;align-items:flex-end;overflow:hidden}
 .be-hist-bar i{display:block;width:100%;background:linear-gradient(180deg,var(--brand),var(--brand-deep));border-radius:6px 6px 0 0;min-height:3px}
 .be-hist-lbl{font-size:10.5px;color:var(--ink-soft);font-weight:650;text-align:center}
-.be-hist-pos{color:var(--gold);font-weight:800}
+.be-hist-pos{color:var(--gold-text);font-weight:800}
 
 /* Conquistas */
 .be-ach{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -143,16 +144,16 @@ const CSS = `
 /* Carteira / Mercado */
 .be-wallet{background:radial-gradient(120% 120% at 85% -10%,rgba(224,162,26,.28),transparent 55%),linear-gradient(180deg,var(--surface),var(--surface-2));border:1px solid var(--line);border-radius:20px;padding:20px;box-shadow:var(--sh-md);text-align:center}
 .be-wallet .big{font-size:38px;font-weight:850;letter-spacing:-.02em;line-height:1}
-.be-wallet .lbl{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);margin-top:2px}
+.be-wallet .lbl{font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--gold-text);margin-top:2px}
 .be-wallet .sub{font-size:12.5px;color:var(--muted);margin-top:8px}
-.be-coins{display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#FBD24E,#E0A21A);color:#4A2F00;font-weight:850;border-radius:999px;padding:6px 13px;font-size:14px;box-shadow:var(--sh-sm)}
+.be-coins{display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#F5CE3A,#EAB802);color:#0E1319;font-weight:850;border-radius:999px;padding:6px 13px;font-size:14px;box-shadow:var(--sh-sm)}
 .be-shop{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .be-shop-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:13px;box-shadow:var(--sh-sm);display:flex;flex-direction:column;gap:5px}
 .be-shop-emo{font-size:30px;line-height:1}
 .be-shop-nm{font-size:13.5px;font-weight:800;line-height:1.15}
 .be-shop-ds{font-size:11px;color:var(--muted);line-height:1.35;flex:1}
-.be-shop-cost{font-size:14px;font-weight:850;color:var(--gold);margin-top:2px}
-.be-shop-btn{margin-top:5px;border:none;border-radius:10px;padding:8px;font-size:12.5px;font-weight:800;cursor:pointer;background:linear-gradient(135deg,var(--brand),var(--brand-deep));color:#fff}
+.be-shop-cost{font-size:14px;font-weight:850;color:var(--gold-text);margin-top:2px}
+.be-shop-btn{margin-top:5px;border:none;border-radius:10px;padding:8px;font-size:12.5px;font-weight:850;cursor:pointer;background:linear-gradient(135deg,#F2C63A,var(--brand));color:#0E1319}
 .be-shop-btn:disabled{background:var(--surface-2);color:var(--muted);border:1px solid var(--line);cursor:not-allowed}
 .be-resg{display:flex;flex-direction:column;gap:7px;margin-top:12px}
 .be-resg-row{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px;box-shadow:var(--sh-sm)}
@@ -162,7 +163,7 @@ const CSS = `
 /* Voz (formulários) */
 .be-input{width:100%;box-sizing:border-box;font-family:inherit;font-size:14px;color:var(--ink);background:var(--surface-2);border:1px solid var(--line);border-radius:11px;padding:11px 12px;outline:none}
 .be-input:focus{border-color:var(--brand)}
-.be-btn{width:100%;font-family:inherit;font-size:14.5px;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--brand),var(--brand-deep));border:none;border-radius:12px;padding:12px 18px;cursor:pointer;box-shadow:var(--sh-sm)}
+.be-btn{width:100%;font-family:inherit;font-size:14.5px;font-weight:850;color:#0E1319;background:linear-gradient(135deg,#F2C63A,var(--brand));border:none;border-radius:12px;padding:12px 18px;cursor:pointer;box-shadow:var(--sh-sm)}
 .be-btn:disabled{opacity:.55;cursor:default}
 .be-mini-title{font-size:12px;font-weight:800;color:var(--muted);margin-bottom:7px;text-transform:uppercase;letter-spacing:.03em}
 .be-rec-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px dashed var(--line);font-size:13px}
@@ -180,7 +181,7 @@ const CSS = `
 .be-dlg p{font-size:13px;color:var(--ink-soft);line-height:1.5;margin-bottom:16px}
 .be-dlg-row{display:flex;gap:9px}
 .be-dlg-row button{flex:1;border-radius:11px;padding:11px;font-size:13.5px;font-weight:800;cursor:pointer;border:1px solid var(--line)}
-.be-dlg-row .ok{border:none;background:linear-gradient(135deg,var(--brand),var(--brand-deep));color:#fff}
+.be-dlg-row .ok{border:none;background:linear-gradient(135deg,#F2C63A,var(--brand));color:#0E1319}
 .be-dlg-row .no{background:var(--surface-2);color:var(--ink-soft)}
 .be-dlg-row button:disabled{opacity:.6;cursor:not-allowed}
 `
@@ -241,9 +242,20 @@ export default function BonificacaoEu() {
               {funcionario?.funcao && <div className="fx">{funcionario.funcao}</div>}
             </div>
           </div>
-          <div className="be-hero-chips">
-            <span className="be-chip gold be-tnum">🪙 {num(saldoCoins)} <small>Coins</small></span>
-            {meu?.indice != null && <span className="be-chip be-tnum">⭐ {meu.indice}% <small>Índice</small></span>}
+          <div className="be-hero-stats">
+            <div className="be-stat coins">
+              <div className="v be-tnum">🪙 {num(saldoCoins)}</div>
+              <div className="k">Coins</div>
+            </div>
+            {meu?.indice != null && (
+              <>
+                <div className="be-stat-div" />
+                <div className="be-stat">
+                  <div className="v be-tnum">⭐ {meu.indice}%</div>
+                  <div className="k">Índice</div>
+                </div>
+              </>
+            )}
           </div>
         </header>
 
@@ -466,7 +478,7 @@ function TabPremios({ saldoCoins, conquistas, conquistasResumo, mercado, meusRes
                   <div key={r.id} className="be-resg-row">
                     <span style={{ fontSize: 18 }}>{r.itemEmoji}</span>
                     <span className="nm">{r.itemNome}{r.tipoItem === 'FOLGA' && r.dataDesejada && <span style={{ fontSize: 11, color: 'var(--brand-deep)', fontWeight: 700, marginLeft: 6 }}>🏖️ {new Date(r.dataDesejada).toLocaleDateString('pt-BR')}</span>}</span>
-                    <span className="be-tnum" style={{ fontSize: 12, color: 'var(--gold)', fontWeight: 800 }}>🪙 {num(r.custo)}</span>
+                    <span className="be-tnum" style={{ fontSize: 12, color: 'var(--gold-text)', fontWeight: 800 }}>🪙 {num(r.custo)}</span>
                     <span className="be-st" style={{ color: st.cor, background: st.cor + '22' }}>{st.label}</span>
                   </div>
                 )
