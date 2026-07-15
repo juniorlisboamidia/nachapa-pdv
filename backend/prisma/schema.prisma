@@ -914,6 +914,22 @@ model BonificacaoIndicadorValor {
   @@index([empresaId, ano, mes])
 }
 
+// Código de acesso (OTP) da Área do Colaborador — enviado por WhatsApp (UAZAPI).
+model ColaboradorOtp {
+  id            Int      @id @default(autoincrement())
+  empresaId     Int
+  funcionarioId Int
+  telefone      String   // dígitos canônicos (DDD+número, sem DDI)
+  codigoHash    String
+  expiraEm      DateTime
+  tentativas    Int      @default(0)
+  usado         Boolean  @default(false)
+  criadoEm      DateTime @default(now())
+
+  @@index([empresaId, telefone, criadoEm])
+  @@index([funcionarioId])
+}
+
 // Ouvidoria / Sugestões do colaborador — canal p/ a liderança, opcionalmente anônimo. (Bloco 4)
 model BonificacaoOuvidoria {
   id            Int       @id @default(autoincrement())

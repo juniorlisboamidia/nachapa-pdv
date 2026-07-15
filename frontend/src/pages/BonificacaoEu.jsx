@@ -1,10 +1,10 @@
-// ÁREA DO COLABORADOR (link privado, sem login — abre por token secreto).
-// Mini-app com abas na base: Início (desempenho do mês, sem ranking dos colegas),
-// Ponto (minhas marcações), Prêmios (Coins/conquistas/mercado) e Voz (reconhecer/ouvidoria).
-// CSS escopado em .be-root. NÃO expõe a pontuação dos colegas (evita comparação).
+// ÁREA DO COLABORADOR — login por WhatsApp (OTP) + mini-app com abas na base:
+// Início (desempenho do mês, sem ranking dos colegas), Ponto (minhas marcações),
+// Prêmios (Coins/conquistas/mercado) e Sugestões (reconhecer/ouvidoria).
+// Acesso pelo link da loja /colaborador/:slug; sessão de ~30 dias no aparelho.
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import api from '../services/api'
+import { colabApi, COLAB_TOKEN_KEY } from '../services/api'
 
 const brl = (n) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(n) || 0)
 const num = (n) => new Intl.NumberFormat('pt-BR').format(Math.round(Number(n) || 0))
@@ -184,12 +184,32 @@ const CSS = `
 .be-dlg-row .ok{border:none;background:linear-gradient(135deg,#F2C63A,var(--brand));color:#0E1319}
 .be-dlg-row .no{background:var(--surface-2);color:var(--ink-soft)}
 .be-dlg-row button:disabled{opacity:.6;cursor:not-allowed}
+
+/* Barra do hero + sair */
+.be-hero-bar{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.be-sair{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);color:#fff;font-family:inherit;font-size:11.5px;font-weight:750;padding:5px 12px;border-radius:999px;cursor:pointer}
+.be-state button{cursor:pointer}
+/* Login */
+.be-login{min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 18px;background:radial-gradient(120% 55% at 50% -5%,rgba(234,184,2,.16),transparent 60%),var(--bg)}
+.be-login-card{width:100%;max-width:380px;background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:28px 22px;box-shadow:var(--sh-md);text-align:center}
+.be-login-logo{width:64px;height:64px;border-radius:18px;margin:0 auto 14px;background:linear-gradient(145deg,#F5CE3A,#E0A800);display:grid;place-items:center;font-size:28px;font-weight:850;color:#0E1319;overflow:hidden}
+.be-login-logo img{width:100%;height:100%;object-fit:cover}
+.be-login-oi{font-size:10.5px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--gold-text)}
+.be-login-loja{font-size:24px;font-weight:850;letter-spacing:-.02em;margin:2px 0 12px;text-wrap:balance}
+.be-login-sub{font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:16px}
+.be-login-sub b{color:var(--ink)}
+.be-login .be-input{text-align:center;font-size:17px;font-weight:700;margin-bottom:12px}
+.be-login .be-cod{letter-spacing:.35em;font-size:24px;padding-left:.35em}
+.be-login-erro{font-size:12.5px;color:#dc2626;font-weight:600;margin-bottom:12px}
+.be-login-voltar{background:none;border:none;color:var(--muted);font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;margin-top:12px;text-decoration:underline}
+.be-login-foot{margin-top:18px;font-size:11.5px;color:var(--muted)}
 `
 
 export default function BonificacaoEu() {
-  const { token } = useParams()
+  const { slug } = useParams()
+  const [sessao, setSessao] = useState(() => localStorage.getItem(COLAB_TOKEN_KEY))
   const [data, setData] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!!localStorage.getItem(COLAB_TOKEN_KEY))
   const [erro, setErro] = useState(null)
   const [tab, setTab] = useState('inicio')
   const [confirmar, setConfirmar] = useState(null) // item a resgatar
@@ -197,30 +217,38 @@ export default function BonificacaoEu() {
   const [resgatando, setResgatando] = useState(false)
   const [aviso, setAviso] = useState(null)
 
+  function sair() { localStorage.removeItem(COLAB_TOKEN_KEY); setSessao(null); setData(null); setErro(null) }
+  function aoEntrar(token) { localStorage.setItem(COLAB_TOKEN_KEY, token); setSessao(token); setLoading(true) }
+
   function carregar(silent) {
+    if (!localStorage.getItem(COLAB_TOKEN_KEY)) { setLoading(false); return }
     if (!silent) setLoading(true)
     setErro(null)
-    api.get(`/public/eu/${token}`)
+    colabApi.get('/public/colaborador/me')
       .then((r) => setData(r.data))
-      .catch((err) => { if (!silent) setErro(err?.response?.data?.error ?? 'Não foi possível carregar a página.') })
+      .catch((err) => {
+        if (err?.response?.status === 401) { sair() }
+        else if (!silent) setErro(err?.response?.data?.error ?? 'Não foi possível carregar a página.')
+      })
       .finally(() => setLoading(false))
   }
-  useEffect(() => { carregar() }, [token]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { carregar() }, [sessao]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function resgatar() {
     if (!confirmar) return
     if (confirmar.tipo === 'FOLGA' && !dataFolga) { setAviso('Escolha a data desejada para a folga.'); return }
     setResgatando(true)
     try {
-      await api.post(`/public/eu/${token}/resgatar`, { itemId: confirmar.id, dataDesejada: confirmar.tipo === 'FOLGA' ? dataFolga : undefined })
+      await colabApi.post('/public/colaborador/resgatar', { itemId: confirmar.id, dataDesejada: confirmar.tipo === 'FOLGA' ? dataFolga : undefined })
       setConfirmar(null); setDataFolga(''); setAviso('Resgate solicitado! A liderança vai avaliar e te entregar o prêmio. 🎉')
       carregar(true)
     } catch (err) { setAviso(err?.response?.data?.error ?? 'Não foi possível resgatar.'); setConfirmar(null); setDataFolga('') }
     finally { setResgatando(false) }
   }
 
+  if (!sessao) return <LoginColaborador slug={slug} onEntrar={aoEntrar} />
   if (loading && !data) return <div className="be-root"><style>{CSS}</style><div className="be-state">Carregando…</div></div>
-  if (erro) return <div className="be-root"><style>{CSS}</style><div className="be-state">{erro}</div></div>
+  if (erro) return <div className="be-root"><style>{CSS}</style><div className="be-state"><div>{erro}</div><button type="button" className="be-btn" style={{ maxWidth: 200, marginTop: 16 }} onClick={sair}>Entrar de novo</button></div></div>
 
   const d = data || {}
   const { loja, funcionario, meu, conquistas = [], conquistasResumo = { total: 0, desbloqueadas: 0 }, coins, moedas = 0, mercado = [], meusResgates = [], colegas = [], reconhecimento = null, ouvidoria = [], contribuicoes = [], historico = [], ponto = null, totalEquipe = 0, ano, mes } = d
@@ -233,7 +261,10 @@ export default function BonificacaoEu() {
       <style>{CSS}</style>
       <div className="be-app">
         <header className="be-hero">
-          <span className="be-hero-loja"><span className="lg">{loja?.logoDataUrl ? <img src={loja.logoDataUrl} alt="" /> : (loja?.nome || 'L').charAt(0).toUpperCase()}</span>{loja?.nome}</span>
+          <div className="be-hero-bar">
+            <span className="be-hero-loja"><span className="lg">{loja?.logoDataUrl ? <img src={loja.logoDataUrl} alt="" /> : (loja?.nome || 'L').charAt(0).toUpperCase()}</span>{loja?.nome}</span>
+            <button type="button" className="be-sair" onClick={sair}>Sair</button>
+          </div>
           <div className="be-hero-main">
             <div className="be-avatar">{inicial}</div>
             <div className="be-hero-id">
@@ -263,7 +294,7 @@ export default function BonificacaoEu() {
           {tab === 'inicio' && <TabInicio meu={meu} totalEquipe={totalEquipe} historico={historico} contribuicoes={contribuicoes} mes={mes} ano={ano} />}
           {tab === 'ponto' && <TabPonto ponto={ponto} ano={ano} mes={mes} />}
           {tab === 'premios' && <TabPremios saldoCoins={saldoCoins} conquistas={conquistas} conquistasResumo={conquistasResumo} mercado={mercado} meusResgates={meusResgates} onResgatar={setConfirmar} />}
-          {tab === 'voz' && <TabVoz token={token} colegas={colegas} reconhecimento={reconhecimento} ouvidoria={ouvidoria} onFeito={() => carregar(true)} setAviso={setAviso} />}
+          {tab === 'voz' && <TabVoz colegas={colegas} reconhecimento={reconhecimento} ouvidoria={ouvidoria} onFeito={() => carregar(true)} setAviso={setAviso} />}
         </main>
 
         <nav className="be-tabs">
@@ -491,17 +522,17 @@ function TabPremios({ saldoCoins, conquistas, conquistasResumo, mercado, meusRes
   )
 }
 
-/* ══════════ ABA: VOZ (reconhecer + ouvidoria) ══════════ */
-function TabVoz({ token, colegas, reconhecimento, ouvidoria, onFeito, setAviso }) {
+/* ══════════ ABA: SUGESTÕES (reconhecer + ouvidoria) ══════════ */
+function TabVoz({ colegas, reconhecimento, ouvidoria, onFeito, setAviso }) {
   return (
     <>
-      {colegas.length > 0 && <SecaoReconhecer token={token} colegas={colegas} reconhecimento={reconhecimento} onFeito={onFeito} setAviso={setAviso} />}
-      <SecaoOuvidoria token={token} ouvidoria={ouvidoria} onFeito={onFeito} setAviso={setAviso} />
+      {colegas.length > 0 && <SecaoReconhecer colegas={colegas} reconhecimento={reconhecimento} onFeito={onFeito} setAviso={setAviso} />}
+      <SecaoOuvidoria ouvidoria={ouvidoria} onFeito={onFeito} setAviso={setAviso} />
     </>
   )
 }
 
-function SecaoReconhecer({ token, colegas, reconhecimento, onFeito, setAviso }) {
+function SecaoReconhecer({ colegas, reconhecimento, onFeito, setAviso }) {
   const [para, setPara] = useState('')
   const [msg, setMsg] = useState('')
   const [enviando, setEnviando] = useState(false)
@@ -512,7 +543,7 @@ function SecaoReconhecer({ token, colegas, reconhecimento, onFeito, setAviso }) 
     if (!msg.trim()) { setAviso('Escreva um motivo.'); return }
     setEnviando(true)
     try {
-      await api.post(`/public/eu/${token}/reconhecer`, { paraFuncionarioId: Number(para), mensagem: msg })
+      await colabApi.post('/public/colaborador/reconhecer', { paraFuncionarioId: Number(para), mensagem: msg })
       setPara(''); setMsg(''); setAviso('Reconhecimento enviado! A liderança vai aprovar. 🙌'); onFeito()
     } catch (err) { setAviso(err?.response?.data?.error ?? 'Não foi possível enviar.') }
     finally { setEnviando(false) }
@@ -549,7 +580,7 @@ function SecaoReconhecer({ token, colegas, reconhecimento, onFeito, setAviso }) 
   )
 }
 
-function SecaoOuvidoria({ token, ouvidoria, onFeito, setAviso }) {
+function SecaoOuvidoria({ ouvidoria, onFeito, setAviso }) {
   const [tipo, setTipo] = useState('SUGESTAO')
   const [msg, setMsg] = useState('')
   const [anonimo, setAnonimo] = useState(false)
@@ -558,7 +589,7 @@ function SecaoOuvidoria({ token, ouvidoria, onFeito, setAviso }) {
     if (!msg.trim()) { setAviso('Escreva sua mensagem.'); return }
     setEnviando(true)
     try {
-      await api.post(`/public/eu/${token}/ouvidoria`, { tipo, mensagem: msg, anonimo })
+      await colabApi.post('/public/colaborador/ouvidoria', { tipo, mensagem: msg, anonimo })
       setMsg(''); setAviso('Mensagem enviada! 💬'); onFeito()
     } catch (err) { setAviso(err?.response?.data?.error ?? 'Não foi possível enviar.') }
     finally { setEnviando(false) }
@@ -625,5 +656,67 @@ function SecaoHistorico({ historico }) {
         </div>
       </div>
     </section>
+  )
+}
+
+/* ══════════ LOGIN por WhatsApp (OTP) ══════════ */
+const soFoneDig = (s) => String(s || '').replace(/\D/g, '')
+function LoginColaborador({ slug, onEntrar }) {
+  const [loja, setLoja] = useState(null)
+  const [etapa, setEtapa] = useState('fone') // 'fone' | 'codigo'
+  const [fone, setFone] = useState('')
+  const [codigo, setCodigo] = useState('')
+  const [mascara, setMascara] = useState('')
+  const [erro, setErro] = useState(null)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => {
+    colabApi.get(`/public/colaborador/${slug}/loja`).then((r) => setLoja(r.data)).catch(() => setLoja({ nome: 'Loja' }))
+  }, [slug])
+  async function pedir() {
+    if (soFoneDig(fone).length < 10) { setErro('Digite seu WhatsApp com DDD.'); return }
+    setErro(null); setBusy(true)
+    try {
+      const r = await colabApi.post(`/public/colaborador/${slug}/solicitar`, { telefone: fone })
+      setMascara(r.data?.telefoneMascara || ''); setCodigo(''); setEtapa('codigo')
+    } catch (e) { setErro(e?.response?.data?.error ?? 'Não foi possível enviar o código.') }
+    finally { setBusy(false) }
+  }
+  async function entrar() {
+    if (soFoneDig(codigo).length !== 6) { setErro('Digite o código de 6 dígitos.'); return }
+    setErro(null); setBusy(true)
+    try {
+      const r = await colabApi.post(`/public/colaborador/${slug}/verificar`, { telefone: fone, codigo })
+      onEntrar(r.data.token)
+    } catch (e) { setErro(e?.response?.data?.error ?? 'Código inválido.') }
+    finally { setBusy(false) }
+  }
+  return (
+    <div className="be-root">
+      <style>{CSS}</style>
+      <div className="be-login">
+        <div className="be-login-card">
+          <div className="be-login-logo">{loja?.logoDataUrl ? <img src={loja.logoDataUrl} alt="" /> : (loja?.nome || 'L').charAt(0).toUpperCase()}</div>
+          <div className="be-login-oi">Área do colaborador</div>
+          <h1 className="be-login-loja">{loja?.nome || '…'}</h1>
+          {etapa === 'fone' ? (
+            <>
+              <p className="be-login-sub">Digite o WhatsApp que a liderança cadastrou. Você vai receber um código de acesso por lá.</p>
+              <input className="be-input" inputMode="numeric" placeholder="(00) 00000-0000" value={fone} onChange={(e) => setFone(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && pedir()} />
+              {erro && <div className="be-login-erro">{erro}</div>}
+              <button type="button" className="be-btn" onClick={pedir} disabled={busy}>{busy ? 'Enviando…' : 'Receber código no WhatsApp'}</button>
+            </>
+          ) : (
+            <>
+              <p className="be-login-sub">Enviamos um código {mascara && <>para o WhatsApp <b>{mascara}</b></>}. Digite abaixo.</p>
+              <input className="be-input be-cod" inputMode="numeric" maxLength={6} placeholder="000000" value={codigo} onChange={(e) => setCodigo(e.target.value.replace(/\D/g, '').slice(0, 6))} onKeyDown={(e) => e.key === 'Enter' && entrar()} autoFocus />
+              {erro && <div className="be-login-erro">{erro}</div>}
+              <button type="button" className="be-btn" onClick={entrar} disabled={busy}>{busy ? 'Entrando…' : 'Entrar'}</button>
+              <button type="button" className="be-login-voltar" onClick={() => { setEtapa('fone'); setCodigo(''); setErro(null) }}>‹ Trocar número / reenviar código</button>
+            </>
+          )}
+        </div>
+        <div className="be-login-foot">🔒 Acesso seguro · Na Chapa</div>
+      </div>
+    </div>
   )
 }

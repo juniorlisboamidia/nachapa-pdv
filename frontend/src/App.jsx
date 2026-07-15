@@ -49,6 +49,19 @@ function RequireAuth({ children }) {
   return children
 }
 
+// Link antigo /eu/:token — o acesso agora é pela tela de login da loja + WhatsApp.
+function EuLinkAntigo() {
+  return (
+    <div style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center', padding: 24, textAlign: 'center', background: '#F4F1EA', color: '#0E1319', fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif' }}>
+      <div style={{ maxWidth: 340 }}>
+        <div style={{ fontSize: 40, marginBottom: 10 }}>🔒</div>
+        <h1 style={{ fontSize: 20, fontWeight: 850, marginBottom: 8 }}>O acesso mudou</h1>
+        <p style={{ fontSize: 14, color: '#6b6f75', lineHeight: 1.5 }}>Agora a Área do Colaborador tem login por WhatsApp. Peça à liderança o <b>link da sua loja</b> para entrar com o seu número.</p>
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -87,9 +100,11 @@ export default function App() {
             <Route path="minha-empresa" element={<MinhaEmpresa />} />
             <Route path="central-de-ajuda" element={<EmConstrucao titulo="Central de Ajuda" descricao="Artigos e ajuda do sistema." />} />
           </Route>
-          {/* Públicas (sem login, por token) — página da equipe e página pessoal */}
+          {/* Públicas — ranking da equipe (por token) e Área do Colaborador (login por WhatsApp) */}
           <Route path="bonificacao/:token" element={<BonificacaoPublica />} />
-          <Route path="eu/:token" element={<BonificacaoEu />} />
+          <Route path="colaborador/:slug" element={<BonificacaoEu />} />
+          {/* Link antigo /eu/:token: agora o acesso é pelo link da loja + WhatsApp */}
+          <Route path="eu/:token" element={<EuLinkAntigo />} />
           {/* Banco de Talentos — formulário público de candidatura */}
           <Route path="talentos/:slug" element={<TalentosPublico />} />
         </Routes>

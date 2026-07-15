@@ -487,26 +487,12 @@ function AbaEquipe({ toast }) {
   }
   useEffect(carregar, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const linkDe = (tok) => `${window.location.origin}/eu/${tok}`
-  async function copiarLink(f, rotacionar = false) {
-    try {
-      let tok = f.tokenPrivado
-      if (!tok || rotacionar) {
-        const r = await api.post(`/funcionarios/${f.id}/link-privado`, { rotacionar })
-        tok = r.data.tokenPrivado
-        setLista((ls) => ls.map((x) => (x.id === f.id ? { ...x, tokenPrivado: tok } : x)))
-      }
-      try { await navigator.clipboard.writeText(linkDe(tok)) } catch { /* noop */ }
-      toast({ message: rotacionar ? 'Novo link gerado e copiado — o anterior parou de funcionar.' : 'Link privado copiado.', type: 'success' })
-    } catch (err) { toast({ message: err?.response?.data?.error ?? 'Erro ao gerar o link.', type: 'error' }) }
-  }
-
   if (!lista) return <div className="loading-state">Carregando…</div>
 
   return (
     <div>
       <div style={{ fontSize: 12.5, color: '#777', marginBottom: 12 }}>
-        Cada funcionário junta <strong>🪙 Coins</strong> ao fechar o mês (proporcionais ao prêmio) e por conquistas, pra gastar no Mercado. O <strong>link privado</strong> abre a página pessoal dele (Coins, conquistas e mercado), sem login.
+        Cada funcionário junta <strong>🪙 Coins</strong> ao fechar o mês (proporcionais ao prêmio) e por conquistas, pra gastar no Mercado. O acesso à Área do Colaborador é pelo <strong>link único da loja</strong> (em Configuração › Acesso do colaborador), com login por WhatsApp.
       </div>
       {lista.length === 0 ? (
         <div className="empty-state" style={{ padding: '28px 16px' }}>Nenhum funcionário cadastrado. Cadastre a equipe em Dep. Pessoal › Equipe.</div>
@@ -530,9 +516,6 @@ function AbaEquipe({ toast }) {
                   <td style={{ textAlign: 'right', fontWeight: 800, color: '#B8860B', fontSize: 15 }}>{new Intl.NumberFormat('pt-BR').format(f.coins ?? f.moedas ?? 0)}</td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button type="button" className="btn btn-secondary btn-sm" onClick={() => setMoedaSel(f)}>🪙 Coins</button>
-                    {' '}
-                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => copiarLink(f)} title="Copiar link privado da página pessoal">🔗 Link</button>
-                    {f.tokenPrivado && <button type="button" className="btn btn-secondary btn-sm" onClick={() => copiarLink(f, true)} title="Gerar novo link (invalida o atual)" style={{ marginLeft: 4 }}>↻</button>}
                   </td>
                 </tr>
               ))}
@@ -1361,6 +1344,64 @@ function SecaoSeveridades({ toast }) {
   )
 }
 
+// Acesso do colaborador: link único de login da loja + conexão do WhatsApp (envia os códigos).
+function SecaoAcessoColaborador({ cfg, toast }) {
+  const identificador = cfg?.slugPublico || cfg?.tokenPublico || ''
+  const link = identificador ? `${window.location.origin}/colaborador/${identificador}` : ''
+  const [wa, setWa] = useState(null)
+  const [qr, setQr] = useState(null)
+  const [carregandoWa, setCarregandoWa] = useState(true)
+  const [criando, setCriando] = useState(false)
+  function statusWa() { setCarregandoWa(true); api.get('/pdv/whatsapp/status').then((r) => setWa(r.data)).catch((e) => setWa({ configurado: false, erro: e?.response?.data?.error })).finally(() => setCarregandoWa(false)) }
+  useEffect(statusWa, [])
+  const copiar = () => { try { navigator.clipboard.writeText(link) } catch { /* noop */ } toast?.({ message: 'Link copiado.', type: 'success' }) }
+  async function conectar() {
+    setQr(null)
+    try { const r = await api.post('/pdv/whatsapp/conectar'); setQr(r.data?.qrcode || null); if (!r.data?.qrcode) toast?.({ message: 'Sem QR agora — atualize o status em instantes.', type: 'info' }) }
+    catch (e) { toast?.({ message: e?.response?.data?.error ?? 'Erro ao gerar o QR.', type: 'error' }) }
+  }
+  async function criarInstancia() {
+    setCriando(true)
+    try {
+      const r = await api.post('/pdv/whatsapp/instancia', { nome: 'nachapa-pdv' })
+      if (r.data?.token) window.prompt('Instância criada! Copie este token para UAZAPI_INSTANCE_TOKEN no .env do PDV e reinicie:', r.data.token)
+      toast?.({ message: 'Instância criada. Configure o token no .env e reinicie.', type: 'success' })
+    } catch (e) { toast?.({ message: e?.response?.data?.error ?? 'Erro ao criar a instância.', type: 'error' }) }
+    finally { setCriando(false) }
+  }
+  return (
+    <SecaoConfig titulo="Acesso do colaborador" descricao="Um link único para a equipe entrar na Área do Colaborador. Cada um digita o próprio WhatsApp e recebe um código de acesso.">
+      <div>
+        <label className="form-label">Link de acesso da equipe</label>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+          <input className="form-input" style={{ flex: 1, minWidth: 220 }} value={link || 'Defina o "Endereço do link" acima e salve para gerar.'} readOnly />
+          <button type="button" className="btn btn-secondary btn-sm" onClick={copiar} disabled={!link}>Copiar</button>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => link && window.open(link, '_blank', 'noopener')} disabled={!link}>Abrir</button>
+        </div>
+        <div style={{ fontSize: 11.5, color: 'var(--app-text-soft, #999)', marginTop: 6 }}>O WhatsApp precisa estar cadastrado no colaborador (Ponto Facial › Colaboradores).</div>
+      </div>
+
+      <div style={{ height: 18 }} />
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 5 }}>WhatsApp do PDV <span style={{ fontWeight: 400, color: 'var(--app-text-soft, #999)', fontSize: 11.5 }}>· número que envia os códigos</span></div>
+      {carregandoWa ? <div style={{ fontSize: 12, color: 'var(--app-text-soft, #999)' }}>Verificando…</div> : !wa?.configurado ? (
+        <div style={{ fontSize: 12.5, color: 'var(--app-text-soft, #999)', lineHeight: 1.6 }}>
+          Ainda não configurado. Defina <code>UAZAPI_SERVER</code>, <code>UAZAPI_ADMIN_TOKEN</code> e <code>UAZAPI_INSTANCE_TOKEN</code> no <code>.env</code> do PDV. Se ainda não tem instância, crie uma:
+          <div style={{ marginTop: 8 }}><button type="button" className="btn btn-secondary btn-sm" onClick={criarInstancia} disabled={criando}>{criando ? 'Criando…' : 'Criar instância'}</button></div>
+        </div>
+      ) : (
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span className="badge" style={{ background: wa.connected ? 'rgba(22,163,74,.12)' : 'rgba(217,119,6,.12)', color: wa.connected ? '#16a34a' : '#d97706' }}>{wa.connected ? `Conectado${wa.number ? ' · ' + wa.number : ''}` : 'Desconectado'}</span>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={statusWa}>Atualizar</button>
+            {!wa.connected && <button type="button" className="btn btn-primary btn-sm" onClick={conectar}>Conectar (QR)</button>}
+          </div>
+          {qr && <div style={{ marginTop: 12, textAlign: 'center' }}><img src={qr} alt="QR Code" style={{ width: 220, height: 220, borderRadius: 12, border: '1px solid var(--app-border,#eee)' }} /><div style={{ fontSize: 11.5, color: 'var(--app-text-soft, #999)', marginTop: 6 }}>No WhatsApp do número do PDV: Aparelhos conectados › Conectar aparelho.</div></div>}
+        </div>
+      )}
+    </SecaoConfig>
+  )
+}
+
 // Indicadores coletivos configuráveis (Google/iFood/NPS) — CRUD leve, próprio Salvar. (Bloco 3)
 function SecaoIndicadores({ toast }) {
   const [inds, setInds] = useState(null)
@@ -1496,6 +1537,8 @@ function AbaConfig({ cfg, setCfg, tipos, setTipos, salvar, salvando, toast }) {
           <CampoNum label="Coletiva" prefixo="R$" valor={cfg.tetoColetiva} onChange={(v) => set('tetoColetiva', v)} />
         </div>
       </SecaoConfig>
+
+      <SecaoAcessoColaborador cfg={cfg} toast={toast} />
 
       <SecaoConfig titulo="Bônus da Classificação" descricao="Prêmio extra, em reais, para o Top 3 do ranking do mês.">
         <div style={gridAuto(130)}>

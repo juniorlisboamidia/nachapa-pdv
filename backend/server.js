@@ -2,7 +2,7 @@ import dotenv from 'dotenv';
 // override:true => o .env é a fonte de verdade e SOBRESCREVE variáveis herdadas do
 // ambiente (ex.: um JWT_SECRET antigo que o PM2 injeta nos processos filhos).
 dotenv.config({ override: true });
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import express from 'express';
 import cors from 'cors';
@@ -10,6 +10,7 @@ import jwt from 'jsonwebtoken';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from './generated/prisma/client.ts';
 import { iniciarColetorServer, gravarPontoColetor } from './coletorServer.js';
+import { zapiConfigurado, zapiStatus, zapiQrCode, zapiCriarInstancia, zapiEnviarTexto } from './zapi.mjs';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 
@@ -230,6 +231,34 @@ app.put('/api/empresa', async (req, res) => {
 function exigirAdmin(req, res) {
   if (req.user?.papel !== 'ADMIN') { res.status(403).json({ error: 'Apenas o administrador acessa o Departamento Pessoal.' }); return false; }
   return true;
+}
+
+// ── Login da Área do Colaborador (OTP por WhatsApp) ──────────────────────────
+const soDigitos = (s) => String(s || '').replace(/\D/g, '');
+// Telefone BR canônico = DDD + número (10-11 dígitos), sem DDI. Remove 55 se veio com DDI.
+function foneCanonico(s) {
+  let d = soDigitos(s);
+  if (d.length > 11 && d.startsWith('55')) d = d.slice(2);
+  return d.slice(-11);
+}
+const foneParaEnvio = (canon) => '55' + canon; // DDI Brasil p/ o UAZAPI
+const hashOtp = (codigo) => createHash('sha256').update(`${codigo}:${JWT_SECRET || 'otp'}`).digest('hex');
+const gerarOtp = () => String(100000 + (randomBytes(4).readUInt32BE(0) % 900000)); // 6 dígitos
+// Verifica o token de SESSÃO do colaborador (assinado pelo próprio PDV, tipo 'colab').
+// Devolve { funcionarioId, empresaId } ou null (já responde 401). NUNCA dá acesso admin.
+function exigirColaborador(req, res) {
+  const h = req.headers['authorization'] || '';
+  const token = h.startsWith('Bearer ') ? h.slice(7) : null;
+  if (!token || !JWT_SECRET) { res.status(401).json({ error: 'Sessão expirada. Entre de novo.' }); return null; }
+  let payload;
+  try { payload = jwt.verify(token, JWT_SECRET); } catch { res.status(401).json({ error: 'Sessão expirada. Entre de novo.' }); return null; }
+  if (payload?.tipo !== 'colab' || !payload.fid || !payload.eid) { res.status(401).json({ error: 'Sessão inválida.' }); return null; }
+  return { funcionarioId: payload.fid, empresaId: payload.eid };
+}
+async function empresaPorSlugColaborador(chave) {
+  const cfg = await prisma.bonificacaoConfig.findFirst({ where: { OR: [{ slugPublico: String(chave) }, { tokenPublico: String(chave) }] } });
+  if (!cfg || !cfg.ativo) return null;
+  return cfg.empresaId;
 }
 const FUNCIONARIO_STATUS = new Set(['ATIVO', 'INATIVO']);
 function dadosFuncionario(body) {
@@ -518,6 +547,28 @@ const MERCADO_ITENS_PADRAO = [
   { emoji: '🎫', nome: 'Folga extra (1 dia)', descricao: 'Um dia de folga combinado com a liderança.', custo: 600, estoque: null, ordem: 3 },
 ];
 const mercadoItemJson = (i, extra = {}) => ({ id: i.id, nome: i.nome, descricao: i.descricao || null, emoji: i.emoji, tipo: i.tipo || 'PRODUTO', custo: i.custo, estoque: i.estoque, ativo: i.ativo, ordem: i.ordem, ...extra });
+
+// ===== WhatsApp do PDV (UAZAPI) — número que envia os códigos de acesso (ADMIN) =====
+app.get('/api/pdv/whatsapp/status', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  if (!zapiConfigurado()) return res.json({ configurado: false, connected: false });
+  try { res.json({ configurado: true, ...(await zapiStatus()) }); }
+  catch (err) { res.status(err?.http || 500).json({ error: err?.msg || 'Erro ao consultar o WhatsApp.' }); }
+});
+app.post('/api/pdv/whatsapp/conectar', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try { res.json({ qrcode: await zapiQrCode() }); }
+  catch (err) { res.status(err?.http || 500).json({ error: err?.msg || 'Erro ao gerar o QR Code.' }); }
+});
+app.post('/api/pdv/whatsapp/instancia', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const nome = (String(req.body?.nome || '').trim() || 'nachapa-pdv').slice(0, 40);
+    const data = await zapiCriarInstancia(nome);
+    const token = data?.token || data?.instance?.token || data?.instanceToken || data?.hash || null;
+    res.status(201).json({ ok: true, token, raw: data });
+  } catch (err) { res.status(err?.http || 500).json({ error: err?.msg || 'Erro ao criar a instância.' }); }
+});
 
 app.get('/api/bonificacao/config', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
@@ -1552,12 +1603,70 @@ app.get('/api/public/bonificacao/:token', async (req, res) => {
   } catch (err) { console.error('[public/bonificacao]', err); res.status(500).json({ error: 'Erro ao carregar a página.' }); }
 });
 
-// PÚBLICO/PRIVADO — perfil do funcionário (link privado): seu XP/nível + seu resultado
-// do mês + o ranking do time. Mês vigente. Escopo por empresaId do funcionário.
-app.get('/api/public/eu/:token', async (req, res) => {
+// ── ÁREA DO COLABORADOR — login por WhatsApp (OTP) ───────────────────────────
+// Dados da loja p/ a tela de login (valida o slug).
+app.get('/api/public/colaborador/:slug/loja', async (req, res) => {
   try {
-    const func = await prisma.funcionario.findFirst({ where: { tokenPrivado: String(req.params.token) } });
-    if (!func) return res.status(404).json({ error: 'Página não encontrada.' });
+    const cfg = await prisma.bonificacaoConfig.findFirst({ where: { OR: [{ slugPublico: String(req.params.slug) }, { tokenPublico: String(req.params.slug) }] } });
+    if (!cfg || !cfg.ativo) return res.status(404).json({ error: 'Loja não encontrada.' });
+    const loja = await prisma.empresa.findUnique({ where: { id: cfg.empresaId }, select: { nome: true, logoDataUrl: true } });
+    res.json({ nome: loja?.nome || 'Loja', logoDataUrl: loja?.logoDataUrl || null });
+  } catch (err) { console.error('[colaborador/loja]', err); res.status(500).json({ error: 'Erro ao carregar.' }); }
+});
+
+// Solicita o código: acha o funcionário ATIVO com o número e envia o OTP por WhatsApp.
+app.post('/api/public/colaborador/:slug/solicitar', async (req, res) => {
+  try {
+    const empresaId = await empresaPorSlugColaborador(req.params.slug);
+    if (empresaId == null) return res.status(404).json({ error: 'Loja não encontrada.' });
+    const canon = foneCanonico(req.body?.telefone);
+    if (canon.length < 10) return res.status(400).json({ error: 'Informe seu WhatsApp com DDD.' });
+    const ativos = await prisma.funcionario.findMany({ where: { empresaId, status: 'ATIVO' }, select: { id: true, whatsapp: true } });
+    const func = ativos.find((f) => foneCanonico(f.whatsapp) === canon);
+    if (!func) return res.status(404).json({ error: 'Não encontramos esse número. Confira com a liderança se seu WhatsApp está cadastrado.' });
+    // Rate-limit: no máximo 1 código a cada 45s por funcionário.
+    const recente = await prisma.colaboradorOtp.findFirst({ where: { empresaId, funcionarioId: func.id }, orderBy: { criadoEm: 'desc' } });
+    if (recente && (Date.now() - new Date(recente.criadoEm).getTime()) < 45000) return res.status(429).json({ error: 'Aguarde alguns segundos para pedir um novo código.' });
+    if (!zapiConfigurado()) return res.status(503).json({ error: 'O envio por WhatsApp ainda não está configurado. Fale com a liderança.' });
+    const codigo = gerarOtp();
+    await prisma.colaboradorOtp.create({ data: { empresaId, funcionarioId: func.id, telefone: canon, codigoHash: hashOtp(codigo), expiraEm: new Date(Date.now() + 10 * 60000) } });
+    const loja = await prisma.empresa.findUnique({ where: { id: empresaId }, select: { nome: true } });
+    const msg = `*${loja?.nome || 'Sua loja'}* — Área do Colaborador\n\nSeu código de acesso é *${codigo}*\nVale por 10 minutos. Não compartilhe com ninguém. 🔒`;
+    try { await zapiEnviarTexto(foneParaEnvio(canon), msg); }
+    catch (e) { console.error('[colaborador/solicitar zapi]', e?.msg || e); return res.status(502).json({ error: 'Não consegui enviar o código pelo WhatsApp agora. Tente de novo em instantes.' }); }
+    res.json({ ok: true, telefoneMascara: canon.slice(0, 2) + '••••' + canon.slice(-2) });
+  } catch (err) { console.error('[colaborador/solicitar]', err); res.status(500).json({ error: 'Erro ao solicitar o código.' }); }
+});
+
+// Verifica o código e devolve o token de sessão (30 dias).
+app.post('/api/public/colaborador/:slug/verificar', async (req, res) => {
+  try {
+    if (!JWT_SECRET) return res.status(500).json({ error: 'Configuração de sessão ausente.' });
+    const empresaId = await empresaPorSlugColaborador(req.params.slug);
+    if (empresaId == null) return res.status(404).json({ error: 'Loja não encontrada.' });
+    const canon = foneCanonico(req.body?.telefone);
+    const codigo = soDigitos(req.body?.codigo).slice(0, 6);
+    if (codigo.length !== 6) return res.status(400).json({ error: 'Informe o código de 6 dígitos.' });
+    const otp = await prisma.colaboradorOtp.findFirst({ where: { empresaId, telefone: canon, usado: false }, orderBy: { criadoEm: 'desc' } });
+    if (!otp) return res.status(400).json({ error: 'Peça um novo código.' });
+    if (new Date(otp.expiraEm).getTime() < Date.now()) return res.status(400).json({ error: 'Código expirado. Peça um novo.' });
+    if (otp.tentativas >= 5) return res.status(429).json({ error: 'Muitas tentativas. Peça um novo código.' });
+    if (otp.codigoHash !== hashOtp(codigo)) {
+      await prisma.colaboradorOtp.update({ where: { id: otp.id }, data: { tentativas: otp.tentativas + 1 } });
+      return res.status(400).json({ error: 'Código incorreto.' });
+    }
+    await prisma.colaboradorOtp.update({ where: { id: otp.id }, data: { usado: true } });
+    const token = jwt.sign({ fid: otp.funcionarioId, eid: empresaId, tipo: 'colab' }, JWT_SECRET, { expiresIn: '30d' });
+    res.json({ ok: true, token });
+  } catch (err) { console.error('[colaborador/verificar]', err); res.status(500).json({ error: 'Erro ao verificar o código.' }); }
+});
+
+// ÁREA DO COLABORADOR — dados do mês (exige sessão OTP; deriva o funcionário do token).
+app.get('/api/public/colaborador/me', async (req, res) => {
+  try {
+    const sess = exigirColaborador(req, res); if (!sess) return;
+    const func = await prisma.funcionario.findFirst({ where: { id: sess.funcionarioId, empresaId: sess.empresaId } });
+    if (!func || func.status !== 'ATIVO') return res.status(401).json({ error: 'Acesso indisponível. Fale com a liderança.' });
     const empresaId = func.empresaId;
     const cfg = await prisma.bonificacaoConfig.findFirst({ where: { empresaId } });
     if (!cfg || !cfg.ativo) return res.status(404).json({ error: 'A bonificação não está ativa nesta loja.' });
@@ -1618,7 +1727,7 @@ app.get('/api/public/eu/:token', async (req, res) => {
         .map((d) => ({ dia: d.dia, dow: d.dow, entrada: d.entradaHm, saida: d.saidaHm, situacao: d.situacao, atrasoMin: d.atrasoMin }))
         .reverse();
       ponto = { marcacoes: marc, resumo: { diasTrabalhados: esp.totais.diasTrabalhados, atrasos: esp.totais.atrasos, faltas: esp.totais.faltas } };
-    } catch (e) { console.error('[public/eu ponto]', e?.msg || e); }
+    } catch (e) { console.error('[colaborador/me ponto]', e?.msg || e); }
     res.json({
       loja: { nome: loja?.nome || 'Loja', logoDataUrl: loja?.logoDataUrl || null },
       ano, mes, coletivaPct, coletivo,
@@ -1643,15 +1752,16 @@ app.get('/api/public/eu/:token', async (req, res) => {
       contribuicoes: minhasContrib.map((c) => ({ id: c.id, descricao: c.descricao, pontos: c.pontos, coins: c.coins, criadoEm: c.criadoEm })),
       config: { tetoAssiduidade: t.tetoA, tetoDesempenho: t.tetoD, tetoColetiva: t.tetoC, bonusTop1: t.b1 },
     });
-  } catch (err) { console.error('[public/eu]', err); res.status(500).json({ error: 'Erro ao carregar a página.' }); }
+  } catch (err) { console.error('[colaborador/me]', err); res.status(500).json({ error: 'Erro ao carregar a página.' }); }
 });
 
-// PÚBLICO — funcionário solicita um resgate no mercado (debita moedas na hora; a
-// liderança aprova/entrega depois). Valida saldo e estoque. Escopo por empresaId do token.
-app.post('/api/public/eu/:token/resgatar', async (req, res) => {
+// ÁREA DO COLABORADOR — solicita um resgate no mercado (debita moedas na hora; a
+// liderança aprova/entrega depois). Valida saldo e estoque. Exige sessão OTP.
+app.post('/api/public/colaborador/resgatar', async (req, res) => {
   try {
-    const func = await prisma.funcionario.findFirst({ where: { tokenPrivado: String(req.params.token) } });
-    if (!func) return res.status(404).json({ error: 'Página não encontrada.' });
+    const sess = exigirColaborador(req, res); if (!sess) return;
+    const func = await prisma.funcionario.findFirst({ where: { id: sess.funcionarioId, empresaId: sess.empresaId } });
+    if (!func || func.status !== 'ATIVO') return res.status(401).json({ error: 'Acesso indisponível.' });
     const empresaId = func.empresaId;
     const cfg = await prisma.bonificacaoConfig.findFirst({ where: { empresaId } });
     if (!cfg || !cfg.ativo) return res.status(404).json({ error: 'A bonificação não está ativa nesta loja.' });
@@ -1677,14 +1787,15 @@ app.post('/api/public/eu/:token/resgatar', async (req, res) => {
     await prisma.bonificacaoMoeda.create({ data: { funcionarioId: func.id, empresaId, pontos: -item.custo, motivo: `Resgate: ${item.nome}`, origem: 'RESGATE', resgateId: resg.id } });
     if (item.estoque != null) await prisma.mercadoItem.update({ where: { id: item.id }, data: { estoque: Math.max(0, item.estoque - 1) } });
     res.status(201).json({ ok: true, saldo: await saldoMoedasDe(func.id, empresaId) });
-  } catch (err) { console.error('[public/eu/resgatar]', err); res.status(500).json({ error: 'Erro ao solicitar o resgate.' }); }
+  } catch (err) { console.error('[colaborador/resgatar]', err); res.status(500).json({ error: 'Erro ao solicitar o resgate.' }); }
 });
 
-// PÚBLICO — colaborador envia mensagem à Ouvidoria (opc. anônima). (Bloco 4)
-app.post('/api/public/eu/:token/ouvidoria', async (req, res) => {
+// ÁREA DO COLABORADOR — envia mensagem à Ouvidoria (opc. anônima). Exige sessão OTP. (Bloco 4)
+app.post('/api/public/colaborador/ouvidoria', async (req, res) => {
   try {
-    const func = await prisma.funcionario.findFirst({ where: { tokenPrivado: String(req.params.token) } });
-    if (!func) return res.status(404).json({ error: 'Página não encontrada.' });
+    const sess = exigirColaborador(req, res); if (!sess) return;
+    const func = await prisma.funcionario.findFirst({ where: { id: sess.funcionarioId, empresaId: sess.empresaId } });
+    if (!func || func.status !== 'ATIVO') return res.status(401).json({ error: 'Acesso indisponível.' });
     const empresaId = func.empresaId;
     const tipo = OUVIDORIA_TIPOS.has(req.body?.tipo) ? req.body.tipo : 'SUGESTAO';
     const mensagem = String(req.body?.mensagem || '').trim().slice(0, 2000);
@@ -1692,15 +1803,16 @@ app.post('/api/public/eu/:token/ouvidoria', async (req, res) => {
     const anonimo = req.body?.anonimo === true;
     await prisma.bonificacaoOuvidoria.create({ data: { empresaId, funcionarioId: anonimo ? null : func.id, anonimo, tipo, mensagem } });
     res.status(201).json({ ok: true });
-  } catch (err) { console.error('[public/eu/ouvidoria]', err); res.status(500).json({ error: 'Erro ao enviar a mensagem.' }); }
+  } catch (err) { console.error('[colaborador/ouvidoria]', err); res.status(500).json({ error: 'Erro ao enviar a mensagem.' }); }
 });
 
-// PÚBLICO — colaborador reconhece um colega (peer kudos). Coins entram só após a
-// liderança aprovar. Anti-manipulação: de≠para, colega da mesma loja, teto mensal. (Bloco 4)
-app.post('/api/public/eu/:token/reconhecer', async (req, res) => {
+// ÁREA DO COLABORADOR — reconhece um colega (peer kudos). Coins entram só após a
+// liderança aprovar. Anti-manipulação: de≠para, colega da mesma loja, teto mensal. Exige OTP. (Bloco 4)
+app.post('/api/public/colaborador/reconhecer', async (req, res) => {
   try {
-    const func = await prisma.funcionario.findFirst({ where: { tokenPrivado: String(req.params.token) } });
-    if (!func) return res.status(404).json({ error: 'Página não encontrada.' });
+    const sess = exigirColaborador(req, res); if (!sess) return;
+    const func = await prisma.funcionario.findFirst({ where: { id: sess.funcionarioId, empresaId: sess.empresaId } });
+    if (!func || func.status !== 'ATIVO') return res.status(401).json({ error: 'Acesso indisponível.' });
     const empresaId = func.empresaId;
     const cfg = await prisma.bonificacaoConfig.findFirst({ where: { empresaId } });
     if (!cfg || !cfg.ativo) return res.status(404).json({ error: 'A bonificação não está ativa nesta loja.' });
@@ -1718,7 +1830,7 @@ app.post('/api/public/eu/:token/reconhecer', async (req, res) => {
     }
     await prisma.bonificacaoReconhecimento.create({ data: { empresaId, deFuncionarioId: func.id, paraFuncionarioId: paraId, mensagem, coins: Math.max(0, cfg.reconhecimentoCoins ?? 10), ano, mes } });
     res.status(201).json({ ok: true });
-  } catch (err) { console.error('[public/eu/reconhecer]', err); res.status(500).json({ error: 'Erro ao enviar o reconhecimento.' }); }
+  } catch (err) { console.error('[colaborador/reconhecer]', err); res.status(500).json({ error: 'Erro ao enviar o reconhecimento.' }); }
 });
 
 
