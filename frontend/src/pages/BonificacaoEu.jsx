@@ -81,6 +81,19 @@ const CSS = `
 .be-row .tot{font-weight:850;font-size:15px;color:var(--money);white-space:nowrap}
 .be-foot{text-align:center;font-size:11.5px;color:var(--muted);line-height:1.6}
 .be-state{min-height:60vh;display:grid;place-items:center;text-align:center;color:var(--muted);padding:24px}
+/* Formulários (reconhecimento / ouvidoria) */
+.be-input{width:100%;box-sizing:border-box;font-family:inherit;font-size:14px;color:var(--ink);background:var(--surface-2);border:1px solid var(--line);border-radius:11px;padding:11px 12px;outline:none}
+.be-input:focus{border-color:var(--brand)}
+.be-btn{align-self:flex-start;font-family:inherit;font-size:14px;font-weight:750;color:#fff;background:linear-gradient(135deg,var(--brand),var(--brand-deep));border:none;border-radius:11px;padding:11px 18px;cursor:pointer;box-shadow:var(--sh-sm)}
+.be-btn:disabled{opacity:.55;cursor:default}
+.be-mini-title{font-size:12px;font-weight:800;color:var(--muted);margin-bottom:7px;text-transform:uppercase;letter-spacing:.03em}
+.be-rec-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px dashed var(--line);font-size:13px}
+.be-rec-de{font-weight:750;flex-shrink:0}
+.be-rec-msg{color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.be-rec-st{font-weight:750;flex-shrink:0;font-size:12.5px}
+.be-ouv-row{padding:9px 0;border-top:1px dashed var(--line)}
+.be-ouv-msg{font-size:13px;color:var(--ink);white-space:pre-wrap}
+.be-ouv-resp{margin-top:5px;padding:7px 10px;background:rgba(15,138,84,.1);border-radius:9px;font-size:12.5px;color:var(--ink-soft)}
 /* Conquistas */
 .be-ach{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .be-ach-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:13px;box-shadow:var(--sh-sm);display:flex;flex-direction:column;gap:5px;position:relative;overflow:hidden}
@@ -165,7 +178,7 @@ export default function BonificacaoEu() {
   if (loading && !data) return <div className="be-root"><style>{CSS}</style><div className="be-state">Carregando…</div></div>
   if (erro) return <div className="be-root"><style>{CSS}</style><div className="be-state">{erro}</div></div>
 
-  const { loja, funcionario, meu, ranking = [], conquistas = [], conquistasResumo = { total: 0, desbloqueadas: 0 }, coins, moedas = 0, mercado = [], meusResgates = [], ano, mes } = data || {}
+  const { loja, funcionario, meu, ranking = [], conquistas = [], conquistasResumo = { total: 0, desbloqueadas: 0 }, coins, moedas = 0, mercado = [], meusResgates = [], colegas = [], reconhecimento = null, ouvidoria = [], contribuicoes = [], ano, mes } = data || {}
   const saldoCoins = Number(coins ?? moedas ?? 0)
   const mesNome = new Date(ano, (mes || 1) - 1, 1).toLocaleDateString('pt-BR', { month: 'long' })
   const pos = meu?.posicao
@@ -329,6 +342,12 @@ export default function BonificacaoEu() {
           )}
         </section>
 
+        {/* Reconhecer um colega */}
+        {colegas.length > 0 && <SecaoReconhecer token={token} colegas={colegas} reconhecimento={reconhecimento} onFeito={() => carregar(true)} setAviso={setAviso} />}
+
+        {/* Fale com a liderança (Ouvidoria) */}
+        <SecaoOuvidoria token={token} ouvidoria={ouvidoria} onFeito={() => carregar(true)} setAviso={setAviso} />
+
         <footer className="be-foot">Feito por Agência Na Chapa 🚀</footer>
 
       </main>
@@ -358,5 +377,101 @@ export default function BonificacaoEu() {
         </div>
       )}
     </div>
+  )
+}
+
+/* Reconhecer um colega (peer kudos) — envia p/ aprovação da liderança. (Bloco 4) */
+function SecaoReconhecer({ token, colegas, reconhecimento, onFeito, setAviso }) {
+  const [para, setPara] = useState('')
+  const [msg, setMsg] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const r = reconhecimento || { maxMes: 3, coins: 10, enviadosMes: 0, recebidos: [], enviados: [] }
+  const restam = Math.max(0, (r.maxMes || 0) - (r.enviadosMes || 0))
+  async function enviar() {
+    if (!para) { setAviso('Escolha um colega.'); return }
+    if (!msg.trim()) { setAviso('Escreva um motivo.'); return }
+    setEnviando(true)
+    try {
+      await api.post(`/public/eu/${token}/reconhecer`, { paraFuncionarioId: Number(para), mensagem: msg })
+      setPara(''); setMsg(''); setAviso('Reconhecimento enviado! A liderança vai aprovar. 🙌'); onFeito()
+    } catch (err) { setAviso(err?.response?.data?.error ?? 'Não foi possível enviar.') }
+    finally { setEnviando(false) }
+  }
+  return (
+    <section>
+      <h2 className="be-sec-title">Reconhecer um colega</h2>
+      <div className="be-card">
+        <p className="be-hint" style={{ marginTop: 0 }}>Valorize quem te ajudou. Ao aprovar, o colega ganha <b>🪙 {r.coins} Coins</b>. Você tem <b>{restam}</b> de {r.maxMes} este mês.</p>
+        {restam > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+            <select className="be-input" value={para} onChange={(e) => setPara(e.target.value)}>
+              <option value="">Escolha o colega…</option>
+              {colegas.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            </select>
+            <textarea className="be-input" rows={2} placeholder="Por que você reconhece esse colega?" value={msg} onChange={(e) => setMsg(e.target.value)} />
+            <button type="button" className="be-btn" onClick={enviar} disabled={enviando}>{enviando ? 'Enviando…' : 'Enviar reconhecimento'}</button>
+          </div>
+        ) : <div className="be-emptybox">Você já usou seus reconhecimentos deste mês. 🙌</div>}
+        {r.recebidos.length > 0 && (
+          <div style={{ marginTop: 14 }}>
+            <div className="be-mini-title">Você foi reconhecido por</div>
+            {r.recebidos.map((x) => (
+              <div key={x.id} className="be-rec-row">
+                <span className="be-rec-de">{x.de}</span>
+                <span className="be-rec-msg">“{x.mensagem}”</span>
+                <span className="be-rec-st" style={{ color: x.status === 'APROVADO' ? 'var(--money)' : x.status === 'REJEITADO' ? '#dc2626' : 'var(--muted)' }}>{x.status === 'APROVADO' ? `🪙 ${x.coins}` : x.status === 'PENDENTE' ? 'aguardando' : 'não aprovado'}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  )
+}
+
+/* Fale com a liderança (Ouvidoria / Sugestões), opc. anônimo. (Bloco 4) */
+const OUV_TIPOS_PUB = [['SUGESTAO', 'Sugestão'], ['ELOGIO', 'Elogio'], ['RECLAMACAO', 'Reclamação'], ['DENUNCIA', 'Denúncia'], ['OUTRO', 'Outro']]
+function SecaoOuvidoria({ token, ouvidoria, onFeito, setAviso }) {
+  const [tipo, setTipo] = useState('SUGESTAO')
+  const [msg, setMsg] = useState('')
+  const [anonimo, setAnonimo] = useState(false)
+  const [enviando, setEnviando] = useState(false)
+  async function enviar() {
+    if (!msg.trim()) { setAviso('Escreva sua mensagem.'); return }
+    setEnviando(true)
+    try {
+      await api.post(`/public/eu/${token}/ouvidoria`, { tipo, mensagem: msg, anonimo })
+      setMsg(''); setAviso('Mensagem enviada! 💬'); onFeito()
+    } catch (err) { setAviso(err?.response?.data?.error ?? 'Não foi possível enviar.') }
+    finally { setEnviando(false) }
+  }
+  return (
+    <section>
+      <h2 className="be-sec-title">Fale com a liderança</h2>
+      <div className="be-card">
+        <p className="be-hint" style={{ marginTop: 0 }}>Sugestões, elogios, reclamações ou denúncias. Marque <b>anônimo</b> se preferir não se identificar.</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+          <select className="be-input" value={tipo} onChange={(e) => setTipo(e.target.value)}>
+            {OUV_TIPOS_PUB.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          </select>
+          <textarea className="be-input" rows={3} placeholder="Escreva sua mensagem…" value={msg} onChange={(e) => setMsg(e.target.value)} />
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--ink-soft)' }}>
+            <input type="checkbox" checked={anonimo} onChange={(e) => setAnonimo(e.target.checked)} /> Enviar como anônimo 🕶️
+          </label>
+          <button type="button" className="be-btn" onClick={enviar} disabled={enviando}>{enviando ? 'Enviando…' : 'Enviar mensagem'}</button>
+        </div>
+        {ouvidoria.length > 0 && (
+          <div style={{ marginTop: 14 }}>
+            <div className="be-mini-title">Suas mensagens</div>
+            {ouvidoria.map((o) => (
+              <div key={o.id} className="be-ouv-row">
+                <div className="be-ouv-msg">{o.mensagem}</div>
+                {o.resposta && <div className="be-ouv-resp"><b>Resposta:</b> {o.resposta}</div>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
   )
 }

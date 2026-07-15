@@ -138,6 +138,9 @@ function AbaMes({ tipos, toast }) {
             )}
           </div>
 
+          {/* Contribuições positivas do mês (15% do Índice) */}
+          {funcs.length > 0 && <SecaoContribuicoesMes funcs={funcs} fechado={fechado} ano={ano} mes={mesN} toast={toast} />}
+
           {funcs.length === 0 ? (
             <div className="empty-state" style={{ padding: '28px 16px' }}>Nenhum funcionário ativo. Cadastre a equipe em Dep. Pessoal › Equipe.</div>
           ) : (
@@ -149,7 +152,7 @@ function AbaMes({ tipos, toast }) {
                     <th>Assiduidade</th>
                     <th>Desempenho</th>
                     <th>Coletiva</th>
-                    <th title="Índice de Excelência = 59% Assiduidade + 41% Desempenho (base do Destaque)">Índice</th>
+                    <th title="Índice de Excelência = 50% Assiduidade + 35% Desempenho + 15% Contribuições (base do Destaque)">Índice</th>
                     <th title="Destaque do Mês: Top 3 por Índice de Excelência levam o bônus Extra">Destaque</th>
                     <th style={{ textAlign: 'right' }}>Total</th>
                   </tr>
@@ -257,6 +260,64 @@ function SecaoIndicadoresMes({ coletivo, fechado, ano, mes, onSalvou, toast }) {
         ))}
       </div>
       {!fechado && <div style={{ marginTop: 10, textAlign: 'right' }}><button type="button" className="btn btn-primary btn-sm" onClick={salvar} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar indicadores'}</button></div>}
+    </div>
+  )
+}
+
+/* Contribuições positivas do mês (15% do Índice) — a liderança registra ações positivas. */
+function SecaoContribuicoesMes({ funcs, fechado, ano, mes, toast }) {
+  const [dados, setDados] = useState(null) // { contribuicoes, contribPct }
+  const [funcId, setFuncId] = useState('')
+  const [desc, setDesc] = useState('')
+  const [pontos, setPontos] = useState(25)
+  const [coins, setCoins] = useState(0)
+  const [salvando, setSalvando] = useState(false)
+  function carregar() { api.get('/bonificacao/contribuicoes', { params: { ano, mes } }).then((r) => setDados(r.data)).catch(() => setDados({ contribuicoes: [], contribPct: {} })) }
+  useEffect(carregar, [ano, mes]) // eslint-disable-line react-hooks/exhaustive-deps
+  async function add() {
+    const fid = parseInt(funcId, 10)
+    if (!fid) return toast({ message: 'Escolha o colaborador.', type: 'error' })
+    if (!desc.trim()) return toast({ message: 'Descreva a contribuição.', type: 'error' })
+    setSalvando(true)
+    try {
+      await api.post('/bonificacao/contribuicoes', { ano, mes, funcionarioId: fid, descricao: desc, pontos, coins })
+      setDesc(''); setPontos(25); setCoins(0); carregar()
+    } catch (err) { toast({ message: err?.response?.data?.error ?? 'Erro ao lançar a contribuição.', type: 'error' }) }
+    finally { setSalvando(false) }
+  }
+  async function remover(id) { try { await api.delete(`/bonificacao/contribuicoes/${id}`); carregar() } catch (err) { toast({ message: err?.response?.data?.error ?? 'Erro ao excluir.', type: 'error' }) } }
+  if (!dados) return null
+  return (
+    <div className="table-card" style={{ padding: 14, marginBottom: 12 }}>
+      <div style={{ fontWeight: 700, fontSize: 13 }}>Contribuições positivas do mês <span style={{ fontWeight: 400, color: 'var(--app-text-soft, #999)', fontSize: 11.5 }}>· valem 15% do Índice de Excelência</span></div>
+      <div style={{ fontSize: 11.5, color: 'var(--app-text-soft, #999)', marginBottom: 10 }}>Registre ações positivas (ajudou o time, ideia que rendeu…). Cada colaborador acumula até 100 pontos no mês.</div>
+      {!fechado && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 10 }}>
+          <select className="form-input" style={{ minWidth: 150 }} value={funcId} onChange={(e) => setFuncId(e.target.value)}>
+            <option value="">Colaborador…</option>
+            {funcs.map((f) => <option key={f.funcionarioId} value={f.funcionarioId}>{f.nome}</option>)}
+          </select>
+          <input className="form-input" style={{ flex: 1, minWidth: 160 }} placeholder="O que fez de positivo?" value={desc} onChange={(e) => setDesc(e.target.value)} />
+          <label style={{ fontSize: 11, color: 'var(--app-text-soft, #999)', display: 'flex', alignItems: 'center', gap: 4 }}>pontos<input type="number" className="form-input" style={{ width: 66 }} min="0" max="100" value={pontos} onChange={(e) => setPontos(e.target.value)} /></label>
+          <label style={{ fontSize: 11, color: 'var(--app-text-soft, #999)', display: 'flex', alignItems: 'center', gap: 4 }}>🪙 coins<input type="number" className="form-input" style={{ width: 66 }} min="0" value={coins} onChange={(e) => setCoins(e.target.value)} /></label>
+          <button type="button" className="btn btn-primary btn-sm" onClick={add} disabled={salvando}>+ Registrar</button>
+        </div>
+      )}
+      {dados.contribuicoes.length === 0 ? (
+        <div style={{ fontSize: 12, color: 'var(--app-text-soft, #999)' }}>Nenhuma contribuição lançada neste mês.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {dados.contribuicoes.map((c) => (
+            <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
+              <span style={{ fontWeight: 600, minWidth: 90, flexShrink: 0 }}>{c.funcionario}</span>
+              <span style={{ color: '#16a34a', fontWeight: 700, flexShrink: 0 }}>+{c.pontos}pt</span>
+              {c.coins > 0 && <span style={{ color: '#B8860B', fontWeight: 700, flexShrink: 0 }}>🪙 {c.coins}</span>}
+              <span style={{ color: '#666', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.descricao}</span>
+              {!fechado && <button type="button" className="btn btn-danger btn-sm" style={{ marginLeft: 'auto', flexShrink: 0 }} onClick={() => remover(c.id)}>✕</button>}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -490,7 +551,7 @@ function MoedasModal({ func, onClose, onMudou, toast }) {
   }
   const dataHora = (iso) => { const d = new Date(iso); return isNaN(d) ? '—' : d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }) }
   const nf = new Intl.NumberFormat('pt-BR')
-  const ORIGEM = { FECHAMENTO: 'Fechamento', MANUAL: 'Manual', RESGATE: 'Resgate', ESTORNO: 'Estorno' }
+  const ORIGEM = { FECHAMENTO: 'Fechamento', MANUAL: 'Manual', RESGATE: 'Resgate', ESTORNO: 'Estorno', CONTRIBUICAO: 'Contribuição', RECONHECIMENTO: 'Reconhecimento', CONQUISTA: 'Conquista' }
 
   return (
     <div className="modal-overlay">
@@ -1426,6 +1487,13 @@ function AbaConfig({ cfg, setCfg, tipos, setTipos, salvar, salvando, toast }) {
         </div>
       </SecaoConfig>
 
+      <SecaoConfig titulo="Reconhecimento entre colegas" descricao="A equipe reconhece colegas na página pessoal. Ao aprovar, os Coins caem para quem foi reconhecido.">
+        <div style={gridAuto(240)}>
+          <CampoNum label="Coins por reconhecimento aprovado" sufixo="🪙" step="1" valor={cfg.reconhecimentoCoins} onChange={(v) => set('reconhecimentoCoins', v)} />
+          <CampoNum label="Reconhecimentos por pessoa/mês" step="1" valor={cfg.reconhecimentoMaxMes} onChange={(v) => set('reconhecimentoMaxMes', v)} />
+        </div>
+      </SecaoConfig>
+
       <div className="table-card" style={{ padding: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', background: 'linear-gradient(135deg, rgba(37,99,235,0.06), rgba(13,148,136,0.06))' }}>
         <div style={{ fontSize: 13, color: 'var(--app-text-soft, #666)' }}>Bonificação máxima por funcionário <span style={{ color: '#999' }}>(pilares + 1º lugar)</span></div>
         <div style={{ fontSize: 20, fontWeight: 800 }}>{brl(totalMax)}</div>
@@ -1436,12 +1504,138 @@ function AbaConfig({ cfg, setCfg, tipos, setTipos, salvar, salvando, toast }) {
   )
 }
 
+/* ───────────── Aba: Engajamento (Ouvidoria + Reconhecimentos) ───────────── */
+const OUV_TIPO = { RECLAMACAO: { l: 'Reclamação', c: '#dc2626' }, SUGESTAO: { l: 'Sugestão', c: '#2563eb' }, ELOGIO: { l: 'Elogio', c: '#16a34a' }, DENUNCIA: { l: 'Denúncia', c: '#b91c1c' }, OUTRO: { l: 'Outro', c: '#64748b' } }
+const OUV_STATUS = { ABERTA: { l: 'Aberta', c: '#d97706' }, EM_ANALISE: { l: 'Em análise', c: '#2563eb' }, RESPONDIDA: { l: 'Respondida', c: '#16a34a' }, ARQUIVADA: { l: 'Arquivada', c: '#94a3b8' } }
+function AbaEngajamento({ toast }) {
+  const [ouv, setOuv] = useState(null)
+  const [rec, setRec] = useState(null)
+  const [resp, setResp] = useState(null) // mensagem da ouvidoria em resposta
+  function carregar() {
+    api.get('/bonificacao/ouvidoria').then((r) => setOuv(r.data)).catch(() => setOuv([]))
+    api.get('/bonificacao/reconhecimentos').then((r) => setRec(r.data)).catch(() => setRec([]))
+  }
+  useEffect(carregar, []) // eslint-disable-line react-hooks/exhaustive-deps
+  async function decidir(id, acao) {
+    try { await api.patch(`/bonificacao/reconhecimentos/${id}`, { acao }); carregar() }
+    catch (err) { toast({ message: err?.response?.data?.error ?? 'Erro ao avaliar.', type: 'error' }) }
+  }
+  async function ouvStatus(id, status) {
+    try { await api.patch(`/bonificacao/ouvidoria/${id}`, { status }); carregar() }
+    catch (err) { toast({ message: err?.response?.data?.error ?? 'Erro ao atualizar.', type: 'error' }) }
+  }
+  const dt = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }) }
+  if (!ouv || !rec) return <div className="loading-state">Carregando…</div>
+  const pend = rec.filter((r) => r.status === 'PENDENTE')
+  const outros = rec.filter((r) => r.status !== 'PENDENTE')
+  const STREC = { PENDENTE: { l: 'Pendente', c: '#d97706' }, APROVADO: { l: 'Aprovado', c: '#16a34a' }, REJEITADO: { l: 'Rejeitado', c: '#dc2626' } }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      {/* Reconhecimentos entre colegas */}
+      <div>
+        <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 2 }}>Reconhecimentos entre colegas</div>
+        <div style={{ fontSize: 12.5, color: '#777', marginBottom: 10 }}>A equipe reconhece colegas; ao aprovar, os 🪙 Coins caem para quem foi reconhecido.</div>
+        {pend.length === 0 ? (
+          <div className="empty-state" style={{ padding: '18px 16px' }}>Nenhum reconhecimento aguardando aprovação.</div>
+        ) : (
+          <div className="table-card" style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {pend.map((r) => (
+              <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: '1px solid var(--app-border, #eee)', borderRadius: 10, flexWrap: 'wrap' }}>
+                <div style={{ flex: 1, minWidth: 180 }}>
+                  <div style={{ fontSize: 13 }}><strong>{r.de}</strong> → <strong>{r.para}</strong> {r.coins > 0 && <span style={{ color: '#B8860B', fontWeight: 700 }}>🪙 {r.coins}</span>}</div>
+                  <div style={{ fontSize: 12.5, color: '#666', marginTop: 2 }}>“{r.mensagem}”</div>
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                  <button type="button" className="btn btn-primary btn-sm" onClick={() => decidir(r.id, 'aprovar')}>Aprovar</button>
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => decidir(r.id, 'rejeitar')}>Rejeitar</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {outros.length > 0 && (
+          <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {outros.slice(0, 20).map((r) => {
+              const st = STREC[r.status] || { l: r.status, c: '#888' }
+              return (
+                <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#777' }}>
+                  <span style={{ color: '#aaa', width: 46, flexShrink: 0 }}>{dt(r.criadoEm)}</span>
+                  <span><strong>{r.de}</strong> → <strong>{r.para}</strong></span>
+                  <span className="badge" style={{ background: st.c + '22', color: st.c }}>{st.l}</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Ouvidoria / Sugestões */}
+      <div>
+        <div style={{ fontWeight: 800, fontSize: 15, marginBottom: 2 }}>Ouvidoria &amp; Sugestões</div>
+        <div style={{ fontSize: 12.5, color: '#777', marginBottom: 10 }}>Mensagens da equipe (reclamações, sugestões, elogios, denúncias). As anônimas não mostram o autor.</div>
+        {ouv.length === 0 ? (
+          <div className="empty-state" style={{ padding: '18px 16px' }}>Nenhuma mensagem recebida.</div>
+        ) : (
+          <div className="table-card" style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {ouv.map((o) => {
+              const tp = OUV_TIPO[o.tipo] || OUV_TIPO.OUTRO
+              const st = OUV_STATUS[o.status] || OUV_STATUS.ABERTA
+              return (
+                <div key={o.id} style={{ padding: '9px 11px', border: '1px solid var(--app-border, #eee)', borderRadius: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                    <span className="badge" style={{ background: tp.c + '22', color: tp.c }}>{tp.l}</span>
+                    <span style={{ fontSize: 12.5, fontWeight: 600 }}>{o.anonimo ? '🕶️ Anônimo' : (o.funcionario || '—')}</span>
+                    <span style={{ fontSize: 11, color: '#aaa' }}>{dt(o.criadoEm)}</span>
+                    <span className="badge" style={{ background: st.c + '22', color: st.c, marginLeft: 'auto' }}>{st.l}</span>
+                  </div>
+                  <div style={{ fontSize: 13, color: '#333', whiteSpace: 'pre-wrap' }}>{o.mensagem}</div>
+                  {o.resposta && <div style={{ marginTop: 6, padding: '7px 10px', background: 'rgba(22,163,74,0.08)', borderRadius: 8, fontSize: 12.5 }}><strong>Resposta:</strong> {o.resposta}</div>}
+                  <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                    <button type="button" className="btn btn-primary btn-sm" onClick={() => setResp(o)}>{o.resposta ? 'Editar resposta' : 'Responder'}</button>
+                    {o.status !== 'EM_ANALISE' && <button type="button" className="btn btn-secondary btn-sm" onClick={() => ouvStatus(o.id, 'EM_ANALISE')}>Em análise</button>}
+                    {o.status !== 'ARQUIVADA' && <button type="button" className="btn btn-secondary btn-sm" onClick={() => ouvStatus(o.id, 'ARQUIVADA')}>Arquivar</button>}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {resp && <OuvidoriaRespModal msg={resp} onClose={() => setResp(null)} onSalvou={() => { setResp(null); carregar() }} toast={toast} />}
+    </div>
+  )
+}
+function OuvidoriaRespModal({ msg, onClose, onSalvou, toast }) {
+  const [texto, setTexto] = useState(msg.resposta || '')
+  const [salvando, setSalvando] = useState(false)
+  async function salvar() {
+    setSalvando(true)
+    try { await api.patch(`/bonificacao/ouvidoria/${msg.id}`, { resposta: texto, status: 'RESPONDIDA' }); onSalvou() }
+    catch (err) { toast({ message: err?.response?.data?.error ?? 'Erro ao responder.', type: 'error' }); setSalvando(false) }
+  }
+  return (
+    <div className="modal-overlay">
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header"><div style={{ fontWeight: 700 }}>Responder</div><button type="button" className="btn btn-secondary btn-sm" onClick={onClose}>Fechar</button></div>
+        <div style={{ fontSize: 12.5, color: '#666', margin: '4px 0 10px', whiteSpace: 'pre-wrap' }}>“{msg.mensagem}”</div>
+        <textarea className="form-input" rows={4} value={texto} onChange={(e) => setTexto(e.target.value)} placeholder="Escreva a resposta que o colaborador vai ver…" />
+        <div className="modal-actions" style={{ marginTop: 10 }}>
+          <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+          <button type="button" className="btn btn-primary" onClick={salvar} disabled={salvando || !texto.trim()}>{salvando ? 'Salvando…' : 'Enviar resposta'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ───────────── Container ───────────── */
 const BONI_TABS = {
   mes: { label: 'Mês atual', sub: 'Ranking e prêmios do mês' },
   equipe: { label: 'Equipe & Coins', sub: 'Progresso e coins da equipe' },
   conquistas: { label: 'Conquistas', sub: 'Medalhas e desafios' },
   mercado: { label: 'Mercado', sub: 'Loja de recompensas' },
+  engajamento: { label: 'Engajamento', sub: 'Ouvidoria e reconhecimentos' },
   config: { label: 'Configuração', sub: 'Regras, pilares e prêmios' },
 }
 const BONI_ABAS = Object.keys(BONI_TABS)
@@ -1497,6 +1691,8 @@ export default function Bonificacao() {
         <AbaConquistas toast={showToast} />
       ) : aba === 'mercado' ? (
         <AbaMercado toast={showToast} />
+      ) : aba === 'engajamento' ? (
+        <AbaEngajamento toast={showToast} />
       ) : (
         <AbaConfig cfg={cfg} setCfg={setCfg} tipos={tipos} setTipos={setTipos} salvar={salvarConfig} salvando={salvando} toast={showToast} />
       )}

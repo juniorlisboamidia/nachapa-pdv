@@ -767,6 +767,8 @@ model BonificacaoConfig {
   bonusTop3        Decimal  @default(25)  @db.Decimal(10, 2)
   xpPorNivel       Int      @default(500) // XP necessário por nível
   moedasPorReal    Decimal  @default(1) @db.Decimal(6, 2) // moedas creditadas por R$ no fechamento
+  reconhecimentoCoins  Int  @default(10) // Coins ao aprovar um reconhecimento entre colegas (Bloco 4)
+  reconhecimentoMaxMes Int  @default(3)  // limite de reconhecimentos enviados por colaborador/mês
   criadoEm         DateTime @default(now())
   atualizadoEm     DateTime @updatedAt
 }
@@ -909,6 +911,57 @@ model BonificacaoIndicadorValor {
 
   @@unique([empresaId, indicadorId, ano, mes])
   @@index([empresaId, ano, mes])
+}
+
+// Ouvidoria / Sugestões do colaborador — canal p/ a liderança, opcionalmente anônimo. (Bloco 4)
+model BonificacaoOuvidoria {
+  id            Int       @id @default(autoincrement())
+  empresaId     Int
+  funcionarioId Int?      // null quando anônimo
+  anonimo       Boolean   @default(false)
+  tipo          String    @default("SUGESTAO") // RECLAMACAO | SUGESTAO | ELOGIO | DENUNCIA | OUTRO
+  mensagem      String
+  status        String    @default("ABERTA")   // ABERTA | EM_ANALISE | RESPONDIDA | ARQUIVADA
+  resposta      String?
+  respondidoPor String?
+  respondidoEm  DateTime?
+  criadoEm      DateTime  @default(now())
+
+  @@index([empresaId, status])
+}
+
+// Contribuição positiva registrada pela liderança — alimenta os 15% do Índice de Excelência. (Bloco 4)
+model BonificacaoContribuicao {
+  id            Int      @id @default(autoincrement())
+  empresaId     Int
+  funcionarioId Int
+  ano           Int
+  mes           Int
+  descricao     String
+  pontos        Int      @default(25) // soma no contribPct do mês (teto 100)
+  coins         Int      @default(0)  // bônus opcional creditado na hora
+  registradoPor String?
+  criadoEm      DateTime @default(now())
+
+  @@index([empresaId, ano, mes])
+}
+
+// Reconhecimento entre colegas (peer kudos) — recompensa em Coins após aprovação da liderança. (Bloco 4)
+model BonificacaoReconhecimento {
+  id                Int       @id @default(autoincrement())
+  empresaId         Int
+  deFuncionarioId   Int
+  paraFuncionarioId Int
+  mensagem          String
+  coins             Int       @default(0)
+  status            String    @default("PENDENTE") // PENDENTE | APROVADO | REJEITADO
+  ano               Int
+  mes               Int
+  decididoPor       String?
+  decididoEm        DateTime?
+  criadoEm          DateTime  @default(now())
+
+  @@index([empresaId, status])
 }
 
 // Auditoria mínima do Programa de Benefícios (M1) — quem fez o quê, quando.

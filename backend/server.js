@@ -31,6 +31,7 @@ const MODELS_TENANT = new Set([
   'bonificacaoOcorrencia', 'bonificacaoColetiva', 'bonificacaoFechamento',
   'bonificacaoNivel', 'bonificacaoXp', 'bonificacaoAuditoria', 'bonificacaoSeveridade',
   'bonificacaoIndicador', 'bonificacaoIndicadorValor',
+  'bonificacaoOuvidoria', 'bonificacaoContribuicao', 'bonificacaoReconhecimento',
   'conquista', 'conquistaDesbloqueada',
   'bonificacaoMoeda', 'mercadoItem', 'mercadoResgate',
   'funcionarioFace', 'pontoRegistro', 'dispositivo', 'jornada', 'coletorBatidaPendente', 'coletorComando', 'pontoConfig', 'funcao',
@@ -456,6 +457,8 @@ function bonificacaoConfigJson(c) {
     bonusTop1: Number(c.bonusTop1), bonusTop2: Number(c.bonusTop2), bonusTop3: Number(c.bonusTop3),
     xpPorNivel: c.xpPorNivel ?? 500,
     moedasPorReal: Number(c.moedasPorReal ?? 1),
+    reconhecimentoCoins: c.reconhecimentoCoins ?? 10,
+    reconhecimentoMaxMes: c.reconhecimentoMaxMes ?? 3,
   };
 }
 const bonificacaoTipoJson = (t) => ({
@@ -546,6 +549,8 @@ app.put('/api/bonificacao/config', async (req, res) => {
       bonusTop1: num(b.bonusTop1, 100), bonusTop2: num(b.bonusTop2, 50), bonusTop3: num(b.bonusTop3, 25),
       xpPorNivel: Math.max(1, Math.round(num(b.xpPorNivel, 500))),
       moedasPorReal: Math.max(0, num(b.moedasPorReal, 1)),
+      reconhecimentoCoins: Math.max(0, Math.round(num(b.reconhecimentoCoins, 10))),
+      reconhecimentoMaxMes: Math.max(0, Math.round(num(b.reconhecimentoMaxMes, 3))),
     };
     const existente = await prisma.bonificacaoConfig.findFirst();
     // Slug amigável do link público (opcional; único global).
@@ -681,11 +686,22 @@ function auditarBonif(req, acao, { entidade = null, entidadeId = null, antes = n
 
 // Separa as ocorrências individuais das coletivas (da equipe) e calcula a Nota
 // Coletiva do mês: começa em 100% e desce a soma dos % das ocorrências coletivas.
-// Pesos do Índice de Excelência (base do Destaque/Top 3). Contribuições (15%) chegam no
-// Bloco 4; até lá reescalamos Assiduidade+Desempenho (0.50/0.35 → 0.59/0.41).
-const INDICE_PESO_ASSID = 0.59;
-const INDICE_PESO_DESEMP = 0.41;
-const indiceExcelencia = (assidPct, desPct) => r2(INDICE_PESO_ASSID * (assidPct || 0) + INDICE_PESO_DESEMP * (desPct || 0));
+// Pesos do Índice de Excelência (base do Destaque/Top 3): Assiduidade 50% + Desempenho 35%
+// + Contribuições 15% (Contribuições positivas lançadas pela liderança, Bloco 4).
+const INDICE_PESO_ASSID = 0.50;
+const INDICE_PESO_DESEMP = 0.35;
+const INDICE_PESO_CONTRIB = 0.15;
+const indiceExcelencia = (assidPct, desPct, contribPct = 0) =>
+  r2(INDICE_PESO_ASSID * (assidPct || 0) + INDICE_PESO_DESEMP * (desPct || 0) + INDICE_PESO_CONTRIB * (contribPct || 0));
+
+// Contribuições positivas do mês → Map(funcionarioId → contribPct 0..100 = min(100, Σpontos)).
+async function contribPctDoMes(ano, mes, empresaId) {
+  const where = empresaId != null ? { empresaId, ano, mes } : { ano, mes };
+  const g = await prisma.bonificacaoContribuicao.groupBy({ by: ['funcionarioId'], _sum: { pontos: true }, where });
+  const m = new Map();
+  for (const r of g) m.set(r.funcionarioId, Math.max(0, Math.min(100, r._sum.pontos || 0)));
+  return m;
+}
 
 // Score Coletivo do mês a partir dos indicadores configuráveis (Google/iFood/NPS). Média
 // ponderada dos valores lançados (val/escalaMax·100). Sem valores lançados → base 100
@@ -721,7 +737,8 @@ function separarOcorrenciasBonif(ocorrencias, baseColetiva = 100) {
 }
 
 // Calcula as linhas do mês (por funcionário) a partir das ocorrências + coletiva + tetos.
-function calcularLinhasBonificacao(funcionarios, ocorrencias, coletivaPct, t) {
+// contribMap (funcionarioId → contribPct 0..100) entra nos 15% do Índice de Excelência.
+function calcularLinhasBonificacao(funcionarios, ocorrencias, coletivaPct, t, contribMap = new Map()) {
   const porFunc = new Map();
   for (const o of ocorrencias) {
     if (o.funcionarioId == null || o.pilar === 'COLETIVA') continue; // coletivas entram via coletivaPct
@@ -736,12 +753,13 @@ function calcularLinhasBonificacao(funcionarios, ocorrencias, coletivaPct, t) {
     const g = porFunc.get(f.id) || { assidPen: 0, desPen: 0, ocorrencias: [] };
     const assidPct = Math.max(0, 100 - g.assidPen);
     const desPct = Math.max(0, 100 - g.desPen);
+    const contribPct = contribMap.get(f.id) || 0;
     const assidRs = r2(assidPct / 100 * t.tetoA);
     const desRs = r2(desPct / 100 * t.tetoD);
     const colRs = r2(coletivaPct / 100 * t.tetoC);
     const subtotal = r2(assidRs + desRs + colRs);
-    const indice = indiceExcelencia(assidPct, desPct);
-    return { funcionarioId: f.id, nome: f.nome, funcao: f.funcao || null, assidPct: r2(assidPct), desPct: r2(desPct), coletivaPct: r2(coletivaPct), indice, assidRs, desRs, colRs, subtotal, ocorrencias: g.ocorrencias };
+    const indice = indiceExcelencia(assidPct, desPct, contribPct);
+    return { funcionarioId: f.id, nome: f.nome, funcao: f.funcao || null, assidPct: r2(assidPct), desPct: r2(desPct), coletivaPct: r2(coletivaPct), contribPct: r2(contribPct), indice, assidRs, desRs, colRs, subtotal, ocorrencias: g.ocorrencias };
   });
   // Ranking (Destaque do Mês): maior Índice de Excelência; desempate por subtotal, depois
   // Assiduidade, depois id. Top 3 levam o bônus Extra. (Bloco 3)
@@ -779,8 +797,9 @@ app.get('/api/bonificacao/mensal', async (req, res) => {
     const funcionarios = (await prisma.funcionario.findMany({ where: { status: 'ATIVO' }, orderBy: { nome: 'asc' } })).filter((f) => !exclFuncoes.has(f.funcao));
     const ocorrenciasTodas = await prisma.bonificacaoOcorrencia.findMany({ where: { ano: am.ano, mes: am.mes }, orderBy: { data: 'desc' } });
     const score = await scoreColetivoDoMes(am.ano, am.mes);
+    const contribMap = await contribPctDoMes(am.ano, am.mes);
     const { individuais, coletivas, coletivaPct, descontoColetivo } = separarOcorrenciasBonif(ocorrenciasTodas, score.scoreIndicadores);
-    const rows = calcularLinhasBonificacao(funcionarios, individuais, coletivaPct, t);
+    const rows = calcularLinhasBonificacao(funcionarios, individuais, coletivaPct, t, contribMap);
     res.json({ fechado: false, coletivaPct, coletivas: coletivas.map(ocorrenciaJson), coletivo: { ...score, descontoColetivo, coletivaPct }, totalGeral: r2(rows.reduce((s, r) => s + r.totalRs, 0)), funcionarios: rows, config: configOut });
   } catch (err) { console.error('[bonificacao/mensal]', err); res.status(500).json({ error: 'Erro ao carregar o mês.' }); }
 });
@@ -967,6 +986,112 @@ app.post('/api/bonificacao/indicadores/valores', async (req, res) => {
   } catch (err) { console.error('[bonificacao/indicadores/valores POST]', err); res.status(500).json({ error: 'Erro ao lançar os valores.' }); }
 });
 
+// ===== Bonificação — Ouvidoria / Sugestões (ADMIN) (Bloco 4) =====
+const OUVIDORIA_STATUS = new Set(['ABERTA', 'EM_ANALISE', 'RESPONDIDA', 'ARQUIVADA']);
+const OUVIDORIA_TIPOS = new Set(['RECLAMACAO', 'SUGESTAO', 'ELOGIO', 'DENUNCIA', 'OUTRO']);
+app.get('/api/bonificacao/ouvidoria', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const st = req.query.status && OUVIDORIA_STATUS.has(String(req.query.status)) ? String(req.query.status) : null;
+    const lista = await prisma.bonificacaoOuvidoria.findMany({ where: st ? { status: st } : {}, orderBy: { criadoEm: 'desc' }, take: 200 });
+    const ids = [...new Set(lista.filter((o) => !o.anonimo && o.funcionarioId).map((o) => o.funcionarioId))];
+    const nomes = new Map((await prisma.funcionario.findMany({ where: { id: { in: ids } } })).map((f) => [f.id, f.nome]));
+    res.json(lista.map((o) => ({ id: o.id, tipo: o.tipo, mensagem: o.mensagem, status: o.status, anonimo: o.anonimo, funcionario: o.anonimo ? null : (o.funcionarioId ? nomes.get(o.funcionarioId) || null : null), resposta: o.resposta || null, respondidoPor: o.respondidoPor || null, respondidoEm: o.respondidoEm || null, criadoEm: o.criadoEm })));
+  } catch (err) { console.error('[bonificacao/ouvidoria GET]', err); res.status(500).json({ error: 'Erro ao carregar a ouvidoria.' }); }
+});
+app.patch('/api/bonificacao/ouvidoria/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const id = parseInt(req.params.id, 10);
+    const o = await prisma.bonificacaoOuvidoria.findFirst({ where: { id } });
+    if (!o) return res.status(404).json({ error: 'Mensagem não encontrada.' });
+    const data = {};
+    if (req.body?.status && OUVIDORIA_STATUS.has(req.body.status)) data.status = req.body.status;
+    if (req.body?.resposta !== undefined) {
+      data.resposta = req.body.resposta ? String(req.body.resposta).slice(0, 2000) : null;
+      data.respondidoPor = req.user?.nome || null; data.respondidoEm = new Date();
+      if (data.resposta && !data.status) data.status = 'RESPONDIDA';
+    }
+    await prisma.bonificacaoOuvidoria.update({ where: { id }, data });
+    res.json({ ok: true });
+  } catch (err) { console.error('[bonificacao/ouvidoria PATCH]', err); res.status(500).json({ error: 'Erro ao atualizar.' }); }
+});
+
+// ===== Bonificação — Contribuições positivas (ADMIN) — 15% do Índice (Bloco 4) =====
+app.get('/api/bonificacao/contribuicoes', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const am = lerAnoMesBonif(req, res); if (!am) return;
+  try {
+    const lista = await prisma.bonificacaoContribuicao.findMany({ where: { ano: am.ano, mes: am.mes }, orderBy: { criadoEm: 'desc' } });
+    const ids = [...new Set(lista.map((c) => c.funcionarioId))];
+    const nomes = new Map((await prisma.funcionario.findMany({ where: { id: { in: ids } } })).map((f) => [f.id, f.nome]));
+    const contribMap = await contribPctDoMes(am.ano, am.mes);
+    res.json({
+      contribuicoes: lista.map((c) => ({ id: c.id, funcionarioId: c.funcionarioId, funcionario: nomes.get(c.funcionarioId) || '—', descricao: c.descricao, pontos: c.pontos, coins: c.coins, registradoPor: c.registradoPor || null, criadoEm: c.criadoEm })),
+      contribPct: Object.fromEntries(contribMap),
+    });
+  } catch (err) { console.error('[bonificacao/contribuicoes GET]', err); res.status(500).json({ error: 'Erro ao carregar contribuições.' }); }
+});
+app.post('/api/bonificacao/contribuicoes', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const am = lerAnoMesBonif(req, res); if (!am) return;
+  try {
+    const funcionarioId = parseInt(req.body?.funcionarioId, 10);
+    const func = await prisma.funcionario.findFirst({ where: { id: funcionarioId } });
+    if (!func) return res.status(404).json({ error: 'Funcionário não encontrado.' });
+    const descricao = String(req.body?.descricao || '').trim().slice(0, 300);
+    if (!descricao) return res.status(400).json({ error: 'Descreva a contribuição.' });
+    const pontos = Math.max(0, Math.min(100, Math.round(Number(req.body?.pontos) || 25)));
+    const coins = Math.max(0, Math.round(Number(req.body?.coins) || 0));
+    const c = await prisma.bonificacaoContribuicao.create({ data: { funcionarioId, ano: am.ano, mes: am.mes, descricao, pontos, coins, registradoPor: req.user?.nome || null } });
+    if (coins > 0) await prisma.bonificacaoMoeda.create({ data: { funcionarioId, pontos: coins, motivo: `Contribuição: ${descricao}`.slice(0, 200), origem: 'CONTRIBUICAO' } });
+    auditarBonif(req, 'CONTRIBUICAO_LANCADA', { entidade: 'BonificacaoContribuicao', entidadeId: c.id, valorDepois: { funcionarioId, pontos, coins } });
+    res.status(201).json({ ok: true });
+  } catch (err) { console.error('[bonificacao/contribuicoes POST]', err); res.status(500).json({ error: 'Erro ao lançar a contribuição.' }); }
+});
+app.delete('/api/bonificacao/contribuicoes/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const id = parseInt(req.params.id, 10);
+    const c = await prisma.bonificacaoContribuicao.findFirst({ where: { id } });
+    if (!c) return res.status(404).json({ error: 'Contribuição não encontrada.' });
+    await prisma.bonificacaoContribuicao.delete({ where: { id } });
+    auditarBonif(req, 'CONTRIBUICAO_EXCLUIDA', { entidade: 'BonificacaoContribuicao', entidadeId: id });
+    res.json({ ok: true });
+  } catch (err) { console.error('[bonificacao/contribuicoes DELETE]', err); res.status(500).json({ error: 'Erro ao excluir.' }); }
+});
+
+// ===== Bonificação — Reconhecimento entre colegas (ADMIN) (Bloco 4) =====
+app.get('/api/bonificacao/reconhecimentos', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const st = req.query.status ? String(req.query.status) : null;
+    const lista = await prisma.bonificacaoReconhecimento.findMany({ where: st ? { status: st } : {}, orderBy: { criadoEm: 'desc' }, take: 200 });
+    const ids = [...new Set(lista.flatMap((r) => [r.deFuncionarioId, r.paraFuncionarioId]))];
+    const nomes = new Map((await prisma.funcionario.findMany({ where: { id: { in: ids } } })).map((f) => [f.id, f.nome]));
+    res.json(lista.map((r) => ({ id: r.id, de: nomes.get(r.deFuncionarioId) || '—', para: nomes.get(r.paraFuncionarioId) || '—', mensagem: r.mensagem, coins: r.coins, status: r.status, criadoEm: r.criadoEm, decididoPor: r.decididoPor || null, decididoEm: r.decididoEm || null })));
+  } catch (err) { console.error('[bonificacao/reconhecimentos GET]', err); res.status(500).json({ error: 'Erro ao carregar.' }); }
+});
+app.patch('/api/bonificacao/reconhecimentos/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const id = parseInt(req.params.id, 10);
+    const acao = String(req.body?.acao || '');
+    const r = await prisma.bonificacaoReconhecimento.findFirst({ where: { id } });
+    if (!r) return res.status(404).json({ error: 'Reconhecimento não encontrado.' });
+    if (r.status !== 'PENDENTE') return res.status(400).json({ error: 'Este reconhecimento já foi avaliado.' });
+    if (acao === 'aprovar') {
+      await prisma.bonificacaoReconhecimento.update({ where: { id }, data: { status: 'APROVADO', decididoPor: req.user?.nome || null, decididoEm: new Date() } });
+      if (r.coins > 0) await prisma.bonificacaoMoeda.create({ data: { funcionarioId: r.paraFuncionarioId, pontos: r.coins, motivo: 'Reconhecimento de colega', origem: 'RECONHECIMENTO' } });
+      auditarBonif(req, 'RECONHECIMENTO_APROVADO', { entidade: 'BonificacaoReconhecimento', entidadeId: id });
+    } else if (acao === 'rejeitar') {
+      await prisma.bonificacaoReconhecimento.update({ where: { id }, data: { status: 'REJEITADO', decididoPor: req.user?.nome || null, decididoEm: new Date() } });
+      auditarBonif(req, 'RECONHECIMENTO_REJEITADO', { entidade: 'BonificacaoReconhecimento', entidadeId: id });
+    } else return res.status(400).json({ error: 'Ação inválida.' });
+    res.json({ ok: true });
+  } catch (err) { console.error('[bonificacao/reconhecimentos PATCH]', err); res.status(500).json({ error: 'Erro ao avaliar.' }); }
+});
+
 // Simula o impacto de uma regra num cenário, SEM gravar (M5).
 // body: { regra:{...campos da regra...}, ocorrencias?, minutos?, severidadePct? }
 app.post('/api/bonificacao/simular', async (req, res) => {
@@ -999,8 +1124,9 @@ app.post('/api/bonificacao/fechar', async (req, res) => {
     const funcionarios = (await prisma.funcionario.findMany({ where: { status: 'ATIVO' }, orderBy: { nome: 'asc' } })).filter((f) => !exclFuncoes.has(f.funcao));
     const ocorrenciasTodas = await prisma.bonificacaoOcorrencia.findMany({ where: { ano: am.ano, mes: am.mes }, orderBy: { data: 'desc' } });
     const score = await scoreColetivoDoMes(am.ano, am.mes);
+    const contribMap = await contribPctDoMes(am.ano, am.mes);
     const { individuais, coletivaPct } = separarOcorrenciasBonif(ocorrenciasTodas, score.scoreIndicadores);
-    const rows = calcularLinhasBonificacao(funcionarios, individuais, coletivaPct, t);
+    const rows = calcularLinhasBonificacao(funcionarios, individuais, coletivaPct, t, contribMap);
     const totalGeral = r2(rows.reduce((s, r) => s + r.totalRs, 0));
     const f = await prisma.bonificacaoFechamento.create({
       data: { ano: am.ano, mes: am.mes, coletivaPct, itensJson: rows, indicadoresJson: score, totalGeral, fechadoPor: req.user?.nome || null },
@@ -1332,7 +1458,7 @@ app.delete('/api/bonificacao/conquistas/desbloqueio/:id', async (req, res) => {
 // NÃO expõe o motivo das ocorrências (privacidade). Escopo por empresaId do token.
 const rowPublicoBonif = (r) => ({
   funcionarioId: r.funcionarioId, nome: r.nome, funcao: r.funcao || null, posicao: r.posicao,
-  assidPct: r.assidPct, desPct: r.desPct, coletivaPct: r.coletivaPct, indice: r.indice ?? null,
+  assidPct: r.assidPct, desPct: r.desPct, coletivaPct: r.coletivaPct, contribPct: r.contribPct ?? null, indice: r.indice ?? null,
   assidRs: r.assidRs, desRs: r.desRs, colRs: r.colRs, classificacaoRs: r.classificacaoRs, totalRs: r.totalRs,
 });
 app.get('/api/public/bonificacao/:token', async (req, res) => {
@@ -1363,9 +1489,10 @@ app.get('/api/public/bonificacao/:token', async (req, res) => {
       const fs = (await prisma.funcionario.findMany({ where: { empresaId, status: 'ATIVO' }, orderBy: { nome: 'asc' } })).filter((f) => !exclFuncoes.has(f.funcao));
       const ocs = await prisma.bonificacaoOcorrencia.findMany({ where: { empresaId, ano, mes } });
       const score = await scoreColetivoDoMes(ano, mes, empresaId);
+      const contribMap = await contribPctDoMes(ano, mes, empresaId);
       const sep = separarOcorrenciasBonif(ocs, score.scoreIndicadores);
       coletivaPct = sep.coletivaPct;
-      funcionarios = calcularLinhasBonificacao(fs, sep.individuais, coletivaPct, t).map(rowPublicoBonif);
+      funcionarios = calcularLinhasBonificacao(fs, sep.individuais, coletivaPct, t, contribMap).map(rowPublicoBonif);
     }
     res.json({
       loja: { nome: loja?.nome || 'Loja', logoDataUrl: loja?.logoDataUrl || null },
@@ -1396,9 +1523,10 @@ app.get('/api/public/eu/:token', async (req, res) => {
       const fs = await prisma.funcionario.findMany({ where: { empresaId, status: 'ATIVO' }, orderBy: { nome: 'asc' } });
       const ocs = await prisma.bonificacaoOcorrencia.findMany({ where: { empresaId, ano, mes } });
       const score = await scoreColetivoDoMes(ano, mes, empresaId);
+      const contribMap = await contribPctDoMes(ano, mes, empresaId);
       const sep = separarOcorrenciasBonif(ocs, score.scoreIndicadores); // coletiva = base(indicadores ou 100) − ocorrências COLETIVA
       coletivaPct = sep.coletivaPct; coletivo = { ...score, coletivaPct };
-      rows = calcularLinhasBonificacao(fs, sep.individuais, coletivaPct, t);
+      rows = calcularLinhasBonificacao(fs, sep.individuais, coletivaPct, t, contribMap);
     }
     const meu = rows.find((r) => r.funcionarioId === func.id) || null;
     // Mural de conquistas: desbloqueadas + bloqueadas com progresso (métricas do histórico da loja).
@@ -1418,10 +1546,18 @@ app.get('/api/public/eu/:token', async (req, res) => {
     const saldoMoedas = await saldoMoedasDe(func.id, empresaId);
     const itens = await prisma.mercadoItem.findMany({ where: { empresaId, ativo: true }, orderBy: [{ ordem: 'asc' }, { id: 'asc' }] });
     const meusResgates = await prisma.mercadoResgate.findMany({ where: { empresaId, funcionarioId: func.id }, orderBy: { criadoEm: 'desc' }, take: 20 });
+    // Bloco 4: colegas p/ reconhecer, meus reconhecimentos, ouvidoria e contribuições.
+    const colegasRaw = await prisma.funcionario.findMany({ where: { empresaId, status: 'ATIVO', NOT: { id: func.id } }, orderBy: { nome: 'asc' }, select: { id: true, nome: true, funcao: true } });
+    const recRaw = await prisma.bonificacaoReconhecimento.findMany({ where: { empresaId, OR: [{ deFuncionarioId: func.id }, { paraFuncionarioId: func.id }] }, orderBy: { criadoEm: 'desc' }, take: 40 });
+    const recIds = [...new Set(recRaw.flatMap((r) => [r.deFuncionarioId, r.paraFuncionarioId]))];
+    const recNomes = new Map((await prisma.funcionario.findMany({ where: { id: { in: recIds } }, select: { id: true, nome: true } })).map((f) => [f.id, f.nome]));
+    const enviadosMes = recRaw.filter((r) => r.deFuncionarioId === func.id && r.ano === ano && r.mes === mes && r.status !== 'REJEITADO').length;
+    const minhasMsgs = await prisma.bonificacaoOuvidoria.findMany({ where: { empresaId, funcionarioId: func.id, anonimo: false }, orderBy: { criadoEm: 'desc' }, take: 20 });
+    const minhasContrib = await prisma.bonificacaoContribuicao.findMany({ where: { empresaId, funcionarioId: func.id, ano, mes }, orderBy: { criadoEm: 'desc' } });
     res.json({
       loja: { nome: loja?.nome || 'Loja', logoDataUrl: loja?.logoDataUrl || null },
       ano, mes, coletivaPct, coletivo,
-      funcionario: { nome: func.nome, funcao: func.funcao || null },
+      funcionario: { id: func.id, nome: func.nome, funcao: func.funcao || null },
       meu: meu ? rowPublicoBonif(meu) : null,
       ranking: rows.map(rowPublicoBonif).sort((a, b) => (a.posicao || 99) - (b.posicao || 99)),
       conquistas: conquistasOut,
@@ -1430,6 +1566,14 @@ app.get('/api/public/eu/:token', async (req, res) => {
       moedas: saldoMoedas,
       mercado: itens.map((i) => ({ id: i.id, nome: i.nome, descricao: i.descricao || null, emoji: i.emoji, custo: i.custo, esgotado: i.estoque != null && i.estoque <= 0 })),
       meusResgates: meusResgates.map((r) => ({ id: r.id, itemNome: r.itemNome, itemEmoji: r.itemEmoji, custo: r.custo, status: r.status, criadoEm: r.criadoEm })),
+      colegas: colegasRaw.map((c) => ({ id: c.id, nome: c.nome, funcao: c.funcao || null })),
+      reconhecimento: {
+        maxMes: cfg.reconhecimentoMaxMes ?? 3, coins: cfg.reconhecimentoCoins ?? 10, enviadosMes,
+        recebidos: recRaw.filter((r) => r.paraFuncionarioId === func.id).map((r) => ({ id: r.id, de: recNomes.get(r.deFuncionarioId) || 'Colega', mensagem: r.mensagem, coins: r.coins, status: r.status, criadoEm: r.criadoEm })),
+        enviados: recRaw.filter((r) => r.deFuncionarioId === func.id).map((r) => ({ id: r.id, para: recNomes.get(r.paraFuncionarioId) || 'Colega', mensagem: r.mensagem, coins: r.coins, status: r.status, criadoEm: r.criadoEm })),
+      },
+      ouvidoria: minhasMsgs.map((o) => ({ id: o.id, tipo: o.tipo, mensagem: o.mensagem, status: o.status, resposta: o.resposta || null, criadoEm: o.criadoEm })),
+      contribuicoes: minhasContrib.map((c) => ({ id: c.id, descricao: c.descricao, pontos: c.pontos, coins: c.coins, criadoEm: c.criadoEm })),
       config: { tetoAssiduidade: t.tetoA, tetoDesempenho: t.tetoD, tetoColetiva: t.tetoC, bonusTop1: t.b1 },
     });
   } catch (err) { console.error('[public/eu]', err); res.status(500).json({ error: 'Erro ao carregar a página.' }); }
@@ -1456,6 +1600,47 @@ app.post('/api/public/eu/:token/resgatar', async (req, res) => {
     if (item.estoque != null) await prisma.mercadoItem.update({ where: { id: item.id }, data: { estoque: Math.max(0, item.estoque - 1) } });
     res.status(201).json({ ok: true, saldo: await saldoMoedasDe(func.id, empresaId) });
   } catch (err) { console.error('[public/eu/resgatar]', err); res.status(500).json({ error: 'Erro ao solicitar o resgate.' }); }
+});
+
+// PÚBLICO — colaborador envia mensagem à Ouvidoria (opc. anônima). (Bloco 4)
+app.post('/api/public/eu/:token/ouvidoria', async (req, res) => {
+  try {
+    const func = await prisma.funcionario.findFirst({ where: { tokenPrivado: String(req.params.token) } });
+    if (!func) return res.status(404).json({ error: 'Página não encontrada.' });
+    const empresaId = func.empresaId;
+    const tipo = OUVIDORIA_TIPOS.has(req.body?.tipo) ? req.body.tipo : 'SUGESTAO';
+    const mensagem = String(req.body?.mensagem || '').trim().slice(0, 2000);
+    if (!mensagem) return res.status(400).json({ error: 'Escreva sua mensagem.' });
+    const anonimo = req.body?.anonimo === true;
+    await prisma.bonificacaoOuvidoria.create({ data: { empresaId, funcionarioId: anonimo ? null : func.id, anonimo, tipo, mensagem } });
+    res.status(201).json({ ok: true });
+  } catch (err) { console.error('[public/eu/ouvidoria]', err); res.status(500).json({ error: 'Erro ao enviar a mensagem.' }); }
+});
+
+// PÚBLICO — colaborador reconhece um colega (peer kudos). Coins entram só após a
+// liderança aprovar. Anti-manipulação: de≠para, colega da mesma loja, teto mensal. (Bloco 4)
+app.post('/api/public/eu/:token/reconhecer', async (req, res) => {
+  try {
+    const func = await prisma.funcionario.findFirst({ where: { tokenPrivado: String(req.params.token) } });
+    if (!func) return res.status(404).json({ error: 'Página não encontrada.' });
+    const empresaId = func.empresaId;
+    const cfg = await prisma.bonificacaoConfig.findFirst({ where: { empresaId } });
+    if (!cfg || !cfg.ativo) return res.status(404).json({ error: 'A bonificação não está ativa nesta loja.' });
+    const paraId = parseInt(req.body?.paraFuncionarioId, 10);
+    if (!Number.isInteger(paraId) || paraId === func.id) return res.status(400).json({ error: 'Escolha um colega (diferente de você).' });
+    const colega = await prisma.funcionario.findFirst({ where: { id: paraId, empresaId, status: 'ATIVO' } });
+    if (!colega) return res.status(404).json({ error: 'Colega não encontrado nesta loja.' });
+    const mensagem = String(req.body?.mensagem || '').trim().slice(0, 500);
+    if (!mensagem) return res.status(400).json({ error: 'Escreva um motivo para o reconhecimento.' });
+    const now = new Date(); const ano = now.getFullYear(), mes = now.getMonth() + 1;
+    const limite = cfg.reconhecimentoMaxMes ?? 3;
+    if (limite > 0) {
+      const enviados = await prisma.bonificacaoReconhecimento.count({ where: { empresaId, deFuncionarioId: func.id, ano, mes, status: { not: 'REJEITADO' } } });
+      if (enviados >= limite) return res.status(400).json({ error: `Você já usou seus ${limite} reconhecimentos deste mês.` });
+    }
+    await prisma.bonificacaoReconhecimento.create({ data: { empresaId, deFuncionarioId: func.id, paraFuncionarioId: paraId, mensagem, coins: Math.max(0, cfg.reconhecimentoCoins ?? 10), ano, mes } });
+    res.status(201).json({ ok: true });
+  } catch (err) { console.error('[public/eu/reconhecer]', err); res.status(500).json({ error: 'Erro ao enviar o reconhecimento.' }); }
 });
 
 
