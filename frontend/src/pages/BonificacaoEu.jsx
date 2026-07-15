@@ -466,11 +466,11 @@ function TabPremios({ saldoCoins, conquistas, conquistasResumo, mercado, meusRes
                   <div className="be-ach-nm">{c.nome}</div>
                   {c.descricao && <div className="be-ach-ds">{c.descricao}</div>}
                   {on ? (
-                    <span className="be-rar" style={{ color: r.cor, background: r.cor + '22' }}>{r.label}{(c.coinsBonus ?? c.xpBonus) > 0 ? ` · +${c.coinsBonus ?? c.xpBonus} 🪙` : ''}</span>
+                    <span className="be-rar" style={{ color: r.cor, background: r.cor + '22' }}>{c.nivelAtual || r.label}{(c.coinsBonus ?? c.xpBonus) > 0 && !c.nivelAtual ? ` · +${c.coinsBonus ?? c.xpBonus} 🪙` : ''}</span>
                   ) : p ? (
                     <>
                       <div className="be-ach-prog"><i style={{ width: pct + '%' }} /></div>
-                      <div className="be-ach-meta be-tnum">{num(p.atual)} / {num(p.meta)}</div>
+                      <div className="be-ach-meta be-tnum">{num(p.atual)} / {num(p.meta)}{p.nivelNome ? ` · ${p.nivelNome}` : ''}</div>
                     </>
                   ) : (
                     <span className="be-ach-meta">Concedida pela liderança</span>

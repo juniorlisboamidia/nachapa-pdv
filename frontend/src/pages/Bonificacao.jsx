@@ -617,29 +617,65 @@ function MoedasModal({ func, onClose, onMudou, toast }) {
 
 /* ───────────── Aba: Conquistas (cards) ───────────── */
 const RARIDADES = [
-  { id: 'COMUM', label: 'Comum', cor: '#64748b', bg: '#f1f5f9' },
-  { id: 'RARO', label: 'Raro', cor: '#a17c00', bg: '#fdf6da' },
-  { id: 'EPICO', label: 'Épico', cor: '#7c3aed', bg: '#f5f3ff' },
-  { id: 'LENDARIO', label: 'Lendário', cor: '#d97706', bg: '#fffbeb' },
+  // faixa = Coins sugeridos (orientativo: avisa, não impede)
+  { id: 'COMUM', label: 'Comum', cor: '#64748b', bg: '#f1f5f9', faixa: [25, 75], ref: 'Normalmente obtida nos primeiros ciclos' },
+  { id: 'RARO', label: 'Raro', cor: '#a17c00', bg: '#fdf6da', faixa: [75, 200], ref: 'Exige resultado relevante ou consistência' },
+  { id: 'EPICO', label: 'Épico', cor: '#7c3aed', bg: '#f5f3ff', faixa: [200, 400], ref: 'Exige repetição de alto desempenho' },
+  { id: 'LENDARIO', label: 'Lendário', cor: '#d97706', bg: '#fffbeb', faixa: [400, 750], ref: 'Exige completar uma jornada ampla' },
 ]
 const RAR = Object.fromEntries(RARIDADES.map((r) => [r.id, r]))
-const REGRAS = [
-  { id: 'MANUAL', label: 'Concedida manualmente', unit: '' },
-  { id: 'VITORIAS', label: 'Vitórias (1º lugar)', unit: 'vitórias' },
-  { id: 'PODIOS', label: 'Pódios (Top 3)', unit: 'pódios' },
-  { id: 'MESES_ATIVOS', label: 'Meses ativos', unit: 'meses' },
-  { id: 'PRESENCA_100', label: 'Meses com Assiduidade 100%', unit: 'meses' },
-  { id: 'SCORE_100', label: 'Meses com Desempenho 100%', unit: 'meses' },
+const CATEGORIAS = [
+  { id: 'JORNADA', label: 'Jornada' }, { id: 'ASSIDUIDADE', label: 'Assiduidade' },
+  { id: 'DESEMPENHO', label: 'Desempenho' }, { id: 'EXCELENCIA', label: 'Excelência' },
+  { id: 'COLABORACAO', label: 'Colaboração' }, { id: 'INOVACAO', label: 'Inovação' },
+  { id: 'COLECAO', label: 'Coleção' },
 ]
-const REG = Object.fromEntries(REGRAS.map((r) => [r.id, r]))
-const regraTexto = (c) => c.regra === 'MANUAL' ? 'Concedida manualmente' : `${REG[c.regra]?.label || c.regra} ≥ ${c.meta}${REG[c.regra]?.unit ? ' ' + REG[c.regra].unit : ''}`
+const CAT = Object.fromEntries(CATEGORIAS.map((c) => [c.id, c.label]))
+const DESBLOQUEIO = {
+  AUTOMATICA: { label: 'Automática', cor: '#0F8A54', bg: 'rgba(15,138,84,.1)' },
+  MANUAL: { label: 'Manual', cor: '#2563eb', bg: 'rgba(37,99,235,.1)' },
+  VALIDACAO: { label: 'Por validação', cor: '#7c3aed', bg: 'rgba(124,58,237,.1)' },
+}
+const REGRAS = [
+  { id: 'MANUAL', label: 'Concedida pela gestão' },
+  { id: 'MESES_ATIVOS', label: 'Ciclos concluídos' },
+  { id: 'PRESENCA_100', label: 'Ciclos com Assiduidade 100%' },
+  { id: 'SCORE_100', label: 'Ciclos com Desempenho 100%' },
+  { id: 'CICLOS_CONSECUTIVOS_95', label: 'Ciclos seguidos ≥ 95% (Assid. e Desemp.)' },
+  { id: 'VITORIAS', label: 'Vitórias (1º lugar)' },
+  { id: 'PODIOS', label: 'Pódios (Top 3)' },
+  { id: 'SUGESTOES_IMPLEMENTADAS', label: 'Sugestões implementadas' },
+  { id: 'RECONHECIMENTOS_RECEBIDOS', label: 'Reconhecimentos aprovados recebidos' },
+  { id: 'COLECAO', label: 'Coleção (todas as principais)' },
+]
+const plural = (n, s, p) => `${n} ${n === 1 ? s : p}`
+// Critério em linguagem natural (a condição técnica fica só na edição da regra).
+function criterioTexto(c) {
+  const m = c.tipo === 'PROGRESSIVA' && c.niveisJson?.length ? c.niveisJson[0].meta : c.meta
+  switch (c.regra) {
+    case 'MANUAL': return 'Concedida pela gestão'
+    case 'MESES_ATIVOS': return `Complete ${plural(m, 'ciclo', 'ciclos')} no programa`
+    case 'PRESENCA_100': return `Conquiste Assiduidade 100% em ${plural(m, 'ciclo', 'ciclos')}`
+    case 'SCORE_100': return `Conquiste Desempenho 100% em ${plural(m, 'ciclo', 'ciclos')}`
+    case 'VITORIAS': return `Conquiste o 1º lugar em ${plural(m, 'ciclo', 'ciclos')}`
+    case 'PODIOS': return `Alcance o Top 3 em ${plural(m, 'ciclo', 'ciclos')}`
+    case 'CICLOS_CONSECUTIVOS_95': return `Feche ${plural(m, 'ciclo', 'ciclos')} seguidos com Assiduidade e Desempenho acima de 95%`
+    case 'SUGESTOES_IMPLEMENTADAS': return `Tenha ${plural(m, 'sugestão implementada', 'sugestões implementadas')}`
+    case 'RECONHECIMENTOS_RECEBIDOS': return `Receba ${plural(m, 'reconhecimento aprovado', 'reconhecimentos aprovados')}`
+    case 'COLECAO': return 'Desbloqueie todas as conquistas principais'
+    default: return c.regra
+  }
+}
 
 function AbaConquistas({ toast }) {
   const [lista, setLista] = useState(null)
   const [edit, setEdit] = useState(null)      // conquista em edição (ou {} p/ nova)
   const [conceder, setConceder] = useState(null)
+  const [verConq, setVerConq] = useState(null) // conquistadores
   const [excluir, setExcluir] = useState(null)
-  const [recalc, setRecalc] = useState(false)
+  const [menu, setMenu] = useState(null)       // id do card com o menu ⋯ aberto
+  const [verificar, setVerificar] = useState(false)
+  const [verArquivadas, setVerArquivadas] = useState(false)
 
   function carregar() {
     api.get('/bonificacao/conquistas')
@@ -648,57 +684,95 @@ function AbaConquistas({ toast }) {
   }
   useEffect(carregar, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function recalcular() {
-    setRecalc(true)
-    try { const r = await api.post('/bonificacao/conquistas/recalcular'); toast({ message: r.data.novas > 0 ? `${r.data.novas} nova(s) conquista(s) desbloqueada(s)!` : 'Tudo em dia — nenhuma nova conquista.', type: 'success' }); carregar() }
-    catch (err) { toast({ message: err?.response?.data?.error ?? 'Erro ao recalcular.', type: 'error' }) }
-    finally { setRecalc(false) }
+  async function arquivar(c, arquivada) {
+    setMenu(null)
+    try { await api.patch(`/bonificacao/conquistas/${c.id}/arquivar`, { arquivada }); toast({ message: arquivada ? 'Conquista arquivada.' : 'Conquista restaurada.', type: 'success' }); carregar() }
+    catch (err) { toast({ message: err?.response?.data?.error ?? 'Erro ao arquivar.', type: 'error' }) }
+  }
+  async function duplicar(c) {
+    setMenu(null)
+    try { await api.post(`/bonificacao/conquistas/${c.id}/duplicar`); toast({ message: 'Cópia criada (inativa) — ajuste e ative.', type: 'success' }); carregar() }
+    catch (err) { toast({ message: err?.response?.data?.error ?? 'Erro ao duplicar.', type: 'error' }) }
+  }
+  async function ativar(c) {
+    setMenu(null)
+    try { await api.put(`/bonificacao/conquistas/${c.id}`, { ...c, ativo: !c.ativo }); carregar() }
+    catch (err) { toast({ message: err?.response?.data?.error ?? 'Erro ao alterar.', type: 'error' }) }
   }
   async function excluirConfirm() {
     try { await api.delete(`/bonificacao/conquistas/${excluir.id}`); setExcluir(null); carregar() }
-    catch (err) { toast({ message: err?.response?.data?.error ?? 'Erro ao excluir.', type: 'error' }) }
+    catch (err) { toast({ message: err?.response?.data?.error ?? 'Erro ao excluir.', type: 'error' }); setExcluir(null) }
   }
 
   if (!lista) return <div className="loading-state">Carregando…</div>
+  const visiveis = lista.filter((c) => verArquivadas || !c.arquivada)
+  const nArquivadas = lista.filter((c) => c.arquivada).length
 
   return (
-    <div>
+    <div onClick={() => menu && setMenu(null)}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 6 }}>
         <div style={{ fontSize: 12.5, color: '#777', maxWidth: 520 }}>
-          Cards que o funcionário desbloqueia. As de regra automática são concedidas ao <strong>fechar o mês</strong> (ou ao recalcular); as <strong>manuais</strong>, você concede à mão. Cada uma pode dar 🪙 Coins bônus.
+          Medalhas que o colaborador desbloqueia. As <strong>automáticas</strong> saem no fechamento do mês (ou ao verificar); as <strong>por validação</strong> dependem de você aprovar o evento na aba Engajamento; as <strong>manuais</strong>, você concede à mão.
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" className="btn btn-secondary" onClick={recalcular} disabled={recalc}>{recalc ? 'Recalculando…' : '↻ Recalcular'}</button>
+          <button type="button" className="btn btn-secondary" onClick={() => setVerificar(true)}>✓ Verificar conquistas</button>
           <button type="button" className="btn btn-primary" onClick={() => setEdit({})}>+ Nova conquista</button>
         </div>
       </div>
 
-      {lista.length === 0 ? (
+      {nArquivadas > 0 && (
+        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 12.5, color: 'var(--app-text-soft, #777)', margin: '4px 0 8px', cursor: 'pointer' }}>
+          <input type="checkbox" checked={verArquivadas} onChange={(e) => setVerArquivadas(e.target.checked)} /> Mostrar arquivadas ({nArquivadas})
+        </label>
+      )}
+
+      {visiveis.length === 0 ? (
         <div className="empty-state" style={{ padding: '28px 16px' }}>Nenhuma conquista. Crie a primeira.</div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 12, marginTop: 12 }}>
-          {lista.map((c) => {
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12, marginTop: 12 }}>
+          {visiveis.map((c) => {
             const r = RAR[c.raridade] || RAR.COMUM
+            const d = DESBLOQUEIO[c.desbloqueio] || DESBLOQUEIO.AUTOMATICA
             return (
-              <div key={c.id} className="table-card" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 8, opacity: c.ativo ? 1 : 0.55, borderTop: `3px solid ${r.cor}` }}>
+              <div key={c.id} className="table-card" style={{ padding: 14, display: 'flex', flexDirection: 'column', gap: 8, opacity: c.ativo && !c.arquivada ? 1 : 0.5, borderTop: `3px solid ${r.cor}`, position: 'relative' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                   <span style={{ fontSize: 30, lineHeight: 1 }}>{c.emoji}</span>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 14.5 }}>{c.nome}</div>
-                    <span style={{ display: 'inline-block', marginTop: 3, fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: r.cor, background: r.bg, borderRadius: 999, padding: '2px 8px' }}>{r.label}</span>
+                    <div style={{ fontWeight: 700, fontSize: 14.5 }}>{c.nome}{c.arquivada && <span className="badge badge-gray" style={{ marginLeft: 5 }}>arquivada</span>}</div>
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
+                      <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.05em', color: r.cor, background: r.bg, borderRadius: 999, padding: '2px 7px' }}>{r.label}</span>
+                      <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.05em', color: d.cor, background: d.bg, borderRadius: 999, padding: '2px 7px' }}>{d.label}</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--app-text-soft, #999)', background: 'var(--app-surface-2, #f5f5f5)', borderRadius: 999, padding: '2px 7px' }}>{CAT[c.categoria] || c.categoria}</span>
+                    </div>
                   </div>
                 </div>
                 {c.descricao && <div style={{ fontSize: 12, color: '#777', lineHeight: 1.4 }}>{c.descricao}</div>}
-                <div style={{ fontSize: 11.5, color: '#555' }}>🎯 {regraTexto(c)}</div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, fontSize: 11.5, color: '#999' }}>
-                  <span>{c.xpBonus > 0 ? <span style={{ color: '#B8860B', fontWeight: 700 }}>+{c.xpBonus} 🪙</span> : 'sem bônus'}</span>
-                  <span>👥 {c.desbloqueada}</span>
+                <div style={{ fontSize: 11.5, color: '#555' }}>🎯 {criterioTexto(c)}</div>
+                {c.tipo === 'PROGRESSIVA' && c.niveisJson?.length > 0 && (
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    {c.niveisJson.map((n, i) => <span key={i} className="badge badge-gray" style={{ fontSize: 10 }}>{n.nome} · {n.meta} · {n.coins}🪙</span>)}
+                  </div>
+                )}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, fontSize: 11.5, color: '#999', marginTop: 'auto', paddingTop: 4 }}>
+                  <span>{c.tipo === 'PROGRESSIVA' ? 'Coins por nível' : (c.xpBonus > 0 ? <span style={{ color: '#B8860B', fontWeight: 700 }}>+{c.xpBonus} 🪙</span> : 'sem bônus')}</span>
+                  <span>{c.desbloqueada === 1 ? '1 conquistador' : `${c.desbloqueada} conquistadores`}</span>
                 </div>
                 <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
                   <button type="button" className="btn btn-secondary btn-sm" style={{ flex: 1 }} onClick={() => setEdit(c)}>Editar</button>
-                  <button type="button" className="btn btn-secondary btn-sm" style={{ flex: 1 }} onClick={() => setConceder(c)}>Conceder</button>
-                  <button type="button" className="btn btn-danger btn-sm" onClick={() => setExcluir(c)} title="Excluir">✕</button>
+                  {c.desbloqueio === 'MANUAL'
+                    ? <button type="button" className="btn btn-secondary btn-sm" style={{ flex: 1 }} onClick={() => setConceder(c)}>Conceder</button>
+                    : <button type="button" className="btn btn-secondary btn-sm" style={{ flex: 1 }} onClick={() => setVerConq(c)}>Conquistadores</button>}
+                  <button type="button" className="btn btn-secondary btn-sm" title="Mais opções" onClick={(e) => { e.stopPropagation(); setMenu(menu === c.id ? null : c.id) }}>⋯</button>
                 </div>
+                {menu === c.id && (
+                  <div onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', right: 12, bottom: 48, zIndex: 5, background: 'var(--app-surface, #fff)', border: '1px solid var(--app-border, #e5e5e5)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,.14)', padding: 4, minWidth: 170 }}>
+                    <ItemMenuConq onClick={() => duplicar(c)}>Duplicar</ItemMenuConq>
+                    <ItemMenuConq onClick={() => ativar(c)}>{c.ativo ? 'Desativar' : 'Ativar'}</ItemMenuConq>
+                    <ItemMenuConq onClick={() => arquivar(c, !c.arquivada)}>{c.arquivada ? 'Desarquivar' : 'Arquivar'}</ItemMenuConq>
+                    <ItemMenuConq onClick={() => { setMenu(null); setVerConq(c) }}>Ver histórico</ItemMenuConq>
+                    {c.desbloqueada === 0 && <ItemMenuConq danger onClick={() => { setMenu(null); setExcluir(c) }}>Excluir</ItemMenuConq>}
+                  </div>
+                )}
               </div>
             )
           })}
@@ -707,9 +781,110 @@ function AbaConquistas({ toast }) {
 
       {edit && <ConquistaModal conquista={edit} onClose={() => setEdit(null)} onSalvou={() => { setEdit(null); carregar() }} toast={toast} />}
       {conceder && <ConcederModal conquista={conceder} onClose={() => setConceder(null)} onMudou={carregar} toast={toast} />}
+      {verConq && <ConquistadoresModal conquista={verConq} onClose={() => setVerConq(null)} />}
+      {verificar && <VerificarConquistasModal onClose={() => setVerificar(false)} onFeito={() => { setVerificar(false); carregar() }} toast={toast} />}
       <ConfirmDialog open={!!excluir} title="Excluir conquista" message={excluir ? `Excluir “${excluir.nome}”?` : ''}
-        description="Os desbloqueios dessa conquista também serão removidos. Os Coins já creditados não são estornados." variant="danger"
+        description="Só é possível excluir conquistas que nunca foram concedidas. As demais devem ser arquivadas." variant="danger"
         confirmLabel="Excluir" cancelLabel="Cancelar" onConfirm={excluirConfirm} onCancel={() => setExcluir(null)} />
+    </div>
+  )
+}
+function ItemMenuConq({ children, onClick, danger }) {
+  return (
+    <button type="button" onClick={onClick}
+      style={{ display: 'block', width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: '8px 10px', fontSize: 13, borderRadius: 7, cursor: 'pointer', color: danger ? '#dc2626' : 'var(--app-text, #222)', fontFamily: 'inherit' }}
+      onMouseOver={(e) => { e.currentTarget.style.background = 'var(--app-highlight, #f5f5f5)' }}
+      onMouseOut={(e) => { e.currentTarget.style.background = 'none' }}>{children}</button>
+  )
+}
+
+// Prévia antes de conceder — evita concessão inesperada.
+function VerificarConquistasModal({ onClose, onFeito, toast }) {
+  const [previa, setPrevia] = useState(null)
+  const [confirmando, setConfirmando] = useState(false)
+  useEffect(() => {
+    api.get('/bonificacao/conquistas/verificar').then((r) => setPrevia(r.data))
+      .catch((e) => { toast({ message: e?.response?.data?.error ?? 'Erro ao verificar.', type: 'error' }); onClose() })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  async function confirmar() {
+    setConfirmando(true)
+    try { const r = await api.post('/bonificacao/conquistas/verificar'); toast({ message: `${r.data.total} conquista(s) concedida(s).`, type: 'success' }); onFeito() }
+    catch (e) { toast({ message: e?.response?.data?.error ?? 'Erro ao conceder.', type: 'error' }); setConfirmando(false) }
+  }
+  return (
+    <div className="modal-overlay">
+      <div className="modal" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
+        <div className="modal-title">Verificar conquistas</div>
+        <p style={{ fontSize: 13, color: 'var(--app-text-soft, #666)', margin: '0 0 14px', lineHeight: 1.5 }}>
+          Procuramos colaboradores que já cumpriram o critério de conquistas automáticas e ainda não receberam. Nada é concedido sem sua confirmação.
+        </p>
+        {!previa ? <div className="loading-state">Verificando…</div> : previa.total === 0 ? (
+          <div className="empty-state" style={{ padding: '22px 16px' }}>Tudo em dia — nenhuma conquista nova a conceder. 👌</div>
+        ) : (
+          <>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              {[[previa.total, 'novos desbloqueios'], [previa.colaboradores, 'colaboradores'], [`${previa.coins} 🪙`, 'em Coins']].map(([n, l], i) => (
+                <div key={i} style={{ flex: 1, background: 'var(--app-surface-2, #f7f7f7)', border: '1px solid var(--app-border, #eee)', borderRadius: 12, padding: '10px 8px', textAlign: 'center' }}>
+                  <div style={{ fontSize: 19, fontWeight: 850 }}>{n}</div>
+                  <div style={{ fontSize: 10.5, color: 'var(--app-text-soft, #999)', fontWeight: 700, textTransform: 'uppercase', marginTop: 2 }}>{l}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{ maxHeight: 240, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {previa.novos.map((n, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, padding: '5px 0', borderTop: '1px solid var(--app-border, #f0f0f0)' }}>
+                  <span style={{ fontSize: 16 }}>{n.emoji}</span>
+                  <span style={{ fontWeight: 600 }}>{n.funcionarioNome}</span>
+                  <span style={{ color: '#666' }}>{n.conquistaNome}{n.nivelNome ? ` · ${n.nivelNome}` : ''}</span>
+                  {n.coins > 0 && <span style={{ marginLeft: 'auto', color: '#B8860B', fontWeight: 700, flexShrink: 0 }}>+{n.coins} 🪙</span>}
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+        <div className="modal-actions">
+          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={confirmando}>Cancelar</button>
+          {previa?.total > 0 && <button type="button" className="btn btn-primary" onClick={confirmar} disabled={confirmando}>{confirmando ? 'Concedendo…' : 'Confirmar concessões'}</button>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ConquistadoresModal({ conquista, onClose }) {
+  const [lista, setLista] = useState(null)
+  useEffect(() => { api.get(`/bonificacao/conquistas/${conquista.id}/desbloqueios`).then((r) => setLista(r.data)).catch(() => setLista([])) }, [conquista.id])
+  const dt = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString('pt-BR') }
+  return (
+    <div className="modal-overlay">
+      <div className="modal modal-card-large" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-header">
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 16 }}>{conquista.emoji} {conquista.nome}</div>
+            <div style={{ fontSize: 12, color: '#999' }}>{lista ? (lista.length === 1 ? '1 conquistador' : `${lista.length} conquistadores`) : '…'}</div>
+          </div>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={onClose}>Fechar</button>
+        </div>
+        {!lista ? <div className="loading-state">Carregando…</div> : lista.length === 0 ? (
+          <div className="empty-state" style={{ padding: '22px 16px' }}>Ninguém desbloqueou esta conquista ainda.</div>
+        ) : (
+          <div className="table-card">
+            <table className="hb-table hb-table-compact">
+              <thead><tr><th>Colaborador</th><th>Quando</th><th>Como</th><th>Motivo</th></tr></thead>
+              <tbody>
+                {lista.map((d) => (
+                  <tr key={d.id}>
+                    <td style={{ fontWeight: 600 }}>{d.funcionario}{d.nivelNome && <span className="badge badge-gray" style={{ marginLeft: 5 }}>{d.nivelNome}</span>}</td>
+                    <td>{dt(d.desbloqueadoEm)}</td>
+                    <td>{d.origem === 'MANUAL' ? <span className="badge">Manual{d.concedidoPor ? ` · ${d.concedidoPor}` : ''}</span> : <span className="badge badge-gray">Automática</span>}</td>
+                    <td style={{ fontSize: 12, color: '#666' }}>{d.motivo || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -720,17 +895,32 @@ function ConquistaModal({ conquista, onClose, onSalvou, toast }) {
     emoji: conquista.emoji || '🏅', nome: conquista.nome || '', descricao: conquista.descricao || '',
     raridade: conquista.raridade || 'COMUM', regra: conquista.regra || 'MANUAL',
     meta: conquista.meta ?? 1, xpBonus: conquista.xpBonus ?? 0, ativo: conquista.ativo !== false,
+    categoria: conquista.categoria || 'JORNADA', tipo: conquista.tipo || 'UNICA',
+    niveisJson: conquista.niveisJson?.length ? conquista.niveisJson.map((n) => ({ ...n })) : [{ nome: 'Bronze', meta: 5, coins: 100 }],
+    acumulavel: conquista.acumulavel !== false,
   })
   const [salvando, setSalvando] = useState(false)
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }))
-  const temMeta = f.regra !== 'MANUAL'
+  const temMeta = f.regra !== 'MANUAL' && f.regra !== 'COLECAO' && f.tipo !== 'PROGRESSIVA'
+  const progressiva = f.tipo === 'PROGRESSIVA'
+  const validacao = f.regra === 'SUGESTOES_IMPLEMENTADAS' || f.regra === 'RECONHECIMENTOS_RECEBIDOS'
+  const faixa = RAR[f.raridade]?.faixa || [0, 9999]
+  const coinsMax = progressiva ? Math.max(...f.niveisJson.map((n) => Number(n.coins) || 0), 0) : Number(f.xpBonus) || 0
+  const foraDaFaixa = coinsMax > 0 && (coinsMax < faixa[0] || coinsMax > faixa[1])
+  const setNivel = (i, patch) => setF((s) => ({ ...s, niveisJson: s.niveisJson.map((n, j) => (j === i ? { ...n, ...patch } : n)) }))
 
   async function salvar() {
     if (!f.nome.trim()) return toast({ message: 'Informe o nome da conquista.', type: 'error' })
+    if (progressiva && !f.niveisJson.some((n) => String(n.nome || '').trim() && Number(n.meta) > 0)) {
+      return toast({ message: 'Uma conquista progressiva precisa de pelo menos um nível com nome e meta.', type: 'error' })
+    }
+    // Faixa é orientativa: avisa, mas deixa seguir.
+    if (foraDaFaixa && !window.confirm(`Esta conquista está marcada como ${RAR[f.raridade].label} (faixa sugerida: ${faixa[0]}–${faixa[1]} Coins), mas concede ${coinsMax} Coins.\n\nDeseja continuar?`)) return
     setSalvando(true)
     try {
-      if (nova) await api.post('/bonificacao/conquistas', f)
-      else await api.put(`/bonificacao/conquistas/${conquista.id}`, f)
+      const payload = { ...f, niveisJson: progressiva ? f.niveisJson : null }
+      if (nova) await api.post('/bonificacao/conquistas', payload)
+      else await api.put(`/bonificacao/conquistas/${conquista.id}`, payload)
       onSalvou()
     } catch (err) { toast({ message: err?.response?.data?.error ?? 'Erro ao salvar.', type: 'error' }) }
     finally { setSalvando(false) }
@@ -759,14 +949,17 @@ function ConquistaModal({ conquista, onClose, onSalvou, toast }) {
         </div>
         <div className="form-grid-2">
           <div className="form-group">
+            <label className="form-label">Categoria</label>
+            <select className="form-input" value={f.categoria} onChange={(e) => set('categoria', e.target.value)}>
+              {CATEGORIAS.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
             <label className="form-label">Raridade</label>
             <select className="form-input" value={f.raridade} onChange={(e) => set('raridade', e.target.value)}>
               {RARIDADES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
             </select>
-          </div>
-          <div className="form-group">
-            <label className="form-label">🪙 Coins bônus</label>
-            <input type="number" className="form-input" min="0" step="10" value={f.xpBonus} onChange={(e) => set('xpBonus', e.target.value)} />
+            <div style={{ fontSize: 11, color: 'var(--app-text-soft, #999)', marginTop: 4 }}>{RAR[f.raridade]?.ref} · sugerido {faixa[0]}–{faixa[1]} 🪙</div>
           </div>
         </div>
         <div className="form-grid-2">
@@ -775,14 +968,65 @@ function ConquistaModal({ conquista, onClose, onSalvou, toast }) {
             <select className="form-input" value={f.regra} onChange={(e) => set('regra', e.target.value)}>
               {REGRAS.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
             </select>
+            {validacao && <div style={{ fontSize: 11, color: '#7c3aed', marginTop: 4 }}>Por validação: só conta depois que você aprova o evento (aba Engajamento).</div>}
+            {f.regra === 'COLECAO' && <div style={{ fontSize: 11, color: 'var(--app-text-soft, #999)', marginTop: 4 }}>A meta é automática: todas as conquistas que não são de Coleção.</div>}
           </div>
           {temMeta && (
             <div className="form-group">
-              <label className="form-label">Meta ({REG[f.regra]?.unit || '—'})</label>
+              <label className="form-label">Meta</label>
               <input type="number" className="form-input" min="1" step="1" value={f.meta} onChange={(e) => set('meta', e.target.value)} />
+              <div style={{ fontSize: 11, color: 'var(--app-text-soft, #999)', marginTop: 4 }}>{criterioTexto({ ...f, meta: Number(f.meta) || 1 })}</div>
+            </div>
+          )}
+          {!progressiva && (
+            <div className="form-group">
+              <label className="form-label">🪙 Coins bônus</label>
+              <input type="number" className="form-input" min="0" step="10" value={f.xpBonus} onChange={(e) => set('xpBonus', e.target.value)} />
             </div>
           )}
         </div>
+
+        {f.regra !== 'MANUAL' && f.regra !== 'COLECAO' && (
+          <div className="form-group">
+            <label className="form-label">Tipo</label>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {[['UNICA', 'Única'], ['PROGRESSIVA', 'Progressiva (níveis)']].map(([id, lb]) => (
+                <button key={id} type="button" className={'btn btn-sm ' + (f.tipo === id ? 'btn-primary' : 'btn-secondary')} onClick={() => set('tipo', id)}>{lb}</button>
+              ))}
+            </div>
+          </div>
+        )}
+        {progressiva && (
+          <div className="form-group">
+            <label className="form-label">Níveis <span style={{ fontWeight: 400, color: '#999', fontSize: 11.5 }}>· um card só, vários estágios</span></label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {f.niveisJson.map((n, i) => (
+                <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <input className="form-input" style={{ flex: 1 }} placeholder="Bronze" value={n.nome || ''} onChange={(e) => setNivel(i, { nome: e.target.value })} />
+                  <label style={{ fontSize: 11, color: '#999', display: 'flex', alignItems: 'center', gap: 3 }}>meta<input type="number" className="form-input" style={{ width: 62 }} min="1" value={n.meta} onChange={(e) => setNivel(i, { meta: e.target.value })} /></label>
+                  <label style={{ fontSize: 11, color: '#999', display: 'flex', alignItems: 'center', gap: 3 }}>🪙<input type="number" className="form-input" style={{ width: 68 }} min="0" step="10" value={n.coins} onChange={(e) => setNivel(i, { coins: e.target.value })} /></label>
+                  <button type="button" className="btn btn-danger btn-sm" onClick={() => setF((s) => ({ ...s, niveisJson: s.niveisJson.filter((_, j) => j !== i) }))}>✕</button>
+                </div>
+              ))}
+            </div>
+            <button type="button" className="btn btn-secondary btn-sm" style={{ marginTop: 6 }} onClick={() => setF((s) => ({ ...s, niveisJson: [...s.niveisJson, { nome: '', meta: 10, coins: 200 }] }))}>+ Nível</button>
+          </div>
+        )}
+
+        {foraDaFaixa && (
+          <div className="alert" style={{ marginBottom: 10 }}>
+            <div className="alert-msg" style={{ fontSize: 12.5 }}>Esta conquista está marcada como <strong>{RAR[f.raridade].label}</strong> (sugerido {faixa[0]}–{faixa[1]} Coins), mas concede <strong>{coinsMax}</strong>. Dá pra salvar assim mesmo.</div>
+          </div>
+        )}
+
+        {validacao && (
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer', fontSize: 13, marginBottom: 8 }}>
+            <input type="checkbox" checked={f.acumulavel} onChange={(e) => set('acumulavel', e.target.checked)} style={{ marginTop: 3 }} />
+            <span>Acumulável com o evento de origem<br />
+              <span style={{ fontSize: 11.5, color: 'var(--app-text-soft, #999)' }}>Se marcado, os Coins da conquista somam aos que o colaborador já ganhou pelo evento (ex.: a contribuição que gerou a sugestão).</span>
+            </span>
+          </label>
+        )}
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
           <input type="checkbox" checked={f.ativo} onChange={(e) => set('ativo', e.target.checked)} />
           <span>Conquista ativa (visível e avaliada)</span>
@@ -800,6 +1044,10 @@ function ConcederModal({ conquista, onClose, onMudou, toast }) {
   const [equipe, setEquipe] = useState(null)
   const [desb, setDesb] = useState([])   // desbloqueios [{id, funcionarioId, origem}]
   const [busy, setBusy] = useState(0)
+  const hoje = new Date()
+  const [alvo, setAlvo] = useState(null)  // funcionário sendo concedido (abre o passo do motivo)
+  const [motivo, setMotivo] = useState('')
+  const [ciclo, setCiclo] = useState(`${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`)
 
   function carregar() {
     Promise.all([api.get('/bonificacao/equipe'), api.get(`/bonificacao/conquistas/${conquista.id}/desbloqueios`)])
@@ -809,10 +1057,16 @@ function ConcederModal({ conquista, onClose, onMudou, toast }) {
   useEffect(carregar, []) // eslint-disable-line react-hooks/exhaustive-deps
   const desbDe = (fid) => desb.find((d) => d.funcionarioId === fid) || null
 
-  async function conceder(fid) {
-    setBusy(fid)
-    try { await api.post(`/bonificacao/conquistas/${conquista.id}/conceder`, { funcionarioId: fid }); carregar(); onMudou() }
-    catch (err) { toast({ message: err?.response?.data?.error ?? 'Erro ao conceder.', type: 'error' }) }
+  // Conceder exige motivo + ciclo + confirmação (fica registrado em quem concedeu).
+  async function confirmarConcessao() {
+    if (!motivo.trim()) return toast({ message: 'Descreva o motivo da concessão.', type: 'error' })
+    const [ano, mes] = ciclo.split('-').map(Number)
+    setBusy(alvo.id)
+    try {
+      await api.post(`/bonificacao/conquistas/${conquista.id}/conceder`, { funcionarioId: alvo.id, motivo, ano, mes })
+      toast({ message: `Conquista concedida a ${alvo.nome}.`, type: 'success' })
+      setAlvo(null); setMotivo(''); carregar(); onMudou()
+    } catch (err) { toast({ message: err?.response?.data?.error ?? 'Erro ao conceder.', type: 'error' }) }
     finally { setBusy(0) }
   }
   async function revogar(d) {
@@ -828,11 +1082,35 @@ function ConcederModal({ conquista, onClose, onMudou, toast }) {
         <div className="modal-header">
           <div>
             <div style={{ fontWeight: 700, fontSize: 16 }}>{conquista.emoji} {conquista.nome}</div>
-            <div style={{ fontSize: 12, color: '#999' }}>{regraTexto(conquista)}{conquista.xpBonus > 0 ? ` · +${conquista.xpBonus} 🪙` : ''}</div>
+            <div style={{ fontSize: 12, color: '#999' }}>{criterioTexto(conquista)}{conquista.xpBonus > 0 ? ` · +${conquista.xpBonus} 🪙` : ''}</div>
           </div>
           <button type="button" className="btn btn-secondary btn-sm" onClick={onClose}>Fechar</button>
         </div>
         {conquista.regra !== 'MANUAL' && <div className="alert" style={{ margin: '4px 0 10px' }}><div className="alert-msg" style={{ fontSize: 12 }}>Esta conquista tem regra automática — normalmente é concedida sozinha ao fechar o mês. Você ainda pode conceder/revogar à mão aqui.</div></div>}
+
+        {/* Passo do motivo: conceder à mão exige justificativa e ciclo. */}
+        {alvo && (
+          <div className="ent-edit" style={{ marginBottom: 10 }}>
+            <div className="ent-edit-titulo">Conceder a {alvo.nome}</div>
+            <div className="form-grid-2">
+              <div className="form-group">
+                <label className="form-label">Motivo <span style={{ color: '#dc2626' }}>*</span></label>
+                <input className="form-input" value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ex.: assumiu o turno sozinho num dia crítico" autoFocus />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Ciclo</label>
+                <input type="month" className="form-input" value={ciclo} onChange={(e) => setCiclo(e.target.value)} />
+              </div>
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--app-text-soft, #999)', marginBottom: 8 }}>
+              {conquista.xpBonus > 0 ? <>Ao confirmar, {alvo.nome} recebe a medalha e <strong>+{conquista.xpBonus} 🪙 Coins</strong>.</> : <>Ao confirmar, {alvo.nome} recebe a medalha (sem Coins).</>}
+            </div>
+            <div className="ent-edit-actions" style={{ gap: 8 }}>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setAlvo(null); setMotivo('') }}>Cancelar</button>
+              <button type="button" className="btn btn-primary btn-sm" onClick={confirmarConcessao} disabled={busy === alvo.id}>{busy === alvo.id ? 'Concedendo…' : 'Confirmar concessão'}</button>
+            </div>
+          </div>
+        )}
         {!equipe ? (
           <div className="loading-state">Carregando…</div>
         ) : (
@@ -854,7 +1132,7 @@ function ConcederModal({ conquista, onClose, onMudou, toast }) {
                             <button type="button" className="btn btn-danger btn-sm" onClick={() => revogar(d)} disabled={busy === f.id}>Revogar</button>
                           </span>
                         ) : (
-                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => conceder(f.id)} disabled={busy === f.id}>Conceder</button>
+                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setAlvo(f); setMotivo('') }} disabled={busy === f.id}>Conceder</button>
                         )}
                       </td>
                     </tr>
@@ -1555,7 +1833,7 @@ function AbaConfig({ cfg, setCfg, tipos, setTipos, salvar, salvando, toast }) {
 
 /* ───────────── Aba: Engajamento (Ouvidoria + Reconhecimentos) ───────────── */
 const OUV_TIPO = { RECLAMACAO: { l: 'Reclamação', c: '#dc2626' }, SUGESTAO: { l: 'Sugestão', c: '#2563eb' }, ELOGIO: { l: 'Elogio', c: '#16a34a' }, DENUNCIA: { l: 'Denúncia', c: '#b91c1c' }, OUTRO: { l: 'Outro', c: '#64748b' } }
-const OUV_STATUS = { ABERTA: { l: 'Aberta', c: '#d97706' }, EM_ANALISE: { l: 'Em análise', c: '#2563eb' }, RESPONDIDA: { l: 'Respondida', c: '#16a34a' }, ARQUIVADA: { l: 'Arquivada', c: '#94a3b8' } }
+const OUV_STATUS = { ABERTA: { l: 'Aberta', c: '#d97706' }, EM_ANALISE: { l: 'Em análise', c: '#2563eb' }, RESPONDIDA: { l: 'Respondida', c: '#16a34a' }, IMPLEMENTADA: { l: 'Implementada', c: '#7c3aed' }, ARQUIVADA: { l: 'Arquivada', c: '#94a3b8' } }
 function AbaEngajamento({ toast }) {
   const [ouv, setOuv] = useState(null)
   const [rec, setRec] = useState(null)
@@ -1642,6 +1920,8 @@ function AbaEngajamento({ toast }) {
                   <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
                     <button type="button" className="btn btn-primary btn-sm" onClick={() => setResp(o)}>{o.resposta ? 'Editar resposta' : 'Responder'}</button>
                     {o.status !== 'EM_ANALISE' && <button type="button" className="btn btn-secondary btn-sm" onClick={() => ouvStatus(o.id, 'EM_ANALISE')}>Em análise</button>}
+                    {/* Implementada = a sugestão virou realidade → conta p/ as conquistas de Inovação. */}
+                    {o.tipo === 'SUGESTAO' && o.status !== 'IMPLEMENTADA' && <button type="button" className="btn btn-secondary btn-sm" onClick={() => ouvStatus(o.id, 'IMPLEMENTADA')} title="Marca a sugestão como implementada (conta para Ideia em Ação / Olhar de Dono)">💡 Implementada</button>}
                     {o.status !== 'ARQUIVADA' && <button type="button" className="btn btn-secondary btn-sm" onClick={() => ouvStatus(o.id, 'ARQUIVADA')}>Arquivar</button>}
                   </div>
                 </div>
