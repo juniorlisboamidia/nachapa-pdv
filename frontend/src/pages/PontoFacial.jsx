@@ -489,7 +489,7 @@ function Painel() {
 }
 
 // ===================== COLABORADORES =====================
-const FORM_VAZIO = { nome: '', funcao: '', cpf: '', whatsapp: '', status: 'ATIVO', folgaSemana: [] }
+const FORM_VAZIO = { nome: '', apelido: '', funcao: '', cpf: '', whatsapp: '', status: 'ATIVO', folgaSemana: [] }
 // Resumo curto das folgas ([1,4] -> "Seg, Qui")
 function resumoFolga(dias) {
   if (!Array.isArray(dias) || !dias.length) return null
@@ -559,7 +559,7 @@ function Colaboradores({ notify }) {
   })
 
   const abrirNovo = () => setModal({ id: null, form: { ...FORM_VAZIO } })
-  const abrirEditar = (f) => setModal({ id: f.id, form: { nome: f.nome ?? '', funcao: f.funcao ?? '', cpf: mascararCPF(f.cpf ?? ''), whatsapp: f.whatsapp ?? '', status: f.status ?? 'ATIVO', folgaSemana: Array.isArray(f.folgaSemana) ? f.folgaSemana : [] } })
+  const abrirEditar = (f) => setModal({ id: f.id, form: { nome: f.nome ?? '', apelido: f.apelido ?? '', funcao: f.funcao ?? '', cpf: mascararCPF(f.cpf ?? ''), whatsapp: f.whatsapp ?? '', status: f.status ?? 'ATIVO', folgaSemana: Array.isArray(f.folgaSemana) ? f.folgaSemana : [] } })
   const upd = (campo, valor) => setModal((m) => ({ ...m, form: { ...m.form, [campo]: valor } }))
 
   async function salvar() {
@@ -700,8 +700,12 @@ function Colaboradores({ notify }) {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-title">{modal.id ? 'Editar colaborador' : 'Novo colaborador'}</div>
             <div className="form-group">
-              <label className="form-label">Nome <span style={{ color: '#dc2626' }}>*</span></label>
+              <label className="form-label">Nome completo <span style={{ color: '#dc2626' }}>*</span></label>
               <input className="form-input" value={modal.form.nome} onChange={(e) => upd('nome', e.target.value)} autoFocus />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Nome de exibição <span style={{ color: '#999', fontWeight: 400 }}>· como aparece no ranking (opcional)</span></label>
+              <input className="form-input" value={modal.form.apelido} onChange={(e) => upd('apelido', e.target.value)} placeholder={modal.form.nome ? `Ex.: ${(modal.form.nome.split(' ')[0] || '') + (modal.form.nome.split(' ').length > 1 ? ' ' + modal.form.nome.split(' ').slice(-1)[0] : '')}` : 'Ex.: Rafaely Gomes'} maxLength={60} />
             </div>
             <div className="form-grid-2">
               <div className="form-group">

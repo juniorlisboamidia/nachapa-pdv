@@ -242,6 +242,7 @@ function dadosFuncionario(body) {
   const only = (v, max) => (v == null || String(v).trim() === '' ? null : String(v).trim().slice(0, max));
   const campos = {
     nome: nome.slice(0, 160),
+    apelido: only(body?.apelido, 60),
     funcao: only(body?.funcao, 80),
     cpf: only(body?.cpf, 20),
     whatsapp: only(body?.whatsapp, 30),
@@ -760,7 +761,7 @@ function calcularLinhasBonificacao(funcionarios, ocorrencias, coletivaPct, t, co
     const colRs = r2(coletivaPct / 100 * t.tetoC);
     const subtotal = r2(assidRs + desRs + colRs);
     const indice = indiceExcelencia(assidPct, desPct, contribPct);
-    return { funcionarioId: f.id, nome: f.nome, funcao: f.funcao || null, assidPct: r2(assidPct), desPct: r2(desPct), coletivaPct: r2(coletivaPct), contribPct: r2(contribPct), indice, assidRs, desRs, colRs, subtotal, ocorrencias: g.ocorrencias };
+    return { funcionarioId: f.id, nome: f.apelido || f.nome, funcao: f.funcao || null, assidPct: r2(assidPct), desPct: r2(desPct), coletivaPct: r2(coletivaPct), contribPct: r2(contribPct), indice, assidRs, desRs, colRs, subtotal, ocorrencias: g.ocorrencias };
   });
   // Ranking (Destaque do Mês): maior Índice de Excelência; desempate por subtotal, depois
   // Assiduidade, depois id. Top 3 levam o bônus Extra. (Bloco 3)
@@ -1595,10 +1596,10 @@ app.get('/api/public/eu/:token', async (req, res) => {
     const itens = await prisma.mercadoItem.findMany({ where: { empresaId, ativo: true }, orderBy: [{ ordem: 'asc' }, { id: 'asc' }] });
     const meusResgates = await prisma.mercadoResgate.findMany({ where: { empresaId, funcionarioId: func.id }, orderBy: { criadoEm: 'desc' }, take: 20 });
     // Bloco 4: colegas p/ reconhecer, meus reconhecimentos, ouvidoria e contribuições.
-    const colegasRaw = await prisma.funcionario.findMany({ where: { empresaId, status: 'ATIVO', NOT: { id: func.id } }, orderBy: { nome: 'asc' }, select: { id: true, nome: true, funcao: true } });
+    const colegasRaw = await prisma.funcionario.findMany({ where: { empresaId, status: 'ATIVO', NOT: { id: func.id } }, orderBy: { nome: 'asc' }, select: { id: true, nome: true, apelido: true, funcao: true } });
     const recRaw = await prisma.bonificacaoReconhecimento.findMany({ where: { empresaId, OR: [{ deFuncionarioId: func.id }, { paraFuncionarioId: func.id }] }, orderBy: { criadoEm: 'desc' }, take: 40 });
     const recIds = [...new Set(recRaw.flatMap((r) => [r.deFuncionarioId, r.paraFuncionarioId]))];
-    const recNomes = new Map((await prisma.funcionario.findMany({ where: { id: { in: recIds } }, select: { id: true, nome: true } })).map((f) => [f.id, f.nome]));
+    const recNomes = new Map((await prisma.funcionario.findMany({ where: { id: { in: recIds } }, select: { id: true, nome: true, apelido: true } })).map((f) => [f.id, f.apelido || f.nome]));
     const enviadosMes = recRaw.filter((r) => r.deFuncionarioId === func.id && r.ano === ano && r.mes === mes && r.status !== 'REJEITADO').length;
     const minhasMsgs = await prisma.bonificacaoOuvidoria.findMany({ where: { empresaId, funcionarioId: func.id, anonimo: false }, orderBy: { criadoEm: 'desc' }, take: 20 });
     const minhasContrib = await prisma.bonificacaoContribuicao.findMany({ where: { empresaId, funcionarioId: func.id, ano, mes }, orderBy: { criadoEm: 'desc' } });
@@ -1621,7 +1622,7 @@ app.get('/api/public/eu/:token', async (req, res) => {
       mercado: itens.map((i) => ({ id: i.id, nome: i.nome, descricao: i.descricao || null, emoji: i.emoji, tipo: i.tipo || 'PRODUTO', custo: i.custo, esgotado: i.estoque != null && i.estoque <= 0 })),
       meusResgates: meusResgates.map((r) => ({ id: r.id, itemNome: r.itemNome, itemEmoji: r.itemEmoji, tipoItem: r.tipoItem || 'PRODUTO', dataDesejada: r.dataDesejada || null, custo: r.custo, status: r.status, criadoEm: r.criadoEm })),
       historico,
-      colegas: colegasRaw.map((c) => ({ id: c.id, nome: c.nome, funcao: c.funcao || null })),
+      colegas: colegasRaw.map((c) => ({ id: c.id, nome: c.apelido || c.nome, funcao: c.funcao || null })),
       reconhecimento: {
         maxMes: cfg.reconhecimentoMaxMes ?? 3, coins: cfg.reconhecimentoCoins ?? 10, enviadosMes,
         recebidos: recRaw.filter((r) => r.paraFuncionarioId === func.id).map((r) => ({ id: r.id, de: recNomes.get(r.deFuncionarioId) || 'Colega', mensagem: r.mensagem, coins: r.coins, status: r.status, criadoEm: r.criadoEm })),

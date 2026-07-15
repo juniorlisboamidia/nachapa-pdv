@@ -601,6 +601,7 @@ model Funcionario {
   id           Int      @id @default(autoincrement())
   empresaId    Int
   nome         String
+  apelido      String?  // nome curto de exibição no ranking (fallback = nome completo)
   funcao       String?
   cpf          String?
   whatsapp     String?
