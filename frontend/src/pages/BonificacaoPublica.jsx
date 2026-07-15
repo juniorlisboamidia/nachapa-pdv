@@ -101,6 +101,10 @@ const CSS = `
 .bp-state{min-height:60vh;display:grid;place-items:center;text-align:center;color:var(--muted);padding:24px}
 `
 
+// Etiquetas do Resultado coletivo quando a loja ainda não cadastrou indicadores.
+// Assim que houver indicadores (Bonificação › Configuração), estes dão lugar aos reais.
+const COLETIVO_PADRAO = ['Google', 'NPS', 'Metas']
+
 // Uma frente da bonificação: nome (principal) + valor como selo + descrição + etiquetas
 // (geradas das regras/indicadores do ciclo — sem percentual fixo no layout).
 function Frente({ emo, nome, selo, desc, tags }) {
@@ -226,7 +230,7 @@ export default function BonificacaoPublica() {
               tags={tDesemp.map((t) => t.nome)} />
             <Frente emo="🤝" nome="Resultado coletivo" selo={`até ${brl(c.tetoColetiva)}`}
               desc="Mostra o desempenho geral da loja durante o ciclo."
-              tags={indicadores.length ? indicadores : tipos.filter((t) => t.pilar === 'COLETIVA').map((t) => t.nome)} />
+              tags={indicadores.length ? indicadores : COLETIVO_PADRAO} />
             <Frente emo="🏆" nome="Destaque do mês" selo={brl(c.bonusTop1)}
               desc="Reconhece o colaborador com o melhor resultado geral no ciclo."
               tags={['Índice de Excelência', '1º lugar do mês']} />
