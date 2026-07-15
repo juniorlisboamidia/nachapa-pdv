@@ -1728,11 +1728,14 @@ app.get('/api/public/bonificacao/:token', async (req, res) => {
       coletivaPct = sep.coletivaPct;
       funcionarios = calcularLinhasBonificacao(fs, sep.individuais, coletivaPct, t, contribMap).map(rowPublicoBonif);
     }
+    // Link PÚBLICO: expõe SÓ o pódio (Top 3). As posições de 4º em diante não saem
+    // daqui nem no JSON — cada um vê o próprio resultado na Área do Colaborador.
+    const podio = funcionarios.filter((f) => f.posicao && f.posicao <= 3);
     res.json({
       loja: { nome: loja?.nome || 'Loja', logoDataUrl: loja?.logoDataUrl || null },
       ano, mes, fechado, coletivaPct,
       config: { tetoAssiduidade: t.tetoA, tetoDesempenho: t.tetoD, tetoColetiva: t.tetoC, bonusTop1: t.b1, bonusTop2: t.b2, bonusTop3: t.b3 },
-      tipos, funcionarios,
+      tipos, funcionarios: podio,
     });
   } catch (err) { console.error('[public/bonificacao]', err); res.status(500).json({ error: 'Erro ao carregar a página.' }); }
 });

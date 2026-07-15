@@ -70,6 +70,7 @@ const CSS = `
 .bp-pod .stand{width:100%;margin-top:9px;border-radius:12px 12px 0 0;background:var(--surface);border:1px solid var(--line);border-bottom:none;box-shadow:var(--sh-sm)}
 .bp-pod.g1 .stand{height:62px;background:linear-gradient(180deg,var(--brand-tint),var(--surface))}
 .bp-pod.g2 .stand{height:44px} .bp-pod.g3 .stand{height:34px}
+.bp-podium-nota{font-size:11.5px;color:var(--muted);text-align:center;line-height:1.5;margin-top:14px}
 .bp-list{display:flex;flex-direction:column;gap:8px}
 .bp-row{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:11px 13px;display:flex;align-items:center;gap:12px;box-shadow:var(--sh-sm)}
 .bp-pos{width:28px;height:28px;border-radius:8px;background:var(--surface-2);border:1px solid var(--line);display:grid;place-items:center;font-weight:800;font-size:13px;color:var(--muted);flex-shrink:0}
@@ -115,8 +116,8 @@ export default function BonificacaoPublica() {
   const tAssid = tipos.filter((t) => t.pilar === 'ASSIDUIDADE')
   const tDesemp = tipos.filter((t) => t.pilar === 'DESEMPENHO')
   const ordenados = [...funcionarios].sort((a, b) => (a.posicao || 99) - (b.posicao || 99))
+  // Só o pódio é exposto publicamente (o backend também só devolve o Top 3).
   const podio = ordenados.filter((f) => f.posicao <= 3)
-  const resto = ordenados.filter((f) => f.posicao > 3)
   const podOrder = [podio.find((f) => f.posicao === 2), podio.find((f) => f.posicao === 1), podio.find((f) => f.posicao === 3)].filter(Boolean)
   const lider = ordenados.find((f) => f.posicao === 1)
 
@@ -193,41 +194,22 @@ export default function BonificacaoPublica() {
 
         <section>
           <h2 className="bp-sec-title">Ranking de {new Date(ano, mes - 1, 1).toLocaleDateString('pt-BR', { month: 'long' })}</h2>
-          {ordenados.length === 0 ? (
-            <div className="bp-state" style={{ minHeight: 120 }}>Nenhum funcionário neste mês.</div>
+          {podOrder.length === 0 ? (
+            <div className="bp-state" style={{ minHeight: 120 }}>O Destaque deste mês ainda não foi definido.</div>
           ) : (
             <>
-              {podOrder.length > 0 && (
-                <div className="bp-podium">
-                  {podOrder.map((f) => (
-                    <div key={f.funcionarioId} className={'bp-pod ' + MEDAL[f.posicao]}>
-                      <div className="medal">{f.posicao}</div>
-                      <div className="who">{f.nome}</div>
-                      <div className="tot bp-tnum">{brl(f.totalRs)}</div>
-                      <div className="stand"></div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {resto.length > 0 && (
-                <div className="bp-list">
-                  {resto.map((f) => (
-                    <div key={f.funcionarioId} className="bp-row">
-                      <div className="bp-pos">{f.posicao}º</div>
-                      <div className="name">
-                        <div className="n">{f.nome}</div>
-                        <div className="bp-chips">
-                          {f.indice != null && <span className="bp-chip">⭐ Índice <b>{f.indice}%</b></span>}
-                          <span className="bp-chip">Assiduidade <b>{f.assidPct}%</b></span>
-                          <span className="bp-chip">Desempenho <b>{f.desPct}%</b></span>
-                          <span className="bp-chip">Coletivo <b>{f.coletivaPct}%</b></span>
-                        </div>
-                      </div>
-                      <div className="tot bp-tnum">{brl(f.totalRs)}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <div className="bp-podium">
+                {podOrder.map((f) => (
+                  <div key={f.funcionarioId} className={'bp-pod ' + MEDAL[f.posicao]}>
+                    <div className="medal">{f.posicao}</div>
+                    <div className="who">{f.nome}</div>
+                    <div className="tot bp-tnum">{brl(f.totalRs)}</div>
+                    <div className="stand"></div>
+                  </div>
+                ))}
+              </div>
+              {/* Só o pódio: as posições de 4º em diante não são expostas (evita constrangimento). */}
+              <p className="bp-podium-nota">Só o pódio é divulgado. O seu resultado completo fica na sua Área do Colaborador. 🔒</p>
             </>
           )}
         </section>
