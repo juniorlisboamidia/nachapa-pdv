@@ -217,6 +217,7 @@ export default function BonificacaoPublica() {
                       <div className="name">
                         <div className="n">{f.nome}</div>
                         <div className="bp-chips">
+                          {f.indice != null && <span className="bp-chip">⭐ Índice <b>{f.indice}%</b></span>}
                           <span className="bp-chip">Assiduidade <b>{f.assidPct}%</b></span>
                           <span className="bp-chip">Desempenho <b>{f.desPct}%</b></span>
                           <span className="bp-chip">Coletivo <b>{f.coletivaPct}%</b></span>

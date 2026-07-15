@@ -880,6 +880,37 @@ model BonificacaoSeveridade {
   @@index([empresaId, ordem])
 }
 
+// Indicador coletivo configurável da LOJA (ex.: Google, iFood, NPS). O gestor lança
+// o valor do mês; o Score Coletivo = média ponderada pelos pesos. (Bloco 3)
+model BonificacaoIndicador {
+  id           Int      @id @default(autoincrement())
+  empresaId    Int
+  nome         String
+  escalaMax    Decimal  @default(5) @db.Decimal(8, 2) // valor máximo da escala (ex.: 5 estrelas, 100 NPS)
+  peso         Decimal  @default(1) @db.Decimal(6, 2)  // peso relativo na média ponderada
+  ordem        Int      @default(0)
+  ativo        Boolean  @default(true)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([empresaId, ordem])
+}
+
+// Valor lançado de um indicador coletivo num mês específico.
+model BonificacaoIndicadorValor {
+  id           Int      @id @default(autoincrement())
+  empresaId    Int
+  indicadorId  Int
+  ano          Int
+  mes          Int
+  valor        Decimal  @db.Decimal(8, 2)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@unique([empresaId, indicadorId, ano, mes])
+  @@index([empresaId, ano, mes])
+}
+
 // Auditoria mínima do Programa de Benefícios (M1) — quem fez o quê, quando.
 model BonificacaoAuditoria {
   id            Int      @id @default(autoincrement())
@@ -914,13 +945,14 @@ model BonificacaoColetiva {
 model BonificacaoFechamento {
   id          Int      @id @default(autoincrement())
   empresaId   Int
-  ano         Int
-  mes         Int
-  coletivaPct Decimal  @default(0) @db.Decimal(5, 2)
-  itensJson   Json
-  totalGeral  Decimal  @default(0) @db.Decimal(12, 2)
-  fechadoPor  String?
-  fechadoEm   DateTime @default(now())
+  ano             Int
+  mes             Int
+  coletivaPct     Decimal  @default(0) @db.Decimal(5, 2)
+  itensJson       Json
+  indicadoresJson Json?    // snapshot dos indicadores coletivos do mês (Bloco 3)
+  totalGeral      Decimal  @default(0) @db.Decimal(12, 2)
+  fechadoPor      String?
+  fechadoEm       DateTime @default(now())
 
   @@unique([empresaId, ano, mes])
 }

@@ -98,12 +98,19 @@ function AbaMes({ tipos, toast }) {
             </div>
           )}
 
-          {/* Nota coletiva da equipe — 100% e desce por ocorrência coletiva */}
+          {/* Indicadores coletivos do mês (base da Nota Coletiva) */}
+          <SecaoIndicadoresMes coletivo={data.coletivo} fechado={fechado} ano={ano} mes={mesN} onSalvou={carregar} toast={toast} />
+
+          {/* Nota coletiva da equipe — base (indicadores ou 100%) e desce por ocorrência coletiva */}
           <div className="table-card" style={{ padding: 14, marginBottom: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <div>
                 <div style={{ fontWeight: 700, fontSize: 13 }}>Nota Coletiva da equipe</div>
-                <div style={{ fontSize: 11.5, color: '#999' }}>Começa em 100% e desce por ocorrência da equipe. Aplicada igual a todos.</div>
+                <div style={{ fontSize: 11.5, color: '#999' }}>
+                  {data.coletivo?.temIndicadores
+                    ? <>Base = Score Coletivo <strong>{pct(data.coletivo.scoreIndicadores)}</strong>{Number(data.coletivo.descontoColetivo) > 0 ? <> − ocorrências <strong>{pct(data.coletivo.descontoColetivo)}</strong></> : null} = <strong>{pct(data.coletivaPct)}</strong>. Aplicada igual a todos.</>
+                    : 'Começa em 100% e desce por ocorrência da equipe. Aplicada igual a todos.'}
+                </div>
               </div>
               <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
                 <span style={{ fontSize: 22, fontWeight: 800, color: Number(data.coletivaPct) >= 100 ? '#16a34a' : Number(data.coletivaPct) >= 70 ? '#d97706' : '#dc2626' }}>{pct(data.coletivaPct)}</span>
@@ -142,7 +149,8 @@ function AbaMes({ tipos, toast }) {
                     <th>Assiduidade</th>
                     <th>Desempenho</th>
                     <th>Coletiva</th>
-                    <th>Classificação</th>
+                    <th title="Índice de Excelência = 59% Assiduidade + 41% Desempenho (base do Destaque)">Índice</th>
+                    <th title="Destaque do Mês: Top 3 por Índice de Excelência levam o bônus Extra">Destaque</th>
                     <th style={{ textAlign: 'right' }}>Total</th>
                   </tr>
                 </thead>
@@ -156,6 +164,7 @@ function AbaMes({ tipos, toast }) {
                       <td>{pct(f.assidPct)} <span style={{ color: '#999' }}>· {brl(f.assidRs)}</span></td>
                       <td>{pct(f.desPct)} <span style={{ color: '#999' }}>· {brl(f.desRs)}</span></td>
                       <td>{brl(f.colRs)}</td>
+                      <td style={{ fontWeight: 700 }}>{f.indice != null ? pct(f.indice) : '—'}</td>
                       <td>{f.posicao <= 3 && f.classificacaoRs > 0 ? <span className="badge badge-yellow">{f.posicao}º · {brl(f.classificacaoRs)}</span> : <span style={{ color: '#bbb' }}>{f.posicao}º</span>}</td>
                       <td style={{ textAlign: 'right', fontWeight: 700 }}>{brl(f.totalRs)}</td>
                     </tr>
@@ -163,7 +172,7 @@ function AbaMes({ tipos, toast }) {
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td colSpan={5} style={{ textAlign: 'right', fontWeight: 600, color: '#666' }}>Total do mês</td>
+                    <td colSpan={6} style={{ textAlign: 'right', fontWeight: 600, color: '#666' }}>Total do mês</td>
                     <td style={{ textAlign: 'right', fontWeight: 800 }}>{brl(data.totalGeral)}</td>
                   </tr>
                 </tfoot>
@@ -201,6 +210,53 @@ function AbaMes({ tipos, toast }) {
       <ConfirmDialog open={confirmReabrir} title="Reabrir o mês" message="Reabrir para novos ajustes?"
         description="O fechamento atual será descartado; um novo cálculo será gerado ao fechar de novo." variant="danger"
         confirmLabel="Reabrir" cancelLabel="Cancelar" loading={acao} onConfirm={reabrirMes} onCancel={() => setConfirmReabrir(false)} />
+    </div>
+  )
+}
+
+/* Painel de indicadores coletivos do mês (Google/iFood/NPS) — o gestor lança os valores. */
+function SecaoIndicadoresMes({ coletivo, fechado, ano, mes, onSalvou, toast }) {
+  const inds = coletivo?.indicadores || []
+  const [vals, setVals] = useState({})
+  const [salvando, setSalvando] = useState(false)
+  useEffect(() => {
+    const m = {}; (coletivo?.indicadores || []).forEach((i) => { m[i.id] = i.valor == null ? '' : String(i.valor) })
+    setVals(m)
+  }, [coletivo])
+  if (!inds.length) return null
+  const set = (id, v) => setVals((s) => ({ ...s, [id]: v }))
+  const score = coletivo?.temIndicadores ? coletivo.scoreIndicadores : 100
+  async function salvar() {
+    setSalvando(true)
+    try {
+      const valores = inds.map((i) => ({ indicadorId: i.id, valor: vals[i.id] === '' || vals[i.id] == null ? null : Number(vals[i.id]) }))
+      await api.post('/bonificacao/indicadores/valores', { ano, mes, valores })
+      toast({ message: 'Indicadores salvos.', type: 'success' }); onSalvou()
+    } catch (err) { toast({ message: err?.response?.data?.error ?? 'Erro ao salvar os indicadores.', type: 'error' }) }
+    finally { setSalvando(false) }
+  }
+  return (
+    <div className="table-card" style={{ padding: 14, marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 13 }}>Indicadores coletivos do mês</div>
+          <div style={{ fontSize: 11.5, color: '#999' }}>Google, iFood, NPS… A média ponderada vira a base da Nota Coletiva.</div>
+        </div>
+        <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
+          <div style={{ fontSize: 10.5, color: '#999' }}>Score Coletivo</div>
+          <div style={{ fontSize: 20, fontWeight: 800, color: '#2563eb' }}>{pct(score)}</div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {inds.map((i) => (
+          <div key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ flex: 1, minWidth: 120, fontWeight: 600, fontSize: 13 }}>{i.nome} <span style={{ color: '#aaa', fontWeight: 400, fontSize: 11 }}>· peso {i.peso} · escala 0–{i.escalaMax}</span></span>
+            <input type="number" className="form-input" style={{ width: 100 }} min="0" step="0.1" max={i.escalaMax} value={vals[i.id] ?? ''} onChange={(e) => set(i.id, e.target.value)} disabled={fechado} placeholder="—" />
+            <span style={{ width: 54, textAlign: 'right', fontSize: 13, fontWeight: 700, color: i.pct == null ? '#bbb' : '#16a34a' }}>{i.pct == null ? '—' : pct(i.pct)}</span>
+          </div>
+        ))}
+      </div>
+      {!fechado && <div style={{ marginTop: 10, textAlign: 'right' }}><button type="button" className="btn btn-primary btn-sm" onClick={salvar} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar indicadores'}</button></div>}
     </div>
   )
 }
@@ -1214,6 +1270,48 @@ function SecaoSeveridades({ toast }) {
   )
 }
 
+// Indicadores coletivos configuráveis (Google/iFood/NPS) — CRUD leve, próprio Salvar. (Bloco 3)
+function SecaoIndicadores({ toast }) {
+  const [inds, setInds] = useState(null)
+  const [salvando, setSalvando] = useState(false)
+  useEffect(() => { api.get('/bonificacao/indicadores').then((r) => setInds((r.data || []).map((i) => ({ ...i })))).catch(() => setInds([])) }, [])
+  const set = (key, patch) => setInds((xs) => xs.map((x) => ((x.id ?? x._tmp) === key ? { ...x, ...patch } : x)))
+  async function salvar() {
+    setSalvando(true)
+    try {
+      const indicadores = (inds || []).filter((i) => (i.nome || '').trim()).map((i) => ({ id: i.id, nome: i.nome, escalaMax: i.escalaMax, peso: i.peso, ativo: i.ativo !== false }))
+      const r = await api.put('/bonificacao/indicadores', { indicadores })
+      setInds((r.data || []).map((i) => ({ ...i })))
+      toast?.({ message: 'Indicadores salvos.', type: 'success' })
+    } catch (e) { toast?.({ message: e?.response?.data?.error ?? 'Erro ao salvar.', type: 'error' }) }
+    finally { setSalvando(false) }
+  }
+  if (!inds) return null
+  return (
+    <SecaoConfig titulo="Indicadores coletivos" descricao="Métricas da loja (Google, iFood, NPS…). O gestor lança o valor de cada mês na aba do Mês; a média ponderada pelos pesos vira a base da Nota Coletiva."
+      right={<button type="button" className="btn btn-primary btn-sm" onClick={salvar} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar indicadores'}</button>}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {inds.map((i) => {
+          const key = i.id ?? i._tmp
+          return (
+            <div key={key} style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <input className="form-input" style={{ flex: 1, minWidth: 140 }} placeholder="Nome (ex.: Google)" value={i.nome} onChange={(e) => set(key, { nome: e.target.value })} />
+              <label style={{ fontSize: 11, color: 'var(--app-text-soft, #999)', display: 'flex', alignItems: 'center', gap: 4 }}>escala 0–
+                <input type="number" className="form-input" style={{ width: 72 }} min="1" step="0.5" value={i.escalaMax} onChange={(e) => set(key, { escalaMax: e.target.value })} title="Valor máximo da escala (5 estrelas, 100 NPS…)" />
+              </label>
+              <label style={{ fontSize: 11, color: 'var(--app-text-soft, #999)', display: 'flex', alignItems: 'center', gap: 4 }}>peso
+                <input type="number" className="form-input" style={{ width: 64 }} min="0" step="1" value={i.peso} onChange={(e) => set(key, { peso: e.target.value })} title="Peso relativo na média ponderada" />
+              </label>
+              <button type="button" className="btn btn-danger btn-sm" onClick={() => setInds((xs) => xs.filter((x) => (x.id ?? x._tmp) !== key))}>✕</button>
+            </div>
+          )
+        })}
+      </div>
+      <button type="button" className="btn btn-secondary btn-sm" style={{ marginTop: 8 }} onClick={() => setInds((xs) => [...xs, { _tmp: `i${++tmpSeq}`, nome: '', escalaMax: 5, peso: 1, ativo: true }])}>+ Indicador</button>
+    </SecaoConfig>
+  )
+}
+
 function AbaConfig({ cfg, setCfg, tipos, setTipos, salvar, salvando, toast }) {
   const set = (campo, v) => setCfg((c) => ({ ...c, [campo]: v }))
   const addTipo = (pilar) => setTipos((ts) => [...ts, { _tmp: `t${++tmpSeq}`, nome: '', pilar, percentual: '', tipoImpacto: 'PERCENTUAL' }])
@@ -1319,6 +1417,8 @@ function AbaConfig({ cfg, setCfg, tipos, setTipos, salvar, salvando, toast }) {
       </SecaoConfig>
 
       <SecaoSeveridades toast={toast} />
+
+      <SecaoIndicadores toast={toast} />
 
       <SecaoConfig titulo="Coins" descricao="Ao fechar o mês, cada funcionário ganha 🪙 Coins proporcionais ao prêmio (R$) para gastar no Mercado. Conquistas também dão Coins.">
         <div style={gridAuto(240)}>

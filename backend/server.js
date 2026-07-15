@@ -30,6 +30,7 @@ const MODELS_TENANT = new Set([
   'funcionario', 'bonificacaoConfig', 'bonificacaoTipoOcorrencia',
   'bonificacaoOcorrencia', 'bonificacaoColetiva', 'bonificacaoFechamento',
   'bonificacaoNivel', 'bonificacaoXp', 'bonificacaoAuditoria', 'bonificacaoSeveridade',
+  'bonificacaoIndicador', 'bonificacaoIndicadorValor',
   'conquista', 'conquistaDesbloqueada',
   'bonificacaoMoeda', 'mercadoItem', 'mercadoResgate',
   'funcionarioFace', 'pontoRegistro', 'dispositivo', 'jornada', 'coletorBatidaPendente', 'coletorComando', 'pontoConfig', 'funcao',
@@ -680,11 +681,43 @@ function auditarBonif(req, acao, { entidade = null, entidadeId = null, antes = n
 
 // Separa as ocorrências individuais das coletivas (da equipe) e calcula a Nota
 // Coletiva do mês: começa em 100% e desce a soma dos % das ocorrências coletivas.
-function separarOcorrenciasBonif(ocorrencias) {
+// Pesos do Índice de Excelência (base do Destaque/Top 3). Contribuições (15%) chegam no
+// Bloco 4; até lá reescalamos Assiduidade+Desempenho (0.50/0.35 → 0.59/0.41).
+const INDICE_PESO_ASSID = 0.59;
+const INDICE_PESO_DESEMP = 0.41;
+const indiceExcelencia = (assidPct, desPct) => r2(INDICE_PESO_ASSID * (assidPct || 0) + INDICE_PESO_DESEMP * (desPct || 0));
+
+// Score Coletivo do mês a partir dos indicadores configuráveis (Google/iFood/NPS). Média
+// ponderada dos valores lançados (val/escalaMax·100). Sem valores lançados → base 100
+// (comportamento antigo). empresaId explícito p/ rotas públicas; admin usa a extension.
+async function scoreColetivoDoMes(ano, mes, empresaId) {
+  const where = empresaId != null ? { empresaId } : {};
+  const indicadores = await prisma.bonificacaoIndicador.findMany({ where: { ...where, ativo: true }, orderBy: [{ ordem: 'asc' }, { id: 'asc' }] });
+  if (!indicadores.length) return { temIndicadores: false, scoreIndicadores: 100, indicadores: [] };
+  const valores = await prisma.bonificacaoIndicadorValor.findMany({ where: { ...where, ano, mes } });
+  const vmap = new Map(valores.map((v) => [v.indicadorId, Number(v.valor)]));
+  let somaPeso = 0, somaPond = 0;
+  const out = indicadores.map((ind) => {
+    const temValor = vmap.has(ind.id);
+    const valor = temValor ? vmap.get(ind.id) : null;
+    const escalaMax = Number(ind.escalaMax) || 100;
+    const peso = Number(ind.peso) || 0;
+    const pct = temValor ? Math.max(0, Math.min(100, r2((valor / escalaMax) * 100))) : null;
+    if (temValor && peso > 0) { somaPeso += peso; somaPond += peso * pct; }
+    return { id: ind.id, nome: ind.nome, escalaMax: r2(escalaMax), peso: r2(peso), valor: temValor ? r2(valor) : null, pct };
+  });
+  const temLancado = somaPeso > 0;
+  return { temIndicadores: temLancado, scoreIndicadores: temLancado ? r2(somaPond / somaPeso) : 100, indicadores: out };
+}
+
+// Separa individuais/coletivas. baseColetiva = 100 (padrão) ou o Score Coletivo dos
+// indicadores; coletiva final = base − Σ ocorrências COLETIVA (coexistem, Bloco 3).
+function separarOcorrenciasBonif(ocorrencias, baseColetiva = 100) {
   const coletivas = ocorrencias.filter((o) => o.pilar === 'COLETIVA');
   const individuais = ocorrencias.filter((o) => o.pilar !== 'COLETIVA' && o.funcionarioId != null);
-  const coletivaPct = Math.max(0, r2(100 - coletivas.reduce((s, o) => s + Number(o.percentual), 0)));
-  return { individuais, coletivas, coletivaPct };
+  const descontoColetivo = r2(coletivas.reduce((s, o) => s + Number(o.percentual), 0));
+  const coletivaPct = Math.max(0, r2((Number(baseColetiva) || 0) - descontoColetivo));
+  return { individuais, coletivas, coletivaPct, descontoColetivo, baseColetiva: r2(baseColetiva) };
 }
 
 // Calcula as linhas do mês (por funcionário) a partir das ocorrências + coletiva + tetos.
@@ -707,11 +740,13 @@ function calcularLinhasBonificacao(funcionarios, ocorrencias, coletivaPct, t) {
     const desRs = r2(desPct / 100 * t.tetoD);
     const colRs = r2(coletivaPct / 100 * t.tetoC);
     const subtotal = r2(assidRs + desRs + colRs);
-    return { funcionarioId: f.id, nome: f.nome, funcao: f.funcao || null, assidPct: r2(assidPct), desPct: r2(desPct), coletivaPct: r2(coletivaPct), assidRs, desRs, colRs, subtotal, ocorrencias: g.ocorrencias };
+    const indice = indiceExcelencia(assidPct, desPct);
+    return { funcionarioId: f.id, nome: f.nome, funcao: f.funcao || null, assidPct: r2(assidPct), desPct: r2(desPct), coletivaPct: r2(coletivaPct), indice, assidRs, desRs, colRs, subtotal, ocorrencias: g.ocorrencias };
   });
-  // Ranking: maior subtotal; desempate por Assiduidade, depois id. Top 3 levam bônus.
+  // Ranking (Destaque do Mês): maior Índice de Excelência; desempate por subtotal, depois
+  // Assiduidade, depois id. Top 3 levam o bônus Extra. (Bloco 3)
   const bonus = [t.b1, t.b2, t.b3];
-  [...rows].sort((a, b) => b.subtotal - a.subtotal || b.assidPct - a.assidPct || a.funcionarioId - b.funcionarioId)
+  [...rows].sort((a, b) => b.indice - a.indice || b.subtotal - a.subtotal || b.assidPct - a.assidPct || a.funcionarioId - b.funcionarioId)
     .forEach((r, i) => { r.posicao = i + 1; r.classificacaoRs = i < 3 ? r2(bonus[i]) : 0; r.totalRs = r2(r.subtotal + r.classificacaoRs); });
   return rows;
 }
@@ -738,14 +773,15 @@ app.get('/api/bonificacao/mensal', async (req, res) => {
     const configOut = { tetoAssiduidade: t.tetoA, tetoDesempenho: t.tetoD, tetoColetiva: t.tetoC, bonusTop1: t.b1, bonusTop2: t.b2, bonusTop3: t.b3 };
     const fech = await prisma.bonificacaoFechamento.findFirst({ where: { ano: am.ano, mes: am.mes } });
     if (fech) {
-      return res.json({ fechado: true, fechadoEm: fech.fechadoEm, fechadoPor: fech.fechadoPor, coletivaPct: Number(fech.coletivaPct), totalGeral: Number(fech.totalGeral), funcionarios: fech.itensJson, config: configOut });
+      return res.json({ fechado: true, fechadoEm: fech.fechadoEm, fechadoPor: fech.fechadoPor, coletivaPct: Number(fech.coletivaPct), coletivo: fech.indicadoresJson || null, totalGeral: Number(fech.totalGeral), funcionarios: fech.itensJson, config: configOut });
     }
     const exclFuncoes = await nomesFuncoesNaoBonif();
     const funcionarios = (await prisma.funcionario.findMany({ where: { status: 'ATIVO' }, orderBy: { nome: 'asc' } })).filter((f) => !exclFuncoes.has(f.funcao));
     const ocorrenciasTodas = await prisma.bonificacaoOcorrencia.findMany({ where: { ano: am.ano, mes: am.mes }, orderBy: { data: 'desc' } });
-    const { individuais, coletivas, coletivaPct } = separarOcorrenciasBonif(ocorrenciasTodas);
+    const score = await scoreColetivoDoMes(am.ano, am.mes);
+    const { individuais, coletivas, coletivaPct, descontoColetivo } = separarOcorrenciasBonif(ocorrenciasTodas, score.scoreIndicadores);
     const rows = calcularLinhasBonificacao(funcionarios, individuais, coletivaPct, t);
-    res.json({ fechado: false, coletivaPct, coletivas: coletivas.map(ocorrenciaJson), totalGeral: r2(rows.reduce((s, r) => s + r.totalRs, 0)), funcionarios: rows, config: configOut });
+    res.json({ fechado: false, coletivaPct, coletivas: coletivas.map(ocorrenciaJson), coletivo: { ...score, descontoColetivo, coletivaPct }, totalGeral: r2(rows.reduce((s, r) => s + r.totalRs, 0)), funcionarios: rows, config: configOut });
   } catch (err) { console.error('[bonificacao/mensal]', err); res.status(500).json({ error: 'Erro ao carregar o mês.' }); }
 });
 
@@ -871,6 +907,66 @@ app.put('/api/bonificacao/severidades', async (req, res) => {
   } catch (err) { console.error('[bonificacao/severidades PUT]', err); res.status(500).json({ error: 'Erro ao salvar severidades.' }); }
 });
 
+// ===== Bonificação — Indicadores coletivos configuráveis (Bloco 3) =====
+const indicadorJson = (i) => ({ id: i.id, nome: i.nome, escalaMax: Number(i.escalaMax), peso: Number(i.peso), ordem: i.ordem, ativo: i.ativo });
+app.get('/api/bonificacao/indicadores', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const inds = await prisma.bonificacaoIndicador.findMany({ orderBy: [{ ordem: 'asc' }, { id: 'asc' }] });
+    res.json(inds.map(indicadorJson));
+  } catch (err) { console.error('[bonificacao/indicadores GET]', err); res.status(500).json({ error: 'Erro ao carregar indicadores.' }); }
+});
+app.put('/api/bonificacao/indicadores', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const entrada = Array.isArray(req.body?.indicadores) ? req.body.indicadores : [];
+    const atuais = await prisma.bonificacaoIndicador.findMany();
+    const norm = [];
+    entrada.forEach((it, i) => {
+      const nome = String(it?.nome ?? '').trim().slice(0, 40); if (!nome) return;
+      const idExist = Number.isInteger(it?.id) && atuais.some((a) => a.id === it.id) ? it.id : null;
+      norm.push({ id: idExist, nome, escalaMax: Math.max(0.01, Number(it?.escalaMax) || 5), peso: Math.max(0, Number(it?.peso) || 0), ordem: i, ativo: it?.ativo !== false });
+    });
+    const manter = norm.filter((n) => n.id != null).map((n) => n.id);
+    await prisma.$transaction([
+      prisma.bonificacaoIndicador.deleteMany(manter.length ? { where: { id: { notIn: manter } } } : {}),
+      ...norm.filter((n) => n.id != null).map((n) => prisma.bonificacaoIndicador.update({ where: { id: n.id }, data: { nome: n.nome, escalaMax: n.escalaMax, peso: n.peso, ordem: n.ordem, ativo: n.ativo } })),
+      ...norm.filter((n) => n.id == null).map((n) => prisma.bonificacaoIndicador.create({ data: { nome: n.nome, escalaMax: n.escalaMax, peso: n.peso, ordem: n.ordem, ativo: n.ativo } })),
+    ]);
+    auditarBonif(req, 'INDICADORES_ALTERADOS', { entidade: 'BonificacaoIndicador' });
+    const inds = await prisma.bonificacaoIndicador.findMany({ orderBy: [{ ordem: 'asc' }, { id: 'asc' }] });
+    res.json(inds.map(indicadorJson));
+  } catch (err) { console.error('[bonificacao/indicadores PUT]', err); res.status(500).json({ error: 'Erro ao salvar indicadores.' }); }
+});
+// Score coletivo + valores lançados de um mês (painel do mês).
+app.get('/api/bonificacao/indicadores/valores', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const am = lerAnoMesBonif(req, res); if (!am) return;
+  try { res.json(await scoreColetivoDoMes(am.ano, am.mes)); }
+  catch (err) { console.error('[bonificacao/indicadores/valores GET]', err); res.status(500).json({ error: 'Erro ao carregar os valores.' }); }
+});
+// Lança/atualiza os valores dos indicadores do mês (bloqueado se o mês estiver fechado).
+app.post('/api/bonificacao/indicadores/valores', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const am = lerAnoMesBonif(req, res); if (!am) return;
+  try {
+    if (await prisma.bonificacaoFechamento.findFirst({ where: { ano: am.ano, mes: am.mes } })) return res.status(400).json({ error: 'O mês já está fechado.' });
+    const entrada = Array.isArray(req.body?.valores) ? req.body.valores : [];
+    const validId = new Set((await prisma.bonificacaoIndicador.findMany()).map((i) => i.id));
+    for (const v of entrada) {
+      const indicadorId = parseInt(v?.indicadorId, 10);
+      if (!validId.has(indicadorId)) continue;
+      if (v?.valor === '' || v?.valor == null) { await prisma.bonificacaoIndicadorValor.deleteMany({ where: { indicadorId, ano: am.ano, mes: am.mes } }); continue; }
+      const valor = Math.max(0, Number(v.valor) || 0);
+      const ex = await prisma.bonificacaoIndicadorValor.findFirst({ where: { indicadorId, ano: am.ano, mes: am.mes } });
+      if (ex) await prisma.bonificacaoIndicadorValor.update({ where: { id: ex.id }, data: { valor } });
+      else await prisma.bonificacaoIndicadorValor.create({ data: { indicadorId, ano: am.ano, mes: am.mes, valor } });
+    }
+    auditarBonif(req, 'INDICADORES_VALORES_LANCADOS', { entidade: 'BonificacaoIndicadorValor', justificativa: `${String(am.mes).padStart(2, '0')}/${am.ano}` });
+    res.json(await scoreColetivoDoMes(am.ano, am.mes));
+  } catch (err) { console.error('[bonificacao/indicadores/valores POST]', err); res.status(500).json({ error: 'Erro ao lançar os valores.' }); }
+});
+
 // Simula o impacto de uma regra num cenário, SEM gravar (M5).
 // body: { regra:{...campos da regra...}, ocorrencias?, minutos?, severidadePct? }
 app.post('/api/bonificacao/simular', async (req, res) => {
@@ -902,11 +998,12 @@ app.post('/api/bonificacao/fechar', async (req, res) => {
     const exclFuncoes = await nomesFuncoesNaoBonif();
     const funcionarios = (await prisma.funcionario.findMany({ where: { status: 'ATIVO' }, orderBy: { nome: 'asc' } })).filter((f) => !exclFuncoes.has(f.funcao));
     const ocorrenciasTodas = await prisma.bonificacaoOcorrencia.findMany({ where: { ano: am.ano, mes: am.mes }, orderBy: { data: 'desc' } });
-    const { individuais, coletivaPct } = separarOcorrenciasBonif(ocorrenciasTodas);
+    const score = await scoreColetivoDoMes(am.ano, am.mes);
+    const { individuais, coletivaPct } = separarOcorrenciasBonif(ocorrenciasTodas, score.scoreIndicadores);
     const rows = calcularLinhasBonificacao(funcionarios, individuais, coletivaPct, t);
     const totalGeral = r2(rows.reduce((s, r) => s + r.totalRs, 0));
     const f = await prisma.bonificacaoFechamento.create({
-      data: { ano: am.ano, mes: am.mes, coletivaPct, itensJson: rows, totalGeral, fechadoPor: req.user?.nome || null },
+      data: { ano: am.ano, mes: am.mes, coletivaPct, itensJson: rows, indicadoresJson: score, totalGeral, fechadoPor: req.user?.nome || null },
     });
     // Credita COINS do mês (permanentes — 1x só; reabrir NÃO estorna, pois podem já ter sido gastas).
     const moedasPorReal = Number(cfgFech?.moedasPorReal ?? 1);
@@ -1235,7 +1332,7 @@ app.delete('/api/bonificacao/conquistas/desbloqueio/:id', async (req, res) => {
 // NÃO expõe o motivo das ocorrências (privacidade). Escopo por empresaId do token.
 const rowPublicoBonif = (r) => ({
   funcionarioId: r.funcionarioId, nome: r.nome, funcao: r.funcao || null, posicao: r.posicao,
-  assidPct: r.assidPct, desPct: r.desPct, coletivaPct: r.coletivaPct,
+  assidPct: r.assidPct, desPct: r.desPct, coletivaPct: r.coletivaPct, indice: r.indice ?? null,
   assidRs: r.assidRs, desRs: r.desRs, colRs: r.colRs, classificacaoRs: r.classificacaoRs, totalRs: r.totalRs,
 });
 app.get('/api/public/bonificacao/:token', async (req, res) => {
@@ -1265,7 +1362,8 @@ app.get('/api/public/bonificacao/:token', async (req, res) => {
       const exclFuncoes = await nomesFuncoesNaoBonif(empresaId);
       const fs = (await prisma.funcionario.findMany({ where: { empresaId, status: 'ATIVO' }, orderBy: { nome: 'asc' } })).filter((f) => !exclFuncoes.has(f.funcao));
       const ocs = await prisma.bonificacaoOcorrencia.findMany({ where: { empresaId, ano, mes } });
-      const sep = separarOcorrenciasBonif(ocs);
+      const score = await scoreColetivoDoMes(ano, mes, empresaId);
+      const sep = separarOcorrenciasBonif(ocs, score.scoreIndicadores);
       coletivaPct = sep.coletivaPct;
       funcionarios = calcularLinhasBonificacao(fs, sep.individuais, coletivaPct, t).map(rowPublicoBonif);
     }
@@ -1292,13 +1390,14 @@ app.get('/api/public/eu/:token', async (req, res) => {
     const ano = now.getFullYear(), mes = now.getMonth() + 1;
     const t = { tetoA: Number(cfg.tetoAssiduidade), tetoD: Number(cfg.tetoDesempenho), tetoC: Number(cfg.tetoColetiva), b1: Number(cfg.bonusTop1), b2: Number(cfg.bonusTop2), b3: Number(cfg.bonusTop3) };
     const fech = await prisma.bonificacaoFechamento.findFirst({ where: { empresaId, ano, mes } });
-    let rows, coletivaPct;
-    if (fech) { rows = Array.isArray(fech.itensJson) ? fech.itensJson : []; coletivaPct = Number(fech.coletivaPct); }
+    let rows, coletivaPct, coletivo;
+    if (fech) { rows = Array.isArray(fech.itensJson) ? fech.itensJson : []; coletivaPct = Number(fech.coletivaPct); coletivo = fech.indicadoresJson || null; }
     else {
       const fs = await prisma.funcionario.findMany({ where: { empresaId, status: 'ATIVO' }, orderBy: { nome: 'asc' } });
       const ocs = await prisma.bonificacaoOcorrencia.findMany({ where: { empresaId, ano, mes } });
-      const sep = separarOcorrenciasBonif(ocs); // coletiva = 100% − ocorrências COLETIVA (igual aos outros fluxos)
-      coletivaPct = sep.coletivaPct;
+      const score = await scoreColetivoDoMes(ano, mes, empresaId);
+      const sep = separarOcorrenciasBonif(ocs, score.scoreIndicadores); // coletiva = base(indicadores ou 100) − ocorrências COLETIVA
+      coletivaPct = sep.coletivaPct; coletivo = { ...score, coletivaPct };
       rows = calcularLinhasBonificacao(fs, sep.individuais, coletivaPct, t);
     }
     const meu = rows.find((r) => r.funcionarioId === func.id) || null;
@@ -1321,7 +1420,7 @@ app.get('/api/public/eu/:token', async (req, res) => {
     const meusResgates = await prisma.mercadoResgate.findMany({ where: { empresaId, funcionarioId: func.id }, orderBy: { criadoEm: 'desc' }, take: 20 });
     res.json({
       loja: { nome: loja?.nome || 'Loja', logoDataUrl: loja?.logoDataUrl || null },
-      ano, mes, coletivaPct,
+      ano, mes, coletivaPct, coletivo,
       funcionario: { nome: func.nome, funcao: func.funcao || null },
       meu: meu ? rowPublicoBonif(meu) : null,
       ranking: rows.map(rowPublicoBonif).sort((a, b) => (a.posicao || 99) - (b.posicao || 99)),

@@ -62,6 +62,8 @@ const CSS = `
 .be-el .l{color:var(--ink-soft)} .be-el .l small{color:var(--muted)}
 .be-el .r{font-weight:750;color:var(--money)}
 .be-el.zero .r{color:var(--muted);font-weight:650}
+.be-indice{display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding:10px 13px;border-radius:12px;background:var(--brand-tint);color:var(--brand-deep);font-weight:750;font-size:13.5px}
+.be-indice b{color:var(--brand-deep);font-size:16px}
 .be-emptybox{text-align:center;padding:10px 0 4px;color:var(--muted);font-size:13px}
 .be-hint{font-size:12px;color:var(--muted);margin-top:12px;line-height:1.5}
 .be-hint b{color:var(--xp)}
@@ -215,11 +217,17 @@ export default function BonificacaoEu() {
                 <div className="be-el"><span className="l">Desempenho <small>· {meu.desPct}%</small></span><span className="r be-tnum">{brl(meu.desRs)}</span></div>
                 <div className="be-el"><span className="l">Coletivo <small>· {meu.coletivaPct}%</small></span><span className="r be-tnum">{brl(meu.colRs)}</span></div>
                 <div className={'be-el' + (meu.classificacaoRs > 0 ? '' : ' zero')}><span className="l">Extra <small>· destaque do mês</small></span><span className="r be-tnum">{brl(meu.classificacaoRs)}</span></div>
+                {meu.indice != null && (
+                  <div className="be-indice">
+                    <span>⭐ Índice de Excelência</span>
+                    <b className="be-tnum">{meu.indice}%</b>
+                  </div>
+                )}
               </>
             ) : (
               <div className="be-emptybox">Seu resultado deste mês ainda não foi lançado.</div>
             )}
-            <p className="be-hint">A cada fechamento você ganha <b>🪙 Coins</b> proporcionais ao seu prêmio do mês — quanto melhor o resultado, mais Coins pra trocar por prêmios. 🚀</p>
+            <p className="be-hint">O <b>Destaque do Mês</b> (Top 3, que leva o Extra) é por <b>Índice de Excelência</b>: 59% Assiduidade + 41% Desempenho. E a cada fechamento você ganha <b>🪙 Coins</b> pra trocar por prêmios. 🚀</p>
           </div>
         </section>
 
