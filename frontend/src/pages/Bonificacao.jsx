@@ -270,7 +270,10 @@ function OcorrenciasModal({ func, tipos, ano, mes, onClose, onExcluir, onLancou,
                 {func.ocorrencias.map((o) => (
                   <tr key={o.id}>
                     <td>{dataCurta(o.data)}</td>
-                    <td>{o.nomeTipo}</td>
+                    <td>
+                      {o.nomeTipo}
+                      {(() => { const d = o.explicacao && o.explicacao.startsWith(o.nomeTipo) ? o.explicacao.slice(o.nomeTipo.length).replace(/^\s*·\s*/, '') : (o.explicacao && o.explicacao !== o.nomeTipo ? o.explicacao : ''); return d ? <div style={{ fontSize: 10.5, color: 'var(--app-text-soft, #999)', marginTop: 1 }}>{d}</div> : null })()}
+                    </td>
                     <td>{o.pilar === 'ASSIDUIDADE' ? 'Assiduidade' : 'Desempenho'}</td>
                     <td className="clr-red">−{o.percentual}%</td>
                     <td style={{ color: '#666', fontSize: 11.5 }}>{o.observacao || '—'}</td>
@@ -1149,11 +1152,181 @@ function SecaoFuncoes({ toast }) {
   )
 }
 
+// Resumo curto do que a regra (tipo) tem configurado além do % base.
+function resumoRegra(t) {
+  const p = []
+  if (t.tipoImpacto === 'FAIXA_MINUTOS') p.push(`faixas de minutos${Array.isArray(t.faixasJson) ? ` (${t.faixasJson.length})` : ''}`)
+  else if (t.tipoImpacto === 'SEVERIDADE') p.push('por severidade')
+  if (t.toleranciaMin) p.push(`tolerância ${t.toleranciaMin}min`)
+  if (t.reincidenciaAPartir != null && t.reincidenciaAPartir !== '') p.push(`reincidência ≥${t.reincidenciaAPartir}ª (+${t.incrementoPct || 0}%)`)
+  if (t.tetoOcorrenciaPct != null && t.tetoOcorrenciaPct !== '') p.push(`teto ${t.tetoOcorrenciaPct}%/oco`)
+  if (t.tetoCicloPct != null && t.tetoCicloPct !== '') p.push(`teto ${t.tetoCicloPct}%/ciclo`)
+  return p.join(' · ')
+}
+
+// Editor avançado de uma regra (Motor de Regras) + simulador. As mudanças são
+// aplicadas ao estado do tipo; só persistem no "Salvar configuração".
+function RegraAvancadaModal({ regra: t, severidades, onPatch, onClose, toast }) {
+  const faixas = Array.isArray(t.faixasJson) ? t.faixasJson : []
+  const setFaixas = (fx) => onPatch({ faixasJson: fx })
+  const setFaixa = (i, patch) => setFaixas(faixas.map((f, idx) => idx === i ? { ...f, ...patch } : f))
+  const num = (v) => (v === '' || v == null ? null : Number(v))
+  const [simN, setSimN] = useState(3)
+  const [simMin, setSimMin] = useState(20)
+  const [simRes, setSimRes] = useState(null)
+  const [simulando, setSimulando] = useState(false)
+  async function simular() {
+    setSimulando(true)
+    try {
+      const regraSim = { nome: t.nome || 'Regra', percentual: num(t.percentual) || 0, tipoImpacto: t.tipoImpacto, toleranciaMin: num(t.toleranciaMin), faixasJson: faixas.map((f) => ({ minMin: num(f.minMin), maxMin: num(f.maxMin), percentual: num(f.percentual), rotulo: f.rotulo })), reincidenciaAPartir: num(t.reincidenciaAPartir), incrementoPct: num(t.incrementoPct), tetoOcorrenciaPct: num(t.tetoOcorrenciaPct), tetoCicloPct: num(t.tetoCicloPct) }
+      const body = { regra: regraSim, ocorrencias: simN }
+      if (t.tipoImpacto === 'FAIXA_MINUTOS') body.minutos = simMin
+      const r = await api.post('/bonificacao/simular', body)
+      setSimRes(r.data)
+    } catch (e) { toast?.({ message: e?.response?.data?.error ?? 'Erro ao simular.', type: 'error' }) }
+    finally { setSimulando(false) }
+  }
+  return (
+    <div className="modal-overlay">
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 580 }}>
+        <div className="modal-title">Regra · {t.nome || 'nova'}</div>
+        <div className="page-header-sub" style={{ marginTop: -4, marginBottom: 12 }}>Como o impacto desta ocorrência é calculado.</div>
+        <div className="form-group">
+          <label className="form-label">Tipo de impacto</label>
+          <select className="form-input" value={t.tipoImpacto || 'PERCENTUAL'} onChange={(e) => onPatch({ tipoImpacto: e.target.value })}>
+            <option value="PERCENTUAL">Percentual fixo (usa o % base)</option>
+            <option value="FAIXA_MINUTOS">Por faixa de minutos (atraso)</option>
+            <option value="SEVERIDADE">Por severidade</option>
+          </select>
+        </div>
+        {t.tipoImpacto === 'FAIXA_MINUTOS' && (
+          <>
+            <div className="form-group">
+              <label className="form-label">Tolerância (min) — abaixo disso, sem impacto</label>
+              <input type="number" className="form-input" style={{ maxWidth: 140 }} min="0" value={t.toleranciaMin ?? ''} onChange={(e) => onPatch({ toleranciaMin: e.target.value })} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Faixas de minutos</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {faixas.map((f, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <input type="number" className="form-input" style={{ width: 64 }} placeholder="de" value={f.minMin ?? ''} onChange={(e) => setFaixa(i, { minMin: e.target.value })} />
+                    <span style={{ color: '#999' }}>–</span>
+                    <input type="number" className="form-input" style={{ width: 64 }} placeholder="até" value={f.maxMin ?? ''} onChange={(e) => setFaixa(i, { maxMin: e.target.value })} />
+                    <span style={{ color: '#999', fontSize: 12 }}>min →</span>
+                    <div style={{ position: 'relative', width: 80 }}>
+                      <input type="number" className="form-input" style={{ paddingRight: 20 }} placeholder="%" value={f.percentual ?? ''} onChange={(e) => setFaixa(i, { percentual: e.target.value })} />
+                      <span style={{ position: 'absolute', right: 7, top: '50%', transform: 'translateY(-50%)', color: '#999', fontSize: 12 }}>%</span>
+                    </div>
+                    <button type="button" className="btn btn-danger btn-sm" onClick={() => setFaixas(faixas.filter((_, idx) => idx !== i))}>✕</button>
+                  </div>
+                ))}
+              </div>
+              <button type="button" className="btn btn-secondary btn-sm" style={{ marginTop: 6 }} onClick={() => setFaixas([...faixas, { minMin: '', maxMin: '', percentual: '', rotulo: '' }])}>+ Faixa</button>
+              <div style={{ fontSize: 11, color: 'var(--app-text-soft, #999)', marginTop: 4 }}>Deixe "até" vazio na última faixa para "em diante". Ex.: 6–15→2%, 16–30→4%, 31+→8%.</div>
+            </div>
+          </>
+        )}
+        {t.tipoImpacto === 'SEVERIDADE' && (
+          <div className="form-group">
+            <label className="form-label">Severidade padrão</label>
+            <select className="form-input" value={t.severidadeId ?? ''} onChange={(e) => onPatch({ severidadeId: e.target.value ? Number(e.target.value) : null })}>
+              <option value="">— escolher ao lançar —</option>
+              {severidades.map((s) => <option key={s.id} value={s.id}>{s.nome} (−{s.percentual}%)</option>)}
+            </select>
+            <div style={{ fontSize: 11, color: 'var(--app-text-soft, #999)', marginTop: 4 }}>O % vem da severidade escolhida. Cadastre as severidades na seção "Severidades".</div>
+          </div>
+        )}
+        <div className="form-grid-2">
+          <div className="form-group">
+            <label className="form-label">Reincidência a partir da Nª</label>
+            <input type="number" className="form-input" min="1" placeholder="—" value={t.reincidenciaAPartir ?? ''} onChange={(e) => onPatch({ reincidenciaAPartir: e.target.value })} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Incremento por reincidência (%)</label>
+            <input type="number" className="form-input" min="0" step="0.5" placeholder="—" value={t.incrementoPct ?? ''} onChange={(e) => onPatch({ incrementoPct: e.target.value })} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Teto por ocorrência (%)</label>
+            <input type="number" className="form-input" min="0" placeholder="—" value={t.tetoOcorrenciaPct ?? ''} onChange={(e) => onPatch({ tetoOcorrenciaPct: e.target.value })} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Teto no ciclo (%)</label>
+            <input type="number" className="form-input" min="0" placeholder="—" value={t.tetoCicloPct ?? ''} onChange={(e) => onPatch({ tetoCicloPct: e.target.value })} />
+          </div>
+        </div>
+        <div className="table-card" style={{ padding: 12, marginTop: 2 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <strong style={{ fontSize: 13 }}>Simular</strong>
+            <span style={{ fontSize: 12, color: '#999' }}>nº ocorrências:</span>
+            <input type="number" className="form-input" style={{ width: 62 }} min="1" max="20" value={simN} onChange={(e) => setSimN(Number(e.target.value))} />
+            {t.tipoImpacto === 'FAIXA_MINUTOS' && (<><span style={{ fontSize: 12, color: '#999' }}>minutos:</span><input type="number" className="form-input" style={{ width: 70 }} min="0" value={simMin} onChange={(e) => setSimMin(Number(e.target.value))} /></>)}
+            <button type="button" className="btn btn-secondary btn-sm" onClick={simular} disabled={simulando}>{simulando ? '…' : 'Simular'}</button>
+          </div>
+          {simRes && (
+            <div style={{ marginTop: 8, fontSize: 12 }}>
+              {simRes.linhas.map((l) => <div key={l.ocorrencia} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '3px 0', borderTop: '1px solid var(--app-border, #eee)' }}><span style={{ color: '#666' }}>{l.explicacao}</span><span style={{ color: '#dc2626', fontWeight: 600, flexShrink: 0 }}>−{l.percentual}%</span></div>)}
+              <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 5, marginTop: 2, borderTop: '2px solid var(--app-border, #ddd)', fontWeight: 700 }}><span>Total no ciclo</span><span style={{ color: '#dc2626' }}>−{simRes.totalPct}%</span></div>
+            </div>
+          )}
+        </div>
+        <div className="modal-actions">
+          <button type="button" className="btn btn-primary" onClick={onClose}>Concluir</button>
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--app-text-soft, #999)', marginTop: 6, textAlign: 'right' }}>Aplica ao clicar em "Salvar configuração".</div>
+      </div>
+    </div>
+  )
+}
+
+// Severidades configuráveis (Desempenho) — CRUD leve, próprio Salvar.
+function SecaoSeveridades({ toast }) {
+  const [sev, setSev] = useState([])
+  const [salvando, setSalvando] = useState(false)
+  useEffect(() => { api.get('/bonificacao/severidades').then((r) => setSev((r.data || []).map((s) => ({ ...s })))).catch(() => {}) }, [])
+  const set = (key, patch) => setSev((ss) => ss.map((s) => ((s.id ?? s._tmp) === key ? { ...s, ...patch } : s)))
+  async function salvar() {
+    setSalvando(true)
+    try {
+      const r = await api.put('/bonificacao/severidades', { severidades: sev.filter((s) => (s.nome || '').trim()).map((s) => ({ id: s.id, nome: s.nome, percentual: s.percentual, cor: s.cor })) })
+      setSev((r.data || []).map((s) => ({ ...s })))
+      toast?.({ message: 'Severidades salvas.', type: 'success' })
+    } catch (e) { toast?.({ message: e?.response?.data?.error ?? 'Erro ao salvar.', type: 'error' }) }
+    finally { setSalvando(false) }
+  }
+  return (
+    <SecaoConfig titulo="Severidades (Desempenho)" descricao="Classificação das ocorrências de Desempenho — o impacto de uma regra 'por severidade' vem daqui."
+      right={<button type="button" className="btn btn-primary btn-sm" onClick={salvar} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar severidades'}</button>}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {sev.map((s) => {
+          const key = s.id ?? s._tmp
+          return (
+            <div key={key} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input type="color" value={s.cor || '#dc2626'} onChange={(e) => set(key, { cor: e.target.value })} style={{ width: 30, height: 30, border: 'none', background: 'none', cursor: 'pointer', flexShrink: 0, padding: 0 }} title="Cor" />
+              <input className="form-input" style={{ flex: 1 }} placeholder="Nome (ex.: Grave)" value={s.nome} onChange={(e) => set(key, { nome: e.target.value })} />
+              <div style={{ position: 'relative', width: 96 }}>
+                <input type="number" className="form-input" min="0" max="100" step="0.5" style={{ paddingRight: 22 }} value={s.percentual} onChange={(e) => set(key, { percentual: e.target.value })} />
+                <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', color: '#999', fontSize: 12 }}>%</span>
+              </div>
+              <button type="button" className="btn btn-danger btn-sm" onClick={() => setSev((ss) => ss.filter((x) => (x.id ?? x._tmp) !== key))}>✕</button>
+            </div>
+          )
+        })}
+      </div>
+      <button type="button" className="btn btn-secondary btn-sm" style={{ marginTop: 8 }} onClick={() => setSev((ss) => [...ss, { _tmp: `s${++tmpSeq}`, nome: '', percentual: '', cor: '#dc2626' }])}>+ Severidade</button>
+    </SecaoConfig>
+  )
+}
+
 function AbaConfig({ cfg, setCfg, tipos, setTipos, niveis, setNiveis, salvar, salvando, toast }) {
   const set = (campo, v) => setCfg((c) => ({ ...c, [campo]: v }))
-  const addTipo = (pilar) => setTipos((ts) => [...ts, { _tmp: `t${++tmpSeq}`, nome: '', pilar, percentual: '' }])
+  const addTipo = (pilar) => setTipos((ts) => [...ts, { _tmp: `t${++tmpSeq}`, nome: '', pilar, percentual: '', tipoImpacto: 'PERCENTUAL' }])
   const setTipo = (key, patch) => setTipos((ts) => ts.map((t) => ((t.id ?? t._tmp) === key ? { ...t, ...patch } : t)))
   const rmTipo = (key) => setTipos((ts) => ts.filter((t) => (t.id ?? t._tmp) !== key))
+  const [regraKey, setRegraKey] = useState(null) // regra em edição avançada
+  const [severidades, setSeveridades] = useState([])
+  useEffect(() => { api.get('/bonificacao/severidades').then((r) => setSeveridades(Array.isArray(r.data) ? r.data : [])).catch(() => {}) }, [])
+  const regraSel = tipos.find((t) => (t.id ?? t._tmp) === regraKey) || null
   const addNivel = () => setNiveis((ns) => [...ns, { _tmp: `n${++tmpSeq}`, nome: '' }])
   const setNivel = (key, nome) => setNiveis((ns) => ns.map((n) => ((n.id ?? n._tmp) === key ? { ...n, nome } : n)))
   const rmNivel = (key) => setNiveis((ns) => ns.filter((n) => (n.id ?? n._tmp) !== key))
@@ -1229,14 +1402,19 @@ function AbaConfig({ cfg, setCfg, tipos, setTipos, niveis, setNiveis, salvar, sa
                 {doPilar.length === 0 && <div style={{ fontSize: 12, color: '#bbb', marginBottom: 6 }}>Nenhum tipo cadastrado.</div>}
                 {doPilar.map((t) => {
                   const key = t.id ?? t._tmp
+                  const resumo = resumoRegra(t)
                   return (
-                    <div key={key} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
-                      <input className="form-input" style={{ flex: 1 }} placeholder="Nome da ocorrência" value={t.nome} onChange={(e) => setTipo(key, { nome: e.target.value })} />
-                      <div style={{ position: 'relative', width: 104 }}>
-                        <input type="number" className="form-input" min="0" max="100" step="0.5" style={{ paddingRight: 26 }} value={t.percentual} onChange={(e) => setTipo(key, { percentual: e.target.value })} />
-                        <span style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', color: '#999', fontSize: 13, pointerEvents: 'none' }}>%</span>
+                    <div key={key} style={{ marginBottom: 6 }}>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <input className="form-input" style={{ flex: 1 }} placeholder="Nome da ocorrência" value={t.nome} onChange={(e) => setTipo(key, { nome: e.target.value })} />
+                        <div style={{ position: 'relative', width: 96 }}>
+                          <input type="number" className="form-input" min="0" max="100" step="0.5" style={{ paddingRight: 26 }} value={t.percentual} onChange={(e) => setTipo(key, { percentual: e.target.value })} title="% base (usado no modo Percentual e como fallback)" />
+                          <span style={{ position: 'absolute', right: 9, top: '50%', transform: 'translateY(-50%)', color: '#999', fontSize: 13, pointerEvents: 'none' }}>%</span>
+                        </div>
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setRegraKey(key)} title="Regras avançadas (faixas, severidade, progressividade, tetos)" style={{ padding: '5px 9px' }}>⚙</button>
+                        <button type="button" className="btn btn-danger btn-sm" onClick={() => rmTipo(key)} title="Remover">✕</button>
                       </div>
-                      <button type="button" className="btn btn-danger btn-sm" onClick={() => rmTipo(key)} title="Remover">✕</button>
+                      {resumo && <div style={{ fontSize: 10.5, color: p.cor, marginTop: 2, marginLeft: 2 }}>{resumo}</div>}
                     </div>
                   )
                 })}
@@ -1246,6 +1424,8 @@ function AbaConfig({ cfg, setCfg, tipos, setTipos, niveis, setNiveis, salvar, sa
           })}
         </div>
       </SecaoConfig>
+
+      <SecaoSeveridades toast={toast} />
 
       <SecaoConfig titulo="Níveis e XP" descricao="Ao fechar o mês, cada funcionário ganha XP igual ao prêmio (R$) e moedas para o Mercado. Juntando XP, sobe de nível.">
         <div style={gridAuto(200)}>
@@ -1272,6 +1452,8 @@ function AbaConfig({ cfg, setCfg, tipos, setTipos, niveis, setNiveis, salvar, sa
         <div style={{ fontSize: 13, color: 'var(--app-text-soft, #666)' }}>Bonificação máxima por funcionário <span style={{ color: '#999' }}>(pilares + 1º lugar)</span></div>
         <div style={{ fontSize: 20, fontWeight: 800 }}>{brl(totalMax)}</div>
       </div>
+
+      {regraSel && <RegraAvancadaModal regra={regraSel} severidades={severidades} onPatch={(patch) => setTipo(regraKey, patch)} onClose={() => setRegraKey(null)} toast={toast} />}
     </div>
   )
 }
@@ -1308,7 +1490,7 @@ export default function Bonificacao() {
     try {
       const payload = {
         ...cfg,
-        tipos: tipos.filter((t) => (t.nome || '').trim()).map((t) => ({ id: t.id, nome: t.nome, pilar: t.pilar, percentual: t.percentual })),
+        tipos: tipos.filter((t) => (t.nome || '').trim()).map((t) => ({ id: t.id, nome: t.nome, pilar: t.pilar, percentual: t.percentual, tipoImpacto: t.tipoImpacto, evento: t.evento, toleranciaMin: t.toleranciaMin, faixasJson: t.faixasJson, severidadeId: t.severidadeId, reincidenciaAPartir: t.reincidenciaAPartir, incrementoPct: t.incrementoPct, tetoOcorrenciaPct: t.tetoOcorrenciaPct, tetoCicloPct: t.tetoCicloPct })),
         niveis: niveis.filter((n) => (n.nome || '').trim()).map((n) => ({ id: n.id, nome: n.nome })),
       }
       const r = await api.put('/bonificacao/config', payload)

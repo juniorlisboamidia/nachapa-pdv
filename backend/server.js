@@ -29,7 +29,7 @@ const MODELS_TENANT = new Set([
   'avaliacaoCandidato', 'contatoCandidato', 'entrevistaCandidato', 'recrutamentoTag', 'recrutamentoConfig', 'scoreHistorico',
   'funcionario', 'bonificacaoConfig', 'bonificacaoTipoOcorrencia',
   'bonificacaoOcorrencia', 'bonificacaoColetiva', 'bonificacaoFechamento',
-  'bonificacaoNivel', 'bonificacaoXp', 'bonificacaoAuditoria',
+  'bonificacaoNivel', 'bonificacaoXp', 'bonificacaoAuditoria', 'bonificacaoSeveridade',
   'conquista', 'conquistaDesbloqueada',
   'bonificacaoMoeda', 'mercadoItem', 'mercadoResgate',
   'funcionarioFace', 'pontoRegistro', 'dispositivo', 'jornada', 'coletorBatidaPendente', 'coletorComando', 'pontoConfig', 'funcao',
@@ -467,7 +467,43 @@ function bonificacaoConfigJson(c) {
     moedasPorReal: Number(c.moedasPorReal ?? 1),
   };
 }
-const bonificacaoTipoJson = (t) => ({ id: t.id, nome: t.nome, pilar: t.pilar, percentual: Number(t.percentual), ordem: t.ordem, ativo: t.ativo });
+const bonificacaoTipoJson = (t) => ({
+  id: t.id, nome: t.nome, pilar: t.pilar, percentual: Number(t.percentual), ordem: t.ordem, ativo: t.ativo,
+  // Motor de Regras
+  tipoImpacto: t.tipoImpacto || 'PERCENTUAL', evento: t.evento || null,
+  toleranciaMin: t.toleranciaMin ?? null, faixasJson: Array.isArray(t.faixasJson) ? t.faixasJson : null,
+  severidadeId: t.severidadeId ?? null,
+  reincidenciaAPartir: t.reincidenciaAPartir ?? null,
+  incrementoPct: t.incrementoPct != null ? Number(t.incrementoPct) : null,
+  tetoOcorrenciaPct: t.tetoOcorrenciaPct != null ? Number(t.tetoOcorrenciaPct) : null,
+  tetoCicloPct: t.tetoCicloPct != null ? Number(t.tetoCicloPct) : null,
+  prioridade: t.prioridade ?? 0,
+});
+// Sanitiza os campos do Motor de Regras vindos do PUT /config (bulk de tipos).
+function motorCamposRegra(t) {
+  const int = (v) => (v === '' || v == null ? null : (Number.isInteger(parseInt(v, 10)) ? parseInt(v, 10) : null));
+  const dec = (v) => (v === '' || v == null ? null : (Number.isFinite(Number(v)) ? Math.max(0, Math.min(100, Number(v))) : null));
+  const modos = new Set(['PERCENTUAL', 'FAIXA_MINUTOS', 'SEVERIDADE']);
+  let faixas = null;
+  if (Array.isArray(t?.faixasJson)) {
+    faixas = t.faixasJson
+      .map((f) => ({ minMin: int(f?.minMin) ?? 0, maxMin: int(f?.maxMin), percentual: dec(f?.percentual) ?? 0, rotulo: f?.rotulo ? String(f.rotulo).slice(0, 40) : null }))
+      .filter((f) => f.percentual != null);
+    if (!faixas.length) faixas = null;
+  }
+  return {
+    tipoImpacto: modos.has(t?.tipoImpacto) ? t.tipoImpacto : 'PERCENTUAL',
+    evento: t?.evento ? String(t.evento).slice(0, 40) : null,
+    toleranciaMin: int(t?.toleranciaMin),
+    faixasJson: faixas,
+    severidadeId: int(t?.severidadeId),
+    reincidenciaAPartir: int(t?.reincidenciaAPartir),
+    incrementoPct: dec(t?.incrementoPct),
+    tetoOcorrenciaPct: dec(t?.tetoOcorrenciaPct),
+    tetoCicloPct: dec(t?.tetoCicloPct),
+    prioridade: int(t?.prioridade) ?? 0,
+  };
+}
 // Nível a partir do XP total (níveis uniformes de xpPorNivel).
 function nivelDeXp(totalXp, xpPorNivel, nomes) {
   const xpN = Math.max(1, xpPorNivel || 500);
@@ -580,13 +616,14 @@ app.put('/api/bonificacao/config', async (req, res) => {
         const pilar = BONI_PILARES.has(t?.pilar) ? t.pilar : 'ASSIDUIDADE';
         const percentual = Math.min(100, num(t?.percentual, 0));
         const idExist = Number.isInteger(t?.id) && byId.has(t.id) ? t.id : null;
-        norm.push({ id: idExist, nome, pilar, percentual, ordem: i });
+        norm.push({ id: idExist, nome, pilar, percentual, ordem: i, ...motorCamposRegra(t) });
       });
       const manter = norm.filter((t) => t.id != null).map((t) => t.id);
+      const dados = (t) => ({ nome: t.nome, pilar: t.pilar, percentual: t.percentual, ordem: t.ordem, tipoImpacto: t.tipoImpacto, evento: t.evento, toleranciaMin: t.toleranciaMin, faixasJson: t.faixasJson, severidadeId: t.severidadeId, reincidenciaAPartir: t.reincidenciaAPartir, incrementoPct: t.incrementoPct, tetoOcorrenciaPct: t.tetoOcorrenciaPct, tetoCicloPct: t.tetoCicloPct, prioridade: t.prioridade });
       await prisma.$transaction([
         prisma.bonificacaoTipoOcorrencia.deleteMany(manter.length ? { where: { id: { notIn: manter } } } : {}),
-        ...norm.filter((t) => t.id != null).map((t) => prisma.bonificacaoTipoOcorrencia.update({ where: { id: t.id }, data: { nome: t.nome, pilar: t.pilar, percentual: t.percentual, ordem: t.ordem } })),
-        ...norm.filter((t) => t.id == null).map((t) => prisma.bonificacaoTipoOcorrencia.create({ data: { nome: t.nome, pilar: t.pilar, percentual: t.percentual, ordem: t.ordem } })),
+        ...norm.filter((t) => t.id != null).map((t) => prisma.bonificacaoTipoOcorrencia.update({ where: { id: t.id }, data: dados(t) })),
+        ...norm.filter((t) => t.id == null).map((t) => prisma.bonificacaoTipoOcorrencia.create({ data: dados(t) })),
       ]);
     }
 
@@ -600,16 +637,62 @@ app.put('/api/bonificacao/config', async (req, res) => {
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const ocorrenciaJson = (o) => ({ id: o.id, funcionarioId: o.funcionarioId, tipoId: o.tipoId, nomeTipo: o.nomeTipo, pilar: o.pilar, percentual: Number(o.percentual), data: o.data, observacao: o.observacao || null, explicacao: o.explicacao || null, severidade: o.severidade || null, minutosEvento: o.minutosEvento ?? null, status: o.status || 'VALIDADA' });
 
-// ── Motor de Regras (M1) ─────────────────────────────────────────────────
-// Dado uma regra (tipo de ocorrência) e um evento, calcula o impacto (%) e a
-// explicação. Na M1 só o modo PERCENTUAL (fixo) está ativo — faixas de minutos
-// (M2), severidade (M3) e progressividade/tetos (M4) entram depois e por
-// enquanto caem no % base da regra. Assim o cálculo continua idêntico ao atual.
-function calcularImpactoRegra(regra, evento = {}) {
-  const base = Number(regra.percentual) || 0;
-  // M2+: if (regra.tipoImpacto === 'FAIXA_MINUTOS' && evento.minutos != null) { ... }
-  // M3+: if (regra.tipoImpacto === 'SEVERIDADE') { ... }
-  return { percentual: base, severidade: regra.severidade || null, explicacao: regra.nome };
+// ── Motor de Regras ───────────────────────────────────────────────────────
+// Dado uma regra (tipo de ocorrência) e o contexto do evento, calcula o impacto
+// (%), a severidade e a explicação. Modos:
+//   PERCENTUAL    → % base fixo (regra simples; comportamento original).
+//   FAIXA_MINUTOS → escolhe a faixa de `faixasJson` pelos minutos do evento
+//                   (respeita toleranciaMin); usa o % da faixa. (M2)
+//   SEVERIDADE    → usa o % da severidade escolhida (ctx.severidadePct). (M3)
+// Depois aplica progressividade por reincidência no ciclo, teto por ocorrência
+// e teto acumulado no ciclo. (M4). A explicação lista o que pesou (M5).
+// ctx: { minutos, severidadePct, severidadeNome, ocorrenciasAnteriores, impactoAcumuladoCiclo }
+function calcularImpactoRegra(regra, ctx = {}) {
+  const modo = regra.tipoImpacto || 'PERCENTUAL';
+  const partes = [];
+  let base = Number(regra.percentual) || 0;
+  let severidade = regra.severidade || null;
+
+  if (modo === 'FAIXA_MINUTOS') {
+    const min = Number(ctx.minutos) || 0;
+    const tol = Number(regra.toleranciaMin) || 0;
+    if (min <= tol) return { percentual: 0, severidade: null, explicacao: `${regra.nome}: ${min}min dentro da tolerância de ${tol}min — sem impacto` };
+    const faixas = Array.isArray(regra.faixasJson) ? regra.faixasJson : [];
+    const faixa = faixas.find((f) => min >= (Number(f.minMin) || 0) && (f.maxMin == null || min <= Number(f.maxMin)));
+    if (faixa) { base = Number(faixa.percentual) || 0; partes.push(faixa.rotulo || `${faixa.minMin}–${faixa.maxMin ?? '∞'}min`); }
+    else partes.push(`${min}min`); // sem faixa casada → usa o % base da regra
+  } else if (modo === 'SEVERIDADE') {
+    if (ctx.severidadePct != null) base = Number(ctx.severidadePct) || 0;
+    if (ctx.severidadeNome) { severidade = ctx.severidadeNome; partes.push(ctx.severidadeNome); }
+    else if (severidade) partes.push(severidade);
+  }
+
+  // Progressividade: a k-ésima ocorrência da regra no ciclo (k = anteriores+1);
+  // a partir de `reincidenciaAPartir`, soma incrementoPct por ocorrência excedente.
+  let impacto = base;
+  const k = (Number(ctx.ocorrenciasAnteriores) || 0) + 1;
+  const aPartir = regra.reincidenciaAPartir;
+  const incr = Number(regra.incrementoPct) || 0;
+  if (aPartir != null && incr > 0 && k >= aPartir) {
+    const add = incr * (k - aPartir + 1);
+    impacto = base + add;
+    partes.push(`${k}ª vez (+${r2(add)}%)`);
+  }
+
+  // Teto por ocorrência.
+  if (regra.tetoOcorrenciaPct != null) {
+    const teto = Number(regra.tetoOcorrenciaPct);
+    if (impacto > teto) { impacto = teto; partes.push(`teto ${teto}%/ocorrência`); }
+  }
+  // Teto acumulado no ciclo (limita o que resta até o teto).
+  if (regra.tetoCicloPct != null) {
+    const tetoC = Number(regra.tetoCicloPct);
+    const restante = Math.max(0, tetoC - (Number(ctx.impactoAcumuladoCiclo) || 0));
+    if (impacto > restante) { impacto = restante; partes.push(`teto ${tetoC}%/ciclo`); }
+  }
+
+  const explicacao = `${regra.nome}${partes.length ? ' · ' + partes.join(' · ') : ''}`;
+  return { percentual: r2(impacto), severidade, explicacao };
 }
 
 // Auditoria best-effort do módulo (empresaId injetado pela extension no create).
@@ -725,11 +808,24 @@ app.post('/api/bonificacao/ocorrencias', async (req, res) => {
     }
     const data = req.body?.data ? new Date(req.body.data) : new Date();
     if (isNaN(data.getTime())) return res.status(400).json({ error: 'Data inválida.' });
-    // Evento (M1: só minutos, quando vier) → Motor de Regras → impacto (% + explicação).
-    const evento = {};
+    // Evento → Motor de Regras → impacto (% + severidade + explicação).
     let minutosEvento = null;
-    if (req.body?.minutosEvento != null) { const m = parseInt(req.body.minutosEvento, 10); if (Number.isInteger(m)) { minutosEvento = m; evento.minutos = m; } }
-    const impacto = calcularImpactoRegra(tipo, evento);
+    if (req.body?.minutosEvento != null) { const m = parseInt(req.body.minutosEvento, 10); if (Number.isInteger(m)) minutosEvento = m; }
+    // Severidade (Desempenho): o admin pode escolher no lançamento; senão a padrão da regra.
+    let severidadePct = null, severidadeNome = null;
+    const sevId = req.body?.severidadeId ? parseInt(req.body.severidadeId, 10) : (tipo.severidadeId || null);
+    if (tipo.tipoImpacto === 'SEVERIDADE' && sevId) {
+      const sev = await prisma.bonificacaoSeveridade.findFirst({ where: { id: sevId } });
+      if (sev) { severidadePct = Number(sev.percentual); severidadeNome = sev.nome; }
+    }
+    // Reincidência/teto de ciclo: precisa das ocorrências anteriores da MESMA regra no ciclo.
+    let ocorrenciasAnteriores = 0, impactoAcumuladoCiclo = 0;
+    if ((tipo.reincidenciaAPartir != null || tipo.tetoCicloPct != null) && funcionarioId != null) {
+      const ant = await prisma.bonificacaoOcorrencia.findMany({ where: { funcionarioId, ano: am.ano, mes: am.mes, tipoId: tipo.id }, select: { percentual: true } });
+      ocorrenciasAnteriores = ant.length;
+      impactoAcumuladoCiclo = ant.reduce((s, o) => s + Number(o.percentual), 0);
+    }
+    const impacto = calcularImpactoRegra(tipo, { minutos: minutosEvento, severidadePct, severidadeNome, ocorrenciasAnteriores, impactoAcumuladoCiclo });
     // Idempotência opcional: mesmo evento reenviado não gera impacto duplicado.
     const idemp = req.body?.idempotencyKey ? String(req.body.idempotencyKey).slice(0, 160) : null;
     if (idemp) {
@@ -760,6 +856,65 @@ app.delete('/api/bonificacao/ocorrencias/:id', async (req, res) => {
     auditarBonif(req, 'OCORRENCIA_EXCLUIDA', { entidade: 'BonificacaoOcorrencia', entidadeId: id, antes: { funcionarioId: oc.funcionarioId, pilar: oc.pilar, percentual: Number(oc.percentual), nomeTipo: oc.nomeTipo, ano: oc.ano, mes: oc.mes } });
     res.json({ ok: true });
   } catch (err) { console.error('[bonificacao/ocorrencias DELETE]', err); res.status(500).json({ error: 'Erro ao excluir a ocorrência.' }); }
+});
+
+// ── Severidades (Desempenho) — M3 ──
+const BONI_SEVERIDADES_PADRAO = [
+  { nome: 'Leve', percentual: 5, cor: '#16a34a', ordem: 0 },
+  { nome: 'Média', percentual: 10, cor: '#d97706', ordem: 1 },
+  { nome: 'Grave', percentual: 20, cor: '#dc2626', ordem: 2 },
+  { nome: 'Crítica', percentual: 40, cor: '#7c2d12', ordem: 3 },
+];
+const severidadeJson = (s) => ({ id: s.id, nome: s.nome, percentual: Number(s.percentual), cor: s.cor || null, ordem: s.ordem, ativo: s.ativo });
+app.get('/api/bonificacao/severidades', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    let sev = await prisma.bonificacaoSeveridade.findMany({ orderBy: [{ ordem: 'asc' }, { id: 'asc' }] });
+    if (sev.length === 0) { await prisma.bonificacaoSeveridade.createMany({ data: BONI_SEVERIDADES_PADRAO }); sev = await prisma.bonificacaoSeveridade.findMany({ orderBy: [{ ordem: 'asc' }, { id: 'asc' }] }); }
+    res.json(sev.map(severidadeJson));
+  } catch (err) { console.error('[bonificacao/severidades GET]', err); res.status(500).json({ error: 'Erro ao carregar severidades.' }); }
+});
+app.put('/api/bonificacao/severidades', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const entrada = Array.isArray(req.body?.severidades) ? req.body.severidades : [];
+    const atuais = await prisma.bonificacaoSeveridade.findMany();
+    const norm = [];
+    entrada.forEach((s, i) => {
+      const nome = String(s?.nome ?? '').trim().slice(0, 40); if (!nome) return;
+      const idExist = Number.isInteger(s?.id) && atuais.some((a) => a.id === s.id) ? s.id : null;
+      norm.push({ id: idExist, nome, percentual: Math.max(0, Math.min(100, Number(s?.percentual) || 0)), cor: s?.cor ? String(s.cor).slice(0, 20) : null, ordem: i });
+    });
+    const manter = norm.filter((s) => s.id != null).map((s) => s.id);
+    await prisma.$transaction([
+      prisma.bonificacaoSeveridade.deleteMany(manter.length ? { where: { id: { notIn: manter } } } : {}),
+      ...norm.filter((s) => s.id != null).map((s) => prisma.bonificacaoSeveridade.update({ where: { id: s.id }, data: { nome: s.nome, percentual: s.percentual, cor: s.cor, ordem: s.ordem } })),
+      ...norm.filter((s) => s.id == null).map((s) => prisma.bonificacaoSeveridade.create({ data: { nome: s.nome, percentual: s.percentual, cor: s.cor, ordem: s.ordem } })),
+    ]);
+    auditarBonif(req, 'SEVERIDADES_ALTERADAS', { entidade: 'BonificacaoSeveridade' });
+    const sev = await prisma.bonificacaoSeveridade.findMany({ orderBy: [{ ordem: 'asc' }, { id: 'asc' }] });
+    res.json(sev.map(severidadeJson));
+  } catch (err) { console.error('[bonificacao/severidades PUT]', err); res.status(500).json({ error: 'Erro ao salvar severidades.' }); }
+});
+
+// Simula o impacto de uma regra num cenário, SEM gravar (M5).
+// body: { regra:{...campos da regra...}, ocorrencias?, minutos?, severidadePct? }
+app.post('/api/bonificacao/simular', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const regra = req.body?.regra || {};
+    const n = Math.max(1, Math.min(20, parseInt(req.body?.ocorrencias, 10) || 1));
+    const minutos = req.body?.minutos != null ? Number(req.body.minutos) : null;
+    const severidadePct = req.body?.severidadePct != null ? Number(req.body.severidadePct) : null;
+    const linhas = [];
+    let acum = 0;
+    for (let k = 0; k < n; k++) {
+      const imp = calcularImpactoRegra(regra, { minutos, severidadePct, ocorrenciasAnteriores: k, impactoAcumuladoCiclo: acum });
+      acum += imp.percentual;
+      linhas.push({ ocorrencia: k + 1, percentual: imp.percentual, explicacao: imp.explicacao });
+    }
+    res.json({ linhas, totalPct: r2(acum) });
+  } catch (err) { console.error('[bonificacao/simular]', err); res.status(500).json({ error: 'Erro ao simular.' }); }
 });
 
 // Fecha o mês: congela o cálculo num snapshot (relatório de pagamento).
@@ -5656,14 +5811,19 @@ app.post('/api/ponto/fechamento/sincronizar', async (req, res) => {
     for (const f of funcs) {
       const esp = await calcularEspelho(f.id, ano, mes);
       let teve = false;
+      let nAtrasoFunc = 0, acumAtrasoPct = 0; // reincidência/teto de ciclo do atraso
       for (const d of esp.dias) {
         const dataDia = new Date(brToUtcMs(ano, mes - 1, d.dia, 12, 0));
         const ref = `${String(d.dia).padStart(2, '0')}/${String(mes).padStart(2, '0')}`;
         if (d.situacao === 'falta' && tipoFalta) {
-          novas.push({ funcionarioId: f.id, ano, mes, tipoId: tipoFalta.id, nomeTipo: tipoFalta.nome, pilar: 'ASSIDUIDADE', percentual: tipoFalta.percentual, data: dataDia, observacao: `Ponto: falta em ${ref}`, origem: 'PONTO' });
+          const imp = calcularImpactoRegra(tipoFalta, {});
+          novas.push({ funcionarioId: f.id, ano, mes, tipoId: tipoFalta.id, nomeTipo: tipoFalta.nome, pilar: 'ASSIDUIDADE', percentual: imp.percentual, explicacao: imp.explicacao, data: dataDia, observacao: `Ponto: falta em ${ref}`, origem: 'PONTO', status: 'VALIDADA' });
           nFaltas++; teve = true;
         } else if (d.situacao === 'atraso' && tipoAtraso) {
-          novas.push({ funcionarioId: f.id, ano, mes, tipoId: tipoAtraso.id, nomeTipo: tipoAtraso.nome, pilar: 'ASSIDUIDADE', percentual: tipoAtraso.percentual, data: dataDia, observacao: `Ponto: atraso de ${d.atrasoMin} min em ${ref}`, origem: 'PONTO' });
+          // Motor: passa os minutos reais → escolhe a faixa (M2) + progressividade/teto (M4).
+          const imp = calcularImpactoRegra(tipoAtraso, { minutos: d.atrasoMin, ocorrenciasAnteriores: nAtrasoFunc, impactoAcumuladoCiclo: acumAtrasoPct });
+          nAtrasoFunc++; acumAtrasoPct += imp.percentual;
+          novas.push({ funcionarioId: f.id, ano, mes, tipoId: tipoAtraso.id, nomeTipo: tipoAtraso.nome, pilar: 'ASSIDUIDADE', percentual: imp.percentual, minutosEvento: d.atrasoMin, explicacao: imp.explicacao, data: dataDia, observacao: `Ponto: atraso de ${d.atrasoMin} min em ${ref}`, origem: 'PONTO', status: 'VALIDADA' });
           nAtrasos++; teve = true;
         }
       }

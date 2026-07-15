@@ -818,6 +818,8 @@ model BonificacaoTipoOcorrencia {
   toleranciaMin     Int?      // tolerância antes de aplicar (min) — M2
   faixaMinMin       Int?      // faixa de minutos: início inclusivo — M2
   faixaMaxMin       Int?      // faixa de minutos: fim inclusivo — M2
+  faixasJson        Json?     // FAIXA_MINUTOS: [{minMin,maxMin,percentual,rotulo}] — M2
+  severidadeId      Int?      // SEVERIDADE: severidade padrão da regra — M3
   reincidenciaAPartir Int?    // progressividade a partir da N-ésima ocorrência no ciclo — M4
   incrementoPct     Decimal?  @db.Decimal(5, 2) // incremento por reincidência — M4
   tetoOcorrenciaPct Decimal?  @db.Decimal(5, 2) // teto do impacto por ocorrência — M4
@@ -860,6 +862,22 @@ model BonificacaoOcorrencia {
 
   @@index([empresaId, ano, mes])
   @@index([funcionarioId, ano, mes])
+}
+
+// Severidades configuráveis (pilar Desempenho) — M3. O impacto de uma ocorrência
+// de severidade vem do % da severidade escolhida.
+model BonificacaoSeveridade {
+  id           Int      @id @default(autoincrement())
+  empresaId    Int
+  nome         String
+  percentual   Decimal  @db.Decimal(5, 2) // impacto padrão dessa severidade
+  cor          String?  // hex de identificação
+  ordem        Int      @default(0)
+  ativo        Boolean  @default(true)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([empresaId, ordem])
 }
 
 // Auditoria mínima do Programa de Benefícios (M1) — quem fez o quê, quando.
