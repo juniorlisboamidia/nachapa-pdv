@@ -1,5 +1,5 @@
 // Página PESSOAL da Bonificação (link privado do funcionário). Sem login — abre por
-// token secreto. Mostra: identidade, nível/XP, o resultado do mês e o ranking do time
+// token secreto. Mostra: identidade, carteira de Coins, o resultado do mês e o ranking do time
 // (com "você" destacado). CSS escopado em .be-root (prefixo be-), tema pelo SO.
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
@@ -94,6 +94,10 @@ const CSS = `
 .be-ach-prog{height:6px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line);overflow:hidden;margin-top:4px}
 .be-ach-prog i{display:block;height:100%;background:var(--xp)}
 .be-ach-meta{font-size:10.5px;color:var(--muted);font-weight:600;margin-top:3px}
+/* Carteira de Coins */
+.be-wallet{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.be-wallet-k{font-size:14px;font-weight:800;color:var(--ink)}
+.be-wallet-s{font-size:12.5px;color:var(--muted);margin-top:2px;max-width:280px}
 /* Mercado */
 .be-coins{display:inline-flex;align-items:center;gap:7px;background:linear-gradient(135deg,#F5C451,#D9A21B);color:#4A2F00;font-weight:850;border-radius:999px;padding:7px 15px;font-size:15px;box-shadow:var(--sh-sm)}
 .be-shop{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -159,12 +163,8 @@ export default function BonificacaoEu() {
   if (loading && !data) return <div className="be-root"><style>{CSS}</style><div className="be-state">Carregando…</div></div>
   if (erro) return <div className="be-root"><style>{CSS}</style><div className="be-state">{erro}</div></div>
 
-  const { loja, funcionario, nivel, meu, ranking = [], conquistas = [], conquistasResumo = { total: 0, desbloqueadas: 0 }, moedas = 0, mercado = [], meusResgates = [], ano, mes } = data || {}
-  const nv = nivel || {}
-  const xpNoNivel = Number(nv.xpNoNivel || 0)
-  const xpProximo = Number(nv.xpProximo || 0)
-  const faltam = Math.max(0, xpProximo - xpNoNivel)
-  const prog = Math.max(0, Math.min(100, Number(nv.progresso || 0)))
+  const { loja, funcionario, meu, ranking = [], conquistas = [], conquistasResumo = { total: 0, desbloqueadas: 0 }, coins, moedas = 0, mercado = [], meusResgates = [], ano, mes } = data || {}
+  const saldoCoins = Number(coins ?? moedas ?? 0)
   const mesNome = new Date(ano, (mes || 1) - 1, 1).toLocaleDateString('pt-BR', { month: 'long' })
   const pos = meu?.posicao
   const medalCls = pos && pos <= 3 ? MEDAL[pos] : ''
@@ -185,24 +185,14 @@ export default function BonificacaoEu() {
           {funcionario?.funcao && <div className="fx">{funcionario.funcao}</div>}
         </header>
 
-        {/* Nível + XP */}
-        <section className="be-lvl">
-          <div className="be-lvl-top">
-            <div className="be-badge">
-              <span className="lv">NÍVEL</span>
-              <span className="n be-tnum">{nv.nivel ?? 1}</span>
+        {/* Carteira de Coins */}
+        <section>
+          <div className="be-card be-wallet">
+            <div>
+              <div className="be-wallet-k">Sua carteira</div>
+              <div className="be-wallet-s">Junte Coins a cada fechamento e troque por prêmios no Mercado 🎁</div>
             </div>
-            <div className="be-lvl-info">
-              <div className="nome">{nv.nome || `Nível ${nv.nivel ?? 1}`}</div>
-              <div className="xp"><b className="be-tnum">{num(nv.xpTotal)}</b> XP acumulado</div>
-            </div>
-          </div>
-          <div className="be-bar">
-            <div className="be-bar-track"><div className="be-bar-fill" style={{ width: `${prog}%` }} /></div>
-            <div className="be-bar-meta">
-              <span><b className="be-tnum">{num(xpNoNivel)}</b> / {num(xpProximo)} XP</span>
-              <span>Faltam <b className="be-tnum">{num(faltam)}</b> p/ o Nível {(nv.nivel ?? 1) + 1}</span>
-            </div>
+            <span className="be-coins be-tnum">🪙 {num(saldoCoins)}</span>
           </div>
         </section>
 
@@ -229,7 +219,7 @@ export default function BonificacaoEu() {
             ) : (
               <div className="be-emptybox">Seu resultado deste mês ainda não foi lançado.</div>
             )}
-            <p className="be-hint">A cada fechamento você ganha <b>XP</b> pelo seu prêmio do mês — quanto melhor o resultado, mais rápido você sobe de nível. 🚀</p>
+            <p className="be-hint">A cada fechamento você ganha <b>🪙 Coins</b> proporcionais ao seu prêmio do mês — quanto melhor o resultado, mais Coins pra trocar por prêmios. 🚀</p>
           </div>
         </section>
 
@@ -250,7 +240,7 @@ export default function BonificacaoEu() {
                     <div className="be-ach-nm">{c.nome}</div>
                     {c.descricao && <div className="be-ach-ds">{c.descricao}</div>}
                     {on ? (
-                      <span className="be-rar" style={{ color: r.cor, background: r.cor + '22' }}>{r.label}{c.xpBonus > 0 ? ` · +${c.xpBonus} XP` : ''}</span>
+                      <span className="be-rar" style={{ color: r.cor, background: r.cor + '22' }}>{r.label}{(c.coinsBonus ?? c.xpBonus) > 0 ? ` · +${c.coinsBonus ?? c.xpBonus} 🪙` : ''}</span>
                     ) : p ? (
                       <>
                         <div className="be-ach-prog"><i style={{ width: pct + '%' }} /></div>
@@ -271,11 +261,11 @@ export default function BonificacaoEu() {
           <section>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 12 }}>
               <h2 className="be-sec-title" style={{ margin: 0 }}>Mercado de prêmios</h2>
-              <span className="be-coins be-tnum">🪙 {num(moedas)}</span>
+              <span className="be-coins be-tnum">🪙 {num(saldoCoins)}</span>
             </div>
             <div className="be-shop">
               {mercado.map((i) => {
-                const podeResgatar = !i.esgotado && moedas >= i.custo
+                const podeResgatar = !i.esgotado && saldoCoins >= i.custo
                 return (
                   <div key={i.id} className="be-shop-card">
                     <span className="be-shop-emo">{i.emoji}</span>
@@ -283,7 +273,7 @@ export default function BonificacaoEu() {
                     {i.descricao && <div className="be-shop-ds">{i.descricao}</div>}
                     <div className="be-shop-cost be-tnum">🪙 {num(i.custo)}</div>
                     <button type="button" className="be-shop-btn" disabled={!podeResgatar} onClick={() => setConfirmar(i)}>
-                      {i.esgotado ? 'Esgotado' : moedas >= i.custo ? 'Resgatar' : `Faltam ${num(i.custo - moedas)}`}
+                      {i.esgotado ? 'Esgotado' : saldoCoins >= i.custo ? 'Resgatar' : `Faltam ${num(i.custo - saldoCoins)}`}
                     </button>
                   </div>
                 )
@@ -341,7 +331,7 @@ export default function BonificacaoEu() {
           <div className="be-dlg" onClick={(e) => e.stopPropagation()}>
             <div style={{ fontSize: 38, marginBottom: 6 }}>{confirmar.emoji}</div>
             <h3>Resgatar {confirmar.nome}?</h3>
-            <p>Vão sair <b className="be-tnum">🪙 {num(confirmar.custo)} moedas</b> do seu saldo. A liderança avalia e te entrega o prêmio.</p>
+            <p>Vão sair <b className="be-tnum">🪙 {num(confirmar.custo)} Coins</b> do seu saldo. A liderança avalia e te entrega o prêmio.</p>
             <div className="be-dlg-row">
               <button type="button" className="no" onClick={() => setConfirmar(null)} disabled={resgatando}>Cancelar</button>
               <button type="button" className="ok" onClick={resgatar} disabled={resgatando}>{resgatando ? 'Resgatando…' : 'Confirmar'}</button>

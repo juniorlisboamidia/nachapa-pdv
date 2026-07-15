@@ -377,16 +377,16 @@ const BONI_NIVEIS_PADRAO = ['Aprendiz', 'Chapeiro', 'Chapa de Bronze', 'Chapa de
 
 // Conquistas (cards) padrão — semeadas na 1ª vez. Regras automáticas mapeáveis ao histórico.
 const BONI_RARIDADES = new Set(['COMUM', 'RARO', 'EPICO', 'LENDARIO']);
-const BONI_REGRAS = new Set(['XP_TOTAL', 'NIVEL', 'VITORIAS', 'PODIOS', 'MESES_ATIVOS', 'PRESENCA_100', 'SCORE_100', 'MANUAL']);
+const BONI_REGRAS = new Set(['VITORIAS', 'PODIOS', 'MESES_ATIVOS', 'PRESENCA_100', 'SCORE_100', 'MANUAL']);
 const BONI_CONQUISTAS_PADRAO = [
   { emoji: '🔥', nome: 'Primeira Chama', descricao: 'Participou do primeiro fechamento do mês.', raridade: 'COMUM', regra: 'MESES_ATIVOS', meta: 1, xpBonus: 50, ordem: 0 },
-  { emoji: '💯', nome: 'Presença Perfeita', descricao: 'Fechou um mês inteiro sem faltas nem atrasos (Presença 100%).', raridade: 'RARO', regra: 'PRESENCA_100', meta: 1, xpBonus: 100, ordem: 1 },
-  { emoji: '🎯', nome: 'Trabalho Impecável', descricao: 'Fechou um mês com Score 100%, sem nenhuma ocorrência.', raridade: 'RARO', regra: 'SCORE_100', meta: 1, xpBonus: 100, ordem: 2 },
+  { emoji: '💯', nome: 'Assiduidade Perfeita', descricao: 'Fechou um mês inteiro sem faltas nem atrasos (Assiduidade 100%).', raridade: 'RARO', regra: 'PRESENCA_100', meta: 1, xpBonus: 100, ordem: 1 },
+  { emoji: '🎯', nome: 'Trabalho Impecável', descricao: 'Fechou um mês com Desempenho 100%, sem nenhuma ocorrência.', raridade: 'RARO', regra: 'SCORE_100', meta: 1, xpBonus: 100, ordem: 2 },
   { emoji: '⭐', nome: 'Destaque do Mês', descricao: 'Ficou em 1º lugar no ranking pela primeira vez.', raridade: 'RARO', regra: 'VITORIAS', meta: 1, xpBonus: 150, ordem: 3 },
   { emoji: '🥇', nome: 'Pódio Frequente', descricao: 'Chegou ao Top 3 em 5 meses.', raridade: 'EPICO', regra: 'PODIOS', meta: 5, xpBonus: 200, ordem: 4 },
   { emoji: '🏆', nome: 'Tricampeão', descricao: 'Foi o destaque do mês 3 vezes.', raridade: 'EPICO', regra: 'VITORIAS', meta: 3, xpBonus: 300, ordem: 5 },
   { emoji: '🚀', nome: 'Veterano', descricao: 'Está há 6 meses somando pontos com a equipe.', raridade: 'EPICO', regra: 'MESES_ATIVOS', meta: 6, xpBonus: 200, ordem: 6 },
-  { emoji: '👑', nome: 'Lenda da Chapa', descricao: 'Alcançou o Nível 5.', raridade: 'LENDARIO', regra: 'NIVEL', meta: 5, xpBonus: 500, ordem: 7 },
+  { emoji: '👑', nome: 'Lenda da Chapa', descricao: 'Está há 1 ano somando resultados com a equipe.', raridade: 'LENDARIO', regra: 'MESES_ATIVOS', meta: 12, xpBonus: 500, ordem: 7 },
 ];
 const conquistaJson = (c, extra = {}) => ({ id: c.id, nome: c.nome, descricao: c.descricao || null, emoji: c.emoji, raridade: c.raridade, regra: c.regra, meta: c.meta, xpBonus: c.xpBonus, ativo: c.ativo, ordem: c.ordem, ...extra });
 
@@ -408,45 +408,35 @@ function metricasConquista(fechamentos) {
   }
   return m;
 }
-const valorRegraConquista = (regra, xp, nivel, met) => ({
-  XP_TOTAL: xp, NIVEL: nivel, VITORIAS: met.vitorias, PODIOS: met.podios,
+// XP e nível saíram: conquistas dessas regras (se existirem) só por concessão manual.
+const valorRegraConquista = (regra, met) => ({
+  VITORIAS: met.vitorias, PODIOS: met.podios,
   MESES_ATIVOS: met.mesesAtivos, PRESENCA_100: met.presenca100, SCORE_100: met.score100,
 }[regra]);
 
 // Avalia conquistas automáticas p/ a loja atual (tenantStore). Concede as recém-atingidas
-// (+ XP bônus) e repete até estabilizar (o XP bônus pode desbloquear conquistas de XP/nível).
+// e credita o bônus em COINS (bonificacaoMoeda). Uma passada basta (sem cascata de XP).
 async function avaliarConquistas() {
   const conquistas = await prisma.conquista.findMany({ where: { ativo: true } });
   const autos = conquistas.filter((c) => c.regra !== 'MANUAL' && BONI_REGRAS.has(c.regra));
   if (!autos.length) return 0;
-  const cfg = await prisma.bonificacaoConfig.findFirst();
-  const xpN = cfg?.xpPorNivel ?? 500;
-  const nomesNivel = (await prisma.bonificacaoNivel.findMany({ orderBy: [{ ordem: 'asc' }, { id: 'asc' }] })).map((n) => n.nome);
   const funcs = await prisma.funcionario.findMany();
   const met = metricasConquista(await prisma.bonificacaoFechamento.findMany());
   const jaTem = new Set((await prisma.conquistaDesbloqueada.findMany()).map((d) => `${d.conquistaId}:${d.funcionarioId}`));
   const VAZIO = { vitorias: 0, podios: 0, mesesAtivos: 0, presenca100: 0, score100: 0 };
   let total = 0;
-  for (let iter = 0; iter < 6; iter++) {
-    const xpMap = await xpPorFuncionario(); // re-lê a cada passada (bônus muda o XP)
-    const novos = [];
-    for (const f of funcs) {
-      const xp = xpMap.get(f.id) || 0;
-      const nivel = nivelDeXp(xp, xpN, nomesNivel).nivel;
-      const mf = met.get(f.id) || VAZIO;
-      for (const c of autos) {
-        const chave = `${c.id}:${f.id}`;
-        if (jaTem.has(chave)) continue;
-        const val = valorRegraConquista(c.regra, xp, nivel, mf);
-        if (val != null && val >= c.meta) novos.push({ c, f });
+  for (const f of funcs) {
+    const mf = met.get(f.id) || VAZIO;
+    for (const c of autos) {
+      const chave = `${c.id}:${f.id}`;
+      if (jaTem.has(chave)) continue;
+      const val = valorRegraConquista(c.regra, mf);
+      if (val != null && val >= c.meta) {
+        jaTem.add(chave);
+        await prisma.conquistaDesbloqueada.create({ data: { conquistaId: c.id, funcionarioId: f.id, origem: 'AUTO' } });
+        if (c.xpBonus > 0) await prisma.bonificacaoMoeda.create({ data: { funcionarioId: f.id, pontos: c.xpBonus, motivo: `Conquista: ${c.nome}`, origem: 'CONQUISTA' } });
+        total += 1;
       }
-    }
-    if (!novos.length) break;
-    for (const { c, f } of novos) {
-      jaTem.add(`${c.id}:${f.id}`);
-      await prisma.conquistaDesbloqueada.create({ data: { conquistaId: c.id, funcionarioId: f.id, origem: 'AUTO' } });
-      if (c.xpBonus > 0) await prisma.bonificacaoXp.create({ data: { funcionarioId: f.id, pontos: c.xpBonus, motivo: `Conquista: ${c.nome}`, origem: 'CONQUISTA' } });
-      total += 1;
     }
   }
   return total;
@@ -504,23 +494,7 @@ function motorCamposRegra(t) {
     prioridade: int(t?.prioridade) ?? 0,
   };
 }
-// Nível a partir do XP total (níveis uniformes de xpPorNivel).
-function nivelDeXp(totalXp, xpPorNivel, nomes) {
-  const xpN = Math.max(1, xpPorNivel || 500);
-  const xp = Math.max(0, totalXp || 0);
-  const nivel = Math.floor(xp / xpN) + 1;
-  const nome = (nomes && nomes[nivel - 1]) || `Nível ${nivel}`;
-  const noNivel = xp % xpN;
-  return { nivel, nome, xpTotal: xp, xpNoNivel: noNivel, xpProximo: xpN, progresso: Math.round((noNivel / xpN) * 100) };
-}
-// XP total por funcionário (mapa funcionarioId → soma). empresaId explícito p/ rota pública.
-async function xpPorFuncionario(where = {}) {
-  const g = await prisma.bonificacaoXp.groupBy({ by: ['funcionarioId'], _sum: { pontos: true }, where });
-  const m = new Map();
-  for (const r of g) m.set(r.funcionarioId, r._sum.pontos || 0);
-  return m;
-}
-// Saldo de moedas por funcionário (mapa funcionarioId → soma do ledger). empresaId explícito p/ rota pública.
+// Saldo de Coins por funcionário (mapa funcionarioId → soma do ledger). empresaId explícito p/ rota pública.
 async function moedasPorFuncionario(where = {}) {
   const g = await prisma.bonificacaoMoeda.groupBy({ by: ['funcionarioId'], _sum: { pontos: true }, where });
   const m = new Map();
@@ -934,16 +908,13 @@ app.post('/api/bonificacao/fechar', async (req, res) => {
     const f = await prisma.bonificacaoFechamento.create({
       data: { ano: am.ano, mes: am.mes, coletivaPct, itensJson: rows, totalGeral, fechadoPor: req.user?.nome || null },
     });
-    // Concede XP do mês (1 XP por R$ do total). Removido se o mês for reaberto.
-    const xpData = rows.filter((r) => r.totalRs > 0).map((r) => ({ funcionarioId: r.funcionarioId, pontos: Math.round(r.totalRs), motivo: `Fechamento ${String(am.mes).padStart(2, '0')}/${am.ano}`, origem: 'FECHAMENTO', ano: am.ano, mes: am.mes }));
-    if (xpData.length) await prisma.bonificacaoXp.createMany({ data: xpData });
-    // Credita MOEDAS do mês (permanentes — 1x só; reabrir NÃO estorna, pois podem já ter sido gastas).
+    // Credita COINS do mês (permanentes — 1x só; reabrir NÃO estorna, pois podem já ter sido gastas).
     const moedasPorReal = Number(cfgFech?.moedasPorReal ?? 1);
     if (moedasPorReal > 0 && !(await prisma.bonificacaoMoeda.findFirst({ where: { origem: 'FECHAMENTO', ano: am.ano, mes: am.mes } }))) {
       const moedaData = rows.map((r) => ({ funcionarioId: r.funcionarioId, pontos: Math.round(r.totalRs * moedasPorReal), motivo: `Fechamento ${String(am.mes).padStart(2, '0')}/${am.ano}`, origem: 'FECHAMENTO', ano: am.ano, mes: am.mes })).filter((d) => d.pontos > 0);
       if (moedaData.length) await prisma.bonificacaoMoeda.createMany({ data: moedaData });
     }
-    // Desbloqueia conquistas atingidas com o novo histórico/XP (não bloqueia o fechamento se falhar).
+    // Desbloqueia conquistas atingidas com o novo histórico (não bloqueia o fechamento se falhar).
     let novasConquistas = 0;
     try { novasConquistas = await avaliarConquistas(); } catch (e) { console.error('[conquistas/fechar]', e); }
     res.status(201).json({ ok: true, fechadoEm: f.fechadoEm, totalGeral, funcionarios: rows, novasConquistas });
@@ -956,63 +927,20 @@ app.post('/api/bonificacao/reabrir', async (req, res) => {
   const am = lerAnoMesBonif(req, res); if (!am) return;
   try {
     await prisma.bonificacaoFechamento.deleteMany({ where: { ano: am.ano, mes: am.mes } });
-    await prisma.bonificacaoXp.deleteMany({ where: { origem: 'FECHAMENTO', ano: am.ano, mes: am.mes } }); // devolve o XP concedido no fechamento
+    // Coins do fechamento NÃO são estornados na reabertura (podem já ter sido gastos no Mercado).
     res.json({ ok: true });
   } catch (err) { console.error('[bonificacao/reabrir]', err); res.status(500).json({ error: 'Erro ao reabrir o mês.' }); }
 });
 
-// ===== Bonificação — XP / Níveis / link privado (ADMIN) =====
-// Equipe com XP total, nível e link privado.
+// ===== Bonificação — Coins / link privado (ADMIN) =====
+// Equipe com saldo de Coins e link privado.
 app.get('/api/bonificacao/equipe', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
   try {
-    const c = await prisma.bonificacaoConfig.findFirst();
-    const xpN = c?.xpPorNivel ?? 500;
-    const niveis = (await prisma.bonificacaoNivel.findMany({ orderBy: [{ ordem: 'asc' }, { id: 'asc' }] })).map((n) => n.nome);
     const funcionarios = await prisma.funcionario.findMany({ orderBy: [{ status: 'asc' }, { nome: 'asc' }] });
-    const xpMap = await xpPorFuncionario();
     const moedaMap = await moedasPorFuncionario();
-    res.json(funcionarios.map((f) => {
-      const total = xpMap.get(f.id) || 0;
-      const nv = nivelDeXp(total, xpN, niveis);
-      return { id: f.id, nome: f.nome, funcao: f.funcao || null, status: f.status, tokenPrivado: f.tokenPrivado || null, xpTotal: total, nivel: nv.nivel, nivelNome: nv.nome, progresso: nv.progresso, xpNoNivel: nv.xpNoNivel, xpProximo: nv.xpProximo, moedas: moedaMap.get(f.id) || 0 };
-    }));
+    res.json(funcionarios.map((f) => ({ id: f.id, nome: f.nome, funcao: f.funcao || null, status: f.status, tokenPrivado: f.tokenPrivado || null, coins: moedaMap.get(f.id) || 0, moedas: moedaMap.get(f.id) || 0 })));
   } catch (err) { console.error('[bonificacao/equipe]', err); res.status(500).json({ error: 'Erro ao carregar a equipe.' }); }
-});
-
-// Concede/desconta XP manual.
-app.post('/api/bonificacao/xp', async (req, res) => {
-  if (!exigirAdmin(req, res)) return;
-  try {
-    const funcionarioId = parseInt(req.body?.funcionarioId, 10);
-    const pontos = parseInt(req.body?.pontos, 10);
-    if (!Number.isFinite(pontos) || pontos === 0) return res.status(400).json({ error: 'Informe os pontos de XP (pode ser negativo).' });
-    const func = await prisma.funcionario.findFirst({ where: { id: funcionarioId } });
-    if (!func) return res.status(404).json({ error: 'Funcionário não encontrado.' });
-    await prisma.bonificacaoXp.create({ data: { funcionarioId, pontos, motivo: req.body?.motivo ? String(req.body.motivo).slice(0, 200) : null, origem: 'MANUAL' } });
-    res.status(201).json({ ok: true });
-  } catch (err) { console.error('[bonificacao/xp POST]', err); res.status(500).json({ error: 'Erro ao lançar XP.' }); }
-});
-
-// Extrato de XP de um funcionário.
-app.get('/api/bonificacao/xp/:funcionarioId', async (req, res) => {
-  if (!exigirAdmin(req, res)) return;
-  try {
-    const funcionarioId = parseInt(req.params.funcionarioId, 10);
-    const lista = await prisma.bonificacaoXp.findMany({ where: { funcionarioId }, orderBy: { criadoEm: 'desc' }, take: 60 });
-    res.json(lista.map((x) => ({ id: x.id, pontos: x.pontos, motivo: x.motivo, origem: x.origem, criadoEm: x.criadoEm })));
-  } catch (err) { console.error('[bonificacao/xp GET]', err); res.status(500).json({ error: 'Erro ao carregar o XP.' }); }
-});
-
-app.delete('/api/bonificacao/xp/:id', async (req, res) => {
-  if (!exigirAdmin(req, res)) return;
-  try {
-    const id = parseInt(req.params.id, 10);
-    const x = await prisma.bonificacaoXp.findFirst({ where: { id } });
-    if (!x) return res.status(404).json({ error: 'Lançamento não encontrado.' });
-    await prisma.bonificacaoXp.delete({ where: { id } });
-    res.json({ ok: true });
-  } catch (err) { console.error('[bonificacao/xp DELETE]', err); res.status(500).json({ error: 'Erro ao excluir o XP.' }); }
 });
 
 // ===== Bonificação — MOEDAS (economia do mercado) (ADMIN) =====
@@ -1274,7 +1202,7 @@ app.get('/api/bonificacao/conquistas/:id/desbloqueios', async (req, res) => {
   } catch (err) { console.error('[bonificacao/conquistas/desbloqueios]', err); res.status(500).json({ error: 'Erro ao carregar.' }); }
 });
 
-// Concede uma conquista manualmente a um funcionário (idempotente; credita o XP bônus).
+// Concede uma conquista manualmente a um funcionário (idempotente; credita o bônus em Coins).
 app.post('/api/bonificacao/conquistas/:id/conceder', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
   try {
@@ -1286,12 +1214,12 @@ app.post('/api/bonificacao/conquistas/:id/conceder', async (req, res) => {
     if (!func) return res.status(404).json({ error: 'Funcionário não encontrado.' });
     if (await prisma.conquistaDesbloqueada.findFirst({ where: { conquistaId, funcionarioId } })) return res.json({ ok: true, jaTinha: true });
     await prisma.conquistaDesbloqueada.create({ data: { conquistaId, funcionarioId, origem: 'MANUAL' } });
-    if (c.xpBonus > 0) await prisma.bonificacaoXp.create({ data: { funcionarioId, pontos: c.xpBonus, motivo: `Conquista: ${c.nome}`, origem: 'CONQUISTA' } });
+    if (c.xpBonus > 0) await prisma.bonificacaoMoeda.create({ data: { funcionarioId, pontos: c.xpBonus, motivo: `Conquista: ${c.nome}`, origem: 'CONQUISTA' } });
     res.status(201).json({ ok: true });
   } catch (err) { console.error('[bonificacao/conquistas/conceder]', err); res.status(500).json({ error: 'Erro ao conceder a conquista.' }); }
 });
 
-// Revoga um desbloqueio (corrige um erro). Não estorna o XP já creditado.
+// Revoga um desbloqueio (corrige um erro). Não estorna os Coins já creditados.
 app.delete('/api/bonificacao/conquistas/desbloqueio/:id', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
   try {
@@ -1374,10 +1302,6 @@ app.get('/api/public/eu/:token', async (req, res) => {
       rows = calcularLinhasBonificacao(fs, sep.individuais, coletivaPct, t);
     }
     const meu = rows.find((r) => r.funcionarioId === func.id) || null;
-    const niveis = (await prisma.bonificacaoNivel.findMany({ where: { empresaId }, orderBy: [{ ordem: 'asc' }, { id: 'asc' }] })).map((n) => n.nome);
-    const xpMap = await xpPorFuncionario({ empresaId, funcionarioId: func.id });
-    const xpTotal = xpMap.get(func.id) || 0;
-    const nv = nivelDeXp(xpTotal, cfg.xpPorNivel ?? 500, niveis);
     // Mural de conquistas: desbloqueadas + bloqueadas com progresso (métricas do histórico da loja).
     const conquistas = await prisma.conquista.findMany({ where: { empresaId, ativo: true }, orderBy: [{ ordem: 'asc' }, { id: 'asc' }] });
     const desbMap = new Map((await prisma.conquistaDesbloqueada.findMany({ where: { empresaId, funcionarioId: func.id } })).map((d) => [d.conquistaId, d.desbloqueadoEm]));
@@ -1386,12 +1310,12 @@ app.get('/api/public/eu/:token', async (req, res) => {
       const unlocked = desbMap.has(c.id);
       let progresso = null;
       if (!unlocked && c.regra !== 'MANUAL') {
-        const val = valorRegraConquista(c.regra, xpTotal, nv.nivel, mf) || 0;
+        const val = valorRegraConquista(c.regra, mf) || 0;
         progresso = { atual: Math.min(val, c.meta), meta: c.meta };
       }
-      return { id: c.id, nome: c.nome, descricao: c.descricao || null, emoji: c.emoji, raridade: c.raridade, xpBonus: c.xpBonus, desbloqueada: unlocked, desbloqueadoEm: unlocked ? desbMap.get(c.id) : null, progresso };
+      return { id: c.id, nome: c.nome, descricao: c.descricao || null, emoji: c.emoji, raridade: c.raridade, coinsBonus: c.xpBonus, desbloqueada: unlocked, desbloqueadoEm: unlocked ? desbMap.get(c.id) : null, progresso };
     });
-    // Mercado: saldo de moedas, itens à venda e histórico de resgates do funcionário.
+    // Mercado: saldo de Coins, itens à venda e histórico de resgates do funcionário.
     const saldoMoedas = await saldoMoedasDe(func.id, empresaId);
     const itens = await prisma.mercadoItem.findMany({ where: { empresaId, ativo: true }, orderBy: [{ ordem: 'asc' }, { id: 'asc' }] });
     const meusResgates = await prisma.mercadoResgate.findMany({ where: { empresaId, funcionarioId: func.id }, orderBy: { criadoEm: 'desc' }, take: 20 });
@@ -1399,11 +1323,11 @@ app.get('/api/public/eu/:token', async (req, res) => {
       loja: { nome: loja?.nome || 'Loja', logoDataUrl: loja?.logoDataUrl || null },
       ano, mes, coletivaPct,
       funcionario: { nome: func.nome, funcao: func.funcao || null },
-      nivel: nv,
       meu: meu ? rowPublicoBonif(meu) : null,
       ranking: rows.map(rowPublicoBonif).sort((a, b) => (a.posicao || 99) - (b.posicao || 99)),
       conquistas: conquistasOut,
       conquistasResumo: { total: conquistasOut.length, desbloqueadas: desbMap.size },
+      coins: saldoMoedas,
       moedas: saldoMoedas,
       mercado: itens.map((i) => ({ id: i.id, nome: i.nome, descricao: i.descricao || null, emoji: i.emoji, custo: i.custo, esgotado: i.estoque != null && i.estoque <= 0 })),
       meusResgates: meusResgates.map((r) => ({ id: r.id, itemNome: r.itemNome, itemEmoji: r.itemEmoji, custo: r.custo, status: r.status, criadoEm: r.criadoEm })),

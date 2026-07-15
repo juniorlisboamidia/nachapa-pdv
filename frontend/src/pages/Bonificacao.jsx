@@ -336,11 +336,10 @@ function ColetivaModal({ tipos, ano, mes, onClose, onLancou, toast }) {
   )
 }
 
-/* ───────────── Aba: Equipe (XP, níveis, link privado) ───────────── */
+/* ───────────── Aba: Equipe (Coins, link privado) ───────────── */
 function AbaEquipe({ toast }) {
   const [lista, setLista] = useState(null)
-  const [xpSel, setXpSel] = useState(null)       // funcionário do modal de XP
-  const [moedaSel, setMoedaSel] = useState(null) // funcionário do modal de moedas
+  const [moedaSel, setMoedaSel] = useState(null) // funcionário do modal de Coins
 
   function carregar() {
     api.get('/bonificacao/equipe')
@@ -368,7 +367,7 @@ function AbaEquipe({ toast }) {
   return (
     <div>
       <div style={{ fontSize: 12.5, color: '#777', marginBottom: 12 }}>
-        Cada funcionário sobe de nível acumulando <strong>XP</strong> e junta <strong>🪙 moedas</strong> pra gastar no Mercado — ambos creditados ao fechar o mês. O <strong>link privado</strong> abre a página pessoal dele (nível, XP, conquistas e mercado), sem login.
+        Cada funcionário junta <strong>🪙 Coins</strong> ao fechar o mês (proporcionais ao prêmio) e por conquistas, pra gastar no Mercado. O <strong>link privado</strong> abre a página pessoal dele (Coins, conquistas e mercado), sem login.
       </div>
       {lista.length === 0 ? (
         <div className="empty-state" style={{ padding: '28px 16px' }}>Nenhum funcionário cadastrado. Cadastre a equipe em Dep. Pessoal › Equipe.</div>
@@ -378,9 +377,7 @@ function AbaEquipe({ toast }) {
             <thead>
               <tr>
                 <th>Funcionário</th>
-                <th>Nível</th>
-                <th style={{ textAlign: 'right' }}>XP total</th>
-                <th style={{ textAlign: 'right' }}>🪙 Moedas</th>
+                <th style={{ textAlign: 'right' }}>🪙 Coins</th>
                 <th style={{ textAlign: 'right' }}>Ações</th>
               </tr>
             </thead>
@@ -391,23 +388,9 @@ function AbaEquipe({ toast }) {
                     <div style={{ fontWeight: 600 }}>{f.nome} {f.status !== 'ATIVO' && <span className="badge badge-gray" style={{ marginLeft: 4 }}>inativo</span>}</div>
                     {f.funcao && <div style={{ fontSize: 11.5, color: '#999' }}>{f.funcao}</div>}
                   </td>
-                  <td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ width: 26, height: 26, borderRadius: '50%', background: 'linear-gradient(150deg,#7C5CFF,#5B3EE0)', color: '#fff', display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 12, flexShrink: 0 }}>{f.nivel}</span>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>{f.nivelNome}</div>
-                        <div style={{ height: 5, width: 90, borderRadius: 999, background: '#eee', overflow: 'hidden', marginTop: 3 }}>
-                          <div style={{ height: '100%', width: `${Math.max(0, Math.min(100, f.progresso || 0))}%`, background: '#7C5CFF' }} />
-                        </div>
-                      </div>
-                    </div>
-                  </td>
-                  <td style={{ textAlign: 'right', fontWeight: 700 }}>{new Intl.NumberFormat('pt-BR').format(f.xpTotal)} <span style={{ color: '#aaa', fontWeight: 400, fontSize: 11 }}>XP</span></td>
-                  <td style={{ textAlign: 'right', fontWeight: 700, color: '#B8860B' }}>{new Intl.NumberFormat('pt-BR').format(f.moedas || 0)}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 800, color: '#B8860B', fontSize: 15 }}>{new Intl.NumberFormat('pt-BR').format(f.coins ?? f.moedas ?? 0)}</td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => setXpSel(f)}>Dar XP</button>
-                    {' '}
-                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => setMoedaSel(f)}>🪙 Moedas</button>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => setMoedaSel(f)}>🪙 Coins</button>
                     {' '}
                     <button type="button" className="btn btn-secondary btn-sm" onClick={() => copiarLink(f)} title="Copiar link privado da página pessoal">🔗 Link</button>
                     {f.tokenPrivado && <button type="button" className="btn btn-secondary btn-sm" onClick={() => copiarLink(f, true)} title="Gerar novo link (invalida o atual)" style={{ marginLeft: 4 }}>↻</button>}
@@ -419,7 +402,6 @@ function AbaEquipe({ toast }) {
         </div>
       )}
 
-      {xpSel && <XpModal func={xpSel} onClose={() => setXpSel(null)} onMudou={carregar} toast={toast} />}
       {moedaSel && <MoedasModal func={moedaSel} onClose={() => setMoedaSel(null)} onMudou={carregar} toast={toast} />}
     </div>
   )
@@ -438,12 +420,12 @@ function MoedasModal({ func, onClose, onMudou, toast }) {
 
   async function lancar(sinal) {
     const p = Math.abs(parseInt(pontos, 10)) * sinal
-    if (!Number.isFinite(p) || p === 0) return toast({ message: 'Informe a quantidade de moedas.', type: 'error' })
+    if (!Number.isFinite(p) || p === 0) return toast({ message: 'Informe a quantidade de Coins.', type: 'error' })
     setSalvando(true)
     try {
       await api.post('/bonificacao/moedas', { funcionarioId: func.id, pontos: p, motivo })
       setPontos(''); setMotivo(''); carregar(); onMudou()
-    } catch (err) { toast({ message: err?.response?.data?.error ?? 'Erro ao lançar moedas.', type: 'error' }) }
+    } catch (err) { toast({ message: err?.response?.data?.error ?? 'Erro ao lançar Coins.', type: 'error' }) }
     finally { setSalvando(false) }
   }
   async function excluir(id) {
@@ -459,14 +441,14 @@ function MoedasModal({ func, onClose, onMudou, toast }) {
       <div className="modal modal-card-large" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <div>
-            <div style={{ fontWeight: 700, fontSize: 16 }}>🪙 Moedas de {func.nome}</div>
-            <div style={{ fontSize: 12, color: '#999' }}>Saldo atual: <strong style={{ color: '#B8860B' }}>{nf.format(dados?.saldo ?? 0)} moedas</strong></div>
+            <div style={{ fontWeight: 700, fontSize: 16 }}>🪙 Coins de {func.nome}</div>
+            <div style={{ fontSize: 12, color: '#999' }}>Saldo atual: <strong style={{ color: '#B8860B' }}>{nf.format(dados?.saldo ?? 0)} Coins</strong></div>
           </div>
           <button type="button" className="btn btn-secondary btn-sm" onClick={onClose}>Fechar</button>
         </div>
 
         <div className="ent-edit" style={{ marginTop: 4 }}>
-          <div className="ent-edit-titulo">Ajustar moedas</div>
+          <div className="ent-edit-titulo">Ajustar Coins</div>
           <div className="form-grid-2">
             <div className="form-group">
               <label className="form-label">Quantidade</label>
@@ -483,15 +465,15 @@ function MoedasModal({ func, onClose, onMudou, toast }) {
           </div>
         </div>
 
-        <div className="section-title">Extrato de moedas</div>
+        <div className="section-title">Extrato de Coins</div>
         {!dados ? (
           <div className="loading-state">Carregando…</div>
         ) : dados.extrato.length === 0 ? (
-          <div className="empty-state" style={{ padding: '18px 16px' }}>Nenhuma movimentação de moedas ainda.</div>
+          <div className="empty-state" style={{ padding: '18px 16px' }}>Nenhuma movimentação de Coins ainda.</div>
         ) : (
           <div className="table-card">
             <table className="hb-table hb-table-compact">
-              <thead><tr><th>Data</th><th>Motivo</th><th>Origem</th><th style={{ textAlign: 'right' }}>Moedas</th><th></th></tr></thead>
+              <thead><tr><th>Data</th><th>Motivo</th><th>Origem</th><th style={{ textAlign: 'right' }}>Coins</th><th></th></tr></thead>
               <tbody>
                 {dados.extrato.map((x) => (
                   <tr key={x.id}>
@@ -499,90 +481,6 @@ function MoedasModal({ func, onClose, onMudou, toast }) {
                     <td style={{ color: '#666', fontSize: 12 }}>{x.motivo || '—'}</td>
                     <td><span className="badge badge-gray">{ORIGEM[x.origem] || x.origem}</span></td>
                     <td style={{ textAlign: 'right', fontWeight: 700, color: x.pontos < 0 ? '#7f6300' : '#0F8A54' }}>{x.pontos > 0 ? '+' : ''}{nf.format(x.pontos)}</td>
-                    <td style={{ textAlign: 'right' }}>{x.origem === 'MANUAL' && <button type="button" className="btn btn-danger btn-sm" onClick={() => excluir(x.id)}>Excluir</button>}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function XpModal({ func, onClose, onMudou, toast }) {
-  const [extrato, setExtrato] = useState(null)
-  const [pontos, setPontos] = useState('')
-  const [motivo, setMotivo] = useState('')
-  const [salvando, setSalvando] = useState(false)
-
-  function carregar() {
-    api.get(`/bonificacao/xp/${func.id}`).then((r) => setExtrato(r.data)).catch(() => setExtrato([]))
-  }
-  useEffect(carregar, [func.id]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  async function lancar() {
-    const p = parseInt(pontos, 10)
-    if (!Number.isFinite(p) || p === 0) return toast({ message: 'Informe os pontos (pode ser negativo).', type: 'error' })
-    setSalvando(true)
-    try {
-      await api.post('/bonificacao/xp', { funcionarioId: func.id, pontos: p, motivo })
-      setPontos(''); setMotivo(''); carregar(); onMudou()
-    } catch (err) { toast({ message: err?.response?.data?.error ?? 'Erro ao lançar XP.', type: 'error' }) }
-    finally { setSalvando(false) }
-  }
-  async function excluir(id) {
-    try { await api.delete(`/bonificacao/xp/${id}`); carregar(); onMudou() }
-    catch (err) { toast({ message: err?.response?.data?.error ?? 'Erro ao excluir.', type: 'error' }) }
-  }
-
-  const dataHora = (iso) => { const d = new Date(iso); return isNaN(d) ? '—' : d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }) }
-
-  return (
-    <div className="modal-overlay">
-      <div className="modal modal-card-large" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 16 }}>XP de {func.nome}</div>
-            <div style={{ fontSize: 12, color: '#999' }}>Nível {func.nivel} · {func.nivelNome} · {new Intl.NumberFormat('pt-BR').format(func.xpTotal)} XP</div>
-          </div>
-          <button type="button" className="btn btn-secondary btn-sm" onClick={onClose}>Fechar</button>
-        </div>
-
-        <div className="ent-edit" style={{ marginTop: 4 }}>
-          <div className="ent-edit-titulo">Lançar XP</div>
-          <div className="form-grid-2">
-            <div className="form-group">
-              <label className="form-label">Pontos (negativo desconta)</label>
-              <input type="number" className="form-input" step="1" inputMode="numeric" value={pontos} onChange={(e) => setPontos(e.target.value)} placeholder="Ex.: 100" />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Motivo (opcional)</label>
-              <input className="form-input" value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ex.: elogio de cliente" />
-            </div>
-          </div>
-          <div className="ent-edit-actions">
-            <button type="button" className="btn btn-primary btn-sm" onClick={lancar} disabled={salvando}>{salvando ? 'Lançando…' : 'Lançar XP'}</button>
-          </div>
-        </div>
-
-        <div className="section-title">Extrato de XP</div>
-        {extrato === null ? (
-          <div className="loading-state">Carregando…</div>
-        ) : extrato.length === 0 ? (
-          <div className="empty-state" style={{ padding: '18px 16px' }}>Nenhum lançamento de XP ainda.</div>
-        ) : (
-          <div className="table-card">
-            <table className="hb-table hb-table-compact">
-              <thead><tr><th>Data</th><th>Motivo</th><th>Origem</th><th style={{ textAlign: 'right' }}>XP</th><th></th></tr></thead>
-              <tbody>
-                {extrato.map((x) => (
-                  <tr key={x.id}>
-                    <td>{dataHora(x.criadoEm)}</td>
-                    <td style={{ color: '#666', fontSize: 12 }}>{x.motivo || '—'}</td>
-                    <td>{x.origem === 'FECHAMENTO' ? <span className="badge badge-gray">Fechamento</span> : <span className="badge">Manual</span>}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 700, color: x.pontos < 0 ? '#7f6300' : '#0F8A54' }}>{x.pontos > 0 ? '+' : ''}{new Intl.NumberFormat('pt-BR').format(x.pontos)}</td>
                     <td style={{ textAlign: 'right' }}>{x.origem === 'MANUAL' && <button type="button" className="btn btn-danger btn-sm" onClick={() => excluir(x.id)}>Excluir</button>}</td>
                   </tr>
                 ))}
@@ -605,13 +503,11 @@ const RARIDADES = [
 const RAR = Object.fromEntries(RARIDADES.map((r) => [r.id, r]))
 const REGRAS = [
   { id: 'MANUAL', label: 'Concedida manualmente', unit: '' },
-  { id: 'XP_TOTAL', label: 'XP acumulado', unit: 'XP' },
-  { id: 'NIVEL', label: 'Nível alcançado', unit: 'º nível' },
   { id: 'VITORIAS', label: 'Vitórias (1º lugar)', unit: 'vitórias' },
   { id: 'PODIOS', label: 'Pódios (Top 3)', unit: 'pódios' },
   { id: 'MESES_ATIVOS', label: 'Meses ativos', unit: 'meses' },
-  { id: 'PRESENCA_100', label: 'Meses com Presença 100%', unit: 'meses' },
-  { id: 'SCORE_100', label: 'Meses com Score 100%', unit: 'meses' },
+  { id: 'PRESENCA_100', label: 'Meses com Assiduidade 100%', unit: 'meses' },
+  { id: 'SCORE_100', label: 'Meses com Desempenho 100%', unit: 'meses' },
 ]
 const REG = Object.fromEntries(REGRAS.map((r) => [r.id, r]))
 const regraTexto = (c) => c.regra === 'MANUAL' ? 'Concedida manualmente' : `${REG[c.regra]?.label || c.regra} ≥ ${c.meta}${REG[c.regra]?.unit ? ' ' + REG[c.regra].unit : ''}`
@@ -647,7 +543,7 @@ function AbaConquistas({ toast }) {
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 6 }}>
         <div style={{ fontSize: 12.5, color: '#777', maxWidth: 520 }}>
-          Cards que o funcionário desbloqueia. As de regra automática são concedidas ao <strong>fechar o mês</strong> (ou ao recalcular); as <strong>manuais</strong>, você concede à mão. Cada uma pode dar XP bônus.
+          Cards que o funcionário desbloqueia. As de regra automática são concedidas ao <strong>fechar o mês</strong> (ou ao recalcular); as <strong>manuais</strong>, você concede à mão. Cada uma pode dar 🪙 Coins bônus.
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button type="button" className="btn btn-secondary" onClick={recalcular} disabled={recalc}>{recalc ? 'Recalculando…' : '↻ Recalcular'}</button>
@@ -673,7 +569,7 @@ function AbaConquistas({ toast }) {
                 {c.descricao && <div style={{ fontSize: 12, color: '#777', lineHeight: 1.4 }}>{c.descricao}</div>}
                 <div style={{ fontSize: 11.5, color: '#555' }}>🎯 {regraTexto(c)}</div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, fontSize: 11.5, color: '#999' }}>
-                  <span>{c.xpBonus > 0 ? <span style={{ color: '#7C5CFF', fontWeight: 700 }}>+{c.xpBonus} XP</span> : 'sem XP'}</span>
+                  <span>{c.xpBonus > 0 ? <span style={{ color: '#B8860B', fontWeight: 700 }}>+{c.xpBonus} 🪙</span> : 'sem bônus'}</span>
                   <span>👥 {c.desbloqueada}</span>
                 </div>
                 <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
@@ -690,7 +586,7 @@ function AbaConquistas({ toast }) {
       {edit && <ConquistaModal conquista={edit} onClose={() => setEdit(null)} onSalvou={() => { setEdit(null); carregar() }} toast={toast} />}
       {conceder && <ConcederModal conquista={conceder} onClose={() => setConceder(null)} onMudou={carregar} toast={toast} />}
       <ConfirmDialog open={!!excluir} title="Excluir conquista" message={excluir ? `Excluir “${excluir.nome}”?` : ''}
-        description="Os desbloqueios dessa conquista também serão removidos. O XP já creditado não é estornado." variant="danger"
+        description="Os desbloqueios dessa conquista também serão removidos. Os Coins já creditados não são estornados." variant="danger"
         confirmLabel="Excluir" cancelLabel="Cancelar" onConfirm={excluirConfirm} onCancel={() => setExcluir(null)} />
     </div>
   )
@@ -747,7 +643,7 @@ function ConquistaModal({ conquista, onClose, onSalvou, toast }) {
             </select>
           </div>
           <div className="form-group">
-            <label className="form-label">XP bônus</label>
+            <label className="form-label">🪙 Coins bônus</label>
             <input type="number" className="form-input" min="0" step="10" value={f.xpBonus} onChange={(e) => set('xpBonus', e.target.value)} />
           </div>
         </div>
@@ -810,7 +706,7 @@ function ConcederModal({ conquista, onClose, onMudou, toast }) {
         <div className="modal-header">
           <div>
             <div style={{ fontWeight: 700, fontSize: 16 }}>{conquista.emoji} {conquista.nome}</div>
-            <div style={{ fontSize: 12, color: '#999' }}>{regraTexto(conquista)}{conquista.xpBonus > 0 ? ` · +${conquista.xpBonus} XP` : ''}</div>
+            <div style={{ fontSize: 12, color: '#999' }}>{regraTexto(conquista)}{conquista.xpBonus > 0 ? ` · +${conquista.xpBonus} 🪙` : ''}</div>
           </div>
           <button type="button" className="btn btn-secondary btn-sm" onClick={onClose}>Fechar</button>
         </div>
@@ -900,7 +796,7 @@ function MercadoItens({ toast }) {
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-        <div style={{ fontSize: 12.5, color: '#777', maxWidth: 520 }}>Prêmios que a equipe resgata com <strong>🪙 moedas</strong>. Cada resgate entra na fila de aprovação. Deixe o estoque em branco para ilimitado.</div>
+        <div style={{ fontSize: 12.5, color: '#777', maxWidth: 520 }}>Prêmios que a equipe resgata com <strong>🪙 Coins</strong>. Cada resgate entra na fila de aprovação. Deixe o estoque em branco para ilimitado.</div>
         <button type="button" className="btn btn-primary" onClick={() => setEdit({})}>+ Novo item</button>
       </div>
       {lista.length === 0 ? (
@@ -976,7 +872,7 @@ function ItemModal({ item, onClose, onSalvou, toast }) {
           <input className="form-input" value={f.descricao} onChange={(e) => set('descricao', e.target.value)} placeholder="O que o funcionário ganha" />
         </div>
         <div className="form-grid-2">
-          <CampoNum label="Custo (moedas)" sufixo="🪙" step="10" valor={f.custo} onChange={(v) => set('custo', v)} />
+          <CampoNum label="Custo (Coins)" sufixo="🪙" step="10" valor={f.custo} onChange={(v) => set('custo', v)} />
           <div className="form-group">
             <label className="form-label">Estoque (vazio = ilimitado)</label>
             <input type="number" className="form-input" min="0" step="1" value={f.estoque} onChange={(e) => set('estoque', e.target.value)} placeholder="ilimitado" />
@@ -1075,7 +971,7 @@ function MercadoResgates({ toast }) {
               <div style={{ fontWeight: 700, fontSize: 16 }}>Rejeitar resgate</div>
               <button type="button" className="btn btn-secondary btn-sm" onClick={() => setRejeitar(null)}>Fechar</button>
             </div>
-            <p style={{ fontSize: 13, color: '#666', margin: '4px 0 10px' }}>As <strong>🪙 {moeda(rejeitar.custo)} moedas</strong> voltam para {rejeitar.funcionarioNome} e o estoque é reposto.</p>
+            <p style={{ fontSize: 13, color: '#666', margin: '4px 0 10px' }}>Os <strong>🪙 {moeda(rejeitar.custo)} Coins</strong> voltam para {rejeitar.funcionarioNome} e o estoque é reposto.</p>
             <div className="form-group">
               <label className="form-label">Motivo (opcional)</label>
               <input className="form-input" value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ex.: prêmio indisponível no momento" />
@@ -1318,7 +1214,7 @@ function SecaoSeveridades({ toast }) {
   )
 }
 
-function AbaConfig({ cfg, setCfg, tipos, setTipos, niveis, setNiveis, salvar, salvando, toast }) {
+function AbaConfig({ cfg, setCfg, tipos, setTipos, salvar, salvando, toast }) {
   const set = (campo, v) => setCfg((c) => ({ ...c, [campo]: v }))
   const addTipo = (pilar) => setTipos((ts) => [...ts, { _tmp: `t${++tmpSeq}`, nome: '', pilar, percentual: '', tipoImpacto: 'PERCENTUAL' }])
   const setTipo = (key, patch) => setTipos((ts) => ts.map((t) => ((t.id ?? t._tmp) === key ? { ...t, ...patch } : t)))
@@ -1327,9 +1223,6 @@ function AbaConfig({ cfg, setCfg, tipos, setTipos, niveis, setNiveis, salvar, sa
   const [severidades, setSeveridades] = useState([])
   useEffect(() => { api.get('/bonificacao/severidades').then((r) => setSeveridades(Array.isArray(r.data) ? r.data : [])).catch(() => {}) }, [])
   const regraSel = tipos.find((t) => (t.id ?? t._tmp) === regraKey) || null
-  const addNivel = () => setNiveis((ns) => [...ns, { _tmp: `n${++tmpSeq}`, nome: '' }])
-  const setNivel = (key, nome) => setNiveis((ns) => ns.map((n) => ((n.id ?? n._tmp) === key ? { ...n, nome } : n)))
-  const rmNivel = (key) => setNiveis((ns) => ns.filter((n) => (n.id ?? n._tmp) !== key))
   const totalMax = Number(cfg.tetoAssiduidade || 0) + Number(cfg.tetoDesempenho || 0) + Number(cfg.tetoColetiva || 0) + Number(cfg.bonusTop1 || 0)
   const identificador = cfg.slugPublico || cfg.tokenPublico || ''
   const linkPublico = identificador ? `${window.location.origin}/bonificacao/${identificador}` : ''
@@ -1427,25 +1320,10 @@ function AbaConfig({ cfg, setCfg, tipos, setTipos, niveis, setNiveis, salvar, sa
 
       <SecaoSeveridades toast={toast} />
 
-      <SecaoConfig titulo="Níveis e XP" descricao="Ao fechar o mês, cada funcionário ganha XP igual ao prêmio (R$) e moedas para o Mercado. Juntando XP, sobe de nível.">
-        <div style={gridAuto(200)}>
-          <CampoNum label="XP para subir de nível" sufixo="XP" step="50" valor={cfg.xpPorNivel} onChange={(v) => set('xpPorNivel', v)} />
-          <CampoNum label="Moedas por R$ (no fechamento)" sufixo="🪙" step="0.5" valor={cfg.moedasPorReal} onChange={(v) => set('moedasPorReal', v)} />
+      <SecaoConfig titulo="Coins" descricao="Ao fechar o mês, cada funcionário ganha 🪙 Coins proporcionais ao prêmio (R$) para gastar no Mercado. Conquistas também dão Coins.">
+        <div style={gridAuto(240)}>
+          <CampoNum label="Coins por R$ (no fechamento)" sufixo="🪙" step="0.5" valor={cfg.moedasPorReal} onChange={(v) => set('moedasPorReal', v)} />
         </div>
-        <div style={{ height: 16 }} />
-        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 2 }}>Nomes dos níveis</div>
-        <div style={{ fontSize: 11.5, color: 'var(--app-text-soft, #999)', marginBottom: 8 }}>Na ordem: o 1º nome é o Nível 1, o 2º é o Nível 2… acima do último, aparece “Nível N”.</div>
-        {niveis.map((n, i) => {
-          const key = n.id ?? n._tmp
-          return (
-            <div key={key} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
-              <span style={{ width: 24, height: 24, borderRadius: '50%', background: 'linear-gradient(150deg,#7C5CFF,#5B3EE0)', color: '#fff', display: 'grid', placeItems: 'center', fontWeight: 800, fontSize: 11, flexShrink: 0 }}>{i + 1}</span>
-              <input className="form-input" style={{ flex: 1 }} placeholder={`Nível ${i + 1}`} value={n.nome} onChange={(e) => setNivel(key, e.target.value)} />
-              <button type="button" className="btn btn-danger btn-sm" onClick={() => rmNivel(key)} title="Remover">✕</button>
-            </div>
-          )
-        })}
-        <button type="button" className="btn btn-secondary btn-sm" onClick={addNivel}>+ Adicionar nível</button>
       </SecaoConfig>
 
       <div className="table-card" style={{ padding: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', background: 'linear-gradient(135deg, rgba(37,99,235,0.06), rgba(13,148,136,0.06))' }}>
@@ -1472,7 +1350,6 @@ export default function Bonificacao() {
   const aba = BONI_ABAS.includes(abaParam) ? abaParam : 'mes'
   const [cfg, setCfg] = useState(null)
   const [tipos, setTipos] = useState([])
-  const [niveis, setNiveis] = useState([])
   const [loading, setLoading] = useState(true)
   const [salvando, setSalvando] = useState(false)
   const [toast, setToast] = useState(null)
@@ -1480,7 +1357,7 @@ export default function Bonificacao() {
 
   useEffect(() => {
     api.get('/bonificacao/config')
-      .then((r) => { setCfg(r.data.config); setTipos((r.data.tipos || []).map((t) => ({ ...t }))); setNiveis((r.data.niveis || []).map((n) => ({ ...n }))) })
+      .then((r) => { setCfg(r.data.config); setTipos((r.data.tipos || []).map((t) => ({ ...t }))) })
       .catch((err) => showToast({ message: err?.response?.data?.error ?? 'Erro ao carregar.', type: 'error' }))
       .finally(() => setLoading(false))
   }, [])
@@ -1491,10 +1368,9 @@ export default function Bonificacao() {
       const payload = {
         ...cfg,
         tipos: tipos.filter((t) => (t.nome || '').trim()).map((t) => ({ id: t.id, nome: t.nome, pilar: t.pilar, percentual: t.percentual, tipoImpacto: t.tipoImpacto, evento: t.evento, toleranciaMin: t.toleranciaMin, faixasJson: t.faixasJson, severidadeId: t.severidadeId, reincidenciaAPartir: t.reincidenciaAPartir, incrementoPct: t.incrementoPct, tetoOcorrenciaPct: t.tetoOcorrenciaPct, tetoCicloPct: t.tetoCicloPct })),
-        niveis: niveis.filter((n) => (n.nome || '').trim()).map((n) => ({ id: n.id, nome: n.nome })),
       }
       const r = await api.put('/bonificacao/config', payload)
-      setCfg(r.data.config); setTipos((r.data.tipos || []).map((t) => ({ ...t }))); setNiveis((r.data.niveis || []).map((n) => ({ ...n })))
+      setCfg(r.data.config); setTipos((r.data.tipos || []).map((t) => ({ ...t })))
       showToast({ message: 'Configuração salva.', type: 'success' })
     } catch (err) { showToast({ message: err?.response?.data?.error ?? 'Não foi possível salvar.', type: 'error' }) }
     finally { setSalvando(false) }
@@ -1522,7 +1398,7 @@ export default function Bonificacao() {
       ) : aba === 'mercado' ? (
         <AbaMercado toast={showToast} />
       ) : (
-        <AbaConfig cfg={cfg} setCfg={setCfg} tipos={tipos} setTipos={setTipos} niveis={niveis} setNiveis={setNiveis} salvar={salvarConfig} salvando={salvando} toast={showToast} />
+        <AbaConfig cfg={cfg} setCfg={setCfg} tipos={tipos} setTipos={setTipos} salvar={salvarConfig} salvando={salvando} toast={showToast} />
       )}
     </div>
   )
