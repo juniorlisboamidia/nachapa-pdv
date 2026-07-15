@@ -848,6 +848,9 @@ body.sidebar-collapsed .main-area { margin-left: 76px; }
 
 /* Formulário */
 .form-grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+/* Item de grid nasce com min-width:auto e não encolhe abaixo do próprio conteúdo:
+   um rótulo/dica comprido estoura a coluna e vaza do modal. min-width:0 resolve. */
+.form-grid-2 > * { min-width: 0; }
 @media (max-width: 560px) {
   .form-grid-2 { grid-template-columns: 1fr; }
 }

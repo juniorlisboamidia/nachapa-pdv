@@ -766,6 +766,9 @@ function AbaConquistas({ toast }) {
                 </div>
                 {menu === c.id && (
                   <div onClick={(e) => e.stopPropagation()} style={{ position: 'absolute', right: 12, bottom: 48, zIndex: 5, background: 'var(--app-surface, #fff)', border: '1px solid var(--app-border, #e5e5e5)', borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,.14)', padding: 4, minWidth: 170 }}>
+                    {/* Exceção: automáticas/por validação desbloqueiam sozinhas, mas a gestão
+                        pode conceder à mão num caso fora da curva (exige motivo). */}
+                    {c.desbloqueio !== 'MANUAL' && <ItemMenuConq onClick={() => { setMenu(null); setConceder(c) }}>Conceder manualmente…</ItemMenuConq>}
                     <ItemMenuConq onClick={() => duplicar(c)}>Duplicar</ItemMenuConq>
                     <ItemMenuConq onClick={() => ativar(c)}>{c.ativo ? 'Desativar' : 'Ativar'}</ItemMenuConq>
                     <ItemMenuConq onClick={() => arquivar(c, !c.arquivada)}>{c.arquivada ? 'Desarquivar' : 'Arquivar'}</ItemMenuConq>
@@ -948,43 +951,48 @@ function ConquistaModal({ conquista, onClose, onSalvou, toast }) {
           <input className="form-input" value={f.descricao} onChange={(e) => set('descricao', e.target.value)} placeholder="O que representa essa conquista" />
         </div>
         <div className="form-grid-2">
-          <div className="form-group">
+          <div className="form-group" style={{ minWidth: 0 }}>
             <label className="form-label">Categoria</label>
             <select className="form-input" value={f.categoria} onChange={(e) => set('categoria', e.target.value)}>
               {CATEGORIAS.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
             </select>
           </div>
-          <div className="form-group">
+          <div className="form-group" style={{ minWidth: 0 }}>
             <label className="form-label">Raridade</label>
             <select className="form-input" value={f.raridade} onChange={(e) => set('raridade', e.target.value)}>
               {RARIDADES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
             </select>
-            <div style={{ fontSize: 11, color: 'var(--app-text-soft, #999)', marginTop: 4 }}>{RAR[f.raridade]?.ref} · sugerido {faixa[0]}–{faixa[1]} 🪙</div>
+            <div style={{ fontSize: 11, color: 'var(--app-text-soft, #999)', marginTop: 4 }}>Sugerido {faixa[0]}–{faixa[1]} 🪙</div>
           </div>
         </div>
+        {/* Regra ocupa a linha inteira: rótulos e dicas são longos. */}
+        <div className="form-group">
+          <label className="form-label">Regra de desbloqueio</label>
+          <select className="form-input" value={f.regra} onChange={(e) => set('regra', e.target.value)}>
+            {REGRAS.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
+          </select>
+          {validacao && <div style={{ fontSize: 11, color: '#7c3aed', marginTop: 4 }}>Por validação: só conta depois que você aprova o evento (aba Engajamento).</div>}
+          {f.regra === 'COLECAO' && <div style={{ fontSize: 11, color: 'var(--app-text-soft, #999)', marginTop: 4 }}>A meta é automática: todas as conquistas que não são de Coleção.</div>}
+        </div>
         <div className="form-grid-2">
-          <div className="form-group">
-            <label className="form-label">Regra de desbloqueio</label>
-            <select className="form-input" value={f.regra} onChange={(e) => set('regra', e.target.value)}>
-              {REGRAS.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}
-            </select>
-            {validacao && <div style={{ fontSize: 11, color: '#7c3aed', marginTop: 4 }}>Por validação: só conta depois que você aprova o evento (aba Engajamento).</div>}
-            {f.regra === 'COLECAO' && <div style={{ fontSize: 11, color: 'var(--app-text-soft, #999)', marginTop: 4 }}>A meta é automática: todas as conquistas que não são de Coleção.</div>}
-          </div>
           {temMeta && (
-            <div className="form-group">
+            <div className="form-group" style={{ minWidth: 0 }}>
               <label className="form-label">Meta</label>
               <input type="number" className="form-input" min="1" step="1" value={f.meta} onChange={(e) => set('meta', e.target.value)} />
-              <div style={{ fontSize: 11, color: 'var(--app-text-soft, #999)', marginTop: 4 }}>{criterioTexto({ ...f, meta: Number(f.meta) || 1 })}</div>
             </div>
           )}
           {!progressiva && (
-            <div className="form-group">
+            <div className="form-group" style={{ minWidth: 0 }}>
               <label className="form-label">🪙 Coins bônus</label>
               <input type="number" className="form-input" min="0" step="10" value={f.xpBonus} onChange={(e) => set('xpBonus', e.target.value)} />
             </div>
           )}
         </div>
+        {f.regra !== 'MANUAL' && (
+          <div style={{ fontSize: 12, color: 'var(--app-text-soft, #777)', background: 'var(--app-surface-2, #f7f7f7)', border: '1px solid var(--app-border, #eee)', borderRadius: 8, padding: '7px 10px', marginBottom: 12 }}>
+            🎯 {criterioTexto({ ...f, meta: Number(f.meta) || 1 })}
+          </div>
+        )}
 
         {f.regra !== 'MANUAL' && f.regra !== 'COLECAO' && (
           <div className="form-group">
@@ -1001,8 +1009,8 @@ function ConquistaModal({ conquista, onClose, onSalvou, toast }) {
             <label className="form-label">Níveis <span style={{ fontWeight: 400, color: '#999', fontSize: 11.5 }}>· um card só, vários estágios</span></label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {f.niveisJson.map((n, i) => (
-                <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                  <input className="form-input" style={{ flex: 1 }} placeholder="Bronze" value={n.nome || ''} onChange={(e) => setNivel(i, { nome: e.target.value })} />
+                <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input className="form-input" style={{ flex: 1, minWidth: 90 }} placeholder="Bronze" value={n.nome || ''} onChange={(e) => setNivel(i, { nome: e.target.value })} />
                   <label style={{ fontSize: 11, color: '#999', display: 'flex', alignItems: 'center', gap: 3 }}>meta<input type="number" className="form-input" style={{ width: 62 }} min="1" value={n.meta} onChange={(e) => setNivel(i, { meta: e.target.value })} /></label>
                   <label style={{ fontSize: 11, color: '#999', display: 'flex', alignItems: 'center', gap: 3 }}>🪙<input type="number" className="form-input" style={{ width: 68 }} min="0" step="10" value={n.coins} onChange={(e) => setNivel(i, { coins: e.target.value })} /></label>
                   <button type="button" className="btn btn-danger btn-sm" onClick={() => setF((s) => ({ ...s, niveisJson: s.niveisJson.filter((_, j) => j !== i) }))}>✕</button>
