@@ -111,5 +111,17 @@ const modelDoLote = [...schema.matchAll(/model\s+(\w+)\s*\{([\s\S]*?)\n\}/g)]
 t('schema tem um model com `lote ... @unique`', !!modelDoLote, true);
 t('CONSTRAINT_LOTE = <Model>_lote_key do schema', CONSTRAINT_LOTE, `${modelDoLote?.[1]}_lote_key`);
 
+// A conferência acima monta o nome esperado a partir do NOME DO MODEL — mas quem nomeia a
+// constraint é o Postgres, a partir do nome da TABELA e da COLUNA. Os dois só coincidem
+// enquanto ninguém remapeia: um `@@map("etiquetas_impressas")` no model faz o banco emitir
+// `etiquetas_impressas_lote_key`, o `includes` de colisaoDeLote para de casar e o retry
+// vira código morto calado — a MESMA regressão que este teste existe para pegar, entrando
+// por uma porta que ele não olhava. Idem `@map` na coluna lote. Se um destes falhar, o
+// conserto é atualizar CONSTRAINT_LOTE (em etiquetas.js) para o nome remapeado, não
+// afrouxar o teste.
+const corpoDoLote = modelDoLote?.[2] ?? '';
+t('model do lote nao tem @@map (se ganhar, atualize CONSTRAINT_LOTE)', /^\s*@@map\s*\(/m.test(corpoDoLote), false);
+t('coluna lote nao tem @map (se ganhar, atualize CONSTRAINT_LOTE)', /^\s*lote\s+\S+.*\s@map\s*\(/m.test(corpoDoLote), false);
+
 console.log(`\n${ok} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);

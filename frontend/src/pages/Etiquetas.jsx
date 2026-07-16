@@ -112,6 +112,11 @@ function AbaConfig({ notify }) {
     <div style={{ display: 'grid', gap: 16, maxWidth: 720 }}>
       <div className="table-card" style={{ padding: 16 }}>
         <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Identificação do estabelecimento</h2>
+        {/* Só pedimos o que o rodapé da etiqueta imprime de fato (ver etiquetaCanvas.js):
+            razão social, CNPJ, SIF e SIE. O responsável técnico NÃO é impresso hoje, então
+            não é pedido aqui — um campo que a tela coleta e o papel ignora é promessa
+            falsa. A coluna `responsavelTecnico` continua no banco e o PUT /config continua
+            aceitando: quando o RT entrar no rótulo, o campo volta sem migration. */}
         <div className="form-group">
           <label className="form-label">Razão social / nome fantasia</label>
           <input className="form-input" value={config.razaoSocial || ''} onChange={(e) => upd('razaoSocial', e.target.value)} />
@@ -120,10 +125,6 @@ function AbaConfig({ notify }) {
           <div className="form-group">
             <label className="form-label">CNPJ</label>
             <input className="form-input" value={config.cnpj || ''} onChange={(e) => upd('cnpj', e.target.value)} />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Responsável técnico</label>
-            <input className="form-input" value={config.responsavelTecnico || ''} onChange={(e) => upd('responsavelTecnico', e.target.value)} />
           </div>
         </div>
         <div className="form-grid-2">
@@ -296,8 +297,20 @@ function AbaItens({ notify }) {
   )
 }
 
-// Data/hora curta em pt-BR — usada nas abas Vencimentos e Histórico.
+// Data/hora curta em pt-BR — aba Vencimentos. Sem ano de propósito: os 3 baldes são
+// "vencidas/hoje/amanhã", quem lê está decidindo o que tirar da prateleira agora e o ano
+// só rouba espaço da linha.
 const dt = (v) => new Date(v).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+
+// Idem, COM ano — aba Histórico. Lá o ano não é enfeite: o histórico é rastreabilidade
+// sanitária e acumula para sempre (nada apaga etiqueta), então "15/07 14:00" fica ambíguo
+// já no segundo ano de uso — exatamente numa tela cujo motivo de existir é provar quando
+// um alimento foi manipulado. 2 dígitos bastam e cabem na coluna.
+const dtAno = (v) => new Date(v).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
+
+// Espelha o `take: 200` de cada balde do GET /etiquetas/painel (server.js). Bater neste
+// número quer dizer "tem no mínimo isto", não "tem isto": o backend cortou a lista.
+const LIMITE_PAINEL = 200
 
 // ===================== VENCIMENTOS =====================
 // GET /etiquetas/painel já devolve os 3 baldes prontos (vencidas/hoje/amanhã),
@@ -328,7 +341,14 @@ function AbaPainel({ notify }) {
 function BlocoVencimento({ titulo, cor, lista }) {
   return (
     <div className="table-card" style={{ padding: 16 }}>
-      <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, color: cor }}>{titulo} · {lista.length}</h2>
+      {/* "200+" quando bate no teto: o backend corta em LIMITE_PAINEL, e "Vencidas" só
+          cresce (o model não tem baixa/descarte). Sem o "+", o bloco estacionaria em
+          "Vencidas · 200" para sempre e seria lido como contagem real num painel
+          sanitário — que é justamente o número que alguém usaria para dizer "está tudo
+          sob controle". */}
+      <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, color: cor }}>
+        {titulo} · {lista.length >= LIMITE_PAINEL ? `${LIMITE_PAINEL}+` : lista.length}
+      </h2>
       {lista.length === 0 ? (
         <div className="empty-state">Nada aqui.</div>
       ) : (
@@ -398,8 +418,8 @@ function AbaHistorico({ notify }) {
                   <td style={{ fontWeight: 600 }}>{e.nomeItem}</td>
                   <td style={{ fontFamily: 'monospace' }}>{e.lote}</td>
                   <td>{CONS_LABEL[e.conservacao] || e.conservacao}</td>
-                  <td>{dt(e.manipuladoEm)}</td>
-                  <td>{dt(e.validoAte)}</td>
+                  <td>{dtAno(e.manipuladoEm)}</td>
+                  <td>{dtAno(e.validoAte)}</td>
                   <td>{e.responsavelNome}</td>
                 </tr>
               ))}

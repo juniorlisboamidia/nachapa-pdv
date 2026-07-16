@@ -25,12 +25,14 @@ export const LARGURA_PX = 384
 
 const DPI_B1 = 203
 
-// Espelha a entrada "b1" do registry.json da lib. Não importamos o registry.json
-// porque `density` é escolha nossa (depende do rolo/etiqueta que a loja usa), e não
-// um parâmetro para herdar cegamente da lib.
+// Espelha os campos de IMPRESSORA da entrada "models.b1" do registry.json da lib. Não
+// importamos o registry.json porque `density` é escolha nossa (depende do rolo/etiqueta
+// que a loja usa), e não um parâmetro para herdar cegamente da lib.
 //   name_prefixes: filtra o seletor do navegador pelo nome anunciado no BLE
 //   task "b1":     sequência de comandos da linha B1 (protocolo 3), != "v4" do B1 Pro
 //   density 1-5:   3 é o padrão validado pela lib
+// A GEOMETRIA da etiqueta NÃO mora aqui: no registry ela é uma entrada separada
+// ("sizes.T50x30_b1"), e o que precisamos dela está em OFFSET_Y_PX, abaixo.
 const MODELO_B1 = {
   name_prefixes: ['B1'],
   task: 'b1',
@@ -38,6 +40,17 @@ const MODELO_B1 = {
   label_type: 1,
   speed: 1,
 }
+
+// Calibração vertical do rolo, copiada da entrada "sizes.T50x30_b1" do registry.json da
+// lib — que é EXATAMENTE a nossa geometria: { w_px: 384, h_px: 240, offset_y_px: 4 },
+// 50×30mm na B1 a 203 dpi (o README da lib documenta essa combinação).
+//
+// Por que herdar este número em vez de zero: a lib mede o offset por modelo+tamanho em
+// hardware real (o registry diz "All models/sizes here are validated on real hardware")
+// porque a posição em que a cabeça começa a queimar não bate com a borda física da
+// etiqueta. 4px a 203dpi = 0,5mm; sem isso a impressão sai deslocada para cima no rolo e
+// o rodapé (CNPJ/SIF/SIE, que é exigência sanitária) é o primeiro a ser cortado.
+const OFFSET_Y_PX = 4
 
 // Pega a API global instalada pelo import acima.
 function niimbot() {
@@ -205,8 +218,10 @@ function canvasParaBlobPng(canvas) {
 // `copias` são declaradas uma vez e a imagem sobe UMA vez — a impressora repete
 // sozinha. Muito mais rápido do que mandar N vezes.
 // `deslocamentoY` empurra a impressão para baixo (px, eixo do papel); serve para
-// calibrar a posição quando a etiqueta sai torta/deslocada no rolo real.
-export async function imprimir(canvas, { copias = 1, deslocamentoY = 0 } = {}) {
+// calibrar a posição quando a etiqueta sai torta/deslocada no rolo real. NÃO tem default
+// aqui de propósito — ver o `offsetY` lá embaixo: omitir é o que deixa a calibração da
+// lib (OFFSET_Y_PX) valer. Um `= 0` aqui a anularia em toda chamada.
+export async function imprimir(canvas, { copias = 1, deslocamentoY } = {}) {
   // A lib conecta sozinha se preciso, mas aí o seletor de dispositivos abriria fora de
   // um gesto do usuário e o navegador recusaria com um erro críptico. Exigimos conectar()
   // antes para que a falha seja clara.
@@ -222,9 +237,15 @@ export async function imprimir(canvas, { copias = 1, deslocamentoY = 0 } = {}) {
     await niimbot().printImage(url, {
       model: MODELO_B1,
       // size é a geometria em pixels da etiqueta. dpi vai junto para a lib abortar
-      // antes de imprimir se a impressora conectada não for de 203 dpi.
-      size: { w_px: canvas.width, h_px: canvas.height, dpi: DPI_B1 },
+      // antes de imprimir se a impressora conectada não for de 203 dpi. offset_y_px é a
+      // calibração do rolo (ver OFFSET_Y_PX): é DAQUI que a lib a lê.
+      size: { w_px: canvas.width, h_px: canvas.height, dpi: DPI_B1, offset_y_px: OFFSET_Y_PX },
       copies: copias,
+      // A lib resolve assim: `opts.offsetY != null ? opts.offsetY : size.offset_y_px`.
+      // Ou seja, QUALQUER número aqui — inclusive 0 — descarta a calibração acima. Por
+      // isso `deslocamentoY` chega undefined quando o chamador não pede offset nenhum:
+      // undefined cai no `!= null` e a lib usa o offset_y_px do size. Quem passar um
+      // valor explícito (calibração manual do rolo) continua vencendo, que é a intenção.
       offsetY: deslocamentoY,
     })
   } catch (e) {

@@ -113,10 +113,16 @@ export default function EtiquetasQuiosque() {
   //
   // Invalidamos em vez de travar os seletores enquanto há pendência: travar prenderia o
   // cozinheiro num rótulo que ele JÁ SABE estar errado, e a única saída seria o
-  // "← trocar item" — mesmo descarte, com mais passos e mais chance de errar. O lote
-  // antigo fica no relatório como registrado-e-não-impresso, que é a verdade: ele nunca
-  // virou papel. `erro` NÃO é limpo aqui: se a impressora caiu, ela continua caída e o
-  // botão "Reconectar" ainda é o que ele precisa.
+  // "← trocar item" — mesmo descarte, com mais passos e mais chance de errar.
+  //
+  // O que acontece com o lote abandonado: ele fica no histórico como qualquer outra
+  // etiqueta. EtiquetaImpressa não tem campo de impressão/status, então NÃO dá para
+  // distinguir no relatório o lote que nunca virou papel de um que foi colado no pote —
+  // marcá-lo exigiria uma coluna nova, que ficou para depois. O custo aceito aqui é um
+  // registro a mais no histórico (a manipulação aconteceu de verdade; o que não houve foi
+  // a impressão), e não uma etiqueta errada colada em alimento — que é o que o descarte
+  // evita. `erro` NÃO é limpo aqui: se a impressora caiu, ela continua caída e o botão
+  // "Reconectar" ainda é o que ele precisa.
   function invalidarPendente() {
     if (!pendente) return
     setPendente(null)

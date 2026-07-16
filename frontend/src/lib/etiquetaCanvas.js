@@ -39,13 +39,17 @@ export function dimensoes(config) {
 //          responsavelNome, lote, qrImg? }
 // config: { alturaMm, razaoSocial, cnpj, sif, sie }
 //
-// QR — decisão de escopo desta task: `qrImg` é OPCIONAL e precisa chegar já CARREGADO
+// QR — FICOU PARA A v2: hoje nada nesta base passa `qrImg`, não existe gerador de QR no
+// projeto (a dep `qrcode` foi removida por não ter uso) e a consulta pública por lote que
+// o QR abriria saiu do backend junto. O que sobrou aqui é só o encaixe, de propósito: é
+// inerte sem `qrImg` e já está testado, então a v2 liga o QR sem remexer no desenho.
+//
+// O contrato, para quando isso voltar: `qrImg` é OPCIONAL e precisa chegar já CARREGADO
 // (um HTMLImageElement/ImageBitmap pronto para ctx.drawImage — ex.: `new Image()` com
-// `await` no `onload`, ou `createImageBitmap`). Este módulo não gera QR (nenhuma
-// dependência nova aqui) nem decide o que ele codifica — isso é responsabilidade de quem
-// CHAMA desenharEtiqueta, depois de gerar a imagem por fora (a lib `qrcode` já é
-// dependência do projeto para isso). Sem `qrImg` o espaço simplesmente não é reservado:
-// o texto usa a largura inteira da etiqueta, em vez de deixar um vão em branco.
+// `await` no `onload`, ou `createImageBitmap`). Este módulo não gera QR nem decide o que
+// ele codifica — isso é de quem CHAMA desenharEtiqueta, depois de gerar a imagem por
+// fora. Sem `qrImg` o espaço simplesmente não é reservado: o texto usa a largura inteira
+// da etiqueta, em vez de deixar um vão em branco.
 export function desenharEtiqueta(canvas, dados, config) {
   const { largura, altura } = dimensoes(config)
   canvas.width = largura

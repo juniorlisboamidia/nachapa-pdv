@@ -6866,9 +6866,12 @@ app.put('/api/etiquetas/config', async (req, res) => {
     // +'' e +null são 0 (finito), então caíam no clamp mínimo (20/15) em vez do
     // default (50/30) — um campo de formulário limpo virava rótulo minúsculo.
     // Trata '' e null como ausentes junto com undefined, caindo no default.
+    // Math.round porque larguraMm/alturaMm são colunas Int: o clamp deixava passar
+    // fracionário (30.7 está entre 15 e 100), o Prisma recusava o Float na hora do
+    // update e o PUT inteiro morria em 500 opaco — a tela só dizia "Erro ao salvar".
     const numOuDefault = (v, min, max, def) => {
       if (v === undefined || v === null || String(v).trim() === '') return def;
-      return Number.isFinite(+v) ? Math.min(max, Math.max(min, +v)) : def;
+      return Number.isFinite(+v) ? Math.round(Math.min(max, Math.max(min, +v))) : def;
     };
     const { config: atual } = await garantirEtiquetaSetup();
     const config = await prisma.etiquetaConfig.update({
@@ -7193,17 +7196,12 @@ app.post('/api/public/etiquetas/:token/registrar', async (req, res) => {
   } catch (err) { console.error('[public/etiquetas/registrar]', err); res.status(500).json({ error: 'Erro ao registrar a etiqueta.' }); }
 });
 
-// Consulta pública do QR.
-app.get('/api/public/etiquetas/lote/:lote', async (req, res) => {
-  try {
-    const e = await prisma.etiquetaImpressa.findUnique({ where: { lote: String(req.params.lote).toUpperCase() } });
-    if (!e) return res.status(404).json({ error: 'Etiqueta não encontrada.' });
-    res.json({ etiqueta: {
-      lote: e.lote, nomeItem: e.nomeItem, conservacao: e.conservacao, tempLabel: e.tempLabel,
-      manipuladoEm: e.manipuladoEm, validoAte: e.validoAte, responsavelNome: e.responsavelNome,
-    } });
-  } catch (err) { console.error('[public/etiquetas/lote]', err); res.status(500).json({ error: 'Erro ao consultar.' }); }
-});
+// O QR da etiqueta ficou para a v2, e com ele a consulta pública por lote que existia
+// aqui (GET /api/public/etiquetas/lote/:lote). Ela era pública e sem auth, mas nada a
+// chamava: não há rota /etq/:lote no App.jsx e o quiosque nunca desenha QR. Endpoint sem
+// chamador é só superfície de ataque — quem soubesse o formato do lote (6 chars) lia nome
+// do item, datas e o NOME de quem manipulou, de fora, sem login. Volta junto com o QR,
+// quando houver quem o chame e um dono para a regra de exposição.
 
 app.listen(PORT, () => console.log(`Operação (PDV) API rodando em http://localhost:${PORT}`));
 
