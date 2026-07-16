@@ -868,6 +868,9 @@ function AbaNotificacoes({ notify }) {
   const [nome, setNome] = useState('')
   const [whats, setWhats] = useState('')
   const [salvandoDest, setSalvandoDest] = useState(false)
+  const [excluir, setExcluir] = useState(null) // destinatário em confirmação de exclusão
+  const [excluindo, setExcluindo] = useState(false)
+  const [salvandoConfig, setSalvandoConfig] = useState(false) // trava cliques concorrentes no toggle
 
   function carregar() {
     api.get('/checklist/notificacoes')
@@ -884,13 +887,17 @@ function AbaNotificacoes({ notify }) {
   // Update otimista (mesmo padrão do toggle de setor em AbaColaboradores) — se o PUT
   // falhar, notify + recarrega do servidor pra desfazer o chute otimista.
   async function toggleAtivo() {
+    if (salvandoConfig) return
     const novo = !config.alertaImediatoAtivo
     setConfig((c) => ({ ...c, alertaImediatoAtivo: novo }))
+    setSalvandoConfig(true)
     try {
       await api.put('/checklist/notificacoes/config', { alertaImediatoAtivo: novo })
     } catch (err) {
       notify(err?.response?.data?.error ?? 'Não foi possível salvar a configuração.', 'error')
       carregar()
+    } finally {
+      setSalvandoConfig(false)
     }
   }
 
@@ -911,13 +918,18 @@ function AbaNotificacoes({ notify }) {
     }
   }
 
-  async function rmDest(id) {
+  async function confirmarExclusao() {
+    if (!excluir) return
+    setExcluindo(true)
     try {
-      await api.delete(`/checklist/notificacoes/destinatarios/${id}`)
+      await api.delete(`/checklist/notificacoes/destinatarios/${excluir.id}`)
       notify('Destinatário removido.')
+      setExcluir(null)
       carregar()
     } catch (err) {
       notify(err?.response?.data?.error ?? 'Não foi possível remover o destinatário.', 'error')
+    } finally {
+      setExcluindo(false)
     }
   }
 
@@ -943,7 +955,7 @@ function AbaNotificacoes({ notify }) {
             </div>
           </div>
           <label style={{ cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <input type="checkbox" checked={!!config.alertaImediatoAtivo} onChange={toggleAtivo} />
+            <input type="checkbox" checked={!!config.alertaImediatoAtivo} disabled={salvandoConfig} onChange={toggleAtivo} />
             {config.alertaImediatoAtivo ? 'Ativo' : 'Inativo'}
           </label>
         </div>
@@ -973,11 +985,24 @@ function AbaNotificacoes({ notify }) {
                 <strong>{d.nome}</strong> <span style={{ color: 'var(--app-text-soft, #888)', fontSize: 12 }}>{d.whatsapp}</span>
                 {!d.ativo && <span className="badge badge-gray" style={{ marginLeft: 6 }}>inativo</span>}
               </span>
-              <button type="button" className="btn btn-danger btn-sm" onClick={() => rmDest(d.id)}>Excluir</button>
+              <button type="button" className="btn btn-danger btn-sm" onClick={() => setExcluir(d)}>Excluir</button>
             </div>
           ))
         )}
       </form>
+
+      <ConfirmDialog
+        open={!!excluir}
+        title="Excluir destinatário"
+        message={excluir ? `Excluir "${excluir.nome}"?` : ''}
+        description="Esta ação não pode ser desfeita."
+        confirmLabel="Excluir"
+        cancelLabel="Cancelar"
+        variant="danger"
+        loading={excluindo}
+        onConfirm={confirmarExclusao}
+        onCancel={() => setExcluir(null)}
+      />
 
       <div className="table-card" style={{ padding: 16 }}>
         <div style={{ fontWeight: 700, marginBottom: 8 }}>Histórico de envios</div>
