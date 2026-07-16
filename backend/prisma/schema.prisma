@@ -1948,3 +1948,39 @@ model ChecklistFoto {
   @@unique([execucaoId, itemChave])
   @@index([empresaId])
 }
+
+model ChecklistNotificacaoConfig {
+  id                  Int      @id @default(autoincrement())
+  empresaId           Int
+  alertaImediatoAtivo Boolean  @default(false)
+  criadoEm            DateTime @default(now())
+  atualizadoEm        DateTime @updatedAt
+  @@unique([empresaId])
+  @@index([empresaId])
+}
+
+model ChecklistDestinatario {
+  id           Int      @id @default(autoincrement())
+  empresaId    Int
+  nome         String
+  whatsapp     String
+  ativo        Boolean  @default(true)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+  @@index([empresaId])
+}
+
+model ChecklistNotificacaoLog {
+  id               Int      @id @default(autoincrement())
+  empresaId        Int
+  regra            String
+  canal            String
+  destino          String
+  destinatarioNome String?
+  execucaoId       Int?
+  conteudo         String   @db.Text
+  status           String
+  erro             String?
+  criadoEm         DateTime @default(now())
+  @@index([empresaId, criadoEm])
+}
