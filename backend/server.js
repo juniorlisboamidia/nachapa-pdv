@@ -2364,6 +2364,35 @@ app.get('/api/public/colaborador/fotos/:id', async (req, res) => {
   } catch (e) { if (e.http) return res.status(e.http).json({ error: e.msg }); console.error('[colab/fotos GET]', e); res.status(500).json({ error: 'Erro ao carregar a foto.' }); }
 });
 
+// Dispara o alerta imediato de um checklist concluído com item crítico fora do padrão.
+// Best-effort: chamado sem await no concluir, com try/catch total — uma falha (zapi off,
+// número ruim, DB) NUNCA toca a resposta do concluir. empresaId explícito (fora do tenantStore).
+async function dispararAlertaImediato(empresaId, execucaoId) {
+  try {
+    const cfg = await prisma.checklistNotificacaoConfig.findFirst({ where: { empresaId } });
+    if (!cfg?.alertaImediatoAtivo) return;
+    const exec = await prisma.checklistExecucao.findFirst({ where: { id: execucaoId, empresaId }, include: { respostas: true, checklist: { select: { nome: true } } } });
+    if (!exec) return;
+    const rmap = {}; for (const r of exec.respostas) rmap[r.itemChave] = { conforme: r.conforme };
+    const itensForaDoPadrao = itensCriticosNaoConformes(exec.itensSnapshotJson, rmap);
+    const func = await prisma.funcionario.findFirst({ where: { id: exec.funcionarioId, empresaId }, select: { nome: true, apelido: true } });
+    const loja = await prisma.empresa.findUnique({ where: { id: empresaId }, select: { nome: true } });
+    const quando = new Date(exec.concluidaEm || Date.now()).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    const msg = montarMensagemAlerta({ lojaNome: loja?.nome || 'Loja', checklistNome: exec.checklist?.nome || 'Checklist', funcionarioNome: func ? (func.apelido || func.nome) : '—', quando, itensForaDoPadrao });
+
+    const dests = await prisma.checklistDestinatario.findMany({ where: { empresaId, ativo: true } });
+    if (!dests.length) return;
+    const podeEnviar = zapiConfigurado();
+    for (const d of dests) {
+      const destino = foneParaEnvio(foneCanonico(d.whatsapp));
+      let status = 'ENVIADO', erro = null;
+      if (!podeEnviar) { status = 'FALHOU'; erro = 'WhatsApp não configurado'; }
+      else { try { await zapiEnviarTexto(destino, msg); } catch (e) { status = 'FALHOU'; erro = String(e?.message || e).slice(0, 300); } }
+      await prisma.checklistNotificacaoLog.create({ data: { empresaId, regra: 'ALERTA_IMEDIATO', canal: 'WHATSAPP', destino, destinatarioNome: d.nome, execucaoId: exec.id, conteudo: msg, status, erro } });
+    }
+  } catch (e) { console.error('[dispararAlertaImediato]', e?.message || e); }
+}
+
 app.post('/api/public/colaborador/execucoes/:id/concluir', async (req, res) => {
   try {
     const sess = exigirColaborador(req, res); if (!sess) return;
@@ -2374,9 +2403,15 @@ app.post('/api/public/colaborador/execucoes/:id/concluir', async (req, res) => {
     if (faltando.length) return res.status(400).json({ error: `Falta a foto obrigatória de: ${faltando.join(', ')}` });
     const rmap = {}; for (const r of exec.respostas) rmap[r.itemChave] = { conforme: r.conforme };
     const emAlerta = execucaoEmAlerta(exec.itensSnapshotJson, rmap);
+    // Guarda a transição ANTES do updateMany: idempotência do alerta depende de saber se
+    // esta execução JÁ estava CONCLUIDA (reenvio de request, dupla submissão etc).
+    const eraAndamento = exec.status !== 'CONCLUIDA';
     // updateMany com empresaId no where: exec já veio validado com empresaId neste handler,
     // mas o filtro fica explícito aqui também para o isolamento sobreviver a um refactor futuro.
     await prisma.checklistExecucao.updateMany({ where: { id: exec.id, empresaId: sess.empresaId }, data: { status: 'CONCLUIDA', concluidaEm: new Date(), emAlerta } });
+    // Alerta só na TRANSIÇÃO para CONCLUIDA e quando em alerta. Fire-and-forget: não segura a
+    // resposta do concluir nem propaga falha (dispararAlertaImediato é best-effort).
+    if (eraAndamento && emAlerta) dispararAlertaImediato(sess.empresaId, exec.id);
     res.json({ ok: true, status: 'CONCLUIDA', emAlerta });
   } catch (e) { if (e.http) return res.status(e.http).json({ error: e.msg }); console.error('[colab/concluir]', e); res.status(500).json({ error: 'Erro ao concluir.' }); }
 });
