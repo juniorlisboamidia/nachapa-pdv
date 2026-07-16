@@ -33,7 +33,9 @@ construção:
 6. **Tamanho:** rolo 50×30 mm (padrão da B1). A cabeça tem 384 px = **48 mm**, então a
    área imprimível é 48×30 mm → bitmap **384×240 px** (50 mm dariam 400 px, mas 16 px
    ficam fora da cabeça). O layout desenha para 48 mm e sobra ~1 mm de margem por lado.
-7. **Impressora:** Niimbot B1, sem camada de abstração para outros modelos.
+7. **Impressora:** Niimbot B1, sem camada de abstração para outros modelos. Comprar uma
+   (~R$200) e validar o fluxo real antes de otimizar custo de consumível — o próprio
+   `EtiquetaImpressa` mede o volume, e a decisão de trocar (se vier) será com dado.
 
 ## Viabilidade da impressora (pesquisado, não presumido)
 
@@ -51,6 +53,31 @@ A **Niimbot B1 funciona**, com ressalvas que moldaram o design:
 - **RFID obrigatório:** a B1 lê um chip criptografado no rolo e grava de volta o consumo.
   Rolo de terceiro sai ilegível. Custo de ~R$0,16–0,21/etiqueta é permanente. Aceito.
 - **48 mm úteis:** os 60×40 mm da referência do usuário **não cabem**. Daí o 50×30.
+
+### Por que a B1, sendo o consumível caro (alternativas avaliadas)
+
+**Web Bluetooth só fala BLE/GATT — Bluetooth Classic (SPP) é inacessível pelo navegador.**
+Essa restrição, não o preço, é o que decide a impressora. E a maioria das térmicas de
+etiqueta usa SPP justamente porque BLE tem pouca banda para raster. A B1 é BLE — por isso
+ela imprime do navegador sem app, e as "melhores no papel" não.
+
+| | Niimbot B1 | Elgin L42DT | Knup KP-IM608 |
+|---|---|---|---|
+| Aparelho | ~R$200 | ~R$800–900 | ~R$543 |
+| Por etiqueta | **R$0,16–0,21** (rolo travado por RFID) | R$0,026 (genérico) | R$0,026 (genérico) |
+| Largura útil | 48 mm | 108 mm | 100 mm |
+| Conexão | **BLE** | USB/RS-232 (sem BT) | USB + BT **de tipo não documentado** |
+| Imprime do celular pelo navegador | **Sim** | Não | Provavelmente não |
+
+- **Elgin L42DT:** eliminada — não tem Bluetooth nenhum. Exigiria PC com QZ Tray.
+- **Knup KP-IM608:** tentadora (100 mm resolveria o 60×40, rolo ~7× mais barato), mas a
+  Knup **não documenta o tipo de Bluetooth**; a equivalente de mercado (Xprinter XP-420B)
+  pareia com **PIN 0000** — assinatura de Classic/SPP — e exige app companion. Apostar o
+  projeto nisso sem a impressora na mão seria irresponsável. Não descartada: se um dia
+  aparecer uma unidade, um teste de 2 minutos (página que lista dispositivos BLE) resolve.
+- **Custo é real e cresce com o volume:** a ~50 etiquetas/dia, o rolo da B1 sai ~R$270/mês
+  contra ~R$39 do genérico — a diferença paga uma Elgin em ~3 meses. Por isso o driver mora
+  isolado em `niimbotB1.js`: trocar de modelo não deve encostar na UI.
 
 ### Riscos assumidos
 
