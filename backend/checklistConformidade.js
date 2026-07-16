@@ -38,6 +38,10 @@ export function avaliarResposta({ tipo, config, valor }) {
       return n >= c.notaMinima ? { conforme: true, motivo: null } : { conforme: false, motivo: `Nota abaixo de ${c.notaMinima}` };
     }
     case 'TEXTO':
+    case 'FOTO':
+      // TEXTO é observação; FOTO é evidência — sem IA, nenhuma das duas se julga
+      // por conteúdo. Sempre "não avalia".
+      return { conforme: null, motivo: null };
     default:
       return { conforme: null, motivo: null };
   }
@@ -48,4 +52,14 @@ export function avaliarResposta({ tipo, config, valor }) {
 // levanta a bandeira do dashboard).
 export function execucaoEmAlerta(itensSnapshot, respostasPorChave) {
   return (itensSnapshot || []).some((it) => it.critico && respostasPorChave?.[it.chave]?.conforme === false);
+}
+
+// Obrigatoriedade da foto: um item FOTO CRÍTICO precisa de foto para concluir.
+// Recebe os itens do snapshot e o conjunto de itemChave que já têm foto; devolve
+// os títulos dos itens FOTO críticos ainda sem foto (vazio = pode concluir).
+export function fotosCriticasFaltando(itensSnapshot, chavesComFoto) {
+  const tem = chavesComFoto instanceof Set ? chavesComFoto : new Set(chavesComFoto || []);
+  return (itensSnapshot || [])
+    .filter((it) => it.tipo === 'FOTO' && it.critico && !tem.has(it.chave))
+    .map((it) => it.titulo);
 }

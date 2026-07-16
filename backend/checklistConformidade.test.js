@@ -1,4 +1,4 @@
-import { avaliarResposta, execucaoEmAlerta } from './checklistConformidade.js';
+import { avaliarResposta, execucaoEmAlerta, fotosCriticasFaltando } from './checklistConformidade.js';
 let ok = 0, fail = 0;
 const t = (n, real, esp) => { const a = JSON.stringify(real), b = JSON.stringify(esp); if (a === b) { ok++; console.log(`  ok   ${n}`); } else { fail++; console.log(`  FALHA ${n}\n    real ${a}\n    esp  ${b}`); } };
 
@@ -40,6 +40,22 @@ t('critico nao-conforme = alerta', execucaoEmAlerta(itens, { '1': { conforme: fa
 t('nao-critico nao-conforme = SEM alerta', execucaoEmAlerta(itens, { '1': { conforme: true }, '2': { conforme: false } }), false);
 t('tudo conforme = sem alerta', execucaoEmAlerta(itens, { '1': { conforme: true }, '2': { conforme: true } }), false);
 t('critico sem resposta = sem alerta', execucaoEmAlerta(itens, {}), false);
+
+console.log('\n== FOTO ==');
+t('FOTO sempre evidencia (com foto)', avaliarResposta({ tipo: 'FOTO', config: {}, valor: { temFoto: true } }), { conforme: null, motivo: null });
+t('FOTO sempre evidencia (sem valor)', avaliarResposta({ tipo: 'FOTO', config: {}, valor: null }), { conforme: null, motivo: null });
+
+console.log('\n== fotosCriticasFaltando ==');
+const snap = [
+  { chave: '1', tipo: 'FOTO', critico: true, titulo: 'Foto da válvula' },
+  { chave: '2', tipo: 'FOTO', critico: false, titulo: 'Foto geral' },
+  { chave: '3', tipo: 'CHECK', critico: true, titulo: 'Desligar fogões' },
+];
+t('critica sem foto = falta', fotosCriticasFaltando(snap, new Set([])), ['Foto da válvula']);
+t('critica com foto = ok', fotosCriticasFaltando(snap, new Set(['1'])), []);
+t('nao-critica sem foto = ok', fotosCriticasFaltando(snap, new Set(['1'])), []);
+t('aceita array em vez de Set', fotosCriticasFaltando(snap, ['1']), []);
+t('CHECK critico nao entra (so FOTO)', fotosCriticasFaltando(snap, new Set(['1'])), []);
 
 console.log(`\n${ok} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);
