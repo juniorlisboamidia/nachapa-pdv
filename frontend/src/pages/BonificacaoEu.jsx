@@ -32,7 +32,8 @@ const SIT = {
   trabalhado: { l: 'Trabalhado', c: '#2563eb' },
 }
 const OUV_TIPOS_PUB = [['SUGESTAO', 'Sugestão'], ['ELOGIO', 'Elogio'], ['RECLAMACAO', 'Reclamação'], ['DENUNCIA', 'Denúncia'], ['OUTRO', 'Outro']]
-const TABS = [['inicio', 'Início', '🏠'], ['ponto', 'Ponto', '🕐'], ['premios', 'Prêmios', '🎁'], ['voz', 'Sugestões', '💬']]
+const CL_STATUS = { EM_ANDAMENTO: { label: 'Em andamento', cor: '#d97706' }, CONCLUIDA: { label: 'Concluído', cor: '#0F8A54' } }
+const TABS = [['inicio', 'Início', '🏠'], ['ponto', 'Ponto', '🕐'], ['checklists', 'Checklists', '✅'], ['premios', 'Prêmios', '🎁'], ['voz', 'Sugestões', '💬']]
 
 const CSS = `
 .be-root{--bg:#F4F1EA;--surface:#FFFFFF;--surface-2:#EFEADF;--ink:#0E1319;--ink-soft:#474D55;--muted:#8A8E94;--line:#E5DFD2;--brand:#EAB802;--brand-deep:#C79A05;--brand-tint:#FBF2CC;--money:#0F8A54;--gold:#EAB802;--gold-text:#8A6A00;--silver:#94A0AC;--bronze:#BE7043;--dark:#0E1319;--sh-sm:0 1px 2px rgba(14,19,25,.06);--sh-md:0 3px 8px rgba(14,19,25,.07),0 16px 34px rgba(14,19,25,.08);--rd:18px;
@@ -115,6 +116,29 @@ const CSS = `
 .be-pt-hrs .ar{color:var(--muted);font-weight:600}
 .be-pt-hrs .none{color:var(--muted);font-weight:600;font-size:13px}
 .be-pt-st{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;padding:4px 9px;border-radius:999px;white-space:nowrap;flex-shrink:0}
+
+/* Checklists */
+.be-cl-row{display:flex;align-items:center;gap:11px;background:var(--surface);border:1px solid var(--line);border-radius:13px;padding:11px 13px;box-shadow:var(--sh-sm);width:100%;text-align:left;cursor:pointer;font-family:inherit;color:inherit}
+.be-cl-ic{font-size:19px;flex-shrink:0}
+.be-cl-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.be-cl-nm{font-size:13.5px;font-weight:800;color:var(--ink)}
+.be-cl-meta{font-size:11px;color:var(--muted);font-weight:650}
+.be-cl-arrow{color:var(--muted);font-size:17px;flex-shrink:0}
+.be-cl-item{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px;box-shadow:var(--sh-sm)}
+.be-cl-item-tt{font-weight:750;font-size:13.5px;color:var(--ink);margin-bottom:4px}
+.be-cl-item-ds{font-size:11.5px;color:var(--muted);margin-bottom:9px;line-height:1.4}
+.be-cl-crit{color:#dc2626;font-weight:800}
+.be-cl-warn{font-size:11.5px;color:#dc2626;font-weight:700;margin-top:8px}
+.be-cl-check{display:inline-flex;align-items:center;gap:7px;border-radius:11px;padding:9px 16px;font-size:13px;font-weight:800;cursor:pointer;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink-soft);font-family:inherit}
+.be-cl-check.on{border-color:var(--money);background:rgba(15,138,84,.14);color:var(--money)}
+.be-cl-stars{display:flex;gap:3px}
+.be-cl-star{font-size:24px;background:none;border:none;cursor:pointer;padding:0;color:var(--muted);line-height:1}
+.be-cl-star.on{color:var(--gold)}
+.be-cl-opts{display:flex;gap:6px;flex-wrap:wrap}
+.be-cl-opt{border-radius:999px;padding:7px 14px;font-size:12px;font-weight:750;cursor:pointer;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink-soft);font-family:inherit}
+.be-cl-opt.on{border-color:var(--brand-deep);background:var(--brand-tint);color:var(--brand-deep)}
+.be-cl-num{display:flex;align-items:center;gap:8px}
+.be-cl-num .be-input{max-width:130px}
 
 /* Evolução */
 .be-hist{display:flex;gap:6px;align-items:flex-end;margin-top:8px}
@@ -293,6 +317,7 @@ export default function BonificacaoEu() {
         <main className="be-body">
           {tab === 'inicio' && <TabInicio meu={meu} totalEquipe={totalEquipe} historico={historico} contribuicoes={contribuicoes} mes={mes} ano={ano} />}
           {tab === 'ponto' && <TabPonto ponto={ponto} ano={ano} mes={mes} />}
+          {tab === 'checklists' && <TabChecklists setAviso={setAviso} />}
           {tab === 'premios' && <TabPremios saldoCoins={saldoCoins} conquistas={conquistas} conquistasResumo={conquistasResumo} mercado={mercado} meusResgates={meusResgates} onResgatar={setConfirmar} />}
           {tab === 'voz' && <TabVoz colegas={colegas} reconhecimento={reconhecimento} ouvidoria={ouvidoria} onFeito={() => carregar(true)} setAviso={setAviso} />}
         </main>
@@ -435,6 +460,177 @@ function TabPonto({ ponto, ano, mes }) {
       )}
       <p className="be-hint">Entrada e saída de cada dia, do jeito que o ponto registrou. Algo errado? Fale com a liderança na aba <b>Voz</b>.</p>
     </section>
+  )
+}
+
+/* ══════════ ABA: CHECKLISTS (execução do setor) ══════════ */
+function TabChecklists({ setAviso }) {
+  const [dados, setDados] = useState(null)
+  const [erroCarga, setErroCarga] = useState(false)
+  const [exec, setExec] = useState(null) // execução aberta (troca a tela pela de responder)
+
+  function carregar() {
+    setErroCarga(false)
+    colabApi.get('/public/colaborador/checklists')
+      .then((r) => setDados(r.data))
+      .catch(() => { setDados({ hoje: [], disponiveis: [] }); setErroCarga(true) })
+  }
+  useEffect(() => { carregar() }, [])
+
+  async function abrir(c) {
+    try {
+      const r = await colabApi.post(`/public/colaborador/checklists/${c.id}/iniciar`)
+      setExec(r.data.execucao)
+    } catch (err) { setAviso(err?.response?.data?.error ?? 'Não foi possível abrir o checklist.') }
+  }
+
+  if (exec) return <ExecutarChecklist exec={exec} setAviso={setAviso} onSair={() => { setExec(null); carregar() }} />
+  if (!dados) return <div className="be-empty">Carregando…</div>
+
+  return (
+    <>
+      <section>
+        <h2 className="be-sec-title">✅ Para hoje</h2>
+        {dados.hoje.length === 0 ? (
+          <div className="be-empty">Nenhum checklist pra hoje. 🎉</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {dados.hoje.map((c) => <CardChecklist key={c.id} c={c} onAbrir={abrir} />)}
+          </div>
+        )}
+      </section>
+
+      {dados.disponiveis.length > 0 && (
+        <section>
+          <h2 className="be-sec-title">🗂️ Disponíveis</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {dados.disponiveis.map((c) => <CardChecklist key={c.id} c={c} onAbrir={abrir} />)}
+          </div>
+        </section>
+      )}
+
+      {erroCarga && <p className="be-hint">Não foi possível atualizar os checklists agora. Puxe a tela pra cima e tente de novo.</p>}
+    </>
+  )
+}
+
+function CardChecklist({ c, onAbrir }) {
+  const st = CL_STATUS[c.status]
+  const icone = c.status === 'CONCLUIDA' ? '✅' : c.status === 'EM_ANDAMENTO' ? '📝' : '📋'
+  return (
+    <button type="button" className="be-cl-row" onClick={() => onAbrir(c)}>
+      <span className="be-cl-ic">{icone}</span>
+      <span className="be-cl-info">
+        <span className="be-cl-nm">{c.nome}</span>
+        <span className="be-cl-meta">{c.categoria} · {c.itens} {c.itens === 1 ? 'item' : 'itens'}</span>
+      </span>
+      {c.emAlerta && <span className="be-st" style={{ color: '#dc2626', background: '#dc262622' }}>⚠️ Alerta</span>}
+      {st && <span className="be-st" style={{ color: st.cor, background: st.cor + '22' }}>{st.label}</span>}
+      <span className="be-cl-arrow">›</span>
+    </button>
+  )
+}
+
+// Execução em andamento: responde item a item (auto-salva por item) e conclui no fim.
+function ExecutarChecklist({ exec, setAviso, onSair }) {
+  const [respostas, setRespostas] = useState(exec.respostas || {})
+  const [concluida, setConcluida] = useState(exec.status === 'CONCLUIDA')
+  const [concluindo, setConcluindo] = useState(false)
+
+  async function salvar(chave, valor, observacao) {
+    setRespostas((s) => ({ ...s, [chave]: { ...s[chave], valor, observacao } }))
+    try {
+      // O servidor recalcula "conforme" — o cliente não decide se passou.
+      const r = await colabApi.put(`/public/colaborador/execucoes/${exec.id}/resposta`, { itemChave: chave, valor, observacao })
+      setRespostas((s) => ({ ...s, [chave]: { ...s[chave], conforme: r.data.conforme } }))
+    } catch (err) { setAviso(err?.response?.data?.error ?? 'Não foi possível salvar a resposta.') }
+  }
+
+  async function concluir() {
+    setConcluindo(true)
+    try {
+      await colabApi.post(`/public/colaborador/execucoes/${exec.id}/concluir`)
+      setConcluida(true)
+    } catch (err) { setAviso(err?.response?.data?.error ?? 'Não foi possível concluir o checklist.') }
+    finally { setConcluindo(false) }
+  }
+
+  if (concluida) {
+    return (
+      <div className="be-state" style={{ minHeight: '50vh' }}>
+        <div>
+          <div style={{ fontSize: 40 }}>✅</div>
+          <p style={{ fontWeight: 800, color: 'var(--ink)', marginTop: 8 }}>Checklist concluído!</p>
+          <button type="button" className="be-btn" style={{ marginTop: 14, maxWidth: 220 }} onClick={onSair}>Voltar</button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <section>
+      <button type="button" className="be-login-voltar" style={{ marginTop: 0, marginBottom: 12 }} onClick={onSair}>‹ Voltar</button>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {exec.itens.map((it) => (
+          <ItemChecklist key={it.chave} item={it} resposta={respostas[it.chave] || {}} onSalvar={salvar} />
+        ))}
+      </div>
+      <button type="button" className="be-btn" style={{ marginTop: 14 }} onClick={concluir} disabled={concluindo}>
+        {concluindo ? 'Concluindo…' : 'Concluir checklist'}
+      </button>
+    </section>
+  )
+}
+
+// Um item do snapshot ({ chave, tipo, titulo, descricao, critico, config }), renderizado
+// conforme o tipo. Sem FOTO nesta fatia.
+function ItemChecklist({ item, resposta: r, onSalvar }) {
+  const [texto, setTexto] = useState(r.valor ?? '')
+  const [numero, setNumero] = useState(r.valor ?? '')
+  return (
+    <div className="be-cl-item">
+      <div className="be-cl-item-tt">{item.titulo}{item.critico && <span className="be-cl-crit"> *</span>}</div>
+      {item.descricao && <div className="be-cl-item-ds">{item.descricao}</div>}
+
+      {item.tipo === 'CHECK' && (
+        <button type="button" className={'be-cl-check' + (r.valor === true ? ' on' : '')} onClick={() => onSalvar(item.chave, !(r.valor === true), r.observacao)}>
+          {r.valor === true ? '✔ Feito' : 'Marcar como feito'}
+        </button>
+      )}
+
+      {item.tipo === 'AVALIACAO' && (
+        <div className="be-cl-stars">
+          {[1, 2, 3, 4, 5].map((n) => (
+            <button key={n} type="button" className={'be-cl-star' + (n <= (r.valor || 0) ? ' on' : '')} onClick={() => onSalvar(item.chave, n, r.observacao)}>
+              {n <= (r.valor || 0) ? '★' : '☆'}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {item.tipo === 'TEXTO' && (
+        <textarea className="be-input" rows={2} value={texto} onChange={(e) => setTexto(e.target.value)} onBlur={() => onSalvar(item.chave, texto, r.observacao)} />
+      )}
+
+      {item.tipo === 'NUMERICO' && (
+        <div className="be-cl-num">
+          <input className="be-input" type="number" value={numero} onChange={(e) => setNumero(e.target.value)} onBlur={() => onSalvar(item.chave, numero === '' ? null : Number(numero), r.observacao)} />
+          {item.config?.unidade && <span style={{ fontSize: 12.5, color: 'var(--muted)', fontWeight: 700 }}>{item.config.unidade}</span>}
+        </div>
+      )}
+
+      {item.tipo === 'SELECAO' && (
+        <div className="be-cl-opts">
+          {(item.config?.opcoes || []).map((o) => (
+            <button key={o.rotulo} type="button" className={'be-cl-opt' + (r.valor === o.rotulo ? ' on' : '')} onClick={() => onSalvar(item.chave, o.rotulo, r.observacao)}>
+              {o.rotulo}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {r.conforme === false && <div className="be-cl-warn">⚠ Fora do padrão{item.critico ? ' · item crítico' : ''}</div>}
+    </div>
   )
 }
 
