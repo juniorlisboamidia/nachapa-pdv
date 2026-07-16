@@ -41,7 +41,7 @@ const MODELS_TENANT = new Set([
   'bonificacaoMoeda', 'mercadoItem', 'mercadoResgate',
   'funcionarioFace', 'pontoRegistro', 'dispositivo', 'jornada', 'coletorBatidaPendente', 'coletorComando', 'pontoConfig', 'funcao',
   'etiquetaConfig', 'etiquetaRegra', 'etiquetaItemConfig', 'etiquetaImpressa',
-  'setor', 'checklistTemplate', 'checklistTemplateItem', 'checklist', 'checklistItem', 'checklistExecucao', 'checklistResposta',
+  'setor', 'checklistTemplate', 'checklistTemplateItem', 'checklist', 'checklistItem', 'checklistExecucao', 'checklistResposta', 'checklistFoto',
 ]);
 const OPS_WHERE = new Set([
   'findMany', 'findFirst', 'findFirstOrThrow', 'findUnique', 'findUniqueOrThrow',
@@ -7384,11 +7384,13 @@ const CHECKLIST_TEMPLATES_SEED = [
     { tipo: 'CHECK', titulo: 'Ligar equipamentos' },
     { tipo: 'SELECAO', titulo: 'Verificar estoque crítico', config: { opcoes: [{ rotulo: 'Estoque OK', conforme: true }, { rotulo: 'Baixo estoque', conforme: true }, { rotulo: 'Sem estoque', conforme: false }] } },
     { tipo: 'TEXTO', titulo: 'Observações da abertura' },
+    { tipo: 'FOTO', titulo: 'Foto da organização geral', descricao: 'Verifique se a cozinha está organizada, limpa e sem resíduos' },
   ] },
   { nome: 'Abertura Salão', categoria: 'Abertura', descricao: 'Checklist para garantir a correta abertura do salão', tempoEstimadoMin: 15, itens: [
     { tipo: 'CHECK', titulo: 'Limpar e arrumar mesas' },
     { tipo: 'CHECK', titulo: 'Verificar cardápios nas mesas' },
     { tipo: 'AVALIACAO', titulo: 'Avaliação da apresentação', config: { notaMinima: 4 } },
+    { tipo: 'FOTO', titulo: 'Foto do salão montado', descricao: 'Verifique se as mesas estão arrumadas e o ambiente apresentável' },
   ] },
   { nome: 'Fechamento Salão', categoria: 'Fechamento', descricao: 'Checklist para garantir o correto fechamento do salão', tempoEstimadoMin: 15, itens: [
     { tipo: 'CHECK', titulo: 'Recolher todos os cardápios' },
@@ -7430,6 +7432,8 @@ const CHECKLIST_TEMPLATES_SEED = [
     { tipo: 'CHECK', titulo: 'Armazenar alimentos corretamente' },
     { tipo: 'AVALIACAO', titulo: 'Avaliação geral do turno', config: { notaMinima: 3 } },
     { tipo: 'CHECK', titulo: 'Retirar lixo' },
+    { tipo: 'FOTO', titulo: 'Foto da válvula de gás desligada', descricao: 'Verifique se a válvula de gás está na posição FECHADA', critico: true },
+    { tipo: 'FOTO', titulo: 'Foto do estado final da cozinha', descricao: 'Verifique se os equipamentos estão desligados e a cozinha limpa' },
   ] },
   { nome: 'Fechamento Gerência', categoria: 'Fechamento', descricao: 'Checklist de fechamento para a gerência', tempoEstimadoMin: 15, itens: [
     { tipo: 'NUMERICO', titulo: 'Revisar faturamento do dia', config: { unidade: 'un' } },
@@ -7440,12 +7444,14 @@ const CHECKLIST_TEMPLATES_SEED = [
     { tipo: 'CHECK', titulo: 'Inspeção de armadilhas' },
     { tipo: 'SELECAO', titulo: 'Nível de infestação', config: { opcoes: [{ rotulo: 'Nenhuma', conforme: true }, { rotulo: 'Leve', conforme: true }, { rotulo: 'Moderada', conforme: false }, { rotulo: 'Grave', conforme: false }] } },
     { tipo: 'TEXTO', titulo: 'Laudo técnico' },
+    { tipo: 'FOTO', titulo: 'Foto das armadilhas', descricao: 'Verifique se as armadilhas estão intactas e posicionadas' },
   ] },
   { nome: 'Segurança Alimentar', categoria: 'Segurança Alimentar', descricao: 'Checklist de conformidade ANVISA', tempoEstimadoMin: 20, itens: [
     { tipo: 'NUMERICO', titulo: 'Temperatura do refrigerador', config: { unidade: '°C', min: 0, max: 4 } },
     { tipo: 'NUMERICO', titulo: 'Temperatura do freezer', config: { unidade: '°C', max: -18 } },
     { tipo: 'CHECK', titulo: 'EPIs sendo utilizados', critico: true },
     { tipo: 'AVALIACAO', titulo: 'Higiene das mãos', config: { notaMinima: 4 } },
+    { tipo: 'FOTO', titulo: 'Foto das etiquetas de validade', descricao: 'Verifique se as etiquetas estão visíveis e dentro do prazo' },
   ] },
   { nome: 'Documentações Sanitárias', categoria: 'Documentações Sanitárias', descricao: 'Conferência de documentações sanitárias obrigatórias', tempoEstimadoMin: 30, itens: [
     { tipo: 'CHECK', titulo: 'Alvará sanitário válido', critico: true },
@@ -7539,7 +7545,7 @@ app.get('/api/checklist/templates/:id', async (req, res) => {
 
 // Valida e normaliza a lista de itens (compartilhado por template e checklist).
 function chkNormalizarItens(itensRaw) {
-  const TIPOS = new Set(['CHECK', 'AVALIACAO', 'TEXTO', 'NUMERICO', 'SELECAO']);
+  const TIPOS = new Set(['CHECK', 'AVALIACAO', 'TEXTO', 'NUMERICO', 'SELECAO', 'FOTO']);
   const arr = Array.isArray(itensRaw) ? itensRaw : [];
   const itens = [];
   for (let i = 0; i < arr.length; i++) {

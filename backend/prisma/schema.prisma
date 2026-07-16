@@ -1805,6 +1805,7 @@ enum TipoItemChecklist {
   TEXTO
   NUMERICO
   SELECAO
+  FOTO
 }
 
 enum PrioridadeChecklist {
@@ -1913,6 +1914,7 @@ model ChecklistExecucao {
   itensSnapshotJson Json
   checklist         Checklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
   respostas         ChecklistResposta[]
+  fotos             ChecklistFoto[]
   @@unique([checklistId, dataRef])
   @@index([empresaId, dataRef])
 }
@@ -1927,6 +1929,21 @@ model ChecklistResposta {
   conforme     Boolean?
   observacao   String?
   atualizadoEm DateTime @updatedAt
+  execucao     ChecklistExecucao @relation(fields: [execucaoId], references: [id], onDelete: Cascade)
+  @@unique([execucaoId, itemChave])
+  @@index([empresaId])
+}
+
+model ChecklistFoto {
+  id           Int      @id @default(autoincrement())
+  empresaId    Int
+  execucaoId   Int
+  itemChave    String
+  dataUrl      String   @db.Text
+  largura      Int?
+  altura       Int?
+  tamanhoBytes Int?
+  criadoEm     DateTime @default(now())
   execucao     ChecklistExecucao @relation(fields: [execucaoId], references: [id], onDelete: Cascade)
   @@unique([execucaoId, itemChave])
   @@index([empresaId])
