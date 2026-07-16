@@ -184,7 +184,9 @@ function AbaPainel({ notify }) {
 // O gestor confere o que o operador registrou numa execução: cabeçalho com
 // quem/quando + cada item do snapshot com a resposta formatada conforme o tipo.
 // Fecha só pelo botão "Fechar" — mesma trava dos outros modais deste arquivo
-// (overlay sem onClick, stopPropagation no .modal).
+// (overlay sem onClick, stopPropagation no .modal). O "Fechar" fica fora do
+// condicional de estado (mesmo layout do ModalProgressoEnvio em PontoFacial.jsx):
+// se o GET falhar ou travar carregando, o gestor não fica preso no modal.
 function DetalheExecucao({ id, onClose }) {
   const [ex, setEx] = useState(null)
   const [erro, setErro] = useState(false)
@@ -231,12 +233,12 @@ function DetalheExecucao({ id, onClose }) {
                 </div>
               )
             })}
-
-            <div className="modal-actions">
-              <button type="button" className="btn btn-secondary" onClick={onClose}>Fechar</button>
-            </div>
           </>
         )}
+
+        <div className="modal-actions">
+          <button type="button" className="btn btn-secondary" onClick={onClose}>Fechar</button>
+        </div>
       </div>
     </div>
   )
@@ -273,14 +275,16 @@ function RespostaItem({ item, resposta: r, foto }) {
 // overlay próprio (sem novo fetch) que também só fecha pelo botão.
 function FotoMiniatura({ fotoId }) {
   const [dataUrl, setDataUrl] = useState(null)
+  const [erro, setErro] = useState(false)
   const [grande, setGrande] = useState(false)
 
   useEffect(() => {
     api.get(`/checklist/fotos/${fotoId}`)
       .then((r) => setDataUrl(r.data?.dataUrl || null))
-      .catch(() => {}) // sem a miniatura o resto do detalhe continua legível
+      .catch(() => setErro(true)) // sai do "Carregando…" eterno; resto do detalhe continua legível
   }, [fotoId])
 
+  if (erro) return <span style={{ fontSize: 12, color: '#999' }}>⚠ Falha ao carregar foto</span>
   if (!dataUrl) return <span style={{ fontSize: 12, color: '#999' }}>Carregando foto…</span>
 
   return (
