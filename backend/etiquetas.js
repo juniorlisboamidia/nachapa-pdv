@@ -15,6 +15,8 @@ export function validadeDe({ manipuladoEmMs, conservacao, regras, itemConfig }) 
   if (!regra) throw { http: 400, msg: 'Não há regra de validade para esta conservação.' };
 
   const diasItem = itemConfig?.validadeDias;
+  // > 0 é de propósito: 0 ou negativo faria a etiqueta nascer vencida, então
+  // ignora a validade do item e cai na regra da conservação em vez disso.
   const usaItem = Number.isFinite(diasItem) && diasItem > 0;
   const dias = usaItem ? diasItem : regra.dias;
 

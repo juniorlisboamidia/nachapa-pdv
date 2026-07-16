@@ -51,6 +51,16 @@ console.log('\n== erros ==');
 try { validadeDe({ manipuladoEmMs: manip, conservacao: 'INEXISTENTE', regras, itemConfig: null }); t('conservacao invalida lanca', 'nao lancou', 'lanca'); }
 catch (e) { t('conservacao invalida lanca', e.http, 400); }
 
+try { validadeDe({ manipuladoEmMs: manip, conservacao: 'CONGELADO', regras: [], itemConfig: null }); t('conservacao valida sem regra cadastrada lanca', 'nao lancou', 'lanca'); }
+catch (e) { t('conservacao valida sem regra cadastrada lanca', e.http, 400); }
+
+console.log('\n== validadeDias 0/negativo cai na regra ==');
+const r6 = validadeDe({ manipuladoEmMs: manip, conservacao: 'RESFRIADO_0_4', regras, itemConfig: { validadeDias: 0 } });
+t('validadeDias 0 cai na regra', { origem: r6.origem, dias: r6.dias }, { origem: 'REGRA', dias: 5 });
+
+const r7 = validadeDe({ manipuladoEmMs: manip, conservacao: 'RESFRIADO_0_4', regras, itemConfig: { validadeDias: -5 } });
+t('validadeDias -5 cai na regra', { origem: r7.origem, dias: r7.dias }, { origem: 'REGRA', dias: 5 });
+
 console.log('\n== gerarLote ==');
 const lotes = new Set();
 for (let i = 0; i < 5000; i++) lotes.add(gerarLote());
