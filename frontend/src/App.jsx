@@ -21,6 +21,7 @@ import PontoEquilibrio from './pages/PontoEquilibrio'
 import Faturamento from './pages/Faturamento'
 import MinhaEmpresa from './pages/MinhaEmpresa'
 import Etiquetas from './pages/Etiquetas'
+import EtiquetasQuiosque from './pages/EtiquetasQuiosque'
 
 function TelaCarregando() {
   return (
@@ -109,6 +110,10 @@ export default function App() {
           <Route path="eu/:token" element={<EuLinkAntigo />} />
           {/* Banco de Talentos — formulário público de candidatura */}
           <Route path="talentos/:slug" element={<TalentosPublico />} />
+          {/* Etiquetas — quiosque da cozinha (tablet, por token do dispositivo).
+              O caminho é /etiquetas/:token/imprimir e não /etiquetas/:token para não
+              colidir com o /etiquetas/:tab da tela de admin, logo acima. */}
+          <Route path="etiquetas/:token/imprimir" element={<EtiquetasQuiosque />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

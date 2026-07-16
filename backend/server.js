@@ -6967,6 +6967,172 @@ app.put('/api/etiquetas/itens/:insumoId', async (req, res) => {
   } catch (err) { console.error('[etiquetas/itens PUT]', err); res.status(500).json({ error: 'Erro ao salvar o item.' }); }
 });
 
+// ===== Etiquetas (PÚBLICO — quiosque por token, sem login) =====
+// Estas rotas rodam FORA dos gates de auth/tenant (ver o app.use('/api') do topo:
+// tudo sob /public/ passa direto). Sem tenantStore, a extension do Prisma NÃO
+// injeta empresaId: aqui todo where leva empresaId EXPLÍCITO, vindo do Dispositivo
+// que o token resolve. É o oposto do lado ADMIN, onde filtro manual é erro.
+
+app.get('/api/public/etiquetas/:token/bootstrap', async (req, res) => {
+  try {
+    const disp = await resolverDispositivo(req.params.token);
+    if (!disp) return res.status(404).json({ error: 'Dispositivo não autorizado.' });
+    const empresaId = disp.empresaId;
+
+    const [loja, config, regras, insumos, cfgs, funcionarios] = await Promise.all([
+      prisma.empresa.findUnique({ where: { id: empresaId }, select: { nome: true, logoDataUrl: true } }),
+      prisma.etiquetaConfig.findFirst({ where: { empresaId } }),
+      prisma.etiquetaRegra.findMany({ where: { empresaId, ativo: true }, orderBy: { ordem: 'asc' } }),
+      prisma.insumo.findMany({ where: { empresaId, ativo: true, tipo: { in: ETIQUETA_TIPOS_INSUMO } }, orderBy: { nome: 'asc' }, select: { id: true, nome: true } }),
+      prisma.etiquetaItemConfig.findMany({ where: { empresaId, ativo: true } }),
+      prisma.funcionario.findMany({ where: { empresaId, status: 'ATIVO' }, orderBy: { nome: 'asc' }, select: { id: true, nome: true, apelido: true } }),
+    ]);
+
+    // Quem bateu ponto no expediente corrente aparece primeiro: é quem está na
+    // cozinha agora, e a lista inteira num tablet é lenta de percorrer.
+    const { de, ate } = janelaExpedienteAtual();
+    const presentes = new Set((await prisma.pontoRegistro.findMany({
+      where: { empresaId, invalidada: false, dataHora: { gte: de, lt: ate } }, select: { funcionarioId: true },
+    })).map((r) => r.funcionarioId));
+
+    const cMap = new Map(cfgs.map((c) => [c.insumoId, c]));
+    res.json({
+      loja: { nome: loja?.nome || 'Loja', logoDataUrl: loja?.logoDataUrl || null },
+      dispositivo: { nome: disp.nome },
+      config: config || { larguraMm: 50, alturaMm: 30, razaoSocial: loja?.nome || null },
+      regras,
+      itens: insumos.map((i) => {
+        const c = cMap.get(i.id) || null;
+        return { insumoId: i.id, nome: i.nome, conservacaoPadrao: c?.conservacaoPadrao || null, validadeDias: c?.validadeDias ?? null };
+      }),
+      funcionarios: funcionarios
+        .map((f) => ({ id: f.id, nome: f.apelido || f.nome, presente: presentes.has(f.id) }))
+        .sort((a, b) => (b.presente - a.presente) || a.nome.localeCompare(b.nome)),
+    });
+  } catch (err) { console.error('[public/etiquetas/bootstrap]', err); res.status(500).json({ error: 'Erro ao carregar.' }); }
+});
+
+// Nome da constraint do @unique de `lote` no Postgres (padrão do Prisma:
+// <Tabela>_<coluna>_key). É o identificador que o driver devolve quando a
+// unicidade estoura — ver colisaoDeLote().
+const CONSTRAINT_LOTE = 'EtiquetaImpressa_lote_key';
+
+// O create do lote só pode reciclar UM erro: a colisão do @unique de `lote`.
+// Identificar isso é mais chato do que parece e já falhou uma vez aqui:
+//
+//   - `meta.target`, o caminho "óbvio", vem VAZIO neste stack (Prisma 7 + adapter
+//     pg): a mensagem é literalmente "Unique constraint failed on the (not
+//     available)". Um check só por target nunca casa e o retry vira código morto —
+//     era exatamente o bug desta função na primeira versão.
+//   - A evidência real está no erro do driver, que traz o NOME da constraint. É por
+//     ele que casamos, nunca pela prosa: o Postgres devolve originalMessage no
+//     locale do servidor (aqui vem em português) e o identificador é estável.
+//
+// `target` continua sendo testado primeiro porque é o contrato oficial do Prisma:
+// se uma versão futura voltar a preenchê-lo, casa por ele e o ramo do driver nem roda.
+function colisaoDeLote(e) {
+  if (e?.code !== 'P2002') return false; // P2002 = violação de unicidade
+  const alvo = e?.meta?.target;
+  if (alvo) return Array.isArray(alvo) ? alvo.includes('lote') : String(alvo).includes('lote');
+  const original = e?.meta?.driverAdapterError?.cause?.originalMessage;
+  if (original) return original.includes(CONSTRAINT_LOTE);
+  // Sem evidência nenhuma: `lote` é hoje o ÚNICO unique de EtiquetaImpressa (os
+  // @@index não são únicos), então um P2002 neste create só pode ser ele. Se um dia
+  // outro unique entrar no model, os dois ramos acima já separam os casos — este
+  // fallback existe para o retry não morrer calado de novo se o formato do erro mudar.
+  return true;
+}
+
+// Cria a etiqueta sorteando o lote, com RETRY em colisão.
+//
+// `lote` é @unique GLOBAL e gerarLote() sorteia 6 chars de um alfabeto de 32 —
+// 32^6 ≈ 1,07 bi combinações. Como o unique é global, o paradoxo do aniversário
+// conta o volume SOMADO de todas as lojas: ~5% de chance de ao menos uma colisão
+// em 10 mil etiquetas e ~69% em 50 mil. Não é hipótese remota: é o normal de um
+// ano de operação. Sem retry, o azar chegaria à cozinha como erro opaco no meio
+// do turno — e o cozinheiro não tem o que fazer com "Erro ao registrar".
+//
+// 3 tentativas: cada sorteio é independente, então a chance de três colidirem
+// seguidas é desprezível (~1e-15 no volume acima).
+async function criarEtiquetaComLote(dados) {
+  for (let tentativa = 0; tentativa < 3; tentativa++) {
+    try {
+      return await prisma.etiquetaImpressa.create({ data: { ...dados, lote: gerarLote() } });
+    } catch (e) {
+      // Qualquer outro erro sobe inalterado: engolir aqui esconderia bug de verdade
+      // atrás de três tentativas idênticas e de uma mensagem errada.
+      if (!colisaoDeLote(e)) throw e;
+      console.warn('[public/etiquetas/registrar] colisão de lote, sorteando outro (tentativa %d de 3)', tentativa + 1);
+    }
+  }
+  throw { http: 503, msg: 'Não foi possível gerar um código de lote livre. Tente imprimir de novo.' };
+}
+
+app.post('/api/public/etiquetas/:token/registrar', async (req, res) => {
+  try {
+    const disp = await resolverDispositivo(req.params.token);
+    if (!disp) return res.status(404).json({ error: 'Dispositivo não autorizado.' });
+    const empresaId = disp.empresaId;
+    const b = req.body || {};
+
+    const insumoId = b.insumoId ? parseInt(b.insumoId, 10) : null;
+    const nomeAvulso = typeof b.nomeAvulso === 'string' ? b.nomeAvulso.trim().slice(0, 120) : '';
+    if (!insumoId && !nomeAvulso) return res.status(400).json({ error: 'Escolha um item ou informe o nome.' });
+
+    let nomeItem = nomeAvulso, itemConfig = null;
+    if (insumoId) {
+      const insumo = await prisma.insumo.findFirst({ where: { id: insumoId, empresaId } });
+      if (!insumo) return res.status(404).json({ error: 'Item não encontrado.' });
+      nomeItem = insumo.nome;
+      itemConfig = await prisma.etiquetaItemConfig.findFirst({ where: { empresaId, insumoId } });
+    }
+
+    const func = b.responsavelId ? await prisma.funcionario.findFirst({ where: { id: parseInt(b.responsavelId, 10), empresaId } }) : null;
+    if (!func) return res.status(400).json({ error: 'Escolha quem manipulou.' });
+
+    const regras = await prisma.etiquetaRegra.findMany({ where: { empresaId, ativo: true } });
+    // A validade é recalculada AQUI: o cliente não é fonte de verdade para a
+    // data que vai colada num alimento.
+    let calc;
+    try { calc = validadeDe({ manipuladoEmMs: Date.now(), conservacao: b.conservacao, regras, itemConfig }); }
+    catch (e) { return res.status(e.http || 400).json({ error: e.msg || 'Conservação inválida.' }); }
+
+    const quantidade = Math.min(50, Math.max(1, parseInt(b.quantidade, 10) || 1));
+    let etiqueta;
+    try {
+      etiqueta = await criarEtiquetaComLote({
+        empresaId, insumoId, nomeItem,
+        conservacao: b.conservacao, tempLabel: calc.tempLabel,
+        manipuladoEm: new Date(), validoAte: calc.validoAte, validadeDias: calc.dias,
+        responsavelId: func.id,
+        // Snapshot deliberado: o rótulo colado no alimento tem que continuar
+        // dizendo quem manipulou mesmo que o cadastro mude ou saia depois.
+        responsavelNome: func.apelido || func.nome,
+        dispositivoId: disp.id, quantidade,
+      });
+    } catch (e) {
+      // Só o esgotamento das tentativas chega aqui como {http, msg}; o resto cai
+      // no catch de fora e vira 500 com log.
+      if (e?.http) return res.status(e.http).json({ error: e.msg });
+      throw e;
+    }
+    await prisma.dispositivo.update({ where: { id: disp.id }, data: { ultimaSync: new Date() } });
+    res.status(201).json({ ok: true, etiqueta });
+  } catch (err) { console.error('[public/etiquetas/registrar]', err); res.status(500).json({ error: 'Erro ao registrar a etiqueta.' }); }
+});
+
+// Consulta pública do QR.
+app.get('/api/public/etiquetas/lote/:lote', async (req, res) => {
+  try {
+    const e = await prisma.etiquetaImpressa.findUnique({ where: { lote: String(req.params.lote).toUpperCase() } });
+    if (!e) return res.status(404).json({ error: 'Etiqueta não encontrada.' });
+    res.json({ etiqueta: {
+      lote: e.lote, nomeItem: e.nomeItem, conservacao: e.conservacao, tempLabel: e.tempLabel,
+      manipuladoEm: e.manipuladoEm, validoAte: e.validoAte, responsavelNome: e.responsavelNome,
+    } });
+  } catch (err) { console.error('[public/etiquetas/lote]', err); res.status(500).json({ error: 'Erro ao consultar.' }); }
+});
+
 app.listen(PORT, () => console.log(`Operação (PDV) API rodando em http://localhost:${PORT}`));
 
 // Servidor de ingest do coletor DIXI (WebSocket na porta própria 7788).
