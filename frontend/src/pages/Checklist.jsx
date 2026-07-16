@@ -20,11 +20,13 @@ const TAB_IDS = TABS.map((t) => t.id)
 
 // A API só devolve o código do tipo do item (enum TipoItemChecklist) — o rótulo de
 // exibição fica no front, mesmo padrão de Etiquetas.jsx com CONS_LABEL.
-const TIPO_LABEL = { CHECK: 'Check', AVALIACAO: 'Avaliação', TEXTO: 'Texto', NUMERICO: 'Numérico', SELECAO: 'Seleção' }
+const TIPO_LABEL = { CHECK: 'Check', AVALIACAO: 'Avaliação', TEXTO: 'Texto', NUMERICO: 'Numérico', SELECAO: 'Seleção', FOTO: 'Foto' }
 const PRIORIDADE_LABEL = { BAIXA: 'Baixa', MEDIA: 'Média', ALTA: 'Alta' }
 const REC_LABEL = { DIARIA: 'Todo dia', DIAS_SEMANA: 'Dias da semana', AVULSO: 'Sem agendamento' }
 const DOW = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
-const TIPOS = ['CHECK', 'AVALIACAO', 'TEXTO', 'NUMERICO', 'SELECAO']
+// FOTO, assim como CHECK e TEXTO, não tem config própria no editor — é só evidência
+// (a execução exige anexar uma foto, sem parâmetros extras pra configurar aqui).
+const TIPOS = ['CHECK', 'AVALIACAO', 'TEXTO', 'NUMERICO', 'SELECAO', 'FOTO']
 // Mesma lista fixa do backend (CHECKLIST_CATEGORIAS em server.js) — o endpoint de
 // checklists não devolve categorias (diferente de /templates), então replica aqui.
 const CHECKLIST_CATEGORIAS = ['Abertura', 'Fechamento', 'Controle de Pragas', 'Documentações Sanitárias', 'Segurança Alimentar']
