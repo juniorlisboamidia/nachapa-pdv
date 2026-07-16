@@ -7823,6 +7823,49 @@ app.get('/api/checklist/painel', async (req, res) => {
   } catch (err) { console.error('[checklist/painel]', err); res.status(500).json({ error: 'Erro ao carregar o painel.' }); }
 });
 
+// ---- Revisão da execução (Task 7): o gestor confere o que foi feito
+
+// Execuções recentes — o gestor escolhe qual abrir.
+app.get('/api/checklist/execucoes', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const execs = await prisma.checklistExecucao.findMany({
+      orderBy: { iniciadaEm: 'desc' }, take: 50,
+      include: { checklist: { select: { nome: true, categoria: true } } },
+    });
+    const funcIds = [...new Set(execs.map((e) => e.funcionarioId))];
+    const funcs = funcIds.length ? await prisma.funcionario.findMany({ where: { id: { in: funcIds } }, select: { id: true, nome: true, apelido: true } }) : [];
+    const fmap = new Map(funcs.map((f) => [f.id, f.apelido || f.nome]));
+    res.json({ execucoes: execs.map((e) => ({ id: e.id, checklistNome: e.checklist?.nome, categoria: e.checklist?.categoria, funcionario: fmap.get(e.funcionarioId) || '—', status: e.status, emAlerta: e.emAlerta, iniciadaEm: e.iniciadaEm, concluidaEm: e.concluidaEm })) });
+  } catch (err) { console.error('[checklist/execucoes]', err); res.status(500).json({ error: 'Erro ao carregar execuções.' }); }
+});
+
+// Detalhe de uma execução (respostas + fotos metadata; bytes por /fotos/:id).
+app.get('/api/checklist/execucoes/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const e = await prisma.checklistExecucao.findFirst({
+      where: { id: parseInt(req.params.id, 10) },
+      include: { respostas: true, fotos: { select: { id: true, itemChave: true } }, checklist: { select: { nome: true, categoria: true } } },
+    });
+    if (!e) return res.status(404).json({ error: 'Execução não encontrada.' });
+    const func = await prisma.funcionario.findFirst({ where: { id: e.funcionarioId }, select: { nome: true, apelido: true } });
+    const rmap = {}; for (const r of e.respostas) rmap[r.itemChave] = { valor: r.valorJson, conforme: r.conforme, observacao: r.observacao };
+    const fmap = {}; for (const f of e.fotos) fmap[f.itemChave] = { id: f.id };
+    res.json({ execucao: { id: e.id, checklistNome: e.checklist?.nome, categoria: e.checklist?.categoria, funcionario: func ? (func.apelido || func.nome) : '—', dataRef: e.dataRef, status: e.status, emAlerta: e.emAlerta, iniciadaEm: e.iniciadaEm, concluidaEm: e.concluidaEm, itens: e.itensSnapshotJson, respostas: rmap, fotos: fmap } });
+  } catch (err) { console.error('[checklist/execucoes/:id]', err); res.status(500).json({ error: 'Erro ao carregar a execução.' }); }
+});
+
+// Bytes da foto (gestor).
+app.get('/api/checklist/fotos/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const foto = await prisma.checklistFoto.findFirst({ where: { id: parseInt(req.params.id, 10) }, select: { dataUrl: true } });
+    if (!foto) return res.status(404).json({ error: 'Foto não encontrada.' });
+    res.json({ dataUrl: foto.dataUrl });
+  } catch (err) { console.error('[checklist/fotos]', err); res.status(500).json({ error: 'Erro ao carregar a foto.' }); }
+});
+
 app.listen(PORT, () => console.log(`Operação (PDV) API rodando em http://localhost:${PORT}`));
 
 // Servidor de ingest do coletor DIXI (WebSocket na porta própria 7788).
