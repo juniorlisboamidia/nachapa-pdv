@@ -7718,6 +7718,33 @@ app.put('/api/checklist/colaboradores/:id/setores', async (req, res) => {
   } catch (err) { console.error('[checklist/colaboradores setores]', err); res.status(500).json({ error: 'Erro ao salvar setores.' }); }
 });
 
+// Painel do gestor (Task 10): KPIs + pendentes de hoje + em alerta. "Hoje" aqui é o dia
+// de EXPEDIENTE (corte 05:00 BR via janelaExpedienteAtual), não o dia civil do VPS
+// (que roda em UTC) — mesmo dataRef/dow usados pela Área do Colaborador (chkDataRefAtual/
+// chkDiaSemanaExpediente) e pelo motor de recorrência puro (venceHoje).
+app.get('/api/checklist/painel', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const dataRef = janelaExpedienteAtual().de;
+    const f = brFields(dataRef.getTime());
+    const dow = new Date(Date.UTC(f.y, f.mo, f.day)).getUTCDay();
+    const checklists = await prisma.checklist.findMany({ where: { ativo: true }, include: { _count: { select: { itens: true } } } });
+    const execs = await prisma.checklistExecucao.findMany({ where: { dataRef }, select: { checklistId: true, status: true, emAlerta: true } });
+    const execMap = new Map(execs.map((e) => [e.checklistId, e]));
+    const venceHojeLista = checklists.filter((c) => venceHoje({ recorrenciaTipo: c.recorrenciaTipo, recorrenciaConfig: c.recorrenciaConfig }, dow));
+    const concluidosHoje = execs.filter((e) => e.status === 'CONCLUIDA').length;
+    const emAlerta = execs.filter((e) => e.emAlerta).length;
+    const pendentes = venceHojeLista.filter((c) => execMap.get(c.id)?.status !== 'CONCLUIDA')
+      .map((c) => ({ id: c.id, nome: c.nome, categoria: c.categoria, prioridade: c.prioridade, status: execMap.get(c.id)?.status || 'PENDENTE' }));
+    const alertas = checklists.filter((c) => execMap.get(c.id)?.emAlerta).map((c) => ({ id: c.id, nome: c.nome }));
+    res.json({
+      kpis: { ativos: checklists.length, venceHoje: venceHojeLista.length, concluidosHoje, emAlerta },
+      pendentes, alertas,
+      meus: checklists.slice(0, 20).map((c) => ({ id: c.id, nome: c.nome, categoria: c.categoria, prioridade: c.prioridade, recorrenciaTipo: c.recorrenciaTipo, itens: c._count.itens })),
+    });
+  } catch (err) { console.error('[checklist/painel]', err); res.status(500).json({ error: 'Erro ao carregar o painel.' }); }
+});
+
 app.listen(PORT, () => console.log(`Operação (PDV) API rodando em http://localhost:${PORT}`));
 
 // Servidor de ingest do coletor DIXI (WebSocket na porta própria 7788).

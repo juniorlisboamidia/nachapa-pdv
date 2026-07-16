@@ -1,8 +1,8 @@
 // Checklist Inteligente — rotinas padronizadas da operação, com registro exigido e
-// acompanhamento de longe. Painel do gestor com Templates (biblioteca pronta, semeada
-// pelo backend), Setores (onde cada checklist roda — Cozinha, Salão…) e Checklists
-// (CRUD + editor, Task 7: nasce do zero ou de um template). A aba Painel (visão
-// consolidada do gestor) chega na Task 10; por ora fica como placeholder "Em breve".
+// acompanhamento de longe. Painel do gestor (Task 10: KPIs + pendentes de hoje + em
+// alerta) com Templates (biblioteca pronta, semeada pelo backend), Setores (onde cada
+// checklist roda — Cozinha, Salão…) e Checklists (CRUD + editor, Task 7: nasce do zero
+// ou de um template).
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import api from '../services/api'
@@ -62,9 +62,37 @@ export default function Checklist() {
       {tab === 'templates' && <AbaTemplates notify={notify} />}
       {tab === 'setores' && <AbaSetores notify={notify} />}
       {tab === 'checklists' && <AbaChecklists notify={notify} />}
-      {tab === 'painel' && (
-        <div className="empty-state">Em breve nesta fatia.</div>
-      )}
+      {tab === 'painel' && <AbaPainel />}
+    </div>
+  )
+}
+
+// ===================== PAINEL =====================
+// Visão consolidada do gestor: KPIs do dia + pendentes (vencem hoje e ainda não foram
+// concluídos) + em alerta (execução com item crítico não-conforme). "Hoje" já vem
+// resolvido pelo backend com o dia de expediente (corte 05:00 BR), não precisa de
+// nenhum cálculo de fuso aqui no front.
+function AbaPainel() {
+  const [p, setP] = useState(null)
+  useEffect(() => { api.get('/checklist/painel').then((r) => setP(r.data)).catch(() => {}) }, [])
+  if (!p) return <div className="empty-state">Carregando…</div>
+  const KPI = ({ n, label }) => <div className="table-card" style={{ padding: 16 }}><div style={{ fontSize: 28, fontWeight: 800 }}>{n}</div><div style={{ fontSize: 12, color: '#777' }}>{label}</div></div>
+  return (
+    <div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 16 }}>
+        <KPI n={p.kpis.ativos} label="Checklists ativos" /><KPI n={p.kpis.venceHoje} label="Vencem hoje" />
+        <KPI n={p.kpis.concluidosHoje} label="Concluídos hoje" /><KPI n={p.kpis.emAlerta} label="Em alerta" />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
+        <div className="table-card" style={{ padding: 14 }}>
+          <h3 style={{ fontSize: 13, fontWeight: 800, marginBottom: 8 }}>Pendentes de hoje</h3>
+          {p.pendentes.length === 0 ? <p className="empty-state">Tudo em dia.</p> : p.pendentes.map((c) => <div key={c.id} style={{ padding: '6px 0', borderTop: '1px solid var(--app-border,#eee)', fontSize: 13 }}>{c.nome} <span style={{ color: '#999' }}>· {c.categoria}</span></div>)}
+        </div>
+        <div className="table-card" style={{ padding: 14 }}>
+          <h3 style={{ fontSize: 13, fontWeight: 800, color: '#dc2626', marginBottom: 8 }}>Em alerta</h3>
+          {p.alertas.length === 0 ? <p className="empty-state">Nenhum alerta.</p> : p.alertas.map((c) => <div key={c.id} style={{ padding: '6px 0', borderTop: '1px solid var(--app-border,#eee)', fontSize: 13 }}>{c.nome}</div>)}
+        </div>
+      </div>
     </div>
   )
 }
