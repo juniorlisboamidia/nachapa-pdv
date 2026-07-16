@@ -46,6 +46,25 @@ function niimbot() {
   return api
 }
 
+// Os erros que a lib levanta são em inglês e falam de protocolo — o assertSelection
+// dela, por exemplo, devolve coisas como `Connected printer is Niimbot B1 (task "b1",
+// 203 dpi)…`. "task" e dpi são exatamente o detalhe que este arquivo existe para
+// conter, e quem lê a mensagem é um cozinheiro com o celular no meio do serviço, não
+// um dev. Então traduzimos para uma frase que diz O QUE FAZER e guardamos o original
+// em `cause`: nada é engolido, o dev acha tudo no console.
+function erroAmigavel(e, mensagem) {
+  // NotFoundError = o usuário fechou o seletor sem escolher nada, ou nenhuma B1
+  // apareceu na lista. É o caminho mais comum deste fluxo e o Chrome o descreve em
+  // inglês ("User cancelled the requestDevice() chooser.").
+  if (e?.name === 'NotFoundError') {
+    return new Error(
+      'Nenhuma impressora foi escolhida. Confira se a etiquetadora está ligada e perto do celular, e toque em conectar de novo.',
+      { cause: e },
+    )
+  }
+  return new Error(mensagem, { cause: e })
+}
+
 export function bluetoothDisponivel() {
   return typeof navigator !== 'undefined' && !!navigator.bluetooth
 }
@@ -57,7 +76,15 @@ export async function conectar() {
     throw new Error('Este navegador não tem Bluetooth. Use o Chrome no Android.')
   }
   // identify() conecta e pergunta o modelo à impressora SEM imprimir nada.
-  const info = await niimbot().identify(MODELO_B1)
+  let info
+  try {
+    info = await niimbot().identify(MODELO_B1)
+  } catch (e) {
+    throw erroAmigavel(
+      e,
+      'Não foi possível conectar na etiquetadora. Confira se ela está ligada e perto do celular, e tente de novo.',
+    )
+  }
 
   // A B1 e a B1 Pro anunciam o MESMO nome no BLE ("B1…"), então o usuário consegue
   // escolher a errada no seletor e só descobriria na hora de imprimir. A B1 Pro é 300
@@ -81,7 +108,15 @@ export async function conectar() {
 // ATENÇÃO: `Niimbot.printer` só é zerado por disconnect(). Se a impressora for
 // desligada ou sair de alcance, a lib zera a característica BLE mas não o printer —
 // então isto responde "já identificamos uma impressora nesta sessão", não "o link BLE
-// está vivo agora". A confirmação real só vem ao imprimir.
+// está vivo agora". A confirmação real só vem ao imprimir. (`printer` é getter sem
+// setter: o driver não tem como corrigir a mentira por fora da lib.)
+//
+// CONSEQUÊNCIA PARA A UI, que é o motivo deste aviso existir: com o link caído, o
+// imprimir() seguinte cai no connect() da lib, que tenta reabrir o seletor de
+// dispositivos FORA de um gesto do usuário — o Chrome recusa com um erro críptico.
+// Ou seja: tentar imprimir de novo sozinha não recupera. Depois de uma falha de
+// impressão a UI precisa oferecer um botão "reconectar" (o toque é o gesto que o
+// navegador exige) em vez de reimprimir automaticamente.
 export function conectado() {
   return !!globalThis.Niimbot?.printer
 }
@@ -100,23 +135,55 @@ export function desconectar() {
 // dithering: é o que o protocolo espera, e dithering em etiqueta de 203dpi vira
 // borrão ilegível.
 //
-// NOTA: quem converte o bitmap de verdade na hora de imprimir é a própria lib
-// (imageToPacked), com a mesma regra (luminância < 128 = preto, MSB-first). Esta
-// função é lógica NOSSA, mantida exportada porque é a única parte do driver testável
-// sem a impressora na mão — e é a especificação viva do que esperamos da lib.
-export function canvasParaBitmap(canvas) {
+// O QUE ESTA FUNÇÃO É: uma prévia/conferência do bitmap que a lib vai gerar. Ela NÃO
+// está no caminho da impressão — quem converte de verdade é a `imageToPacked` da lib,
+// dentro de printImage(). Existe porque é a única parte do driver que dá para exercitar
+// sem a impressora na mão (ver niimbotB1.test.js) e porque permite conferir na tela o
+// que vai sair no papel.
+//
+// Por isso ela ESPELHA a imageToPacked, passo a passo, e só vale enquanto espelhar:
+// a implementação está em node_modules/niimbot-web-bluetooth/src/niimbot.js (busque
+// "imageToPacked") e PRECISA ser reconferida a cada bump de versão da lib — a lib não
+// tem tipagem nem changelog que avise de mudança de regra.
+//
+// Os passos da lib, na ordem (niimbot.js): fillRect branco opaco → drawImage por cima,
+// deslocado dy linhas → luminância 0.299/0.587/0.114 → `< 128` vira bit 1 (preto).
+// Duas consequências que já nos morderam:
+//   1. O alfa é RESOLVIDO na composição, não no threshold. Depois do fillRect+drawImage
+//      todo pixel tem alfa 255, então o `alpha > 32` que existe na lib é código morto —
+//      quem decide é a cor JÁ COMPOSTA sobre o branco. Preto com alfa 64 compõe em ~191
+//      e sai BRANCO. (A versão antiga daqui thresholdava o RGB cru e dizia preto:
+//      divergia da lib em todo alfa 1..254.)
+//   2. `deslocamentoY` empurra a arte para baixo: as dy primeiras linhas saem brancas e
+//      as dy últimas caem para fora da página. Mesmo default (0) e mesmo `| 0` da lib.
+export function canvasParaBitmap(canvas, { deslocamentoY = 0 } = {}) {
   const { width, height } = canvas
   const ctx = canvas.getContext('2d')
   const { data } = ctx.getImageData(0, 0, width, height)
   const bytesPorLinha = Math.ceil(width / 8)
+  const dy = deslocamentoY | 0
   const linhas = []
   for (let y = 0; y < height; y++) {
     const linha = new Uint8Array(bytesPorLinha)
-    for (let x = 0; x < width; x++) {
-      const i = (y * width + x) * 4
-      // Luminância padrão; alfa 0 conta como branco (fundo não impresso).
-      const lum = data[i + 3] === 0 ? 255 : 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]
-      if (lum < 128) linha[x >> 3] |= 0x80 >> (x & 7) // MSB-first
+    // Linha da arte que cai nesta linha do papel. Fora do intervalo = fundo branco
+    // (as de cima empurradas pelo offset; as de baixo que saíram da página).
+    const origem = y - dy
+    if (origem >= 0 && origem < height) {
+      for (let x = 0; x < width; x++) {
+        const i = (origem * width + x) * 4
+        // Compõe sobre branco opaco ANTES de thresholdar, como o fillRect+drawImage da
+        // lib: cor * a + 255 * (1 - a), por canal. O Math.round não é enfeite: o canvas
+        // da lib guarda o resultado em 8 bits, então quem cai na fronteira (ex.: 128.49
+        // → 128 → luminância 127.999… → preto) só bate com a lib se arredondarmos
+        // igual. Sem ele, divergíamos nesse pixel.
+        const a = data[i + 3] / 255
+        const branco = 255 * (1 - a)
+        const r = Math.round(data[i] * a + branco)
+        const g = Math.round(data[i + 1] * a + branco)
+        const b = Math.round(data[i + 2] * a + branco)
+        const lum = 0.299 * r + 0.587 * g + 0.114 * b
+        if (lum < 128) linha[x >> 3] |= 0x80 >> (x & 7) // MSB-first
+      }
     }
     linhas.push(linha)
   }
@@ -160,6 +227,14 @@ export async function imprimir(canvas, { copias = 1, deslocamentoY = 0 } = {}) {
       copies: copias,
       offsetY: deslocamentoY,
     })
+  } catch (e) {
+    // Erro daqui para baixo é da lib (BLE caiu, impressora desligou, seleção errada).
+    // A saída para o usuário é sempre a mesma: reconectar num toque — ver o aviso em
+    // conectado() sobre por que tentar imprimir de novo sozinho não resolve.
+    throw erroAmigavel(
+      e,
+      'Não foi possível imprimir a etiqueta. Confira se a etiquetadora está ligada, com etiqueta e perto do celular, e conecte de novo.',
+    )
   } finally {
     // Sem isto o blob fica preso na memória até a aba fechar — num quiosque que imprime
     // o dia inteiro, vaza.
