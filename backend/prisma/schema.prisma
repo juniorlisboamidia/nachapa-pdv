@@ -62,6 +62,8 @@ model Insumo {
   receitaProducao ReceitaProducao?      @relation("ReceitaDoInsumo")
   // Usos deste insumo como ingrediente em receitas de produção própria
   usosEmReceitas  ReceitaProducaoItem[] @relation("IngredienteDeReceita")
+  // Etiquetas: config de conservação/validade padrão deste insumo
+  etiquetaConfig EtiquetaItemConfig?
 
   @@index([empresaId])
   @@index([nome])
@@ -1700,4 +1702,94 @@ model RecrutamentoConfig {
   atualizadoEm DateTime @updatedAt
 
   @@unique([empresaId])
+}
+
+// ============================================================
+// Etiquetas (rotulagem ANVISA RDC 216/2004)
+// ============================================================
+
+enum ConservacaoTipo {
+  CONGELADO
+  RESFRIADO_0_4
+  RESFRIADO_4_6
+  AMBIENTE
+  DESCONGELADO
+  ABERTO
+}
+
+// Identificação impressa + formato. 1 por empresa.
+model EtiquetaConfig {
+  id                 Int      @id @default(autoincrement())
+  empresaId          Int
+  razaoSocial        String?
+  cnpj               String?
+  responsavelTecnico String?
+  sif                String?
+  sie                String?
+  // larguraMm é o ROLO; a área desenhada trava em 48mm (384px), o limite da cabeça da B1.
+  larguraMm          Int      @default(50)
+  alturaMm           Int      @default(30)
+  campos             Json?    // { alergenos: false, instrucoes: false, ... }
+  criadoEm           DateTime @default(now())
+  atualizadoEm       DateTime @updatedAt
+
+  @@unique([empresaId])
+  @@index([empresaId])
+}
+
+// Tabela de validade por conservação (semeada na migration; editável).
+model EtiquetaRegra {
+  id           Int             @id @default(autoincrement())
+  empresaId    Int
+  conservacao  ConservacaoTipo
+  tempLabel    String
+  dias         Int
+  ordem        Int             @default(0)
+  ativo        Boolean         @default(true)
+  criadoEm     DateTime        @default(now())
+  atualizadoEm DateTime        @updatedAt
+
+  @@unique([empresaId, conservacao])
+  @@index([empresaId])
+}
+
+// Config de etiqueta por insumo. validadeDias null = usa a EtiquetaRegra.
+model EtiquetaItemConfig {
+  id                Int              @id @default(autoincrement())
+  empresaId         Int
+  insumoId          Int              @unique
+  conservacaoPadrao ConservacaoTipo?
+  validadeDias      Int?
+  ativo             Boolean          @default(true)
+  criadoEm          DateTime         @default(now())
+  atualizadoEm      DateTime         @updatedAt
+
+  insumo Insumo @relation(fields: [insumoId], references: [id], onDelete: Cascade)
+
+  @@index([empresaId])
+}
+
+// Registro de cada etiqueta emitida. Alimenta painel e histórico.
+// nomeItem/responsavelNome são SNAPSHOT: a etiqueta é um documento sanitário do
+// momento da manipulação e não pode mudar quando o cadastro muda.
+model EtiquetaImpressa {
+  id             Int             @id @default(autoincrement())
+  empresaId      Int
+  lote           String          @unique
+  insumoId       Int?
+  nomeItem       String
+  conservacao    ConservacaoTipo
+  tempLabel      String
+  manipuladoEm   DateTime
+  validoAte      DateTime
+  validadeDias   Int
+  responsavelId  Int?
+  responsavelNome String
+  dispositivoId  Int?
+  quantidade     Int             @default(1)
+  criadoEm       DateTime        @default(now())
+
+  @@index([empresaId, validoAte])
+  @@index([empresaId, criadoEm])
+  @@index([empresaId, insumoId])
 }
