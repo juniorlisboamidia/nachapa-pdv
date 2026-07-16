@@ -14,6 +14,7 @@ import { zapiConfigurado, zapiStatus, zapiQrCode, zapiCriarInstancia, zapiEnviar
 import { validadeDe, gerarLote, colisaoDeLote, CONSERVACOES } from './etiquetas.js';
 import { avaliarResposta, execucaoEmAlerta, fotosCriticasFaltando } from './checklistConformidade.js';
 import { venceHoje } from './checklistRecorrencia.js';
+import { itensCriticosNaoConformes, montarMensagemAlerta } from './checklistAlerta.js';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 
@@ -7865,6 +7866,74 @@ app.get('/api/checklist/fotos/:id', async (req, res) => {
     if (!foto) return res.status(404).json({ error: 'Foto não encontrada.' });
     res.json({ dataUrl: foto.dataUrl });
   } catch (err) { console.error('[checklist/fotos]', err); res.status(500).json({ error: 'Erro ao carregar a foto.' }); }
+});
+
+// ---- Notificações (Fatia 3a): config, destinatários, histórico e prévia do alerta imediato
+
+// Config de notificações (cria on-demand). Admin, dentro do gate → extension injeta empresaId.
+async function garantirNotifConfig() {
+  let c = await prisma.checklistNotificacaoConfig.findFirst();
+  if (!c) c = await prisma.checklistNotificacaoConfig.create({ data: {} });
+  return c;
+}
+app.get('/api/checklist/notificacoes', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const config = await garantirNotifConfig();
+    const destinatarios = await prisma.checklistDestinatario.findMany({ orderBy: { nome: 'asc' } });
+    res.json({ config, destinatarios });
+  } catch (err) { console.error('[checklist/notificacoes GET]', err); res.status(500).json({ error: 'Erro ao carregar notificações.' }); }
+});
+app.put('/api/checklist/notificacoes/config', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const atual = await garantirNotifConfig();
+    const config = await prisma.checklistNotificacaoConfig.update({ where: { id: atual.id }, data: { alertaImediatoAtivo: req.body?.alertaImediatoAtivo !== false && !!req.body?.alertaImediatoAtivo } });
+    res.json({ ok: true, config });
+  } catch (err) { console.error('[checklist/notificacoes config PUT]', err); res.status(500).json({ error: 'Erro ao salvar.' }); }
+});
+app.post('/api/checklist/notificacoes/destinatarios', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const nome = req.body?.nome == null ? '' : String(req.body.nome).trim().slice(0, 80);
+    const whatsapp = req.body?.whatsapp == null ? '' : String(req.body.whatsapp).trim().slice(0, 30);
+    if (!nome) return res.status(400).json({ error: 'Informe o nome.' });
+    if (soDigitos(whatsapp).length < 10) return res.status(400).json({ error: 'Informe o WhatsApp com DDD.' });
+    const dest = await prisma.checklistDestinatario.create({ data: { nome, whatsapp } });
+    res.status(201).json({ ok: true, destinatario: dest });
+  } catch (err) { console.error('[checklist/destinatarios POST]', err); res.status(500).json({ error: 'Erro ao adicionar.' }); }
+});
+app.put('/api/checklist/notificacoes/destinatarios/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const id = parseInt(req.params.id, 10);
+    const atual = await prisma.checklistDestinatario.findFirst({ where: { id } });
+    if (!atual) return res.status(404).json({ error: 'Destinatário não encontrado.' });
+    const data = {};
+    if (req.body?.nome !== undefined) data.nome = String(req.body.nome).trim().slice(0, 80) || atual.nome;
+    if (req.body?.whatsapp !== undefined) data.whatsapp = String(req.body.whatsapp).trim().slice(0, 30) || atual.whatsapp;
+    if (req.body?.ativo !== undefined) data.ativo = req.body.ativo !== false;
+    const dest = await prisma.checklistDestinatario.update({ where: { id }, data });
+    res.json({ ok: true, destinatario: dest });
+  } catch (err) { console.error('[checklist/destinatarios PUT]', err); res.status(500).json({ error: 'Erro ao salvar.' }); }
+});
+app.delete('/api/checklist/notificacoes/destinatarios/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try { await prisma.checklistDestinatario.delete({ where: { id: parseInt(req.params.id, 10) } }); res.json({ ok: true }); }
+  catch (err) { console.error('[checklist/destinatarios DELETE]', err); res.status(500).json({ error: 'Erro ao excluir.' }); }
+});
+app.get('/api/checklist/notificacoes/historico', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try { res.json({ historico: await prisma.checklistNotificacaoLog.findMany({ orderBy: { criadoEm: 'desc' }, take: 50 }) }); }
+  catch (err) { console.error('[checklist/notificacoes historico]', err); res.status(500).json({ error: 'Erro ao carregar o histórico.' }); }
+});
+app.get('/api/checklist/notificacoes/previa', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const loja = await getEmpresa();
+    const msg = montarMensagemAlerta({ lojaNome: loja?.nome || 'Sua loja', checklistNome: 'Fechamento Cozinha', funcionarioNome: 'Rafaely', quando: '22:10', itensForaDoPadrao: ['Temperatura do freezer', 'EPIs sendo utilizados'] });
+    res.json({ previa: msg });
+  } catch (err) { console.error('[checklist/notificacoes previa]', err); res.status(500).json({ error: 'Erro ao gerar prévia.' }); }
 });
 
 app.listen(PORT, () => console.log(`Operação (PDV) API rodando em http://localhost:${PORT}`));
