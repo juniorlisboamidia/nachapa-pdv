@@ -620,6 +620,7 @@ model Funcionario {
   termoBiometriaEm DateTime? // aceite do termo LGPD de uso da biometria
   enrollidColetor Int?     // ID do usuário no coletor DIXI (casa as batidas). Auto-aprendido pelo nome.
   folgaSemana  Int[]    @default([]) // dias de folga fixa (0=dom..6=sáb). Sobrepõe a jornada. Vazio = usa só a jornada.
+  setorIds     Int[]    @default([])
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
@@ -1792,4 +1793,141 @@ model EtiquetaImpressa {
   @@index([empresaId, validoAte])
   @@index([empresaId, criadoEm])
   @@index([empresaId, insumoId])
+}
+
+// ============================================================
+// Checklist Inteligente (Fatia 1 — Núcleo)
+// ============================================================
+
+enum TipoItemChecklist {
+  CHECK
+  AVALIACAO
+  TEXTO
+  NUMERICO
+  SELECAO
+}
+
+enum PrioridadeChecklist {
+  BAIXA
+  MEDIA
+  ALTA
+}
+
+enum RecorrenciaTipo {
+  DIARIA
+  DIAS_SEMANA
+  AVULSO
+}
+
+enum StatusExecucao {
+  EM_ANDAMENTO
+  CONCLUIDA
+}
+
+model Setor {
+  id           Int      @id @default(autoincrement())
+  empresaId    Int
+  nome         String
+  ordem        Int      @default(0)
+  ativo        Boolean  @default(true)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+  @@unique([empresaId, nome])
+  @@index([empresaId])
+}
+
+model ChecklistTemplate {
+  id               Int      @id @default(autoincrement())
+  empresaId        Int
+  nome             String
+  categoria        String
+  descricao        String?
+  tempoEstimadoMin Int?
+  ativo            Boolean  @default(true)
+  arquivado        Boolean  @default(false)
+  criadoEm         DateTime @default(now())
+  atualizadoEm     DateTime @updatedAt
+  itens            ChecklistTemplateItem[]
+  @@index([empresaId])
+}
+
+model ChecklistTemplateItem {
+  id         Int      @id @default(autoincrement())
+  empresaId  Int
+  templateId Int
+  ordem      Int      @default(0)
+  tipo       TipoItemChecklist
+  titulo     String
+  descricao  String?
+  critico    Boolean  @default(false)
+  config     Json?
+  template   ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  @@index([empresaId])
+  @@index([templateId])
+}
+
+model Checklist {
+  id                Int      @id @default(autoincrement())
+  empresaId         Int
+  templateOrigemId  Int?
+  nome              String
+  categoria         String
+  descricao         String?
+  prioridade        PrioridadeChecklist @default(MEDIA)
+  setorIds          Int[]
+  recorrenciaTipo   RecorrenciaTipo @default(AVULSO)
+  recorrenciaConfig Json?
+  ativo             Boolean  @default(true)
+  criadoEm          DateTime @default(now())
+  atualizadoEm      DateTime @updatedAt
+  itens             ChecklistItem[]
+  execucoes         ChecklistExecucao[]
+  @@index([empresaId])
+}
+
+model ChecklistItem {
+  id          Int      @id @default(autoincrement())
+  empresaId   Int
+  checklistId Int
+  ordem       Int      @default(0)
+  tipo        TipoItemChecklist
+  titulo      String
+  descricao   String?
+  critico     Boolean  @default(false)
+  config      Json?
+  checklist   Checklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  @@index([empresaId])
+  @@index([checklistId])
+}
+
+model ChecklistExecucao {
+  id                Int      @id @default(autoincrement())
+  empresaId         Int
+  checklistId       Int
+  dataRef           DateTime
+  funcionarioId     Int
+  iniciadaEm        DateTime @default(now())
+  concluidaEm       DateTime?
+  status            StatusExecucao @default(EM_ANDAMENTO)
+  emAlerta          Boolean  @default(false)
+  itensSnapshotJson Json
+  checklist         Checklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  respostas         ChecklistResposta[]
+  @@unique([checklistId, dataRef])
+  @@index([empresaId, dataRef])
+}
+
+model ChecklistResposta {
+  id           Int      @id @default(autoincrement())
+  empresaId    Int
+  execucaoId   Int
+  itemChave    String
+  tipo         TipoItemChecklist
+  valorJson    Json?
+  conforme     Boolean?
+  observacao   String?
+  atualizadoEm DateTime @updatedAt
+  execucao     ChecklistExecucao @relation(fields: [execucaoId], references: [id], onDelete: Cascade)
+  @@unique([execucaoId, itemChave])
+  @@index([empresaId])
 }
