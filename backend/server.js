@@ -11,7 +11,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from './generated/prisma/client.ts';
 import { iniciarColetorServer, gravarPontoColetor } from './coletorServer.js';
 import { zapiConfigurado, zapiStatus, zapiQrCode, zapiCriarInstancia, zapiEnviarTexto } from './zapi.mjs';
-import { validadeDe, gerarLote, CONSERVACOES } from './etiquetas.js';
+import { validadeDe, gerarLote, colisaoDeLote, CONSERVACOES } from './etiquetas.js';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 
@@ -6984,7 +6984,12 @@ app.get('/api/public/etiquetas/:token/bootstrap', async (req, res) => {
       prisma.etiquetaConfig.findFirst({ where: { empresaId } }),
       prisma.etiquetaRegra.findMany({ where: { empresaId, ativo: true }, orderBy: { ordem: 'asc' } }),
       prisma.insumo.findMany({ where: { empresaId, ativo: true, tipo: { in: ETIQUETA_TIPOS_INSUMO } }, orderBy: { nome: 'asc' }, select: { id: true, nome: true } }),
-      prisma.etiquetaItemConfig.findMany({ where: { empresaId, ativo: true } }),
+      // TODOS os configs, inclusive os desligados: o desligado não some daqui, ele
+      // TIRA o insumo da lista (ver a semântica do `ativo`, abaixo). Filtrar por
+      // `ativo: true` na query era o bug — o config sumia, o item continuava
+      // aparecendo (a lista sai de `insumos`, o config só enriquece) e o /registrar
+      // achava o mesmo config e aplicava o override que o admin tinha desativado.
+      prisma.etiquetaItemConfig.findMany({ where: { empresaId } }),
       prisma.funcionario.findMany({ where: { empresaId, status: 'ATIVO' }, orderBy: { nome: 'asc' }, select: { id: true, nome: true, apelido: true } }),
     ]);
 
@@ -6996,15 +7001,34 @@ app.get('/api/public/etiquetas/:token/bootstrap', async (req, res) => {
     })).map((r) => r.funcionarioId));
 
     const cMap = new Map(cfgs.map((c) => [c.insumoId, c]));
+
+    // ── Semântica do `ativo` do EtiquetaItemConfig (VALE PARA AS DUAS PONTAS) ──
+    //
+    //   • SEM config           → o item APARECE e pode ser etiquetado, escolhendo a
+    //                            conservação na hora. É o insumo recém-cadastrado:
+    //                            não ter padrão não é motivo para não poder etiquetar.
+    //   • config `ativo: true` → o item aparece COM o padrão dele (conservação/validade).
+    //   • config `ativo: false`→ o item NÃO aparece na cozinha, e o /registrar RECUSA.
+    //                            É o que o toggle do admin promete literalmente:
+    //                            "Desligado, o item some da tela de impressão".
+    //
+    // Bootstrap e /registrar TÊM que concordar nisso — foi a discordância que colou
+    // no pote uma validade diferente da que o tablet mostrou: aqui o config desligado
+    // era ignorado (item aparecia sem padrão, prévia calculava pela regra: +5d) e lá
+    // ele era encontrado e aplicado (override desativado: +3d). Mexeu aqui, mexa lá.
+    const itens = insumos
+      .filter((i) => cMap.get(i.id)?.ativo !== false) // sem config (undefined) fica; desligado sai
+      .map((i) => {
+        const c = cMap.get(i.id) || null;
+        return { insumoId: i.id, nome: i.nome, conservacaoPadrao: c?.conservacaoPadrao || null, validadeDias: c?.validadeDias ?? null };
+      });
+
     res.json({
       loja: { nome: loja?.nome || 'Loja', logoDataUrl: loja?.logoDataUrl || null },
       dispositivo: { nome: disp.nome },
       config: config || { larguraMm: 50, alturaMm: 30, razaoSocial: loja?.nome || null },
       regras,
-      itens: insumos.map((i) => {
-        const c = cMap.get(i.id) || null;
-        return { insumoId: i.id, nome: i.nome, conservacaoPadrao: c?.conservacaoPadrao || null, validadeDias: c?.validadeDias ?? null };
-      }),
+      itens,
       funcionarios: funcionarios
         .map((f) => ({ id: f.id, nome: f.apelido || f.nome, presente: presentes.has(f.id) }))
         .sort((a, b) => (b.presente - a.presente) || a.nome.localeCompare(b.nome)),
@@ -7012,38 +7036,11 @@ app.get('/api/public/etiquetas/:token/bootstrap', async (req, res) => {
   } catch (err) { console.error('[public/etiquetas/bootstrap]', err); res.status(500).json({ error: 'Erro ao carregar.' }); }
 });
 
-// Nome da constraint do @unique de `lote` no Postgres (padrão do Prisma:
-// <Tabela>_<coluna>_key). É o identificador que o driver devolve quando a
-// unicidade estoura — ver colisaoDeLote().
-const CONSTRAINT_LOTE = 'EtiquetaImpressa_lote_key';
-
-// O create do lote só pode reciclar UM erro: a colisão do @unique de `lote`.
-// Identificar isso é mais chato do que parece e já falhou uma vez aqui:
-//
-//   - `meta.target`, o caminho "óbvio", vem VAZIO neste stack (Prisma 7 + adapter
-//     pg): a mensagem é literalmente "Unique constraint failed on the (not
-//     available)". Um check só por target nunca casa e o retry vira código morto —
-//     era exatamente o bug desta função na primeira versão.
-//   - A evidência real está no erro do driver, que traz o NOME da constraint. É por
-//     ele que casamos, nunca pela prosa: o Postgres devolve originalMessage no
-//     locale do servidor (aqui vem em português) e o identificador é estável.
-//
-// `target` continua sendo testado primeiro porque é o contrato oficial do Prisma:
-// se uma versão futura voltar a preenchê-lo, casa por ele e o ramo do driver nem roda.
-function colisaoDeLote(e) {
-  if (e?.code !== 'P2002') return false; // P2002 = violação de unicidade
-  const alvo = e?.meta?.target;
-  if (alvo) return Array.isArray(alvo) ? alvo.includes('lote') : String(alvo).includes('lote');
-  const original = e?.meta?.driverAdapterError?.cause?.originalMessage;
-  if (original) return original.includes(CONSTRAINT_LOTE);
-  // Sem evidência nenhuma: `lote` é hoje o ÚNICO unique de EtiquetaImpressa (os
-  // @@index não são únicos), então um P2002 neste create só pode ser ele. Se um dia
-  // outro unique entrar no model, os dois ramos acima já separam os casos — este
-  // fallback existe para o retry não morrer calado de novo se o formato do erro mudar.
-  return true;
-}
-
 // Cria a etiqueta sorteando o lote, com RETRY em colisão.
+//
+// A detecção da colisão (colisaoDeLote) mora em etiquetas.js: é decisão pura sobre
+// o objeto de erro e é onde ela tem teste. Este helper fica aqui porque é o oposto
+// disso — só existe para falar com o Prisma, e o módulo é puro por contrato.
 //
 // `lote` é @unique GLOBAL e gerarLote() sorteia 6 chars de um alfabeto de 32 —
 // 32^6 ≈ 1,07 bi combinações. Como o unique é global, o paradoxo do aniversário
@@ -7081,13 +7078,27 @@ app.post('/api/public/etiquetas/:token/registrar', async (req, res) => {
 
     let nomeItem = nomeAvulso, itemConfig = null;
     if (insumoId) {
-      const insumo = await prisma.insumo.findFirst({ where: { id: insumoId, empresaId } });
+      // MESMOS filtros do bootstrap (`ativo` + tipo etiquetável). Rota pública e sem
+      // auth: se a cozinha não vê o item na tela, um request forjado também não pode
+      // etiquetá-lo — e o que a tela lista é isto aqui.
+      const insumo = await prisma.insumo.findFirst({ where: { id: insumoId, empresaId, ativo: true, tipo: { in: ETIQUETA_TIPOS_INSUMO } } });
       if (!insumo) return res.status(404).json({ error: 'Item não encontrado.' });
       nomeItem = insumo.nome;
       itemConfig = await prisma.etiquetaItemConfig.findFirst({ where: { empresaId, insumoId } });
+      // Config desligado = item fora da cozinha (semântica completa no bootstrap).
+      // O bootstrap já o tirou da lista; recusar aqui fecha a outra ponta: sem isto,
+      // um tablet com o bootstrap velho em cache imprimiria com o override que o
+      // admin desativou. Recusar é melhor que ignorar o config e cair na regra — a
+      // etiqueta sairia com validade que ninguém configurou.
+      if (itemConfig?.ativo === false) {
+        return res.status(400).json({ error: 'Este item está desativado para etiquetagem. Fale com o gestor.' });
+      }
     }
 
-    const func = b.responsavelId ? await prisma.funcionario.findFirst({ where: { id: parseInt(b.responsavelId, 10), empresaId } }) : null;
+    // `status: 'ATIVO'` como no bootstrap (e como na rota irmã do ponto): sem isso um
+    // request forjado atribui a manipulação a um demitido, e responsavelNome é
+    // snapshot legal — é o nome que fica no rótulo colado no alimento.
+    const func = b.responsavelId ? await prisma.funcionario.findFirst({ where: { id: parseInt(b.responsavelId, 10), empresaId, status: 'ATIVO' } }) : null;
     if (!func) return res.status(400).json({ error: 'Escolha quem manipulou.' });
 
     const regras = await prisma.etiquetaRegra.findMany({ where: { empresaId, ativo: true } });

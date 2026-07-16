@@ -20,10 +20,17 @@ const erroDa = (e, fallback) => e?.response?.data?.error || e?.message || fallba
 
 const S = {
   aviso: { background: '#fee', border: '1px solid #fcc', borderRadius: 8, padding: 12, marginBottom: 12, fontSize: 13 },
+  // Amarelo, não vermelho: nada quebrou, é a tela contando o que fez com a pendência.
+  nota: { background: '#fffbe6', border: '1px solid #f0dd8a', borderRadius: 8, padding: 12, marginBottom: 12, fontSize: 13 },
   rotulo: { fontSize: 12, fontWeight: 700, letterSpacing: '.04em' },
   opcao: (on) => ({
     padding: 12, borderRadius: 8, border: on ? '2px solid #eab802' : '1px solid #ddd',
     background: '#fff', textAlign: 'left', fontSize: 15, width: '100%',
+  }),
+  botao: (forte) => ({
+    padding: '10px 14px', borderRadius: 8, fontSize: 13, fontWeight: 700,
+    border: forte ? 'none' : '1px solid #ddd', background: forte ? '#0e1319' : '#fff',
+    color: forte ? '#eab802' : '#0e1319',
   }),
 }
 
@@ -50,6 +57,10 @@ export default function EtiquetasQuiosque() {
   // rastro sanitário da manipulação, e uma 2a chamada ao /registrar criaria uma
   // etiqueta fantasma no relatório para um alimento que só foi manipulado uma vez.
   const [pendente, setPendente] = useState(null)
+  // "← trocar item" com pendência aberta pede confirmação em vez de descartar calado.
+  const [confirmandoVoltar, setConfirmandoVoltar] = useState(false)
+  // Aviso neutro (não é erro): a tela contando que a pendência deixou de valer.
+  const [aviso, setAviso] = useState('')
   const canvasRef = useRef(null)
 
   useEffect(() => {
@@ -77,14 +88,50 @@ export default function EtiquetasQuiosque() {
     setItem(it)
     setConservacao(it.conservacaoPadrao || '')
     setPendente(null)
+    setConfirmandoVoltar(false)
+    setAviso('')
     setErro('')
   }
 
+  // Descartar a pendência NÃO apaga o registro: o lote já está no banco. O alimento
+  // continua precisando de etiqueta, então o cozinheiro registra de novo e sobram 2
+  // registros para 1 manipulação — exatamente o que a pendência existe para evitar.
+  // Por isso "← trocar item" confirma antes: o primeiro toque avisa, o segundo descarta.
   function voltar() {
+    if (pendente && !confirmandoVoltar) { setConfirmandoVoltar(true); return }
     setItem(null)
     setConservacao('')
     setPendente(null)
+    setConfirmandoVoltar(false)
+    setAviso('')
     setErro('')
+  }
+
+  // Trocar conservação ou responsável muda o CONTEÚDO do rótulo, então a etiqueta já
+  // registrada deixa de valer: reimprimi-la colaria no pote um papel que a tela não
+  // mostra mais (era o bug — prévia RESFRIADO +5d, papel CONGELADO +90d do lote velho).
+  //
+  // Invalidamos em vez de travar os seletores enquanto há pendência: travar prenderia o
+  // cozinheiro num rótulo que ele JÁ SABE estar errado, e a única saída seria o
+  // "← trocar item" — mesmo descarte, com mais passos e mais chance de errar. O lote
+  // antigo fica no relatório como registrado-e-não-impresso, que é a verdade: ele nunca
+  // virou papel. `erro` NÃO é limpo aqui: se a impressora caiu, ela continua caída e o
+  // botão "Reconectar" ainda é o que ele precisa.
+  function invalidarPendente() {
+    if (!pendente) return
+    setPendente(null)
+    setConfirmandoVoltar(false)
+    setAviso(`A etiqueta ${pendente.lote} foi registrada e não chegou a ser impressa. Como o rótulo mudou, ela não será reimpressa: a próxima impressão registra uma nova.`)
+  }
+
+  function mudarConservacao(c) {
+    if (c !== conservacao) invalidarPendente()
+    setConservacao(c)
+  }
+
+  function mudarResponsavel(id) {
+    if (id !== responsavelId) invalidarPendente()
+    setResponsavelId(id)
   }
 
   async function conectarImpressora() {
@@ -120,6 +167,7 @@ export default function EtiquetasQuiosque() {
     }
     setImprimindo(true)
     setErro('')
+    setAviso('')
     try {
       // `pendente` = já registrada e só falta sair no papel: reimprime o mesmo lote.
       let etiqueta = pendente
@@ -146,6 +194,7 @@ export default function EtiquetasQuiosque() {
         throw e
       }
       setPendente(null)
+      setConfirmandoVoltar(false)
       setItem(null)
       setConservacao('')
     } catch (e) {
@@ -200,6 +249,8 @@ export default function EtiquetasQuiosque() {
         </div>
       )}
 
+      {aviso && <div style={S.nota}>{aviso}</div>}
+
       {!item ? (
         <>
           <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar item…"
@@ -224,10 +275,30 @@ export default function EtiquetasQuiosque() {
           <button type="button" onClick={voltar} style={{ fontSize: 13, marginBottom: 10, border: 'none', background: 'none', padding: 0 }}>← trocar item</button>
           <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 12 }}>{item.nome}</h2>
 
+          {/* Confirmação na própria tela, sem modal: o quiosque é standalone e não
+              carrega os componentes do admin. */}
+          {confirmandoVoltar && (
+            <div style={S.nota}>
+              <div>
+                A etiqueta <strong>{pendente?.lote}</strong> já foi <strong>registrada</strong> e ainda
+                não foi impressa. Se trocar de item agora ela não sai no papel, e para etiquetar
+                este alimento você vai ter que registrar outra.
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                <button type="button" onClick={() => setConfirmandoVoltar(false)} style={S.botao(true)}>
+                  Continuar aqui
+                </button>
+                <button type="button" onClick={voltar} style={S.botao(false)}>
+                  Descartar e trocar item
+                </button>
+              </div>
+            </div>
+          )}
+
           <label style={S.rotulo}>CONSERVAÇÃO</label>
           <div style={{ display: 'grid', gap: 6, margin: '6px 0 14px' }}>
             {dados.regras.map((r) => (
-              <button key={r.conservacao} type="button" onClick={() => setConservacao(r.conservacao)}
+              <button key={r.conservacao} type="button" onClick={() => mudarConservacao(r.conservacao)}
                 style={S.opcao(conservacao === r.conservacao)}>
                 {CONS_LABEL[r.conservacao] || r.conservacao} · {r.tempLabel}
               </button>
@@ -244,7 +315,7 @@ export default function EtiquetasQuiosque() {
           <label style={S.rotulo}>QUEM MANIPULOU</label>
           <div style={{ display: 'grid', gap: 6, margin: '6px 0 16px' }}>
             {dados.funcionarios.map((f) => (
-              <button key={f.id} type="button" onClick={() => setResponsavelId(f.id)}
+              <button key={f.id} type="button" onClick={() => mudarResponsavel(f.id)}
                 style={S.opcao(responsavelId === f.id)}>
                 {f.nome} {f.presente && <span style={{ fontSize: 11, color: '#0a0' }}>· no turno</span>}
               </button>

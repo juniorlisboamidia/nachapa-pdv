@@ -1,4 +1,5 @@
-import { validadeDe, gerarLote, CONSERVACOES } from './etiquetas.js';
+import { readFileSync } from 'node:fs';
+import { validadeDe, gerarLote, colisaoDeLote, CONSERVACOES, CONSTRAINT_LOTE } from './etiquetas.js';
 
 let ok = 0, fail = 0;
 const t = (nome, real, esperado) => {
@@ -68,6 +69,47 @@ t('6 chars', gerarLote().length, 6);
 t('sem ambiguos (I/O/0/1)', /[IO01]/.test([...lotes].join('')), false);
 t('5000 lotes sem colisao relevante', lotes.size > 4900, true);
 t('6 conservacoes', CONSERVACOES.length, 6);
+
+console.log('\n== colisaoDeLote (retry do lote) ==');
+// Molde do P2002 REAL deste stack (Prisma 7.8 + adapter-pg): `meta.target` NÃO vem
+// preenchido, e o nome da constraint só existe dentro do erro do driver. Testar com
+// um mock "ideal" ({ meta: { target: ['lote'] } }) é o que deixou o bug passar da
+// primeira vez: o código casava por target, o teste passava e nada disso rodava em
+// produção — o retry era código morto até alguém forçar colisões de verdade.
+const p2002 = (constraint) => ({
+  code: 'P2002',
+  meta: {
+    modelName: 'EtiquetaImpressa',
+    driverAdapterError: { cause: {
+      originalCode: '23505',
+      originalMessage: `duplicar valor da chave viola a restrição de unicidade "${constraint}"`,
+      kind: 'UniqueConstraintViolation',
+    } },
+  },
+});
+
+t('colisao no lote = true (sorteia outro)', colisaoDeLote(p2002(CONSTRAINT_LOTE)), true);
+t('P2002 em OUTRA constraint = false (erro tem que subir)', colisaoDeLote(p2002('EtiquetaImpressa_pkey')), false);
+t('erro que nao e P2002 = false', colisaoDeLote({ code: 'P2003', meta: {} }), false);
+t('erro sem code (ex.: timeout) = false', colisaoDeLote(new Error('connection timeout')), false);
+t('null/undefined = false', colisaoDeLote(null), false);
+
+// Contrato oficial do Prisma: se uma versão futura voltar a preencher `target`, o
+// ramo do driver nem roda. Cobre os dois lados para o dia em que isso mudar.
+t('target preenchido casa por ele', colisaoDeLote({ code: 'P2002', meta: { target: ['lote'] } }), true);
+t('target de outra coluna = false', colisaoDeLote({ code: 'P2002', meta: { target: ['insumoId'] } }), false);
+
+console.log('\n== CONSTRAINT_LOTE continua batendo com o schema ==');
+// colisaoDeLote casa a constraint por NOME literal — é a única evidência que este
+// stack entrega. Nada no schema protege esse literal: renomear o model ou a coluna
+// faz o Postgres mandar outro nome, o retry vira código morto de novo e a colisão
+// volta a chegar na cozinha como 500 opaco no meio do turno. Os testes acima não
+// pegariam isso (usam o mesmo literal). Este pega: lê o schema e confere.
+const schema = readFileSync(new URL('./prisma/schema.prisma', import.meta.url), 'utf8');
+const modelDoLote = [...schema.matchAll(/model\s+(\w+)\s*\{([\s\S]*?)\n\}/g)]
+  .find(([, , corpo]) => /^\s*lote\s+\S+\s+@unique/m.test(corpo));
+t('schema tem um model com `lote ... @unique`', !!modelDoLote, true);
+t('CONSTRAINT_LOTE = <Model>_lote_key do schema', CONSTRAINT_LOTE, `${modelDoLote?.[1]}_lote_key`);
 
 console.log(`\n${ok} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);
