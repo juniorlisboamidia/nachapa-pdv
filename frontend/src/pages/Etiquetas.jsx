@@ -5,7 +5,7 @@
 // Histórico (tudo que já foi impresso, com busca).
 // Sem sub-rota na sidebar (item único "Etiquetas") — a troca de aba é local,
 // por isso navega via useNavigate em vez de itens de menu.
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import api from '../services/api'
 import Toast from '../components/Toast'
@@ -106,7 +106,17 @@ function AbaConfig({ notify }) {
     }
   }
 
-  if (!config) return <div className="loading-state">Carregando…</div>
+  // "Aparelhos da cozinha" fica FORA do `if (!config)`: é uma seção independente, com
+  // fetch próprio, e é o único caminho até o link do quiosque. Se o GET /etiquetas/config
+  // falhar, o card ainda aparece em vez de a aba inteira travar em "Carregando…".
+  if (!config) {
+    return (
+      <div style={{ display: 'grid', gap: 16, maxWidth: 720 }}>
+        <div className="loading-state">Carregando…</div>
+        <CardDispositivos notify={notify} />
+      </div>
+    )
+  }
 
   return (
     <div style={{ display: 'grid', gap: 16, maxWidth: 720 }}>
@@ -162,11 +172,196 @@ function AbaConfig({ notify }) {
         ))}
       </div>
 
+      {/* O botão fica logo abaixo dos dois cards que ele de fato salva. Os aparelhos
+          vêm depois porque salvam sozinhos (criar/revogar são imediatos) — deixá-los
+          acima do botão sugeriria que precisam de "Salvar" pra valer. */}
       <div>
         <button type="button" className="btn btn-primary" disabled={salvando} onClick={salvar}>
           {salvando ? 'Salvando…' : 'Salvar configurações'}
         </button>
       </div>
+
+      <CardDispositivos notify={notify} />
+    </div>
+  )
+}
+
+// Copiar fora de contexto seguro. navigator.clipboard só existe em https/localhost;
+// se o dono abrir o PDV por IP na rede local (http://192.168.x.x), a API simplesmente
+// não está lá. Sem este fallback ele ficaria sem NENHUM jeito de tirar o link da tela —
+// e o link é o produto desta seção. execCommand está deprecado, mas é o que resta.
+function copiarFallback(texto) {
+  const ta = document.createElement('textarea')
+  ta.value = texto
+  ta.setAttribute('readonly', '')
+  ta.style.position = 'fixed'
+  ta.style.top = '-1000px'
+  ta.style.opacity = '0'
+  document.body.appendChild(ta)
+  ta.select()
+  let ok = false
+  try { ok = document.execCommand('copy') } catch { ok = false }
+  document.body.removeChild(ta)
+  return ok
+}
+
+// ===================== APARELHOS DA COZINHA =====================
+// O quiosque (/etiquetas/:token/imprimir) abre SEM login: o token do Dispositivo É a
+// credencial — quem tem o link imprime etiquetas nesta loja, ponto. Por isso a tela
+// nunca mostra o token cru: o que o dono leva daqui é o link pronto, pelo botão copiar.
+// Mostrar o token solto o trataria como um id inofensivo e convidaria a mandá-lo no
+// grupo do WhatsApp.
+//
+// Os aparelhos são os MESMOS do Ponto Facial: um único model Dispositivo, um único
+// token, servindo /ponto/:token e /etiquetas/:token/imprimir. Revogar aqui derruba os
+// dois — daí o aviso explícito na confirmação (o dono não pode descobrir isso
+// quebrando o relógio de ponto da equipe no meio do expediente).
+function CardDispositivos({ notify }) {
+  const [lista, setLista] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [nome, setNome] = useState('')
+  const [criando, setCriando] = useState(false)
+  const [confirmando, setConfirmando] = useState(null) // id do aparelho em confirmação inline
+  const [revogando, setRevogando] = useState(false)
+
+  function carregar() {
+    // Endpoints do Ponto Facial (ADMIN) — dispositivo é model de tenant, a extension do
+    // Prisma injeta o empresaId sozinha. Nada de filtrar por loja aqui.
+    api.get('/ponto/dispositivos')
+      .then((r) => setLista(Array.isArray(r.data) ? r.data : []))
+      .catch((e) => notify(e?.response?.data?.error ?? 'Não foi possível carregar os aparelhos.', 'error'))
+      .finally(() => setLoading(false))
+  }
+  useEffect(() => { carregar() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const linkDe = (token) => `${window.location.origin}/etiquetas/${token}/imprimir`
+
+  async function copiar(d) {
+    const link = linkDe(d.token)
+    let ok = false
+    try {
+      if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(link); ok = true }
+    } catch { ok = false } // permissão negada / contexto inseguro — cai no fallback
+    if (!ok) ok = copiarFallback(link)
+    if (ok) notify(`Link do "${d.nome}" copiado. Cole no navegador do tablet — é secreto, não repasse.`)
+    else notify('Não foi possível copiar o link neste navegador.', 'error')
+  }
+
+  async function criar(e) {
+    e.preventDefault()
+    const n = nome.trim()
+    if (!n || criando) return
+    setCriando(true)
+    try {
+      // O POST devolve o token do aparelho novo, mas não copiamos automaticamente:
+      // escrever na área de transferência sem clique explícito é bloqueado por alguns
+      // navegadores e o erro apareceria como se o cadastro tivesse falhado.
+      await api.post('/ponto/dispositivos', { nome: n })
+      setNome('')
+      notify('Aparelho criado. Use "Copiar link" para levá-lo até o tablet.')
+      carregar()
+    } catch (err) {
+      notify(err?.response?.data?.error ?? 'Não foi possível criar o aparelho.', 'error')
+    } finally {
+      setCriando(false)
+    }
+  }
+
+  async function revogar(d) {
+    setRevogando(true)
+    try {
+      await api.delete(`/ponto/dispositivos/${d.id}`)
+      setConfirmando(null)
+      notify(`"${d.nome}" revogado. O link antigo parou de funcionar.`)
+      carregar()
+    } catch (err) {
+      notify(err?.response?.data?.error ?? 'Não foi possível revogar o aparelho.', 'error')
+    } finally {
+      setRevogando(false)
+    }
+  }
+
+  return (
+    <div className="table-card" style={{ padding: 16 }}>
+      <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Aparelhos da cozinha</h2>
+      <div className="page-header-sub" style={{ marginTop: 0, marginBottom: 12 }}>
+        Cada aparelho tem um link próprio que abre a tela de impressão no tablet, sem pedir login.
+        <strong> O link é secreto:</strong> quem tiver ele imprime etiquetas nesta loja. Mande só para o tablet da cozinha
+        e, se vazar, revogue o aparelho aqui.
+      </div>
+
+      <form onSubmit={criar} style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        <input
+          className="form-input"
+          style={{ maxWidth: 260 }}
+          placeholder="Ex.: Tablet da cozinha"
+          maxLength={60}
+          value={nome}
+          onChange={(e) => setNome(e.target.value)}
+        />
+        <button type="submit" className="btn btn-primary" disabled={criando || !nome.trim()}>
+          {criando ? 'Criando…' : 'Criar aparelho'}
+        </button>
+      </form>
+
+      {loading ? (
+        <div className="loading-state">Carregando…</div>
+      ) : lista.length === 0 ? (
+        <div className="empty-state">Nenhum aparelho ainda. Crie um para gerar o link do tablet.</div>
+      ) : (
+        <table className="hb-table">
+          <thead>
+            <tr>
+              <th>Aparelho</th>
+              <th>Última sincronização</th>
+              <th style={{ textAlign: 'right' }}>Link do tablet</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lista.map((d) => (
+              <Fragment key={d.id}>
+                <tr>
+                  <td style={{ fontWeight: 600 }}>{d.nome}</td>
+                  {/* ultimaSync é opcional no model: aparelho recém-criado, ou que só
+                      imprime etiquetas, nunca sincronizou (quem grava isso é o coletor). */}
+                  <td style={{ color: 'var(--app-text-soft, #888)' }}>{d.ultimaSync ? dtAno(d.ultimaSync) : '—'}</td>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => copiar(d)}>Copiar link</button>{' '}
+                    <button
+                      type="button"
+                      className="btn btn-danger btn-sm"
+                      disabled={confirmando === d.id}
+                      onClick={() => setConfirmando(d.id)}
+                    >
+                      Revogar
+                    </button>
+                  </td>
+                </tr>
+                {/* Confirmação inline em vez de modal: o aviso é a parte que importa e
+                    aqui ele fica colado na linha do aparelho certo. */}
+                {confirmando === d.id && (
+                  <tr>
+                    <td colSpan={3} style={{ background: 'var(--app-bg-soft, #fbf7f7)' }}>
+                      <div style={{ fontSize: 13, marginBottom: 8 }}>
+                        Revogar <strong>{d.nome}</strong>? O link para de funcionar na hora e o tablet que estiver com ele
+                        aberto para de imprimir.{' '}
+                        <strong>Este mesmo aparelho é usado no Ponto Facial</strong> — se a equipe bate ponto nele, o ponto
+                        para junto e você precisará criar um aparelho novo e reconfigurar o tablet.
+                      </div>
+                      <button type="button" className="btn btn-danger btn-sm" disabled={revogando} onClick={() => revogar(d)}>
+                        {revogando ? 'Revogando…' : 'Revogar mesmo assim'}
+                      </button>{' '}
+                      <button type="button" className="btn btn-secondary btn-sm" disabled={revogando} onClick={() => setConfirmando(null)}>
+                        Cancelar
+                      </button>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   )
 }
