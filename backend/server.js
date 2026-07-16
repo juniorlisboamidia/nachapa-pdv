@@ -6083,10 +6083,12 @@ async function melhorMatchFacial(descritor, empresaId) {
   }
   return best;
 }
-const inicioDoDia = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
 // Próxima marcação esperada (auto-sequência entrada→intervalo→retorno→saída).
+// A janela é o dia de EXPEDIENTE, não o dia civil: a jornada vira a meia-noite,
+// e cortar à 00:00 fazia a saída da madrugada abrir uma sequência nova — a
+// chegada seguinte então era lida como saída.
 async function proximoTipoPonto(funcionarioId, empresaId) {
-  const de = inicioDoDia(); const ate = new Date(de); ate.setDate(ate.getDate() + 1);
+  const { de, ate } = janelaExpedienteAtual();
   const regs = await prisma.pontoRegistro.findMany({ where: { funcionarioId, empresaId, invalidada: false, dataHora: { gte: de, lt: ate } }, orderBy: { dataHora: 'asc' } });
   const ultimo = regs.length ? regs[regs.length - 1].tipo : null;
   const seq = { ENTRADA: 'SAIDA_INTERVALO', SAIDA_INTERVALO: 'RETORNO_INTERVALO', RETORNO_INTERVALO: 'SAIDA', SAIDA: null };
@@ -6134,6 +6136,19 @@ function diaExpedienteKey(dataHora) {
   const base = new Date(Date.UTC(f.y, f.mo, f.day));
   if (f.min < EXP_CUTOFF_MIN) base.setUTCDate(base.getUTCDate() - 1);
   return `${base.getUTCFullYear()}-${base.getUTCMonth()}-${base.getUTCDate()}`;
+}
+// Instante do início do dia de expediente que contém `dataHora` (o corte, em BR;
+// antes dele, o expediente é o do dia anterior). Versão em instante do
+// diaExpedienteKey, para filtrar por intervalo no banco.
+function inicioDoExpedienteMs(dataHora = Date.now()) {
+  const f = brFields(dataHora);
+  const day = f.min < EXP_CUTOFF_MIN ? f.day - 1 : f.day; // brToUtcMs normaliza o dia 0
+  return brToUtcMs(f.y, f.mo, day, Math.floor(EXP_CUTOFF_MIN / 60), EXP_CUTOFF_MIN % 60);
+}
+// Janela [de, ate) do expediente corrente: do corte de hoje ao corte de amanhã.
+function janelaExpedienteAtual() {
+  const de = new Date(inicioDoExpedienteMs());
+  return { de, ate: new Date(de.getTime() + 24 * 3600 * 1000) };
 }
 
 // ===== Colaboradores (ADMIN) — reusa o cadastro de Funcionario, + biometria/PIN =====
@@ -6353,7 +6368,9 @@ app.put('/api/ponto/marcacoes/:id', async (req, res) => {
 app.get('/api/ponto/painel', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
   try {
-    const de = inicioDoDia(); const ate = new Date(de); ate.setDate(ate.getDate() + 1);
+    // Expediente, não dia civil: quem entrou ontem 17h e segue no turno à 01h
+    // continua "presente" — virar a página à meia-noite zerava o painel.
+    const { de, ate } = janelaExpedienteAtual();
     const fs = await prisma.funcionario.findMany({ where: { status: 'ATIVO' }, orderBy: { nome: 'asc' } });
     const regs = await prisma.pontoRegistro.findMany({ where: { invalidada: false, dataHora: { gte: de, lt: ate } }, orderBy: { dataHora: 'asc' } });
     const porFunc = new Map();
