@@ -6967,6 +6967,67 @@ app.put('/api/etiquetas/itens/:insumoId', async (req, res) => {
   } catch (err) { console.error('[etiquetas/itens PUT]', err); res.status(500).json({ error: 'Erro ao salvar o item.' }); }
 });
 
+// Painel de vencimentos: o que já venceu / vence hoje / vence amanhã.
+app.get('/api/etiquetas/painel', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const agora = new Date();
+    // Fronteiras do DIA CIVIL BR (não o dia do servidor, que roda em UTC) — é
+    // isso que decide se um item "vence hoje" ou "vence amanhã" pra quem está
+    // na cozinha, não a hora do VPS. brFields()/brToUtcMs() são os mesmos
+    // helpers do módulo de Ponto (fuso BR fixo, -180min, sem DST desde 2019).
+    const f = brFields(agora);
+    const inicioAmanha = new Date(brToUtcMs(f.y, f.mo, f.day + 1, 0, 0));
+    const inicioDepoisDeAmanha = new Date(brToUtcMs(f.y, f.mo, f.day + 2, 0, 0));
+
+    // 3 queries independentes com `take` próprio — não 1 query
+    // `where: { validoAte: { lt: fim } }` seguida de split em memória (era o
+    // desenho original). "Vencidas" nunca esvazia: o model é log de impressão,
+    // sem campo de baixa/descarte, então esse balde só CRESCE desde o dia 1.
+    // Com uma query só e orderBy validoAte asc, o backlog antigo enchia o
+    // take antes de sobrar espaço pra "hoje"/"amanhã" — depois de alguns meses
+    // de uso o painel ia mostrar só etiqueta vencida há muito tempo, e o que
+    // vence HOJE (a informação que a cozinha realmente precisa agora) nem
+    // aparecia. Separando as 3 queries, "hoje" e "amanhã" têm cota própria e
+    // nunca competem com o histórico de vencidas.
+    const [vencidas, hoje, amanha] = await Promise.all([
+      // DESC: vencimento mais recente primeiro. É o que ainda pode estar na
+      // prateleira agora e precisa sair; o que venceu há 3 meses já foi
+      // descartado há muito e não é prioridade de tela.
+      prisma.etiquetaImpressa.findMany({ where: { validoAte: { lt: agora } }, orderBy: { validoAte: 'desc' }, take: 200 }),
+      prisma.etiquetaImpressa.findMany({ where: { validoAte: { gte: agora, lt: inicioAmanha } }, orderBy: { validoAte: 'asc' }, take: 200 }),
+      prisma.etiquetaImpressa.findMany({ where: { validoAte: { gte: inicioAmanha, lt: inicioDepoisDeAmanha } }, orderBy: { validoAte: 'asc' }, take: 200 }),
+    ]);
+    res.json({ vencidas, hoje, amanha });
+  } catch (err) { console.error('[etiquetas/painel]', err); res.status(500).json({ error: 'Erro ao carregar o painel.' }); }
+});
+
+// Histórico: tudo que já foi impresso (rastreabilidade sanitária), com busca
+// por item/lote e filtro por período.
+app.get('/api/etiquetas/historico', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const busca = typeof req.query.busca === 'string' ? req.query.busca.trim() : '';
+    const where = {};
+    // lote é sempre gravado maiúsculo (gerarLote()) — normaliza a busca em vez
+    // de exigir mode:'insensitive', que o Postgres não usa em índice comum.
+    if (busca) where.OR = [{ nomeItem: { contains: busca, mode: 'insensitive' } }, { lote: { contains: busca.toUpperCase() } }];
+    // de/ate = YYYY-MM-DD, inclusivo, fuso BR fixo — mesmo padrão de
+    // GET /api/ponto/marcacoes. Filtra por criadoEm (quando a etiqueta foi
+    // IMPRESSA, que é o que esta tela lista), coluna do índice [empresaId, criadoEm].
+    const ymd = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || '')); return m ? { y: +m[1], mo: +m[2] - 1, d: +m[3] } : null; };
+    const de = ymd(req.query.de), ate = ymd(req.query.ate);
+    if (de || ate) {
+      const cond = {};
+      if (de) cond.gte = new Date(brToUtcMs(de.y, de.mo, de.d, 0, 0));
+      if (ate) cond.lt = new Date(brToUtcMs(ate.y, ate.mo, ate.d + 1, 0, 0)); // dia seguinte (exclusivo)
+      where.criadoEm = cond;
+    }
+    const etiquetas = await prisma.etiquetaImpressa.findMany({ where, orderBy: { criadoEm: 'desc' }, take: 200 });
+    res.json({ etiquetas });
+  } catch (err) { console.error('[etiquetas/historico]', err); res.status(500).json({ error: 'Erro ao carregar o histórico.' }); }
+});
+
 // ===== Etiquetas (PÚBLICO — quiosque por token, sem login) =====
 // Estas rotas rodam FORA dos gates de auth/tenant (ver o app.use('/api') do topo:
 // tudo sob /public/ passa direto). Sem tenantStore, a extension do Prisma NÃO

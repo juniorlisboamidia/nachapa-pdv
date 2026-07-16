@@ -1,7 +1,8 @@
 // Ferramentas › Etiquetas — rotulagem de alimentos manipulados (ANVISA RDC 216/2004).
-// Duas abas: Configuração (identificação do estabelecimento + validade padrão
-// por conservação) e Itens (conservação/validade própria por insumo, quando
-// difere da regra). As abas "Painel" (imprimir) e "Histórico" entram na Task 8.
+// Quatro abas: Configuração (identificação do estabelecimento + validade padrão
+// por conservação), Itens (conservação/validade própria por insumo, quando
+// difere da regra), Vencimentos (painel do que já venceu/vence hoje/amanhã) e
+// Histórico (tudo que já foi impresso, com busca).
 // Sem sub-rota na sidebar (item único "Etiquetas") — a troca de aba é local,
 // por isso navega via useNavigate em vez de itens de menu.
 import { useEffect, useState } from 'react'
@@ -12,6 +13,8 @@ import Toast from '../components/Toast'
 const TABS = [
   { id: 'config', label: 'Configuração' },
   { id: 'itens', label: 'Itens' },
+  { id: 'painel', label: 'Vencimentos' },
+  { id: 'historico', label: 'Histórico' },
 ]
 const TAB_IDS = TABS.map((t) => t.id)
 
@@ -57,7 +60,10 @@ export default function Etiquetas() {
         ))}
       </div>
 
-      {tab === 'config' ? <AbaConfig notify={notify} /> : <AbaItens notify={notify} />}
+      {tab === 'config' && <AbaConfig notify={notify} />}
+      {tab === 'itens' && <AbaItens notify={notify} />}
+      {tab === 'painel' && <AbaPainel notify={notify} />}
+      {tab === 'historico' && <AbaHistorico notify={notify} />}
     </div>
   )
 }
@@ -280,6 +286,121 @@ function AbaItens({ notify }) {
                       title="Desligado, o item some da tela de impressão de etiquetas na cozinha"
                     />
                   </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Data/hora curta em pt-BR — usada nas abas Vencimentos e Histórico.
+const dt = (v) => new Date(v).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+
+// ===================== VENCIMENTOS =====================
+// GET /etiquetas/painel já devolve os 3 baldes prontos (vencidas/hoje/amanhã),
+// cada um calculado pelo dia civil BR no backend — nada de data aqui no front.
+function AbaPainel({ notify }) {
+  const [g, setG] = useState({ vencidas: [], hoje: [], amanha: [] })
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    api.get('/etiquetas/painel')
+      .then((r) => setG(r.data))
+      .catch((e) => notify(e?.response?.data?.error ?? 'Não foi possível carregar o painel.', 'error'))
+      .finally(() => setLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  if (loading) return <div className="loading-state">Carregando…</div>
+
+  return (
+    <div style={{ display: 'grid', gap: 16, maxWidth: 760 }}>
+      <BlocoVencimento titulo="Vencidas" cor="#dc2626" lista={g.vencidas} />
+      <BlocoVencimento titulo="Vencem hoje" cor="#b45309" lista={g.hoje} />
+      <BlocoVencimento titulo="Vencem amanhã" cor="#647087" lista={g.amanha} />
+    </div>
+  )
+}
+
+function BlocoVencimento({ titulo, cor, lista }) {
+  return (
+    <div className="table-card" style={{ padding: 16 }}>
+      <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, color: cor }}>{titulo} · {lista.length}</h2>
+      {lista.length === 0 ? (
+        <div className="empty-state">Nada aqui.</div>
+      ) : (
+        lista.map((e) => (
+          <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '8px 0', borderTop: '1px solid var(--app-border, #eee)', fontSize: 13 }}>
+            <span style={{ fontWeight: 600, minWidth: 0 }}>
+              {e.nomeItem}{' '}
+              <span style={{ fontWeight: 400, color: 'var(--app-text-soft, #888)' }}>({CONS_LABEL[e.conservacao] || e.conservacao})</span>
+            </span>
+            <span style={{ color: 'var(--app-text-soft, #888)', flexShrink: 0, textAlign: 'right' }}>
+              {dt(e.validoAte)} · {e.responsavelNome}
+            </span>
+          </div>
+        ))
+      )}
+    </div>
+  )
+}
+
+// ===================== HISTÓRICO =====================
+function AbaHistorico({ notify }) {
+  const [lista, setLista] = useState([])
+  const [busca, setBusca] = useState('')
+  const [loading, setLoading] = useState(true)
+
+  // Debounce de 250ms na busca — mesmo padrão da aba Itens.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      api.get('/etiquetas/historico', { params: busca ? { busca } : {} })
+        .then((r) => setLista(r.data.etiquetas || []))
+        .catch((e) => notify(e?.response?.data?.error ?? 'Não foi possível carregar o histórico.', 'error'))
+        .finally(() => setLoading(false))
+    }, 250)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busca])
+
+  return (
+    <div>
+      <input
+        className="form-input"
+        style={{ maxWidth: 320, marginBottom: 12 }}
+        placeholder="Buscar item ou lote…"
+        value={busca}
+        onChange={(e) => setBusca(e.target.value)}
+      />
+      {loading ? (
+        <div className="loading-state">Carregando…</div>
+      ) : lista.length === 0 ? (
+        <div className="empty-state">Nenhuma etiqueta impressa ainda.</div>
+      ) : (
+        <div className="table-card">
+          <table className="hb-table">
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Lote</th>
+                <th>Conservação</th>
+                <th>Manipulado</th>
+                <th>Validade</th>
+                <th>Responsável</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lista.map((e) => (
+                <tr key={e.id}>
+                  <td style={{ fontWeight: 600 }}>{e.nomeItem}</td>
+                  <td style={{ fontFamily: 'monospace' }}>{e.lote}</td>
+                  <td>{CONS_LABEL[e.conservacao] || e.conservacao}</td>
+                  <td>{dt(e.manipuladoEm)}</td>
+                  <td>{dt(e.validoAte)}</td>
+                  <td>{e.responsavelNome}</td>
                 </tr>
               ))}
             </tbody>
