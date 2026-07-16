@@ -12,7 +12,7 @@ import { PrismaClient } from './generated/prisma/client.ts';
 import { iniciarColetorServer, gravarPontoColetor } from './coletorServer.js';
 import { zapiConfigurado, zapiStatus, zapiQrCode, zapiCriarInstancia, zapiEnviarTexto } from './zapi.mjs';
 import { validadeDe, gerarLote, colisaoDeLote, CONSERVACOES } from './etiquetas.js';
-import { avaliarResposta, execucaoEmAlerta } from './checklistConformidade.js';
+import { avaliarResposta, execucaoEmAlerta, fotosCriticasFaltando } from './checklistConformidade.js';
 import { venceHoje } from './checklistRecorrencia.js';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
@@ -2228,12 +2228,12 @@ async function chkAbrirExecucao(sess, checklistId) {
   if (!chkSetoresIntersectam(c.setorIds, meus)) throw { http: 403, msg: 'Este checklist não é do seu setor.' };
   const dataRef = chkDataRefAtual();
   // empresaId explícito mesmo com checklistId já validado acima — não depender só do pai.
-  let exec = await prisma.checklistExecucao.findFirst({ where: { checklistId: c.id, dataRef, empresaId: sess.empresaId }, include: { respostas: true } });
+  let exec = await prisma.checklistExecucao.findFirst({ where: { checklistId: c.id, dataRef, empresaId: sess.empresaId }, include: { respostas: true, fotos: true } });
   if (!exec) {
     try {
       exec = await prisma.checklistExecucao.create({
         data: { empresaId: sess.empresaId, checklistId: c.id, dataRef, funcionarioId: func.id, itensSnapshotJson: chkSnapshot(c.itens) },
-        include: { respostas: true },
+        include: { respostas: true, fotos: true },
       });
     } catch (e) {
       // @@unique([checklistId, dataRef]): dois "iniciar" simultâneos do mesmo checklist/dia
@@ -2241,7 +2241,7 @@ async function chkAbrirExecucao(sess, checklistId) {
       // findFirst→null e os dois create; o segundo esbarra no unique — relê a execução
       // que a outra requisição acabou de criar e retoma, em vez de 500 no perdedor.
       if (e?.code === 'P2002') {
-        exec = await prisma.checklistExecucao.findFirst({ where: { checklistId: c.id, dataRef, empresaId: sess.empresaId }, include: { respostas: true } });
+        exec = await prisma.checklistExecucao.findFirst({ where: { checklistId: c.id, dataRef, empresaId: sess.empresaId }, include: { respostas: true, fotos: true } });
         if (!exec) throw e; // não deveria acontecer — não escondemos o erro se ainda assim sumir
       } else {
         throw e;
@@ -2261,7 +2261,8 @@ app.post('/api/public/colaborador/checklists/:id/iniciar', async (req, res) => {
 
 function chkExecJson(exec) {
   const rmap = {}; for (const r of exec.respostas || []) rmap[r.itemChave] = { valor: r.valorJson, conforme: r.conforme, observacao: r.observacao };
-  return { id: exec.id, checklistId: exec.checklistId, status: exec.status, emAlerta: exec.emAlerta, itens: exec.itensSnapshotJson, respostas: rmap };
+  const fmap = {}; for (const f of exec.fotos || []) fmap[f.itemChave] = { id: f.id };
+  return { id: exec.id, checklistId: exec.checklistId, status: exec.status, emAlerta: exec.emAlerta, itens: exec.itensSnapshotJson, respostas: rmap, fotos: fmap };
 }
 
 // Posse por SETOR de uma execução JÁ EXISTENTE — não basta filtrar por empresaId: dentro
@@ -2273,7 +2274,7 @@ function chkExecJson(exec) {
 async function chkPosseExecucao(sess, execucaoId, { comRespostas = false } = {}) {
   const exec = await prisma.checklistExecucao.findFirst({
     where: { id: execucaoId, empresaId: sess.empresaId },
-    include: comRespostas ? { respostas: true } : undefined,
+    include: comRespostas ? { respostas: true, fotos: true } : undefined,
   });
   if (!exec) throw { http: 404, msg: 'Execução não encontrada.' };
   const func = await prisma.funcionario.findFirst({ where: { id: sess.funcionarioId, empresaId: sess.empresaId } });
@@ -2318,10 +2319,57 @@ app.put('/api/public/colaborador/execucoes/:id/resposta', async (req, res) => {
   } catch (e) { if (e.http) return res.status(e.http).json({ error: e.msg }); console.error('[colab/resposta]', e); res.status(500).json({ error: 'Erro ao salvar resposta.' }); }
 });
 
+// Sobe/atualiza a foto de um item FOTO (uma por item por execução). dataUrl já vem
+// comprimido do cliente; o servidor ainda valida tamanho e formato.
+app.put('/api/public/colaborador/execucoes/:id/foto', async (req, res) => {
+  try {
+    const sess = exigirColaborador(req, res); if (!sess) return;
+    const exec = await chkPosseExecucao(sess, parseInt(req.params.id, 10));
+    if (exec.status === 'CONCLUIDA') return res.status(409).json({ error: 'Execução já concluída.' });
+    const itemChave = String(req.body?.itemChave || '');
+    const item = (exec.itensSnapshotJson || []).find((it) => it.chave === itemChave);
+    if (!item || item.tipo !== 'FOTO') return res.status(400).json({ error: 'Item de foto inválido.' });
+    const dataUrl = typeof req.body?.dataUrl === 'string' ? req.body.dataUrl : '';
+    if (!/^data:image\/(jpeg|png|webp);base64,/.test(dataUrl)) return res.status(400).json({ error: 'Foto inválida.' });
+    if (dataUrl.length > 4_500_000) return res.status(413).json({ error: 'Foto muito grande. Tente novamente.' });
+    const tamanhoBytes = Math.floor((dataUrl.length - dataUrl.indexOf(',') - 1) * 0.75);
+    const largura = parseInt(req.body?.largura, 10) || null;
+    const altura = parseInt(req.body?.altura, 10) || null;
+
+    const fExist = await prisma.checklistFoto.findFirst({ where: { execucaoId: exec.id, itemChave, empresaId: sess.empresaId } });
+    if (fExist) await prisma.checklistFoto.updateMany({ where: { id: fExist.id, empresaId: sess.empresaId }, data: { dataUrl, tamanhoBytes, largura, altura } });
+    else await prisma.checklistFoto.create({ data: { empresaId: sess.empresaId, execucaoId: exec.id, itemChave, dataUrl, tamanhoBytes, largura, altura } });
+
+    // marca a resposta do item (temFoto); conformidade FOTO é sempre null.
+    const rExist = await prisma.checklistResposta.findFirst({ where: { execucaoId: exec.id, itemChave, empresaId: sess.empresaId } });
+    const dados = { tipo: 'FOTO', valorJson: { temFoto: true }, conforme: null };
+    if (rExist) await prisma.checklistResposta.updateMany({ where: { id: rExist.id, empresaId: sess.empresaId }, data: dados });
+    else await prisma.checklistResposta.create({ data: { ...dados, empresaId: sess.empresaId, execucaoId: exec.id, itemChave } });
+
+    const foto = await prisma.checklistFoto.findFirst({ where: { execucaoId: exec.id, itemChave, empresaId: sess.empresaId }, select: { id: true } });
+    res.json({ ok: true, itemChave, fotoId: foto?.id });
+  } catch (e) { if (e.http) return res.status(e.http).json({ error: e.msg }); console.error('[colab/foto PUT]', e); res.status(500).json({ error: 'Erro ao salvar a foto.' }); }
+});
+
+// Bytes da foto sob demanda (o operador vê a própria; posse por setor garante isolamento).
+app.get('/api/public/colaborador/fotos/:id', async (req, res) => {
+  try {
+    const sess = exigirColaborador(req, res); if (!sess) return;
+    const foto = await prisma.checklistFoto.findFirst({ where: { id: parseInt(req.params.id, 10), empresaId: sess.empresaId } });
+    if (!foto) return res.status(404).json({ error: 'Foto não encontrada.' });
+    await chkPosseExecucao(sess, foto.execucaoId); // 403 se não for do setor
+    res.json({ dataUrl: foto.dataUrl });
+  } catch (e) { if (e.http) return res.status(e.http).json({ error: e.msg }); console.error('[colab/fotos GET]', e); res.status(500).json({ error: 'Erro ao carregar a foto.' }); }
+});
+
 app.post('/api/public/colaborador/execucoes/:id/concluir', async (req, res) => {
   try {
     const sess = exigirColaborador(req, res); if (!sess) return;
     const exec = await chkPosseExecucao(sess, parseInt(req.params.id, 10), { comRespostas: true });
+    // Foto crítica é obrigatória: item FOTO crítico sem foto bloqueia concluir.
+    const chavesComFoto = new Set((await prisma.checklistFoto.findMany({ where: { execucaoId: exec.id, empresaId: sess.empresaId }, select: { itemChave: true } })).map((f) => f.itemChave));
+    const faltando = fotosCriticasFaltando(exec.itensSnapshotJson, chavesComFoto);
+    if (faltando.length) return res.status(400).json({ error: `Falta a foto obrigatória de: ${faltando.join(', ')}` });
     const rmap = {}; for (const r of exec.respostas) rmap[r.itemChave] = { conforme: r.conforme };
     const emAlerta = execucaoEmAlerta(exec.itensSnapshotJson, rmap);
     // updateMany com empresaId no where: exec já veio validado com empresaId neste handler,
