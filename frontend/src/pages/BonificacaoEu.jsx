@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { colabApi, COLAB_TOKEN_KEY } from '../services/api'
+import { comprimirFoto } from '../lib/comprimirFoto'
 
 const brl = (n) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(n) || 0)
 const num = (n) => new Intl.NumberFormat('pt-BR').format(Math.round(Number(n) || 0))
@@ -534,6 +535,10 @@ function CardChecklist({ c, onAbrir }) {
 // Execução em andamento: responde item a item (auto-salva por item) e conclui no fim.
 function ExecutarChecklist({ exec, setAviso, onSair }) {
   const [respostas, setRespostas] = useState(exec.respostas || {})
+  // Metadata das fotos já anexadas — { [chave]: { id, dataUrl? } }. dataUrl só existe
+  // localmente logo após tirar a foto (prévia imediata, sem novo fetch); do backend
+  // vem só { id } e a miniatura é buscada sob demanda ao abrir o item.
+  const [fotos, setFotos] = useState(exec.fotos || {})
   const [concluida, setConcluida] = useState(exec.status === 'CONCLUIDA')
   const [concluindo, setConcluindo] = useState(false)
 
@@ -546,7 +551,16 @@ function ExecutarChecklist({ exec, setAviso, onSair }) {
     } catch (err) { setAviso(err?.response?.data?.error ?? 'Não foi possível salvar a resposta.') }
   }
 
+  function fotoSalva(chave, meta) {
+    setFotos((s) => ({ ...s, [chave]: meta }))
+  }
+
+  // Item FOTO crítico sem foto ainda anexada — bloqueia o Concluir (o 400 do servidor
+  // é a rede de segurança, mas aqui evitamos a viagem ao servidor pra um erro esperado).
+  const faltaFotoCritica = exec.itens.some((it) => it.tipo === 'FOTO' && it.critico && !fotos[it.chave])
+
   async function concluir() {
+    if (faltaFotoCritica) { setAviso('Falta anexar uma foto obrigatória.'); return }
     setConcluindo(true)
     try {
       await colabApi.post(`/public/colaborador/execucoes/${exec.id}/concluir`)
@@ -572,10 +586,11 @@ function ExecutarChecklist({ exec, setAviso, onSair }) {
       <button type="button" className="be-login-voltar" style={{ marginTop: 0, marginBottom: 12 }} onClick={onSair}>‹ Voltar</button>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {exec.itens.map((it) => (
-          <ItemChecklist key={it.chave} item={it} resposta={respostas[it.chave] || {}} onSalvar={salvar} />
+          <ItemChecklist key={it.chave} item={it} resposta={respostas[it.chave] || {}} onSalvar={salvar} foto={fotos[it.chave] || null} onFoto={fotoSalva} execId={exec.id} setAviso={setAviso} />
         ))}
       </div>
-      <button type="button" className="be-btn" style={{ marginTop: 14 }} onClick={concluir} disabled={concluindo}>
+      {faltaFotoCritica && <p className="be-cl-warn" style={{ marginTop: 10 }}>⚠ Falta anexar uma foto obrigatória antes de concluir.</p>}
+      <button type="button" className="be-btn" style={{ marginTop: 14 }} onClick={concluir} disabled={concluindo || faltaFotoCritica}>
         {concluindo ? 'Concluindo…' : 'Concluir checklist'}
       </button>
     </section>
@@ -583,8 +598,8 @@ function ExecutarChecklist({ exec, setAviso, onSair }) {
 }
 
 // Um item do snapshot ({ chave, tipo, titulo, descricao, critico, config }), renderizado
-// conforme o tipo. Sem FOTO nesta fatia.
-function ItemChecklist({ item, resposta: r, onSalvar }) {
+// conforme o tipo.
+function ItemChecklist({ item, resposta: r, onSalvar, foto, onFoto, execId, setAviso }) {
   const [texto, setTexto] = useState(r.valor ?? '')
   const [numero, setNumero] = useState(r.valor ?? '')
   return (
@@ -629,7 +644,77 @@ function ItemChecklist({ item, resposta: r, onSalvar }) {
         </div>
       )}
 
+      {item.tipo === 'FOTO' && (
+        <ItemFoto item={item} foto={foto} onFoto={onFoto} execId={execId} setAviso={setAviso} />
+      )}
+
       {r.conforme === false && <div className="be-cl-warn">⚠ Fora do padrão{item.critico ? ' · item crítico' : ''}</div>}
+    </div>
+  )
+}
+
+// Captura/anexa a foto de um item FOTO. Sem foto: input de câmera + botão "Tirar
+// foto". Com foto: miniatura (dataUrl local se acabou de tirar, senão busca sob
+// demanda ao montar) + "✓ foto anexada" + botão "Refazer".
+function ItemFoto({ item, foto, onFoto, execId, setAviso }) {
+  const [enviando, setEnviando] = useState(false)
+  const [carregandoPrevia, setCarregandoPrevia] = useState(false)
+  const [previaUrl, setPreviaUrl] = useState(foto?.dataUrl || null)
+  const inputId = `be-foto-${item.chave}`
+
+  // Já veio com foto do backend (metadata { id } sem bytes) e ainda não temos prévia
+  // local — busca os bytes sob demanda uma vez.
+  useEffect(() => {
+    if (foto?.id && !foto?.dataUrl && !previaUrl) {
+      setCarregandoPrevia(true)
+      colabApi.get(`/public/colaborador/fotos/${foto.id}`)
+        .then((r) => setPreviaUrl(r.data?.dataUrl || null))
+        .catch(() => {}) // miniatura é só conveniência — "✓ foto anexada" já basta
+        .finally(() => setCarregandoPrevia(false))
+    }
+  }, [foto?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function aoEscolher(e) {
+    const file = e.target.files?.[0]
+    e.target.value = '' // permite escolher o mesmo arquivo de novo (ex.: refazer)
+    if (!file) return
+    setEnviando(true)
+    try {
+      const { dataUrl, largura, altura } = await comprimirFoto(file)
+      const r = await colabApi.put(`/public/colaborador/execucoes/${execId}/foto`, { itemChave: item.chave, dataUrl, largura, altura })
+      setPreviaUrl(dataUrl) // prévia imediata com o dataUrl comprimido, sem novo fetch
+      onFoto(item.chave, { id: r.data.fotoId, dataUrl })
+    } catch (err) { setAviso(err?.response?.data?.error ?? 'Não foi possível salvar a foto.') }
+    finally { setEnviando(false) }
+  }
+
+  return (
+    <div>
+      <input id={inputId} type="file" accept="image/*" capture="environment" hidden onChange={aoEscolher} disabled={enviando} />
+      {foto ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {previaUrl ? (
+            <img src={previaUrl} alt="" style={{ width: 52, height: 52, borderRadius: 10, objectFit: 'cover', flexShrink: 0, border: '1px solid var(--line)' }} />
+          ) : (
+            <div style={{ width: 52, height: 52, borderRadius: 10, flexShrink: 0, background: 'var(--surface-2)', border: '1px solid var(--line)', display: 'grid', placeItems: 'center', fontSize: 18 }}>
+              {carregandoPrevia ? '…' : '📷'}
+            </div>
+          )}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 750, color: 'var(--money)' }}>✓ foto anexada</div>
+            <label htmlFor={inputId} className="be-cl-check" style={{ marginTop: 6, padding: '6px 12px', fontSize: 12 }}>
+              {enviando ? 'Enviando…' : 'Refazer'}
+            </label>
+          </div>
+        </div>
+      ) : (
+        <>
+          <label htmlFor={inputId} className="be-cl-check">
+            📷 {enviando ? 'Enviando…' : 'Tirar foto'}
+          </label>
+          {item.critico && <div className="be-cl-warn">⚠ Foto obrigatória</div>}
+        </>
+      )}
     </div>
   )
 }
