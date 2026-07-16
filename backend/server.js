@@ -6161,7 +6161,7 @@ app.get('/api/ponto/colaboradores', async (req, res) => {
     const jornadas = await prisma.jornada.findMany({ select: { id: true, nome: true } });
     const jMap = new Map(jornadas.map((j) => [j.id, j.nome]));
     res.json(fs.map((f) => ({
-      id: f.id, nome: f.nome, funcao: f.funcao || null, cpf: f.cpf || null, whatsapp: f.whatsapp || null, status: f.status,
+      id: f.id, nome: f.nome, apelido: f.apelido || null, funcao: f.funcao || null, cpf: f.cpf || null, whatsapp: f.whatsapp || null, status: f.status,
       biometriaStatus: f.biometriaStatus, biometriaEm: f.biometriaEm, temPin: !!f.pinPonto, ultimaMarcacao: uMap.get(f.id) || null,
       jornadaId: f.jornadaId || null, jornadaNome: f.jornadaId ? (jMap.get(f.jornadaId) || null) : null,
       enrollidColetor: f.enrollidColetor ?? null,
