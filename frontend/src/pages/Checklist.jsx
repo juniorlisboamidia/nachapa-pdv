@@ -4,7 +4,7 @@
 // (CRUD + editor, Task 7: nasce do zero ou de um template). A aba Painel (visão
 // consolidada do gestor) chega na Task 10; por ora fica como placeholder "Em breve".
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import api from '../services/api'
 import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -193,13 +193,20 @@ function AbaTemplates({ notify }) {
   const [ver, setVer] = useState(null)
   const [usando, setUsando] = useState(false)
 
-  // "Usar como base": clona o template num checklist novo e manda pra aba Checklists,
-  // onde ele já aparece na lista (a busca não fica filtrada por nada ao entrar).
+  // "Usar como base": clona o template num checklist novo e manda direto pro editor
+  // dele na aba Checklists — o id vai na querystring (?editar=) porque Templates e
+  // Checklists são abas irmãs sem estado compartilhado; AbaChecklists detecta o
+  // parâmetro no mount e abre o editor com o objeto completo (mesmo caminho do
+  // botão "Editar").
   function usarComoBase() {
     if (usando) return
     setUsando(true)
     api.post(`/checklist/templates/${ver.id}/usar`)
-      .then(() => { setVer(null); notify('Checklist criado a partir do template.'); navigate('/checklist/checklists') })
+      .then((r) => {
+        setVer(null)
+        notify('Checklist criado a partir do template.')
+        navigate(`/checklist/checklists?editar=${r.data.checklist.id}`)
+      })
       .catch((e) => notify(e?.response?.data?.error ?? 'Não foi possível usar o template.', 'error'))
       .finally(() => setUsando(false))
   }
@@ -277,6 +284,7 @@ function AbaTemplates({ notify }) {
 // template ("Usar como base" na aba Templates). Nome, categoria, prioridade, setores
 // responsáveis, recorrência (todo dia / dias da semana / avulso) e a lista de itens.
 function AbaChecklists({ notify }) {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [lista, setLista] = useState([])
   const [busca, setBusca] = useState('')
   const [loading, setLoading] = useState(true)
@@ -291,6 +299,23 @@ function AbaChecklists({ notify }) {
   // Busca debounced — mesmo padrão de AbaItens em Etiquetas.jsx. Dispara também na
   // carga inicial (busca começa vazia, o efeito roda no mount).
   useEffect(() => { const t = setTimeout(carregar, 250); return () => clearTimeout(t) }, [busca]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Chegando de "Usar como base" (aba Templates) com ?editar=<id>: abre o editor já
+  // carregado nesse checklist, mesmo caminho do botão "Editar" (GET completo, exigido
+  // pelo full-replace do PUT). Só no mount — depois limpa o parâmetro da URL pra um
+  // F5 não reabrir o editor sozinho.
+  useEffect(() => {
+    const id = searchParams.get('editar')
+    if (!id) return
+    api.get(`/checklist/checklists/${id}`)
+      .then((r) => setEdit(r.data.checklist))
+      .catch((e) => notify(e?.response?.data?.error ?? 'Não foi possível carregar o checklist.', 'error'))
+      .finally(() => {
+        searchParams.delete('editar')
+        setSearchParams(searchParams, { replace: true })
+      })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function novo() {
     setEdit({
@@ -367,6 +392,10 @@ function ChecklistEditor({ inicial, notify, onClose, onSalvou }) {
 
   async function salvar() {
     if (!f.nome?.trim()) { notify('Informe o nome do checklist.', 'error'); return }
+    // Valida no cliente antes de mandar pro backend — o 400 "Todo item precisa de um
+    // título." de lá não diz qual, então aponta a posição aqui.
+    const itemSemTitulo = f.itens.findIndex((it) => !it.titulo?.trim())
+    if (itemSemTitulo !== -1) { notify(`O item ${itemSemTitulo + 1} está sem título.`, 'error'); return }
     const criando = f.novo || !f.id
     setSalvando(true)
     try {
