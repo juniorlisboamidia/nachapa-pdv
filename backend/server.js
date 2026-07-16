@@ -6820,11 +6820,25 @@ const ETIQUETA_REGRAS_PADRAO = [
 // de validade" para toda conservação — e como o seed da migration só cobriu as
 // empresas que já existiam, uma loja nova ficaria com o módulo todo morto
 // (nenhuma etiqueta imprime) sem nenhum aviso até alguém tentar usar.
-async function garantirEtiquetaSetup(empresaId) {
+async function garantirEtiquetaSetup() {
+  // NÃO usar req.user.empresaId aqui: só existe para operador (autenticar monta
+  // req.user manualmente com empresaId=payload.eid); para ADMIN req.user é o JWT
+  // cru do HUB, sem empresaId, e empresa.findUnique({ id: undefined }) lançava
+  // PrismaClientValidationError => 500 permanente nesta rota. getEmpresaIdAtual()
+  // lê a loja já resolvida pelo gate de tenant (tenantStore), vale para os dois papéis.
+  const empresaId = getEmpresaIdAtual();
   let c = await prisma.etiquetaConfig.findFirst();
   if (!c) {
     const emp = await prisma.empresa.findUnique({ where: { id: empresaId }, select: { nome: true } });
-    c = await prisma.etiquetaConfig.create({ data: { razaoSocial: emp?.nome || null, campos: {} } });
+    try {
+      c = await prisma.etiquetaConfig.create({ data: { razaoSocial: emp?.nome || null, campos: {} } });
+    } catch (e) {
+      // @@unique([empresaId]): duas requisições concorrentes na primeira vez que a
+      // loja mexe em Etiquetas (ex.: React StrictMode dobrando o mount) podem colidir
+      // aqui — relê a linha que a outra request acabou de criar em vez de 500.
+      if (e?.code === 'P2002') c = await prisma.etiquetaConfig.findFirst();
+      else throw e;
+    }
   }
   let regras = await prisma.etiquetaRegra.findMany({ orderBy: { ordem: 'asc' } });
   if (!regras.length) {
@@ -6839,7 +6853,7 @@ async function garantirEtiquetaSetup(empresaId) {
 app.get('/api/etiquetas/config', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
   try {
-    const { config, regras } = await garantirEtiquetaSetup(req.user.empresaId);
+    const { config, regras } = await garantirEtiquetaSetup();
     res.json({ config, regras, conservacoes: CONSERVACOES });
   } catch (err) { console.error('[etiquetas/config GET]', err); res.status(500).json({ error: 'Erro ao carregar a configuração.' }); }
 });
@@ -6849,7 +6863,14 @@ app.put('/api/etiquetas/config', async (req, res) => {
   try {
     const b = req.body || {};
     const only = (v, max) => (v == null || String(v).trim() === '' ? null : String(v).trim().slice(0, max));
-    const { config: atual } = await garantirEtiquetaSetup(req.user.empresaId);
+    // +'' e +null são 0 (finito), então caíam no clamp mínimo (20/15) em vez do
+    // default (50/30) — um campo de formulário limpo virava rótulo minúsculo.
+    // Trata '' e null como ausentes junto com undefined, caindo no default.
+    const numOuDefault = (v, min, max, def) => {
+      if (v === undefined || v === null || String(v).trim() === '') return def;
+      return Number.isFinite(+v) ? Math.min(max, Math.max(min, +v)) : def;
+    };
+    const { config: atual } = await garantirEtiquetaSetup();
     const config = await prisma.etiquetaConfig.update({
       where: { id: atual.id },
       data: {
@@ -6858,8 +6879,8 @@ app.put('/api/etiquetas/config', async (req, res) => {
         responsavelTecnico: only(b.responsavelTecnico, 120),
         sif: only(b.sif, 10),
         sie: only(b.sie, 10),
-        larguraMm: Number.isFinite(+b.larguraMm) ? Math.min(50, Math.max(20, +b.larguraMm)) : 50,
-        alturaMm: Number.isFinite(+b.alturaMm) ? Math.min(100, Math.max(15, +b.alturaMm)) : 30,
+        larguraMm: numOuDefault(b.larguraMm, 20, 50, 50),
+        alturaMm: numOuDefault(b.alturaMm, 15, 100, 30),
         campos: b.campos && typeof b.campos === 'object' ? b.campos : {},
       },
     });
@@ -6870,16 +6891,20 @@ app.put('/api/etiquetas/config', async (req, res) => {
 app.put('/api/etiquetas/regras', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
   try {
+    await garantirEtiquetaSetup(); // lazy-seed: garante as 6 regras antes de atualizar
     const entrada = Array.isArray(req.body?.regras) ? req.body.regras : [];
     for (const r of entrada) {
       if (!CONSERVACOES.includes(r.conservacao)) return res.status(400).json({ error: `Conservação inválida: ${r.conservacao}` });
       const dias = parseInt(r.dias, 10);
       if (!Number.isFinite(dias) || dias < 1 || dias > 3650) return res.status(400).json({ error: 'Validade deve ser de 1 a 3650 dias.' });
+      // Coluna NOT NULL e impressa no rótulo sanitário (ex.: "<= -18 °C"): vazio some
+      // com a temperatura na etiqueta ANVISA sem nenhum erro visível, por isso valida.
+      if (!String(r.tempLabel ?? '').trim()) return res.status(400).json({ error: 'Temperatura do rótulo é obrigatória.' });
     }
     for (const r of entrada) {
       await prisma.etiquetaRegra.updateMany({
         where: { conservacao: r.conservacao },
-        data: { dias: parseInt(r.dias, 10), tempLabel: String(r.tempLabel || '').slice(0, 60) },
+        data: { dias: parseInt(r.dias, 10), tempLabel: String(r.tempLabel).trim().slice(0, 60) },
       });
     }
     const regras = await prisma.etiquetaRegra.findMany({ orderBy: { ordem: 'asc' } });
@@ -6890,6 +6915,7 @@ app.put('/api/etiquetas/regras', async (req, res) => {
 app.get('/api/etiquetas/itens', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
   try {
+    await garantirEtiquetaSetup(); // lazy-seed: garante as regras antes de casar validadeEfetiva
     const busca = typeof req.query.busca === 'string' ? req.query.busca.trim() : '';
     const where = { ativo: true, tipo: { in: ETIQUETA_TIPOS_INSUMO } };
     if (busca) where.nome = { contains: busca, mode: 'insensitive' };
