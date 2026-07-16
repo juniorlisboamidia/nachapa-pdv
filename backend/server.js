@@ -7204,6 +7204,250 @@ app.post('/api/public/etiquetas/:token/registrar', async (req, res) => {
 // do item, datas e o NOME de quem manipulou, de fora, sem login. Volta junto com o QR,
 // quando houver quem o chame e um dono para a regra de exposição.
 
+// ===== Checklist (ADMIN) — área `checklist` já protegida pelo middleware =====
+
+const CHECKLIST_CATEGORIAS = ['Abertura', 'Fechamento', 'Controle de Pragas', 'Documentações Sanitárias', 'Segurança Alimentar'];
+
+// Templates de fábrica (da referência), SEM itens de foto — o tipo FOTO chega na
+// Fatia 2. Semeados por loja na 1ª leitura (cobre lojas criadas depois).
+const CHECKLIST_TEMPLATES_SEED = [
+  { nome: 'Abertura Cozinha', categoria: 'Abertura', descricao: 'Procedimentos obrigatórios para abertura da cozinha', tempoEstimadoMin: 20, itens: [
+    { tipo: 'CHECK', titulo: 'Verificar validade dos insumos', critico: true },
+    { tipo: 'NUMERICO', titulo: 'Temperatura da câmara fria', config: { unidade: '°C' } },
+    { tipo: 'AVALIACAO', titulo: 'Estado de limpeza das bancadas', config: { notaMinima: 4 } },
+    { tipo: 'CHECK', titulo: 'Ligar equipamentos' },
+    { tipo: 'SELECAO', titulo: 'Verificar estoque crítico', config: { opcoes: [{ rotulo: 'Estoque OK', conforme: true }, { rotulo: 'Baixo estoque', conforme: true }, { rotulo: 'Sem estoque', conforme: false }] } },
+    { tipo: 'TEXTO', titulo: 'Observações da abertura' },
+  ] },
+  { nome: 'Abertura Salão', categoria: 'Abertura', descricao: 'Checklist para garantir a correta abertura do salão', tempoEstimadoMin: 15, itens: [
+    { tipo: 'CHECK', titulo: 'Limpar e arrumar mesas' },
+    { tipo: 'CHECK', titulo: 'Verificar cardápios nas mesas' },
+    { tipo: 'AVALIACAO', titulo: 'Avaliação da apresentação', config: { notaMinima: 4 } },
+  ] },
+  { nome: 'Fechamento Salão', categoria: 'Fechamento', descricao: 'Checklist para garantir o correto fechamento do salão', tempoEstimadoMin: 15, itens: [
+    { tipo: 'CHECK', titulo: 'Recolher todos os cardápios' },
+    { tipo: 'CHECK', titulo: 'Limpar mesas e cadeiras' },
+    { tipo: 'CHECK', titulo: 'Varrer e passar pano no piso' },
+    { tipo: 'CHECK', titulo: 'Desligar luzes e ar-condicionado' },
+  ] },
+  { nome: 'Abertura Caixa', categoria: 'Abertura', descricao: 'Procedimentos de abertura do caixa', tempoEstimadoMin: 10, itens: [
+    { tipo: 'NUMERICO', titulo: 'Conferir troco inicial', config: { unidade: 'un' } },
+    { tipo: 'CHECK', titulo: 'Testar máquinas de cartão' },
+    { tipo: 'CHECK', titulo: 'Ligar sistema PDV' },
+    { tipo: 'SELECAO', titulo: 'Status das máquinas', config: { opcoes: [{ rotulo: 'Todas funcionando', conforme: true }, { rotulo: 'Uma com problema', conforme: false }, { rotulo: 'Várias com problema', conforme: false }] } },
+  ] },
+  { nome: 'Fechamento Caixa', categoria: 'Fechamento', descricao: 'Checklist para garantir o correto fechamento do caixa', tempoEstimadoMin: 20, itens: [
+    { tipo: 'CHECK', titulo: 'Verificar se há pedidos em aberto no sistema' },
+    { tipo: 'CHECK', titulo: 'Realizar fechamento de caixa no sistema' },
+    { tipo: 'CHECK', titulo: 'Imprimir e arquivar relatórios de pagamento' },
+    { tipo: 'NUMERICO', titulo: 'Contar troco e sangria', config: { unidade: 'un' } },
+    { tipo: 'CHECK', titulo: 'Armazenar malote em cofre' },
+    { tipo: 'CHECK', titulo: 'Conferir recebimentos eletrônicos' },
+    { tipo: 'CHECK', titulo: 'Carregar máquinas de cartão' },
+    { tipo: 'CHECK', titulo: 'Encerrar sessão do iFood Manager' },
+    { tipo: 'CHECK', titulo: 'Desligar equipamentos de front' },
+  ] },
+  { nome: 'Abertura Bar', categoria: 'Abertura', descricao: 'Checklist para garantir a correta abertura do bar', tempoEstimadoMin: 15, itens: [
+    { tipo: 'CHECK', titulo: 'Verificar estoque de bebidas' },
+    { tipo: 'CHECK', titulo: 'Preparar mise en place' },
+    { tipo: 'CHECK', titulo: 'Verificar gelo e frutas' },
+    { tipo: 'CHECK', titulo: 'Limpar bancada do bar' },
+  ] },
+  { nome: 'Fechamento Bar', categoria: 'Fechamento', descricao: 'Checklist para garantir o correto fechamento do bar', tempoEstimadoMin: 15, itens: [
+    { tipo: 'CHECK', titulo: 'Limpar todos os utensílios' },
+    { tipo: 'CHECK', titulo: 'Guardar bebidas' },
+    { tipo: 'CHECK', titulo: 'Descartar frutas vencidas' },
+  ] },
+  { nome: 'Fechamento Cozinha', categoria: 'Fechamento', descricao: 'Checklist para garantir o correto fechamento da cozinha', tempoEstimadoMin: 25, itens: [
+    { tipo: 'CHECK', titulo: 'Desligar todos os fogões', critico: true },
+    { tipo: 'CHECK', titulo: 'Limpar bancadas e superfícies' },
+    { tipo: 'CHECK', titulo: 'Armazenar alimentos corretamente' },
+    { tipo: 'AVALIACAO', titulo: 'Avaliação geral do turno', config: { notaMinima: 3 } },
+    { tipo: 'CHECK', titulo: 'Retirar lixo' },
+  ] },
+  { nome: 'Fechamento Gerência', categoria: 'Fechamento', descricao: 'Checklist de fechamento para a gerência', tempoEstimadoMin: 15, itens: [
+    { tipo: 'NUMERICO', titulo: 'Revisar faturamento do dia', config: { unidade: 'un' } },
+    { tipo: 'CHECK', titulo: 'Aprovar fechamento de caixa' },
+    { tipo: 'TEXTO', titulo: 'Observações gerenciais' },
+  ] },
+  { nome: 'Controle de Pragas', categoria: 'Controle de Pragas', descricao: 'Inspeção periódica de controle de pragas', tempoEstimadoMin: 30, itens: [
+    { tipo: 'CHECK', titulo: 'Inspeção de armadilhas' },
+    { tipo: 'SELECAO', titulo: 'Nível de infestação', config: { opcoes: [{ rotulo: 'Nenhuma', conforme: true }, { rotulo: 'Leve', conforme: true }, { rotulo: 'Moderada', conforme: false }, { rotulo: 'Grave', conforme: false }] } },
+    { tipo: 'TEXTO', titulo: 'Laudo técnico' },
+  ] },
+  { nome: 'Segurança Alimentar', categoria: 'Segurança Alimentar', descricao: 'Checklist de conformidade ANVISA', tempoEstimadoMin: 20, itens: [
+    { tipo: 'NUMERICO', titulo: 'Temperatura do refrigerador', config: { unidade: '°C', min: 0, max: 4 } },
+    { tipo: 'NUMERICO', titulo: 'Temperatura do freezer', config: { unidade: '°C', max: -18 } },
+    { tipo: 'CHECK', titulo: 'EPIs sendo utilizados', critico: true },
+    { tipo: 'AVALIACAO', titulo: 'Higiene das mãos', config: { notaMinima: 4 } },
+  ] },
+  { nome: 'Documentações Sanitárias', categoria: 'Documentações Sanitárias', descricao: 'Conferência de documentações sanitárias obrigatórias', tempoEstimadoMin: 30, itens: [
+    { tipo: 'CHECK', titulo: 'Alvará sanitário válido', critico: true },
+    { tipo: 'CHECK', titulo: 'Laudo de dedetização em dia' },
+    { tipo: 'CHECK', titulo: 'POP atualizado' },
+    { tipo: 'CHECK', titulo: 'Certificado de manipuladores' },
+    { tipo: 'TEXTO', titulo: 'Observações' },
+  ] },
+];
+
+// Semeia os templates de fábrica na 1ª vez (a extension injeta empresaId por linha,
+// inclusive no createMany dos itens — mesmo padrão do garantirEtiquetaSetup).
+async function garantirChecklistTemplatesSeed() {
+  // findFirst (não count) — findFirst é escopado por empresaId pela extension; um
+  // count() poderia contar entre lojas e nunca semear a 2ª loja. Mesmo cuidado do
+  // garantirEtiquetaSetup.
+  const existe = await prisma.checklistTemplate.findFirst();
+  if (existe) return;
+  for (const tpl of CHECKLIST_TEMPLATES_SEED) {
+    const criado = await prisma.checklistTemplate.create({
+      data: { nome: tpl.nome, categoria: tpl.categoria, descricao: tpl.descricao || null, tempoEstimadoMin: tpl.tempoEstimadoMin || null },
+    });
+    await prisma.checklistTemplateItem.createMany({
+      data: tpl.itens.map((it, i) => ({ templateId: criado.id, ordem: i, tipo: it.tipo, titulo: it.titulo, descricao: it.descricao || null, critico: !!it.critico, config: it.config || null })),
+    });
+  }
+}
+
+const chkOnly = (v, max) => (v == null || String(v).trim() === '' ? null : String(v).trim().slice(0, max));
+
+// ---- Setores
+app.get('/api/checklist/setores', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try { res.json({ setores: await prisma.setor.findMany({ orderBy: [{ ordem: 'asc' }, { nome: 'asc' }] }) }); }
+  catch (err) { console.error('[checklist/setores GET]', err); res.status(500).json({ error: 'Erro ao carregar setores.' }); }
+});
+app.post('/api/checklist/setores', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const nome = chkOnly(req.body?.nome, 60);
+    if (!nome) return res.status(400).json({ error: 'Informe o nome do setor.' });
+    const setor = await prisma.setor.create({ data: { nome, ordem: parseInt(req.body?.ordem, 10) || 0 } });
+    res.status(201).json({ ok: true, setor });
+  } catch (err) {
+    if (err?.code === 'P2002') return res.status(409).json({ error: 'Já existe um setor com esse nome.' });
+    console.error('[checklist/setores POST]', err); res.status(500).json({ error: 'Erro ao criar setor.' });
+  }
+});
+app.put('/api/checklist/setores/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const id = parseInt(req.params.id, 10);
+    const atual = await prisma.setor.findFirst({ where: { id } });
+    if (!atual) return res.status(404).json({ error: 'Setor não encontrado.' });
+    const data = {};
+    if (req.body?.nome !== undefined) data.nome = chkOnly(req.body.nome, 60) || atual.nome;
+    if (req.body?.ativo !== undefined) data.ativo = req.body.ativo !== false;
+    if (req.body?.ordem !== undefined) data.ordem = parseInt(req.body.ordem, 10) || 0;
+    const setor = await prisma.setor.update({ where: { id }, data });
+    res.json({ ok: true, setor });
+  } catch (err) {
+    if (err?.code === 'P2002') return res.status(409).json({ error: 'Já existe um setor com esse nome.' });
+    console.error('[checklist/setores PUT]', err); res.status(500).json({ error: 'Erro ao salvar setor.' });
+  }
+});
+app.delete('/api/checklist/setores/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try { await prisma.setor.delete({ where: { id: parseInt(req.params.id, 10) } }); res.json({ ok: true }); }
+  catch (err) { console.error('[checklist/setores DELETE]', err); res.status(500).json({ error: 'Erro ao excluir setor.' }); }
+});
+
+// ---- Templates
+app.get('/api/checklist/templates', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    await garantirChecklistTemplatesSeed();
+    const where = { arquivado: false };
+    if (req.query.categoria && CHECKLIST_CATEGORIAS.includes(req.query.categoria)) where.categoria = req.query.categoria;
+    const templates = await prisma.checklistTemplate.findMany({ where, orderBy: { nome: 'asc' }, include: { itens: { orderBy: { ordem: 'asc' } } } });
+    res.json({ templates, categorias: CHECKLIST_CATEGORIAS });
+  } catch (err) { console.error('[checklist/templates GET]', err); res.status(500).json({ error: 'Erro ao carregar templates.' }); }
+});
+app.get('/api/checklist/templates/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const t = await prisma.checklistTemplate.findFirst({ where: { id: parseInt(req.params.id, 10) }, include: { itens: { orderBy: { ordem: 'asc' } } } });
+    if (!t) return res.status(404).json({ error: 'Template não encontrado.' });
+    res.json({ template: t });
+  } catch (err) { console.error('[checklist/templates/:id GET]', err); res.status(500).json({ error: 'Erro ao carregar template.' }); }
+});
+
+// Valida e normaliza a lista de itens (compartilhado por template e checklist).
+function chkNormalizarItens(itensRaw) {
+  const TIPOS = new Set(['CHECK', 'AVALIACAO', 'TEXTO', 'NUMERICO', 'SELECAO']);
+  const arr = Array.isArray(itensRaw) ? itensRaw : [];
+  const itens = [];
+  for (let i = 0; i < arr.length; i++) {
+    const it = arr[i] || {};
+    if (!TIPOS.has(it.tipo)) throw { http: 400, msg: `Tipo de item inválido: ${it.tipo}` };
+    const titulo = chkOnly(it.titulo, 160);
+    if (!titulo) throw { http: 400, msg: 'Todo item precisa de um título.' };
+    itens.push({ ordem: i, tipo: it.tipo, titulo, descricao: chkOnly(it.descricao, 300), critico: !!it.critico, config: it.config && typeof it.config === 'object' ? it.config : null });
+  }
+  return itens;
+}
+
+app.post('/api/checklist/templates', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const nome = chkOnly(req.body?.nome, 120);
+    if (!nome) return res.status(400).json({ error: 'Informe o nome do template.' });
+    const categoria = CHECKLIST_CATEGORIAS.includes(req.body?.categoria) ? req.body.categoria : CHECKLIST_CATEGORIAS[0];
+    let itens; try { itens = chkNormalizarItens(req.body?.itens); } catch (e) { return res.status(e.http || 400).json({ error: e.msg }); }
+    // create do pai + createMany dos filhos (NÃO `itens: { create: itens }` aninhado):
+    // a extension multi-tenant injeta empresaId por chamada de 1º nível do Prisma; um
+    // nested write dentro de um único create() não passa pelo $allOperations dos
+    // filhos, então o Prisma recusa a escrita na hora ("Argument `empresaId` is
+    // missing"), já que a coluna é NOT NULL — confirmado num script isolado durante
+    // o desenvolvimento. Mesmo padrão do garantirChecklistTemplatesSeed.
+    const criado = await prisma.checklistTemplate.create({
+      data: { nome, categoria, descricao: chkOnly(req.body?.descricao, 300), tempoEstimadoMin: parseInt(req.body?.tempoEstimadoMin, 10) || null },
+    });
+    if (itens.length) {
+      await prisma.checklistTemplateItem.createMany({ data: itens.map((it) => ({ ...it, templateId: criado.id })) });
+    }
+    const t = await prisma.checklistTemplate.findFirst({ where: { id: criado.id }, include: { itens: { orderBy: { ordem: 'asc' } } } });
+    res.status(201).json({ ok: true, template: t });
+  } catch (err) { console.error('[checklist/templates POST]', err); res.status(500).json({ error: 'Erro ao criar template.' }); }
+});
+app.put('/api/checklist/templates/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const id = parseInt(req.params.id, 10);
+    const atual = await prisma.checklistTemplate.findFirst({ where: { id } });
+    if (!atual) return res.status(404).json({ error: 'Template não encontrado.' });
+    let itens; try { itens = chkNormalizarItens(req.body?.itens); } catch (e) { return res.status(e.http || 400).json({ error: e.msg }); }
+    // Substitui os itens (a edição reescreve a lista inteira). Templates são
+    // biblioteca — execuções passadas usam snapshot, então isso não afeta histórico.
+    // Mesma ressalva do POST: nested `itens: { create: itens }` não recebe empresaId
+    // da extension (nested write não passa pelo $allOperations do filho) — aqui é
+    // delete + update do pai (sem itens aninhados) + createMany dos filhos, dentro da
+    // mesma transação. Verificado que `tx` preserva a extension e o AsyncLocalStorage
+    // (o createMany via tx também sai com empresaId certo).
+    await prisma.$transaction(async (tx) => {
+      await tx.checklistTemplateItem.deleteMany({ where: { templateId: id } });
+      await tx.checklistTemplate.update({
+        where: { id },
+        data: {
+          nome: chkOnly(req.body?.nome, 120) || atual.nome,
+          categoria: CHECKLIST_CATEGORIAS.includes(req.body?.categoria) ? req.body.categoria : atual.categoria,
+          descricao: chkOnly(req.body?.descricao, 300),
+          tempoEstimadoMin: parseInt(req.body?.tempoEstimadoMin, 10) || null,
+        },
+      });
+      if (itens.length) {
+        await tx.checklistTemplateItem.createMany({ data: itens.map((it) => ({ ...it, templateId: id })) });
+      }
+    });
+    const t = await prisma.checklistTemplate.findFirst({ where: { id }, include: { itens: { orderBy: { ordem: 'asc' } } } });
+    res.json({ ok: true, template: t });
+  } catch (err) { console.error('[checklist/templates PUT]', err); res.status(500).json({ error: 'Erro ao salvar template.' }); }
+});
+app.delete('/api/checklist/templates/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try { await prisma.checklistTemplate.update({ where: { id: parseInt(req.params.id, 10) }, data: { arquivado: true } }); res.json({ ok: true }); }
+  catch (err) { console.error('[checklist/templates DELETE]', err); res.status(500).json({ error: 'Erro ao arquivar template.' }); }
+});
+
 app.listen(PORT, () => console.log(`Operação (PDV) API rodando em http://localhost:${PORT}`));
 
 // Servidor de ingest do coletor DIXI (WebSocket na porta própria 7788).
