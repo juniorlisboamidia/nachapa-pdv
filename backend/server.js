@@ -7448,6 +7448,134 @@ app.delete('/api/checklist/templates/:id', async (req, res) => {
   catch (err) { console.error('[checklist/templates DELETE]', err); res.status(500).json({ error: 'Erro ao arquivar template.' }); }
 });
 
+// ---- Checklists (a partir de template ou do zero) + atribuição de setor ao colaborador
+const PRIORIDADES = new Set(['BAIXA', 'MEDIA', 'ALTA']);
+const RECORRENCIAS = new Set(['DIARIA', 'DIAS_SEMANA', 'AVULSO']);
+
+// Normaliza os dados de cabeçalho do Checklist. `fallback` é o registro atual no PUT
+// (mantém o que não veio no body); no POST é null.
+function chkDadosChecklist(body, fallback) {
+  const nome = chkOnly(body?.nome, 120);
+  if (!nome && !fallback) throw { http: 400, msg: 'Informe o nome do checklist.' };
+  const setorIds = Array.isArray(body?.setorIds) ? [...new Set(body.setorIds.map((n) => parseInt(n, 10)).filter(Number.isFinite))] : (fallback?.setorIds || []);
+  const rc = body?.recorrenciaConfig && typeof body.recorrenciaConfig === 'object' ? body.recorrenciaConfig : {};
+  const diasSemana = Array.isArray(rc.diasSemana) ? [...new Set(rc.diasSemana.map((n) => parseInt(n, 10)).filter((n) => n >= 0 && n <= 6))] : [];
+  return {
+    nome: nome || fallback.nome,
+    categoria: CHECKLIST_CATEGORIAS.includes(body?.categoria) ? body.categoria : (fallback?.categoria || CHECKLIST_CATEGORIAS[0]),
+    descricao: chkOnly(body?.descricao, 300),
+    prioridade: PRIORIDADES.has(body?.prioridade) ? body.prioridade : (fallback?.prioridade || 'MEDIA'),
+    setorIds,
+    recorrenciaTipo: RECORRENCIAS.has(body?.recorrenciaTipo) ? body.recorrenciaTipo : (fallback?.recorrenciaTipo || 'AVULSO'),
+    recorrenciaConfig: { diasSemana, horarioLimite: chkOnly(rc.horarioLimite, 5) },
+  };
+}
+
+app.get('/api/checklist/checklists', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const busca = typeof req.query.busca === 'string' ? req.query.busca.trim() : '';
+    const where = { ativo: true };
+    if (busca) where.nome = { contains: busca, mode: 'insensitive' };
+    const checklists = await prisma.checklist.findMany({ where, orderBy: { nome: 'asc' }, include: { _count: { select: { itens: true } } } });
+    res.json({ checklists });
+  } catch (err) { console.error('[checklist/checklists GET]', err); res.status(500).json({ error: 'Erro ao carregar checklists.' }); }
+});
+app.get('/api/checklist/checklists/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const c = await prisma.checklist.findFirst({ where: { id: parseInt(req.params.id, 10) }, include: { itens: { orderBy: { ordem: 'asc' } } } });
+    if (!c) return res.status(404).json({ error: 'Checklist não encontrado.' });
+    res.json({ checklist: c });
+  } catch (err) { console.error('[checklist/checklists/:id GET]', err); res.status(500).json({ error: 'Erro ao carregar checklist.' }); }
+});
+app.post('/api/checklist/checklists', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    let dados, itens;
+    try { dados = chkDadosChecklist(req.body, null); itens = chkNormalizarItens(req.body?.itens); } catch (e) { return res.status(e.http || 400).json({ error: e.msg }); }
+    // create do pai + createMany dos filhos (NÃO `itens: { create: itens }` aninhado):
+    // mesmo ponto crítico já resolvido em POST /templates — a extension multi-tenant
+    // não injeta empresaId em nested writes, só em chamadas de 1º nível do Prisma.
+    const criado = await prisma.checklist.create({
+      data: { ...dados, templateOrigemId: parseInt(req.body?.templateOrigemId, 10) || null },
+    });
+    if (itens.length) {
+      await prisma.checklistItem.createMany({ data: itens.map((it) => ({ ...it, checklistId: criado.id })) });
+    }
+    const c = await prisma.checklist.findFirst({ where: { id: criado.id }, include: { itens: { orderBy: { ordem: 'asc' } } } });
+    res.status(201).json({ ok: true, checklist: c });
+  } catch (err) { console.error('[checklist/checklists POST]', err); res.status(500).json({ error: 'Erro ao criar checklist.' }); }
+});
+app.put('/api/checklist/checklists/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const id = parseInt(req.params.id, 10);
+    const atual = await prisma.checklist.findFirst({ where: { id } });
+    if (!atual) return res.status(404).json({ error: 'Checklist não encontrado.' });
+    let dados, itens;
+    // Validação ANTES do $transaction/deleteMany — input inválido não pode apagar os
+    // itens atuais (a checagem tem que acontecer antes de qualquer escrita).
+    try { dados = chkDadosChecklist(req.body, atual); itens = chkNormalizarItens(req.body?.itens); } catch (e) { return res.status(e.http || 400).json({ error: e.msg }); }
+    // Mesma ressalva do POST: update do pai (sem itens aninhados) + deleteMany/createMany
+    // dos filhos, dentro da mesma transação (tx preserva a extension e o empresaId).
+    await prisma.$transaction(async (tx) => {
+      await tx.checklistItem.deleteMany({ where: { checklistId: id } });
+      await tx.checklist.update({ where: { id }, data: dados });
+      if (itens.length) {
+        await tx.checklistItem.createMany({ data: itens.map((it) => ({ ...it, checklistId: id })) });
+      }
+    });
+    const c = await prisma.checklist.findFirst({ where: { id }, include: { itens: { orderBy: { ordem: 'asc' } } } });
+    res.json({ ok: true, checklist: c });
+  } catch (err) { console.error('[checklist/checklists PUT]', err); res.status(500).json({ error: 'Erro ao salvar checklist.' }); }
+});
+app.delete('/api/checklist/checklists/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try { await prisma.checklist.update({ where: { id: parseInt(req.params.id, 10) }, data: { ativo: false } }); res.json({ ok: true }); }
+  catch (err) { console.error('[checklist/checklists DELETE]', err); res.status(500).json({ error: 'Erro ao excluir checklist.' }); }
+});
+
+// Usar template como base → cria um Checklist copiando os itens (snapshot leve).
+app.post('/api/checklist/templates/:id/usar', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const t = await prisma.checklistTemplate.findFirst({ where: { id: parseInt(req.params.id, 10) }, include: { itens: { orderBy: { ordem: 'asc' } } } });
+    if (!t) return res.status(404).json({ error: 'Template não encontrado.' });
+    // create do pai + createMany dos filhos — mesmo ponto crítico dos outros endpoints.
+    const criado = await prisma.checklist.create({
+      data: { templateOrigemId: t.id, nome: t.nome, categoria: t.categoria, descricao: t.descricao },
+    });
+    if (t.itens.length) {
+      await prisma.checklistItem.createMany({
+        data: t.itens.map((it, i) => ({ checklistId: criado.id, ordem: i, tipo: it.tipo, titulo: it.titulo, descricao: it.descricao, critico: it.critico, config: it.config })),
+      });
+    }
+    const c = await prisma.checklist.findFirst({ where: { id: criado.id }, include: { itens: { orderBy: { ordem: 'asc' } } } });
+    res.status(201).json({ ok: true, checklist: c });
+  } catch (err) { console.error('[checklist/templates/usar]', err); res.status(500).json({ error: 'Erro ao criar a partir do template.' }); }
+});
+
+// Colaboradores + atribuição de setor
+app.get('/api/checklist/colaboradores', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const fs = await prisma.funcionario.findMany({ where: { status: 'ATIVO' }, orderBy: { nome: 'asc' }, select: { id: true, nome: true, apelido: true, setorIds: true } });
+    res.json({ colaboradores: fs });
+  } catch (err) { console.error('[checklist/colaboradores GET]', err); res.status(500).json({ error: 'Erro ao carregar colaboradores.' }); }
+});
+app.put('/api/checklist/colaboradores/:id/setores', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const id = parseInt(req.params.id, 10);
+    const func = await prisma.funcionario.findFirst({ where: { id } });
+    if (!func) return res.status(404).json({ error: 'Colaborador não encontrado.' });
+    const setorIds = Array.isArray(req.body?.setorIds) ? [...new Set(req.body.setorIds.map((n) => parseInt(n, 10)).filter(Number.isFinite))] : [];
+    await prisma.funcionario.update({ where: { id }, data: { setorIds } });
+    res.json({ ok: true, setorIds });
+  } catch (err) { console.error('[checklist/colaboradores setores]', err); res.status(500).json({ error: 'Erro ao salvar setores.' }); }
+});
+
 app.listen(PORT, () => console.log(`Operação (PDV) API rodando em http://localhost:${PORT}`));
 
 // Servidor de ingest do coletor DIXI (WebSocket na porta própria 7788).
