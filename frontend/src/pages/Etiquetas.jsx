@@ -76,10 +76,10 @@ function AbaConfig({ notify }) {
   useEffect(() => { carregar() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const upd = (k, v) => setConfig((c) => ({ ...c, [k]: v }))
-  // Só troca os dias — o tempLabel de cada regra permanece o que veio do GET
-  // (o PUT /etiquetas/regras rejeita com 400 se tempLabel vier vazio).
+  // Só os dias são editáveis — a temperatura (tempLabel) é fixa, definida pela
+  // conservação, e nunca passa por input: o PUT /etiquetas/regras rejeita com
+  // 400 se algum tempLabel vier vazio, o que travaria a tela sem recarregar.
   const updRegraDias = (cons, dias) => setRegras((rs) => rs.map((r) => (r.conservacao === cons ? { ...r, dias } : r)))
-  const updRegraLabel = (cons, tempLabel) => setRegras((rs) => rs.map((r) => (r.conservacao === cons ? { ...r, tempLabel } : r)))
 
   async function salvar() {
     setSalvando(true)
@@ -140,14 +140,7 @@ function AbaConfig({ notify }) {
         {regras.map((r) => (
           <div key={r.conservacao} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: '1px solid var(--app-border, #eee)' }}>
             <span style={{ flex: '1 1 220px', minWidth: 0, fontSize: 13, fontWeight: 600 }}>{CONS_LABEL[r.conservacao] || r.conservacao}</span>
-            <input
-              className="form-input"
-              style={{ maxWidth: 150 }}
-              value={r.tempLabel}
-              onChange={(e) => updRegraLabel(r.conservacao, e.target.value)}
-              placeholder="Ex.: <= -18 °C"
-              title="Temperatura impressa no rótulo"
-            />
+            <span style={{ flex: '0 0 150px', fontSize: 13 }} title="Temperatura impressa no rótulo">{r.tempLabel}</span>
             <input
               className="form-input"
               type="number"
@@ -252,15 +245,28 @@ function AbaItens({ notify }) {
                     </select>
                   </td>
                   <td>
+                    {/* Input não-controlado: salva só no blur (mesmo padrão do ID do
+                        coletor em PontoFacial.jsx), pra não disparar um PUT + reload
+                        da lista a cada tecla digitada e sobrescrever o que a pessoa
+                        está digitando. A `key` muda junto com o valor do servidor pra
+                        forçar o React a remontar o campo com o defaultValue atualizado
+                        depois que carregar() resincroniza (sucesso ou falha). */}
                     <input
+                      key={'dias-' + it.insumoId + '-' + (it.validadeDias ?? 'x')}
                       className="form-input"
                       type="number"
                       min={1}
                       max={3650}
                       style={{ width: 90 }}
                       placeholder="usa a regra"
-                      value={it.validadeDias ?? ''}
-                      onChange={(e) => salvarItem(it, { validadeDias: e.target.value === '' ? null : parseInt(e.target.value, 10) })}
+                      defaultValue={it.validadeDias ?? ''}
+                      onBlur={(e) => {
+                        const bruto = e.target.value.trim()
+                        const validadeDias = bruto === '' ? null : parseInt(bruto, 10)
+                        if (validadeDias === (it.validadeDias ?? null)) return // sem mudança, evita PUT à toa
+                        salvarItem(it, { validadeDias })
+                      }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
                     />
                   </td>
                   <td style={{ color: 'var(--app-text-soft, #888)' }}>
