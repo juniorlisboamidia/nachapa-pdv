@@ -1,8 +1,8 @@
 // Checklist Inteligente — rotinas padronizadas da operação, com registro exigido e
-// acompanhamento de longe. Fatia 1 (F1): só o painel do gestor, com Templates (biblioteca
-// pronta, semeada pelo backend) e Setores (onde cada checklist roda — Cozinha, Salão…).
-// As abas Painel (visão do gestor) e Checklists (o dia a dia de quem executa) chegam nas
-// Tasks 7 e 10; por ora ficam como placeholder "Em breve".
+// acompanhamento de longe. Painel do gestor com Templates (biblioteca pronta, semeada
+// pelo backend), Setores (onde cada checklist roda — Cozinha, Salão…) e Checklists
+// (CRUD + editor, Task 7: nasce do zero ou de um template). A aba Painel (visão
+// consolidada do gestor) chega na Task 10; por ora fica como placeholder "Em breve".
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import api from '../services/api'
@@ -20,6 +20,13 @@ const TAB_IDS = TABS.map((t) => t.id)
 // A API só devolve o código do tipo do item (enum TipoItemChecklist) — o rótulo de
 // exibição fica no front, mesmo padrão de Etiquetas.jsx com CONS_LABEL.
 const TIPO_LABEL = { CHECK: 'Check', AVALIACAO: 'Avaliação', TEXTO: 'Texto', NUMERICO: 'Numérico', SELECAO: 'Seleção' }
+const PRIORIDADE_LABEL = { BAIXA: 'Baixa', MEDIA: 'Média', ALTA: 'Alta' }
+const REC_LABEL = { DIARIA: 'Todo dia', DIAS_SEMANA: 'Dias da semana', AVULSO: 'Sem agendamento' }
+const DOW = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+const TIPOS = ['CHECK', 'AVALIACAO', 'TEXTO', 'NUMERICO', 'SELECAO']
+// Mesma lista fixa do backend (CHECKLIST_CATEGORIAS em server.js) — o endpoint de
+// checklists não devolve categorias (diferente de /templates), então replica aqui.
+const CHECKLIST_CATEGORIAS = ['Abertura', 'Fechamento', 'Controle de Pragas', 'Documentações Sanitárias', 'Segurança Alimentar']
 
 export default function Checklist() {
   const { tab: tabParam } = useParams()
@@ -54,7 +61,8 @@ export default function Checklist() {
 
       {tab === 'templates' && <AbaTemplates notify={notify} />}
       {tab === 'setores' && <AbaSetores notify={notify} />}
-      {(tab === 'painel' || tab === 'checklists') && (
+      {tab === 'checklists' && <AbaChecklists notify={notify} />}
+      {tab === 'painel' && (
         <div className="empty-state">Em breve nesta fatia.</div>
       )}
     </div>
@@ -177,11 +185,24 @@ function AbaSetores({ notify }) {
 // garantirChecklistTemplatesSeed em server.js). Nesta F1 só visualização com filtro por
 // categoria; criar/editar template fica pra fatia seguinte.
 function AbaTemplates({ notify }) {
+  const navigate = useNavigate()
   const [templates, setTemplates] = useState([])
   const [categorias, setCategorias] = useState([])
   const [filtro, setFiltro] = useState('')
   const [loading, setLoading] = useState(true)
   const [ver, setVer] = useState(null)
+  const [usando, setUsando] = useState(false)
+
+  // "Usar como base": clona o template num checklist novo e manda pra aba Checklists,
+  // onde ele já aparece na lista (a busca não fica filtrada por nada ao entrar).
+  function usarComoBase() {
+    if (usando) return
+    setUsando(true)
+    api.post(`/checklist/templates/${ver.id}/usar`)
+      .then(() => { setVer(null); notify('Checklist criado a partir do template.'); navigate('/checklist/checklists') })
+      .catch((e) => notify(e?.response?.data?.error ?? 'Não foi possível usar o template.', 'error'))
+      .finally(() => setUsando(false))
+  }
 
   // Sem reset de `loading` a cada troca de categoria (só a carga inicial mostra
   // "Carregando…") — mesmo padrão da busca debounced em Etiquetas.jsx (AbaItens):
@@ -241,11 +262,247 @@ function AbaTemplates({ notify }) {
               </div>
             ))}
             <div className="modal-actions">
-              <button type="button" className="btn btn-primary" onClick={() => setVer(null)}>Fechar</button>
+              <button type="button" className="btn btn-secondary" onClick={() => setVer(null)}>Fechar</button>
+              <button type="button" className="btn btn-primary" disabled={usando} onClick={usarComoBase}>{usando ? 'Criando…' : 'Usar como base'}</button>
             </div>
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+// ===================== CHECKLISTS =====================
+// CRUD dos checklists que a operação executa: nasce do zero (+ Novo checklist) ou de um
+// template ("Usar como base" na aba Templates). Nome, categoria, prioridade, setores
+// responsáveis, recorrência (todo dia / dias da semana / avulso) e a lista de itens.
+function AbaChecklists({ notify }) {
+  const [lista, setLista] = useState([])
+  const [busca, setBusca] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [edit, setEdit] = useState(null) // checklist completo em edição, ou {novo:true,...} pra criação
+
+  function carregar() {
+    api.get('/checklist/checklists', { params: busca ? { busca } : {} })
+      .then((r) => setLista(r.data.checklists || []))
+      .catch((e) => notify(e?.response?.data?.error ?? 'Não foi possível carregar os checklists.', 'error'))
+      .finally(() => setLoading(false))
+  }
+  // Busca debounced — mesmo padrão de AbaItens em Etiquetas.jsx. Dispara também na
+  // carga inicial (busca começa vazia, o efeito roda no mount).
+  useEffect(() => { const t = setTimeout(carregar, 250); return () => clearTimeout(t) }, [busca]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function novo() {
+    setEdit({
+      novo: true, nome: '', categoria: CHECKLIST_CATEGORIAS[0], descricao: '', prioridade: 'MEDIA',
+      setorIds: [], recorrenciaTipo: 'AVULSO', recorrenciaConfig: { diasSemana: [], horarioLimite: '' }, itens: [],
+    })
+  }
+
+  // O PUT do backend é full-replace (zera o que não vier no corpo) — por isso o editor
+  // sempre parte do checklist COMPLETO (GET /:id), nunca da linha resumida da tabela.
+  function editar(c) {
+    api.get(`/checklist/checklists/${c.id}`)
+      .then((r) => setEdit(r.data.checklist))
+      .catch((e) => notify(e?.response?.data?.error ?? 'Não foi possível carregar o checklist.', 'error'))
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        <input className="form-input" style={{ maxWidth: 320 }} placeholder="Buscar checklist…" value={busca} onChange={(e) => setBusca(e.target.value)} />
+        <button type="button" className="btn btn-primary" style={{ marginLeft: 'auto' }} onClick={novo}>+ Novo checklist</button>
+      </div>
+
+      {loading ? (
+        <div className="loading-state">Carregando…</div>
+      ) : lista.length === 0 ? (
+        <div className="empty-state">Nenhum checklist ainda. Crie um do zero ou use um template pronto na aba Templates.</div>
+      ) : (
+        <div className="table-card">
+          <table className="hb-table">
+            <thead><tr><th>Nome</th><th>Categoria</th><th>Prioridade</th><th>Recorrência</th><th>Itens</th><th></th></tr></thead>
+            <tbody>
+              {lista.map((c) => (
+                <tr key={c.id}>
+                  <td style={{ fontWeight: 600 }}>{c.nome}</td>
+                  <td>{c.categoria}</td>
+                  <td>{PRIORIDADE_LABEL[c.prioridade] || c.prioridade}</td>
+                  <td>{REC_LABEL[c.recorrenciaTipo] || c.recorrenciaTipo}</td>
+                  <td>{c._count?.itens ?? '—'}</td>
+                  <td style={{ textAlign: 'right' }}><button type="button" className="btn btn-secondary btn-sm" onClick={() => editar(c)}>Editar</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {edit && <ChecklistEditor inicial={edit} notify={notify} onClose={() => setEdit(null)} onSalvou={() => { setEdit(null); carregar() }} />}
+    </div>
+  )
+}
+
+function ChecklistEditor({ inicial, notify, onClose, onSalvou }) {
+  const [f, setF] = useState(() => ({
+    ...inicial,
+    descricao: inicial.descricao || '',
+    recorrenciaConfig: inicial.recorrenciaConfig || { diasSemana: [], horarioLimite: '' },
+    itens: inicial.itens || [],
+  }))
+  const [setores, setSetores] = useState([])
+  const [salvando, setSalvando] = useState(false)
+
+  useEffect(() => {
+    api.get('/checklist/setores').then((r) => setSetores(r.data.setores || [])).catch(() => {})
+  }, [])
+
+  const upd = (k, v) => setF((s) => ({ ...s, [k]: v }))
+  const updRc = (k, v) => setF((s) => ({ ...s, recorrenciaConfig: { ...s.recorrenciaConfig, [k]: v } }))
+  const toggleSetor = (id) => setF((s) => ({ ...s, setorIds: s.setorIds.includes(id) ? s.setorIds.filter((x) => x !== id) : [...s.setorIds, id] }))
+  const toggleDow = (d) => updRc('diasSemana', f.recorrenciaConfig.diasSemana.includes(d) ? f.recorrenciaConfig.diasSemana.filter((x) => x !== d) : [...f.recorrenciaConfig.diasSemana, d])
+  const setItem = (i, patch) => setF((s) => ({ ...s, itens: s.itens.map((it, j) => (j === i ? { ...it, ...patch } : it)) }))
+  const addItem = () => setF((s) => ({ ...s, itens: [...s.itens, { tipo: 'CHECK', titulo: '', descricao: '', critico: false, config: {} }] }))
+  const rmItem = (i) => setF((s) => ({ ...s, itens: s.itens.filter((_, j) => j !== i) }))
+
+  async function salvar() {
+    if (!f.nome?.trim()) { notify('Informe o nome do checklist.', 'error'); return }
+    const criando = f.novo || !f.id
+    setSalvando(true)
+    try {
+      // Corpo completo mesmo editando — full-replace no backend (ver comentário em
+      // AbaChecklists.editar): omitir um campo aqui zera ele no servidor.
+      const body = {
+        nome: f.nome,
+        categoria: f.categoria,
+        descricao: f.descricao,
+        prioridade: f.prioridade,
+        setorIds: f.setorIds,
+        recorrenciaTipo: f.recorrenciaTipo,
+        recorrenciaConfig: f.recorrenciaConfig,
+        itens: f.itens,
+        templateOrigemId: f.templateOrigemId,
+      }
+      if (criando) await api.post('/checklist/checklists', body)
+      else await api.put(`/checklist/checklists/${f.id}`, body)
+      notify(criando ? 'Checklist criado.' : 'Checklist atualizado.')
+      onSalvou()
+    } catch (err) {
+      notify(err?.response?.data?.error ?? 'Não foi possível salvar o checklist.', 'error')
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  return (
+    // Fecha só pelo botão Cancelar — overlay sem onClick, stopPropagation no .modal
+    // (mesma trava defensiva do modal "Ver template" acima e de PontoFacial.jsx).
+    <div className="modal-overlay">
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640, maxHeight: '90vh', overflow: 'auto' }}>
+        <div className="modal-title">{f.novo ? 'Novo checklist' : 'Editar checklist'}</div>
+
+        <div className="form-grid-2">
+          <div className="form-group"><label className="form-label">Nome</label><input className="form-input" value={f.nome} onChange={(e) => upd('nome', e.target.value)} /></div>
+          <div className="form-group">
+            <label className="form-label">Categoria</label>
+            <select className="form-input" value={f.categoria} onChange={(e) => upd('categoria', e.target.value)}>
+              {CHECKLIST_CATEGORIAS.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="form-grid-2">
+          <div className="form-group">
+            <label className="form-label">Prioridade</label>
+            <select className="form-input" value={f.prioridade} onChange={(e) => upd('prioridade', e.target.value)}>
+              <option value="BAIXA">Baixa</option><option value="MEDIA">Média</option><option value="ALTA">Alta</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Recorrência</label>
+            <select className="form-input" value={f.recorrenciaTipo} onChange={(e) => upd('recorrenciaTipo', e.target.value)}>
+              <option value="DIARIA">Todo dia</option><option value="DIAS_SEMANA">Dias da semana</option><option value="AVULSO">Sem agendamento</option>
+            </select>
+          </div>
+        </div>
+
+        {f.recorrenciaTipo === 'DIAS_SEMANA' && (
+          <div className="form-group">
+            <label className="form-label">Dias</label>
+            <div className="chip-row">
+              {DOW.map((d, i) => (
+                <button key={i} type="button" className={'chip' + (f.recorrenciaConfig.diasSemana.includes(i) ? ' chip-on' : '')} onClick={() => toggleDow(i)}>{d}</button>
+              ))}
+            </div>
+          </div>
+        )}
+        {f.recorrenciaTipo !== 'AVULSO' && (
+          <div className="form-group">
+            <label className="form-label">Horário limite (opcional)</label>
+            <input className="form-input" style={{ maxWidth: 120 }} placeholder="HH:mm" value={f.recorrenciaConfig.horarioLimite || ''} onChange={(e) => updRc('horarioLimite', e.target.value)} />
+          </div>
+        )}
+
+        <div className="form-group">
+          <label className="form-label">Setores</label>
+          {setores.length === 0 ? (
+            <span style={{ fontSize: 12, color: '#999' }}>Nenhum setor cadastrado — crie na aba Setores.</span>
+          ) : (
+            <div className="chip-row">
+              {setores.map((s) => (
+                <button key={s.id} type="button" className={'chip' + (f.setorIds.includes(s.id) ? ' chip-on' : '')} onClick={() => toggleSetor(s.id)}>{s.nome}</button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <label className="form-label" style={{ display: 'block', marginBottom: 6 }}>Itens</label>
+        {f.itens.length === 0 && <div className="empty-state" style={{ padding: 20 }}>Nenhum item ainda.</div>}
+        {f.itens.map((it, i) => (
+          <div key={i} className="table-card" style={{ padding: 10, marginBottom: 8 }}>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+              <select className="form-input" style={{ width: 130, flexShrink: 0 }} value={it.tipo} onChange={(e) => setItem(i, { tipo: e.target.value, config: {} })}>
+                {TIPOS.map((t) => <option key={t} value={t}>{TIPO_LABEL[t]}</option>)}
+              </select>
+              <input className="form-input" style={{ flex: 1, minWidth: 0 }} placeholder="Título do item" value={it.titulo} onChange={(e) => setItem(i, { titulo: e.target.value })} />
+              <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                <input type="checkbox" checked={!!it.critico} onChange={(e) => setItem(i, { critico: e.target.checked })} /> crítico
+              </label>
+              <button type="button" className="btn btn-danger btn-sm" onClick={() => rmItem(i)}>Remover</button>
+            </div>
+
+            {it.tipo === 'NUMERICO' && (
+              <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                <input className="form-input" style={{ width: 100 }} placeholder="unidade" value={it.config?.unidade || ''} onChange={(e) => setItem(i, { config: { ...it.config, unidade: e.target.value } })} />
+                <input className="form-input" type="number" style={{ width: 90 }} placeholder="mín." value={it.config?.min ?? ''} onChange={(e) => setItem(i, { config: { ...it.config, min: e.target.value === '' ? undefined : Number(e.target.value) } })} />
+                <input className="form-input" type="number" style={{ width: 90 }} placeholder="máx." value={it.config?.max ?? ''} onChange={(e) => setItem(i, { config: { ...it.config, max: e.target.value === '' ? undefined : Number(e.target.value) } })} />
+              </div>
+            )}
+            {it.tipo === 'AVALIACAO' && (
+              <input className="form-input" type="number" min={1} max={5} style={{ width: 160, marginTop: 6 }} placeholder="nota mínima (1-5)" value={it.config?.notaMinima ?? ''} onChange={(e) => setItem(i, { config: { ...it.config, notaMinima: e.target.value === '' ? undefined : Number(e.target.value) } })} />
+            )}
+            {it.tipo === 'SELECAO' && (
+              <div style={{ marginTop: 6 }}>
+                {(it.config?.opcoes || []).map((o, oi) => (
+                  <div key={oi} style={{ display: 'flex', gap: 6, marginBottom: 4, alignItems: 'center' }}>
+                    <input className="form-input" style={{ flex: 1 }} placeholder="opção" value={o.rotulo} onChange={(e) => setItem(i, { config: { ...it.config, opcoes: it.config.opcoes.map((x, j) => (j === oi ? { ...x, rotulo: e.target.value } : x)) } })} />
+                    <label style={{ fontSize: 12, display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
+                      <input type="checkbox" checked={o.conforme !== false} onChange={(e) => setItem(i, { config: { ...it.config, opcoes: it.config.opcoes.map((x, j) => (j === oi ? { ...x, conforme: e.target.checked } : x)) } })} /> conforme
+                    </label>
+                    <button type="button" className="btn btn-danger btn-sm" onClick={() => setItem(i, { config: { ...it.config, opcoes: it.config.opcoes.filter((_, j) => j !== oi) } })}>Remover</button>
+                  </div>
+                ))}
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setItem(i, { config: { ...it.config, opcoes: [...(it.config?.opcoes || []), { rotulo: '', conforme: true }] } })}>+ opção</button>
+              </div>
+            )}
+          </div>
+        ))}
+        <button type="button" className="btn btn-secondary btn-sm" onClick={addItem}>+ Adicionar item</button>
+
+        <div className="modal-actions">
+          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={salvando}>Cancelar</button>
+          <button type="button" className="btn btn-primary" disabled={salvando} onClick={salvar}>{salvando ? 'Salvando…' : 'Salvar'}</button>
+        </div>
+      </div>
     </div>
   )
 }
