@@ -30,6 +30,17 @@ const TIPOS = ['CHECK', 'AVALIACAO', 'TEXTO', 'NUMERICO', 'SELECAO', 'FOTO']
 // Mesma lista fixa do backend (CHECKLIST_CATEGORIAS em server.js) — o endpoint de
 // checklists não devolve categorias (diferente de /templates), então replica aqui.
 const CHECKLIST_CATEGORIAS = ['Abertura', 'Fechamento', 'Controle de Pragas', 'Documentações Sanitárias', 'Segurança Alimentar']
+// enum StatusExecucao no backend — só esses 2 valores existem (sem "pendente": a
+// execução só nasce quando o operador abre o checklist).
+const STATUS_EXEC_LABEL = { EM_ANDAMENTO: 'Em andamento', CONCLUIDA: 'Concluída' }
+
+// Formata data+hora de execução (iniciadaEm/concluidaEm) — mesmo padrão de PontoFacial.jsx.
+function fmtDataHora(iso) {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return '—'
+  return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
 
 export default function Checklist() {
   const { tab: tabParam } = useParams()
@@ -79,6 +90,13 @@ export default function Checklist() {
 function AbaPainel({ notify }) {
   const [p, setP] = useState(null)
   const [erro, setErro] = useState(false)
+  // Execuções recentes (Task 8) — carga independente do restante do painel: se essa
+  // chamada falhar, não trava os KPIs/pendentes, só a própria seção fica com o aviso.
+  const [execucoes, setExecucoes] = useState([])
+  const [carregandoExec, setCarregandoExec] = useState(true)
+  const [erroExec, setErroExec] = useState(false)
+  const [verExecucaoId, setVerExecucaoId] = useState(null) // id da execução aberta no modal de detalhe, ou null
+
   useEffect(() => {
     api.get('/checklist/painel')
       .then((r) => setP(r.data))
@@ -91,6 +109,18 @@ function AbaPainel({ notify }) {
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    api.get('/checklist/execucoes')
+      .then((r) => setExecucoes(r.data.execucoes || []))
+      .catch((e) => {
+        notify(e?.response?.data?.error ?? 'Não foi possível carregar as execuções recentes.', 'error')
+        setErroExec(true)
+      })
+      .finally(() => setCarregandoExec(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   if (erro) return <div className="empty-state">Não foi possível carregar o painel.</div>
   if (!p) return <div className="empty-state">Carregando…</div>
   const KPI = ({ n, label }) => <div className="table-card" style={{ padding: 16 }}><div style={{ fontSize: 28, fontWeight: 800 }}>{n}</div><div style={{ fontSize: 12, color: '#777' }}>{label}</div></div>
@@ -110,7 +140,168 @@ function AbaPainel({ notify }) {
           {p.alertas.length === 0 ? <p className="empty-state">Nenhum alerta.</p> : p.alertas.map((c) => <div key={c.id} style={{ padding: '6px 0', borderTop: '1px solid var(--app-border,#eee)', fontSize: 13 }}>{c.nome}</div>)}
         </div>
       </div>
+
+      <h3 style={{ fontSize: 13, fontWeight: 800, margin: '18px 0 8px' }}>Execuções recentes</h3>
+      {carregandoExec ? (
+        <div className="loading-state">Carregando…</div>
+      ) : erroExec ? (
+        <div className="empty-state">Não foi possível carregar as execuções recentes.</div>
+      ) : execucoes.length === 0 ? (
+        <div className="empty-state">Nenhuma execução registrada ainda.</div>
+      ) : (
+        <div className="table-card">
+          <table className="hb-table">
+            <thead>
+              <tr><th>Checklist</th><th>Categoria</th><th>Funcionário</th><th>Início</th><th>Conclusão</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+              {/* Linha inteira clicável (pedido explícito da task) — o hover do hb-table já
+                  dá o feedback visual de "isso é clicável", sem precisar de um botão extra. */}
+              {execucoes.map((e) => (
+                <tr key={e.id} style={{ cursor: 'pointer' }} onClick={() => setVerExecucaoId(e.id)}>
+                  <td style={{ fontWeight: 600 }}>{e.checklistNome}</td>
+                  <td>{e.categoria}</td>
+                  <td>{e.funcionario}</td>
+                  <td>{fmtDataHora(e.iniciadaEm)}</td>
+                  <td>{fmtDataHora(e.concluidaEm)}</td>
+                  <td>
+                    <span className={'badge ' + (e.status === 'CONCLUIDA' ? 'badge-green' : 'badge-gray')}>{STATUS_EXEC_LABEL[e.status] || e.status}</span>
+                    {e.emAlerta && <span className="badge badge-red" style={{ marginLeft: 6 }}>Em alerta</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {verExecucaoId != null && <DetalheExecucao id={verExecucaoId} onClose={() => setVerExecucaoId(null)} />}
     </div>
+  )
+}
+
+// ===================== DETALHE DA EXECUÇÃO (Task 8) =====================
+// O gestor confere o que o operador registrou numa execução: cabeçalho com
+// quem/quando + cada item do snapshot com a resposta formatada conforme o tipo.
+// Fecha só pelo botão "Fechar" — mesma trava dos outros modais deste arquivo
+// (overlay sem onClick, stopPropagation no .modal).
+function DetalheExecucao({ id, onClose }) {
+  const [ex, setEx] = useState(null)
+  const [erro, setErro] = useState(false)
+
+  useEffect(() => {
+    api.get(`/checklist/execucoes/${id}`)
+      .then((r) => setEx(r.data.execucao))
+      .catch(() => setErro(true))
+  }, [id])
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 560, maxHeight: '85vh', overflow: 'auto' }}>
+        {erro ? (
+          <div className="empty-state">Não foi possível carregar esta execução.</div>
+        ) : !ex ? (
+          <div className="loading-state">Carregando…</div>
+        ) : (
+          <>
+            <div className="modal-title">
+              {ex.checklistNome}
+              {ex.emAlerta && <span className="badge badge-red" style={{ marginLeft: 8 }}>Em alerta</span>}
+            </div>
+            <div className="page-header-sub" style={{ marginTop: -8, marginBottom: 12 }}>
+              {ex.categoria} · {ex.funcionario} · iniciada {fmtDataHora(ex.iniciadaEm)}
+              {ex.concluidaEm ? ` · concluída ${fmtDataHora(ex.concluidaEm)}` : ` · ${STATUS_EXEC_LABEL[ex.status] || ex.status}`}
+            </div>
+
+            {(ex.itens || []).map((it) => {
+              const r = ex.respostas?.[it.chave]
+              const foto = ex.fotos?.[it.chave]
+              return (
+                <div key={it.chave} style={{ padding: '9px 0', borderTop: '1px solid var(--app-border, #eee)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+                    <span style={{ fontWeight: 600, fontSize: 13 }}>
+                      {it.titulo}{it.critico && <span style={{ color: '#dc2626' }} title="Item crítico"> *</span>}
+                    </span>
+                    {r?.conforme === false && <span className="badge badge-red" style={{ flexShrink: 0 }}>Fora do padrão</span>}
+                  </div>
+                  <div style={{ marginTop: 6 }}>
+                    <RespostaItem item={it} resposta={r} foto={foto} />
+                  </div>
+                  {r?.observacao && <div style={{ fontSize: 12, color: 'var(--app-text-soft, #888)', marginTop: 4 }}>Obs.: {r.observacao}</div>}
+                </div>
+              )
+            })}
+
+            <div className="modal-actions">
+              <button type="button" className="btn btn-secondary" onClick={onClose}>Fechar</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// Formata a resposta de um item do snapshot conforme o tipo (mesmos 6 tipos do
+// editor). SELECAO e TEXTO: o valor salvo já É o texto/rótulo escolhido — ver
+// ItemChecklist em BonificacaoEu.jsx, onde SELECAO grava `o.rotulo` diretamente, sem
+// um código à parte pra traduzir aqui.
+function RespostaItem({ item, resposta: r, foto }) {
+  if (item.tipo === 'FOTO') {
+    return foto?.id ? <FotoMiniatura fotoId={foto.id} /> : <span style={{ fontSize: 13, color: '#999' }}>Sem foto anexada.</span>
+  }
+  if (!r || r.valor === null || r.valor === undefined || r.valor === '') {
+    return <span style={{ fontSize: 13, color: '#999' }}>Sem resposta.</span>
+  }
+  if (item.tipo === 'CHECK') {
+    return <span style={{ fontSize: 13 }}>{r.valor === true ? '✓ Feito' : '✗ Não feito'}</span>
+  }
+  if (item.tipo === 'AVALIACAO') {
+    const n = Number(r.valor) || 0
+    return <span style={{ fontSize: 15, letterSpacing: 1 }}>{[1, 2, 3, 4, 5].map((i) => (i <= n ? '★' : '☆')).join('')}</span>
+  }
+  if (item.tipo === 'NUMERICO') {
+    return <span style={{ fontSize: 13 }}>{r.valor}{item.config?.unidade ? ` ${item.config.unidade}` : ''}</span>
+  }
+  return <span style={{ fontSize: 13 }}>{String(r.valor)}</span>
+}
+
+// Miniatura de uma foto anexada à execução. Poucas fotos por execução — busca os
+// bytes sob demanda assim que a miniatura MONTA (ou seja, ao abrir o detalhe; não
+// espera um clique), mesmo padrão de "prévia sob demanda" do ItemFoto em
+// BonificacaoEu.jsx. Ao clicar na miniatura já carregada, abre a foto grande num
+// overlay próprio (sem novo fetch) que também só fecha pelo botão.
+function FotoMiniatura({ fotoId }) {
+  const [dataUrl, setDataUrl] = useState(null)
+  const [grande, setGrande] = useState(false)
+
+  useEffect(() => {
+    api.get(`/checklist/fotos/${fotoId}`)
+      .then((r) => setDataUrl(r.data?.dataUrl || null))
+      .catch(() => {}) // sem a miniatura o resto do detalhe continua legível
+  }, [fotoId])
+
+  if (!dataUrl) return <span style={{ fontSize: 12, color: '#999' }}>Carregando foto…</span>
+
+  return (
+    <>
+      <img
+        src={dataUrl}
+        alt="Foto anexada"
+        style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 6, cursor: 'pointer', border: '1px solid var(--app-border, #eee)' }}
+        onClick={() => setGrande(true)}
+      />
+      {grande && (
+        <div className="modal-overlay">
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '90vw', maxHeight: '90vh', overflow: 'auto', textAlign: 'center' }}>
+            <img src={dataUrl} alt="Foto anexada (ampliada)" style={{ maxWidth: '100%', maxHeight: '75vh', borderRadius: 8 }} />
+            <div className="modal-actions" style={{ justifyContent: 'center' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setGrande(false)}>Fechar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 
