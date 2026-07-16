@@ -15,6 +15,7 @@ const TABS = [
   { id: 'templates', label: 'Templates' },
   { id: 'setores', label: 'Setores' },
   { id: 'colaboradores', label: 'Colaboradores' },
+  { id: 'notificacoes', label: 'Notificações' },
 ]
 const TAB_IDS = TABS.map((t) => t.id)
 
@@ -77,6 +78,7 @@ export default function Checklist() {
       {tab === 'setores' && <AbaSetores notify={notify} />}
       {tab === 'colaboradores' && <AbaColaboradores notify={notify} />}
       {tab === 'checklists' && <AbaChecklists notify={notify} />}
+      {tab === 'notificacoes' && <AbaNotificacoes notify={notify} />}
       {tab === 'painel' && <AbaPainel notify={notify} />}
     </div>
   )
@@ -848,6 +850,153 @@ function ChecklistEditor({ inicial, notify, onClose, onSalvou }) {
           <button type="button" className="btn btn-secondary" onClick={onClose} disabled={salvando}>Cancelar</button>
           <button type="button" className="btn btn-primary" disabled={salvando} onClick={salvar}>{salvando ? 'Salvando…' : 'Salvar'}</button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ===================== NOTIFICAÇÕES =====================
+// Alerta imediato (Fatia 3a / Task 3 no backend): quando uma execução conclui com item
+// crítico fora do padrão, os destinatários cadastrados aqui recebem no WhatsApp na
+// hora. Nesta aba o gestor liga/desliga o alerta, mantém a lista de destinatários,
+// confere a prévia da mensagem e acompanha o histórico dos últimos envios.
+function AbaNotificacoes({ notify }) {
+  const [config, setConfig] = useState(null)
+  const [dests, setDests] = useState([])
+  const [historico, setHistorico] = useState([])
+  const [previa, setPrevia] = useState('')
+  const [nome, setNome] = useState('')
+  const [whats, setWhats] = useState('')
+  const [salvandoDest, setSalvandoDest] = useState(false)
+
+  function carregar() {
+    api.get('/checklist/notificacoes')
+      .then((r) => { setConfig(r.data.config); setDests(r.data.destinatarios || []) })
+      .catch((e) => notify(e?.response?.data?.error ?? 'Não foi possível carregar as notificações.', 'error'))
+  }
+  function carregarHist() {
+    api.get('/checklist/notificacoes/historico')
+      .then((r) => setHistorico(r.data.historico || []))
+      .catch((e) => notify(e?.response?.data?.error ?? 'Não foi possível carregar o histórico de envios.', 'error'))
+  }
+  useEffect(() => { carregar(); carregarHist() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Update otimista (mesmo padrão do toggle de setor em AbaColaboradores) — se o PUT
+  // falhar, notify + recarrega do servidor pra desfazer o chute otimista.
+  async function toggleAtivo() {
+    const novo = !config.alertaImediatoAtivo
+    setConfig((c) => ({ ...c, alertaImediatoAtivo: novo }))
+    try {
+      await api.put('/checklist/notificacoes/config', { alertaImediatoAtivo: novo })
+    } catch (err) {
+      notify(err?.response?.data?.error ?? 'Não foi possível salvar a configuração.', 'error')
+      carregar()
+    }
+  }
+
+  async function addDest(e) {
+    e.preventDefault()
+    if (!nome.trim() || !whats.trim() || salvandoDest) return
+    setSalvandoDest(true)
+    try {
+      await api.post('/checklist/notificacoes/destinatarios', { nome, whatsapp: whats })
+      setNome('')
+      setWhats('')
+      notify('Destinatário adicionado.')
+      carregar()
+    } catch (err) {
+      notify(err?.response?.data?.error ?? 'Não foi possível adicionar o destinatário.', 'error')
+    } finally {
+      setSalvandoDest(false)
+    }
+  }
+
+  async function rmDest(id) {
+    try {
+      await api.delete(`/checklist/notificacoes/destinatarios/${id}`)
+      notify('Destinatário removido.')
+      carregar()
+    } catch (err) {
+      notify(err?.response?.data?.error ?? 'Não foi possível remover o destinatário.', 'error')
+    }
+  }
+
+  async function verPrevia() {
+    try {
+      const r = await api.get('/checklist/notificacoes/previa')
+      setPrevia(r.data.previa)
+    } catch (err) {
+      notify(err?.response?.data?.error ?? 'Não foi possível carregar a prévia.', 'error')
+    }
+  }
+
+  if (!config) return <div className="loading-state">Carregando…</div>
+
+  return (
+    <div style={{ maxWidth: 720 }}>
+      <div className="table-card" style={{ padding: 16, marginBottom: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+          <div>
+            <div style={{ fontWeight: 700 }}>Alerta imediato (WhatsApp)</div>
+            <div style={{ fontSize: 12, color: 'var(--app-text-soft, #888)' }}>
+              Quando um checklist é concluído com um item crítico fora do padrão, os destinatários recebem na hora.
+            </div>
+          </div>
+          <label style={{ cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="checkbox" checked={!!config.alertaImediatoAtivo} onChange={toggleAtivo} />
+            {config.alertaImediatoAtivo ? 'Ativo' : 'Inativo'}
+          </label>
+        </div>
+        <button type="button" className="btn btn-secondary btn-sm" style={{ marginTop: 10 }} onClick={verPrevia}>Ver prévia</button>
+        {previa && (
+          <pre style={{ whiteSpace: 'pre-wrap', background: 'var(--app-surface-2,#f7f7f7)', border: '1px solid var(--app-border,#eee)', borderRadius: 8, padding: 10, marginTop: 8, fontSize: 12 }}>
+            {previa}
+          </pre>
+        )}
+      </div>
+
+      <form onSubmit={addDest} className="table-card" style={{ padding: 16, marginBottom: 12 }}>
+        <div style={{ fontWeight: 700, marginBottom: 8 }}>Destinatários</div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+          <input className="form-input" style={{ flex: 1 }} placeholder="Nome" value={nome} onChange={(e) => setNome(e.target.value)} />
+          <input className="form-input" style={{ flex: 1 }} placeholder="WhatsApp (DDD+número)" value={whats} onChange={(e) => setWhats(e.target.value)} />
+          <button type="submit" className="btn btn-primary" disabled={salvandoDest || !nome.trim() || !whats.trim()}>
+            {salvandoDest ? 'Adicionando…' : 'Adicionar'}
+          </button>
+        </div>
+        {dests.length === 0 ? (
+          <p className="empty-state">Nenhum destinatário. Adicione quem deve receber os alertas.</p>
+        ) : (
+          dests.map((d) => (
+            <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderTop: '1px solid var(--app-border,#eee)' }}>
+              <span>
+                <strong>{d.nome}</strong> <span style={{ color: 'var(--app-text-soft, #888)', fontSize: 12 }}>{d.whatsapp}</span>
+                {!d.ativo && <span className="badge badge-gray" style={{ marginLeft: 6 }}>inativo</span>}
+              </span>
+              <button type="button" className="btn btn-danger btn-sm" onClick={() => rmDest(d.id)}>Excluir</button>
+            </div>
+          ))
+        )}
+      </form>
+
+      <div className="table-card" style={{ padding: 16 }}>
+        <div style={{ fontWeight: 700, marginBottom: 8 }}>Histórico de envios</div>
+        {historico.length === 0 ? (
+          <p className="empty-state">Nenhum envio ainda.</p>
+        ) : (
+          <table className="hb-table">
+            <thead><tr><th>Quando</th><th>Destino</th><th>Status</th></tr></thead>
+            <tbody>
+              {historico.map((h) => (
+                <tr key={h.id}>
+                  <td>{fmtDataHora(h.criadoEm)}</td>
+                  <td>{h.destinatarioNome || h.destino}</td>
+                  <td>{h.status === 'ENVIADO' ? '✓ Enviado' : `✗ ${h.erro || 'Falhou'}`}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   )
