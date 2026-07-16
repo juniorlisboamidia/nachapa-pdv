@@ -22,6 +22,7 @@ import Faturamento from './pages/Faturamento'
 import MinhaEmpresa from './pages/MinhaEmpresa'
 import Etiquetas from './pages/Etiquetas'
 import EtiquetasQuiosque from './pages/EtiquetasQuiosque'
+import Checklist from './pages/Checklist'
 
 function TelaCarregando() {
   return (
@@ -94,8 +95,10 @@ export default function App() {
             <Route path="rh/bonificacao/:aba" element={<Bonificacao />} />
             <Route path="rh/banco-de-talentos" element={<BancoTalentos />} />
             <Route path="rh/banco-de-talentos/:tab" element={<BancoTalentos />} />
+            {/* Checklist Inteligente — tela do gestor (Templates/Setores nesta F1) */}
+            <Route path="checklist" element={<Checklist />} />
+            <Route path="checklist/:tab" element={<Checklist />} />
             {/* Em construção */}
-            <Route path="checklist" element={<EmConstrucao titulo="Checklist" descricao="Rotinas e checklists da operação." />} />
             <Route path="etiquetas" element={<Etiquetas />} />
             <Route path="etiquetas/:tab" element={<Etiquetas />} />
             <Route path="automacoes" element={<EmConstrucao titulo="Automações" descricao="Automações da operação." />} />
