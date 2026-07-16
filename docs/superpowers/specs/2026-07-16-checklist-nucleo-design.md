@@ -15,8 +15,9 @@ em 3 fatias, cada uma um ciclo spec → plano → implementação próprio:
 
 - **Fatia 1 — Núcleo (esta spec):** templates → checklists agendados por setor → execução
   autenticada → evidências não-foto → dashboard. Reusa o que já existe; **zero infra nova**.
-- **Fatia 2 — Foto + IA:** pipeline de armazenamento de imagem (o PDV não tem) + tipo de item
-  Foto + auditoria da foto por IA de visão.
+- **Fatia 2 — Foto:** pipeline de armazenamento de imagem (o PDV não tem) + tipo de item Foto
+  como evidência. **Sem IA** — decisão do usuário: a foto fica só como registro/prova, sem
+  auditoria automática por visão.
 - **Fatia 3 — Alertas & agendamento:** motor de disparo (lembrete antes do horário, alerta
   imediato de não-conformidade, boletim semanal, alerta para gestores) por WhatsApp + Email
   (o PDV tem envio de WhatsApp via `zapi.mjs`; **não tem** email), mais a tela de Notificações.
@@ -183,7 +184,7 @@ não injeta aqui, e isso já causou vazamento/500 nesta base):
 
 ## Fora do escopo (Fatia 1)
 
-Tipo de item Foto + armazenamento de imagem + auditoria IA (Fatia 2); motor de alertas
+Tipo de item Foto + armazenamento de imagem (Fatia 2 — sem IA); motor de alertas
 WhatsApp/Email, lembrete, boletim, alerta imediato, tela de Notificações (Fatia 3); geração
 agendada por cron; atribuição individual (só por setor); QR público anônimo (execução é
 autenticada); onboarding "Guia Inicial".
