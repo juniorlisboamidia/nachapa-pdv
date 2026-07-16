@@ -20,6 +20,7 @@ import CustosVariaveis from './pages/CustosVariaveis'
 import PontoEquilibrio from './pages/PontoEquilibrio'
 import Faturamento from './pages/Faturamento'
 import MinhaEmpresa from './pages/MinhaEmpresa'
+import Etiquetas from './pages/Etiquetas'
 
 function TelaCarregando() {
   return (
@@ -94,7 +95,8 @@ export default function App() {
             <Route path="rh/banco-de-talentos/:tab" element={<BancoTalentos />} />
             {/* Em construção */}
             <Route path="checklist" element={<EmConstrucao titulo="Checklist" descricao="Rotinas e checklists da operação." />} />
-            <Route path="etiquetas" element={<EmConstrucao titulo="Etiquetas" descricao="Impressão de etiquetas de validade e produção." />} />
+            <Route path="etiquetas" element={<Etiquetas />} />
+            <Route path="etiquetas/:tab" element={<Etiquetas />} />
             <Route path="automacoes" element={<EmConstrucao titulo="Automações" descricao="Automações da operação." />} />
             {/* Extras */}
             <Route path="minha-empresa" element={<MinhaEmpresa />} />
