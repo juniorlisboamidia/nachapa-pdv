@@ -12,6 +12,8 @@ import { PrismaClient } from './generated/prisma/client.ts';
 import { iniciarColetorServer, gravarPontoColetor } from './coletorServer.js';
 import { zapiConfigurado, zapiStatus, zapiQrCode, zapiCriarInstancia, zapiEnviarTexto } from './zapi.mjs';
 import { validadeDe, gerarLote, colisaoDeLote, CONSERVACOES } from './etiquetas.js';
+import { avaliarResposta, execucaoEmAlerta } from './checklistConformidade.js';
+import { venceHoje } from './checklistRecorrencia.js';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 
@@ -2174,7 +2176,126 @@ app.post('/api/public/colaborador/reconhecer', async (req, res) => {
   } catch (err) { console.error('[colaborador/reconhecer]', err); res.status(500).json({ error: 'Erro ao enviar o reconhecimento.' }); }
 });
 
+// ===== Checklist — Área do Colaborador (execução; sessão OTP) =====
+// Fora do gate: empresaId vem de exigirColaborador; passar explícito em toda query.
 
+// Início do dia de expediente atual (corte 05:00 BR) — instante canônico do dataRef.
+function chkDataRefAtual() { return janelaExpedienteAtual().de; }
+function chkDiaSemanaExpediente() { const f = brFields(chkDataRefAtual().getTime()); return new Date(Date.UTC(f.y, f.mo, f.day)).getUTCDay(); }
+
+// Snapshot dos itens do checklist para congelar na execução.
+function chkSnapshot(itens) {
+  return itens.map((it) => ({ chave: String(it.id), ordem: it.ordem, tipo: it.tipo, titulo: it.titulo, descricao: it.descricao || null, critico: it.critico, config: it.config || null }));
+}
+
+app.get('/api/public/colaborador/checklists', async (req, res) => {
+  try {
+    const sess = exigirColaborador(req, res); if (!sess) return;
+    const func = await prisma.funcionario.findFirst({ where: { id: sess.funcionarioId, empresaId: sess.empresaId } });
+    if (!func || func.status !== 'ATIVO') return res.status(401).json({ error: 'Acesso indisponível. Fale com a liderança.' });
+    const meus = Array.isArray(func.setorIds) ? func.setorIds : [];
+    if (meus.length === 0) return res.json({ hoje: [], disponiveis: [] });
+
+    const checklists = await prisma.checklist.findMany({ where: { empresaId: sess.empresaId, ativo: true, setorIds: { hasSome: meus } }, include: { _count: { select: { itens: true } } } });
+    const dataRef = chkDataRefAtual();
+    const dow = chkDiaSemanaExpediente();
+    // Execuções do dia (para saber o que já foi concluído).
+    const execs = await prisma.checklistExecucao.findMany({ where: { empresaId: sess.empresaId, dataRef }, select: { checklistId: true, status: true, emAlerta: true } });
+    const execMap = new Map(execs.map((e) => [e.checklistId, e]));
+    const mapear = (c) => ({ id: c.id, nome: c.nome, categoria: c.categoria, prioridade: c.prioridade, itens: c._count.itens, recorrenciaTipo: c.recorrenciaTipo, status: execMap.get(c.id)?.status || null, emAlerta: execMap.get(c.id)?.emAlerta || false });
+    const hoje = [], disponiveis = [];
+    for (const c of checklists) {
+      if (venceHoje({ recorrenciaTipo: c.recorrenciaTipo, recorrenciaConfig: c.recorrenciaConfig }, dow)) hoje.push(mapear(c));
+      else if (c.recorrenciaTipo === 'AVULSO') disponiveis.push(mapear(c));
+    }
+    res.json({ hoje, disponiveis });
+  } catch (err) { console.error('[colab/checklists]', err); res.status(500).json({ error: 'Erro ao carregar checklists.' }); }
+});
+
+// Verifica posse (checklist do meu setor) e devolve a execução do dia com snapshot.
+async function chkAbrirExecucao(sess, checklistId) {
+  const func = await prisma.funcionario.findFirst({ where: { id: sess.funcionarioId, empresaId: sess.empresaId } });
+  if (!func || func.status !== 'ATIVO') throw { http: 401, msg: 'Acesso indisponível.' };
+  const meus = Array.isArray(func.setorIds) ? func.setorIds : [];
+  const c = await prisma.checklist.findFirst({ where: { id: checklistId, empresaId: sess.empresaId, ativo: true }, include: { itens: { orderBy: { ordem: 'asc' } } } });
+  if (!c) throw { http: 404, msg: 'Checklist não encontrado.' };
+  if (!c.setorIds.some((s) => meus.includes(s))) throw { http: 403, msg: 'Este checklist não é do seu setor.' };
+  const dataRef = chkDataRefAtual();
+  let exec = await prisma.checklistExecucao.findFirst({ where: { checklistId: c.id, dataRef }, include: { respostas: true } });
+  if (!exec) {
+    exec = await prisma.checklistExecucao.create({
+      data: { empresaId: sess.empresaId, checklistId: c.id, dataRef, funcionarioId: func.id, itensSnapshotJson: chkSnapshot(c.itens) },
+      include: { respostas: true },
+    });
+  }
+  return { exec, checklist: c };
+}
+
+app.post('/api/public/colaborador/checklists/:id/iniciar', async (req, res) => {
+  try {
+    const sess = exigirColaborador(req, res); if (!sess) return;
+    const { exec } = await chkAbrirExecucao(sess, parseInt(req.params.id, 10));
+    res.status(201).json({ execucao: chkExecJson(exec) });
+  } catch (e) { if (e.http) return res.status(e.http).json({ error: e.msg }); console.error('[colab/iniciar]', e); res.status(500).json({ error: 'Erro ao iniciar.' }); }
+});
+
+function chkExecJson(exec) {
+  const rmap = {}; for (const r of exec.respostas || []) rmap[r.itemChave] = { valor: r.valorJson, conforme: r.conforme, observacao: r.observacao };
+  return { id: exec.id, checklistId: exec.checklistId, status: exec.status, emAlerta: exec.emAlerta, itens: exec.itensSnapshotJson, respostas: rmap };
+}
+
+app.get('/api/public/colaborador/execucoes/:id', async (req, res) => {
+  try {
+    const sess = exigirColaborador(req, res); if (!sess) return;
+    const exec = await prisma.checklistExecucao.findFirst({ where: { id: parseInt(req.params.id, 10), empresaId: sess.empresaId }, include: { respostas: true } });
+    if (!exec) return res.status(404).json({ error: 'Execução não encontrada.' });
+    res.json({ execucao: chkExecJson(exec) });
+  } catch (err) { console.error('[colab/execucao GET]', err); res.status(500).json({ error: 'Erro ao carregar.' }); }
+});
+
+app.put('/api/public/colaborador/execucoes/:id/resposta', async (req, res) => {
+  try {
+    const sess = exigirColaborador(req, res); if (!sess) return;
+    const exec = await prisma.checklistExecucao.findFirst({ where: { id: parseInt(req.params.id, 10), empresaId: sess.empresaId } });
+    if (!exec) return res.status(404).json({ error: 'Execução não encontrada.' });
+    if (exec.status === 'CONCLUIDA') return res.status(409).json({ error: 'Execução já concluída.' });
+    const itemChave = String(req.body?.itemChave || '');
+    const item = (exec.itensSnapshotJson || []).find((it) => it.chave === itemChave);
+    if (!item) return res.status(400).json({ error: 'Item inválido.' });
+    // Conformidade recalculada no servidor — o cliente não decide se passou.
+    const { conforme } = avaliarResposta({ tipo: item.tipo, config: item.config, valor: req.body?.valor });
+    const observacao = req.body?.observacao == null ? null : String(req.body.observacao).slice(0, 500);
+    const existente = await prisma.checklistResposta.findFirst({ where: { execucaoId: exec.id, itemChave } });
+    const dados = { tipo: item.tipo, valorJson: req.body?.valor ?? null, conforme, observacao };
+    const resp = existente
+      ? await prisma.checklistResposta.update({ where: { id: existente.id }, data: dados })
+      : await prisma.checklistResposta.create({ data: { ...dados, empresaId: sess.empresaId, execucaoId: exec.id, itemChave } });
+    res.json({ ok: true, itemChave, conforme: resp.conforme });
+  } catch (err) { console.error('[colab/resposta]', err); res.status(500).json({ error: 'Erro ao salvar resposta.' }); }
+});
+
+app.post('/api/public/colaborador/execucoes/:id/concluir', async (req, res) => {
+  try {
+    const sess = exigirColaborador(req, res); if (!sess) return;
+    const exec = await prisma.checklistExecucao.findFirst({ where: { id: parseInt(req.params.id, 10), empresaId: sess.empresaId }, include: { respostas: true } });
+    if (!exec) return res.status(404).json({ error: 'Execução não encontrada.' });
+    const rmap = {}; for (const r of exec.respostas) rmap[r.itemChave] = { conforme: r.conforme };
+    const emAlerta = execucaoEmAlerta(exec.itensSnapshotJson, rmap);
+    const atual = await prisma.checklistExecucao.update({ where: { id: exec.id }, data: { status: 'CONCLUIDA', concluidaEm: new Date(), emAlerta } });
+    res.json({ ok: true, status: atual.status, emAlerta });
+  } catch (err) { console.error('[colab/concluir]', err); res.status(500).json({ error: 'Erro ao concluir.' }); }
+});
+
+app.get('/api/public/colaborador/checklists/historico', async (req, res) => {
+  try {
+    const sess = exigirColaborador(req, res); if (!sess) return;
+    const execs = await prisma.checklistExecucao.findMany({
+      where: { empresaId: sess.empresaId, funcionarioId: sess.funcionarioId, status: 'CONCLUIDA' },
+      orderBy: { concluidaEm: 'desc' }, take: 50, include: { checklist: { select: { nome: true, categoria: true } } },
+    });
+    res.json({ historico: execs.map((e) => ({ id: e.id, nome: e.checklist?.nome, categoria: e.checklist?.categoria, concluidaEm: e.concluidaEm, emAlerta: e.emAlerta })) });
+  } catch (err) { console.error('[colab/historico]', err); res.status(500).json({ error: 'Erro ao carregar histórico.' }); }
+});
 
 // ===================== Dep. Pessoal: Banco de Talentos (portado do H360) =====================
 // ============================================================================
