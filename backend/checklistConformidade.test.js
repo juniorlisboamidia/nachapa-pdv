@@ -13,6 +13,13 @@ t('acima do max', avaliarResposta({ tipo: 'NUMERICO', config: { min: 0, max: 4 }
 t('abaixo do min', avaliarResposta({ tipo: 'NUMERICO', config: { min: 0, max: 4 }, valor: -2 }).conforme, false);
 t('valor invalido = nao avalia', avaliarResposta({ tipo: 'NUMERICO', config: { min: 0, max: 4 }, valor: 'abc' }).conforme, null);
 
+console.log('\n== ausencia nao avalia (NUMERICO/AVALIACAO) ==');
+t('NUMERICO valor null = nao avalia', avaliarResposta({ tipo: 'NUMERICO', config: { min: 0, max: 4 }, valor: null }).conforme, null);
+t('NUMERICO valor vazio = nao avalia', avaliarResposta({ tipo: 'NUMERICO', config: { min: 0, max: 4 }, valor: '' }).conforme, null);
+t('NUMERICO valor 0 real = conforme (nao regride)', avaliarResposta({ tipo: 'NUMERICO', config: { min: 0, max: 4 }, valor: 0 }).conforme, true);
+t('AVALIACAO valor null = nao avalia', avaliarResposta({ tipo: 'AVALIACAO', config: { notaMinima: 4 }, valor: null }).conforme, null);
+t('AVALIACAO valor vazio = nao avalia', avaliarResposta({ tipo: 'AVALIACAO', config: { notaMinima: 4 }, valor: '' }).conforme, null);
+
 console.log('\n== SELECAO ==');
 const opc = { opcoes: [{ rotulo: 'Estoque OK', conforme: true }, { rotulo: 'Sem estoque', conforme: false }] };
 t('opcao conforme', avaliarResposta({ tipo: 'SELECAO', config: opc, valor: 'Estoque OK' }).conforme, true);

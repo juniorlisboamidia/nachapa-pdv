@@ -9,6 +9,12 @@ export function avaliarResposta({ tipo, config, valor }) {
     case 'CHECK':
       return valor === true ? { conforme: true, motivo: null } : { conforme: false, motivo: 'Não marcado' };
     case 'NUMERICO': {
+      // Campo em branco (null/undefined/'') não é medição — Number(null)===0 e
+      // Number('')===0 coagiam "não respondido" para zero e avaliavam contra a
+      // faixa como se fosse leitura real. Ausência não avalia (não aprova nem
+      // reprova); só um número de verdade entra na faixa. 0 legítimo (número ou
+      // string '0') continua sendo medição válida — checa ausência antes do Number().
+      if (valor == null || valor === '') return { conforme: null, motivo: null };
       const n = Number(valor);
       if (!Number.isFinite(n)) return { conforme: null, motivo: null };
       if (c.min != null && n < c.min) return { conforme: false, motivo: `Abaixo de ${c.min}` };
@@ -24,6 +30,9 @@ export function avaliarResposta({ tipo, config, valor }) {
       return op.conforme === false ? { conforme: false, motivo: 'Opção fora do padrão' } : { conforme: true, motivo: null };
     }
     case 'AVALIACAO': {
+      // Mesmo cuidado do NUMERICO: item crítico não avaliado não pode virar nota 0
+      // e disparar reprovação por silêncio do operador. 0 real continua avaliável.
+      if (valor == null || valor === '') return { conforme: null, motivo: null };
       const n = Number(valor);
       if (!Number.isFinite(n) || c.notaMinima == null) return { conforme: null, motivo: null };
       return n >= c.notaMinima ? { conforme: true, motivo: null } : { conforme: false, motivo: `Nota abaixo de ${c.notaMinima}` };
