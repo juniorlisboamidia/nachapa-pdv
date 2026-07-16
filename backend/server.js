@@ -2221,12 +2221,26 @@ async function chkAbrirExecucao(sess, checklistId) {
   if (!c) throw { http: 404, msg: 'Checklist não encontrado.' };
   if (!c.setorIds.some((s) => meus.includes(s))) throw { http: 403, msg: 'Este checklist não é do seu setor.' };
   const dataRef = chkDataRefAtual();
-  let exec = await prisma.checklistExecucao.findFirst({ where: { checklistId: c.id, dataRef }, include: { respostas: true } });
+  // empresaId explícito mesmo com checklistId já validado acima — não depender só do pai.
+  let exec = await prisma.checklistExecucao.findFirst({ where: { checklistId: c.id, dataRef, empresaId: sess.empresaId }, include: { respostas: true } });
   if (!exec) {
-    exec = await prisma.checklistExecucao.create({
-      data: { empresaId: sess.empresaId, checklistId: c.id, dataRef, funcionarioId: func.id, itensSnapshotJson: chkSnapshot(c.itens) },
-      include: { respostas: true },
-    });
+    try {
+      exec = await prisma.checklistExecucao.create({
+        data: { empresaId: sess.empresaId, checklistId: c.id, dataRef, funcionarioId: func.id, itensSnapshotJson: chkSnapshot(c.itens) },
+        include: { respostas: true },
+      });
+    } catch (e) {
+      // @@unique([checklistId, dataRef]): dois "iniciar" simultâneos do mesmo checklist/dia
+      // (ex.: dois colaboradores do mesmo setor clicando ao mesmo tempo) fazem os dois
+      // findFirst→null e os dois create; o segundo esbarra no unique — relê a execução
+      // que a outra requisição acabou de criar e retoma, em vez de 500 no perdedor.
+      if (e?.code === 'P2002') {
+        exec = await prisma.checklistExecucao.findFirst({ where: { checklistId: c.id, dataRef, empresaId: sess.empresaId }, include: { respostas: true } });
+        if (!exec) throw e; // não deveria acontecer — não escondemos o erro se ainda assim sumir
+      } else {
+        throw e;
+      }
+    }
   }
   return { exec, checklist: c };
 }
@@ -2265,12 +2279,17 @@ app.put('/api/public/colaborador/execucoes/:id/resposta', async (req, res) => {
     // Conformidade recalculada no servidor — o cliente não decide se passou.
     const { conforme } = avaliarResposta({ tipo: item.tipo, config: item.config, valor: req.body?.valor });
     const observacao = req.body?.observacao == null ? null : String(req.body.observacao).slice(0, 500);
-    const existente = await prisma.checklistResposta.findFirst({ where: { execucaoId: exec.id, itemChave } });
+    // empresaId explícito mesmo com execucaoId já validado acima — não depender só do pai.
+    const existente = await prisma.checklistResposta.findFirst({ where: { execucaoId: exec.id, itemChave, empresaId: sess.empresaId } });
     const dados = { tipo: item.tipo, valorJson: req.body?.valor ?? null, conforme, observacao };
-    const resp = existente
-      ? await prisma.checklistResposta.update({ where: { id: existente.id }, data: dados })
-      : await prisma.checklistResposta.create({ data: { ...dados, empresaId: sess.empresaId, execucaoId: exec.id, itemChave } });
-    res.json({ ok: true, itemChave, conforme: resp.conforme });
+    if (existente) {
+      // updateMany com empresaId no where (em vez de update por PK) para o isolamento
+      // não depender só do findFirst escopado acima, mesmo que essa query seja refatorada depois.
+      await prisma.checklistResposta.updateMany({ where: { id: existente.id, empresaId: sess.empresaId }, data: dados });
+    } else {
+      await prisma.checklistResposta.create({ data: { ...dados, empresaId: sess.empresaId, execucaoId: exec.id, itemChave } });
+    }
+    res.json({ ok: true, itemChave, conforme });
   } catch (err) { console.error('[colab/resposta]', err); res.status(500).json({ error: 'Erro ao salvar resposta.' }); }
 });
 
@@ -2281,8 +2300,10 @@ app.post('/api/public/colaborador/execucoes/:id/concluir', async (req, res) => {
     if (!exec) return res.status(404).json({ error: 'Execução não encontrada.' });
     const rmap = {}; for (const r of exec.respostas) rmap[r.itemChave] = { conforme: r.conforme };
     const emAlerta = execucaoEmAlerta(exec.itensSnapshotJson, rmap);
-    const atual = await prisma.checklistExecucao.update({ where: { id: exec.id }, data: { status: 'CONCLUIDA', concluidaEm: new Date(), emAlerta } });
-    res.json({ ok: true, status: atual.status, emAlerta });
+    // updateMany com empresaId no where: exec já veio validado com empresaId neste handler,
+    // mas o filtro fica explícito aqui também para o isolamento sobreviver a um refactor futuro.
+    await prisma.checklistExecucao.updateMany({ where: { id: exec.id, empresaId: sess.empresaId }, data: { status: 'CONCLUIDA', concluidaEm: new Date(), emAlerta } });
+    res.json({ ok: true, status: 'CONCLUIDA', emAlerta });
   } catch (err) { console.error('[colab/concluir]', err); res.status(500).json({ error: 'Erro ao concluir.' }); }
 });
 
