@@ -11,6 +11,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from './generated/prisma/client.ts';
 import { iniciarColetorServer, gravarPontoColetor } from './coletorServer.js';
 import { zapiConfigurado, zapiStatus, zapiQrCode, zapiCriarInstancia, zapiEnviarTexto } from './zapi.mjs';
+import { validadeDe, gerarLote, CONSERVACOES } from './etiquetas.js';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 
@@ -6793,6 +6794,151 @@ app.get('/api/ponto/coletor/enviar/status', async (req, res) => {
     const cmds = await prisma.coletorComando.findMany({ where: { id: { in: ids } }, select: { status: true } });
     res.json({ total: cmds.length, enviados: cmds.filter((c) => c.status === 'ENVIADO').length });
   } catch (err) { console.error('[coletor enviar/status]', err); res.status(500).json({ error: 'Erro ao consultar o status.' }); }
+});
+
+// ===== Etiquetas (ADMIN) — área `etiquetas` já protegida pelo middleware =====
+
+// Tipos de insumo que não se etiqueta: embalagem e material operacional não são
+// alimento manipulado.
+const ETIQUETA_TIPOS_INSUMO = ['INGREDIENTE', 'PRODUCAO_PROPRIA', 'HORTIFRUTI', 'ACOMPANHAMENTO', 'BEBIDA'];
+
+// Regras padrão (RDC 216) — mesmos valores do seed da migration. Existem aqui
+// de novo porque o seed da migration só rodou para as empresas que já existiam
+// naquele momento; uma loja criada depois (POST /api/lojas não semeia nada)
+// precisa que o backend semeie na primeira vez que ela mexer em Etiquetas.
+const ETIQUETA_REGRAS_PADRAO = [
+  { conservacao: 'CONGELADO', tempLabel: '<= -18 °C', dias: 90, ordem: 0 },
+  { conservacao: 'RESFRIADO_0_4', tempLabel: '0 a 4 °C', dias: 5, ordem: 1 },
+  { conservacao: 'RESFRIADO_4_6', tempLabel: '4 a 6 °C', dias: 3, ordem: 2 },
+  { conservacao: 'AMBIENTE', tempLabel: '<= 25 °C', dias: 30, ordem: 3 },
+  { conservacao: 'DESCONGELADO', tempLabel: '0 a 4 °C', dias: 1, ordem: 4 },
+  { conservacao: 'ABERTO', tempLabel: 'Conforme fabricante', dias: 3, ordem: 5 },
+];
+
+// Garante config (1 por loja) E as 6 regras de validade na primeira vez que a
+// loja mexe em Etiquetas. Sem as regras, validadeDe() lança 400 "Não há regra
+// de validade" para toda conservação — e como o seed da migration só cobriu as
+// empresas que já existiam, uma loja nova ficaria com o módulo todo morto
+// (nenhuma etiqueta imprime) sem nenhum aviso até alguém tentar usar.
+async function garantirEtiquetaSetup(empresaId) {
+  let c = await prisma.etiquetaConfig.findFirst();
+  if (!c) {
+    const emp = await prisma.empresa.findUnique({ where: { id: empresaId }, select: { nome: true } });
+    c = await prisma.etiquetaConfig.create({ data: { razaoSocial: emp?.nome || null, campos: {} } });
+  }
+  let regras = await prisma.etiquetaRegra.findMany({ orderBy: { ordem: 'asc' } });
+  if (!regras.length) {
+    // skipDuplicates: @@unique([empresaId, conservacao]) torna isto idempotente
+    // caso duas requisições cheguem aqui ao mesmo tempo (sem transação/lock).
+    await prisma.etiquetaRegra.createMany({ data: ETIQUETA_REGRAS_PADRAO, skipDuplicates: true });
+    regras = await prisma.etiquetaRegra.findMany({ orderBy: { ordem: 'asc' } });
+  }
+  return { config: c, regras };
+}
+
+app.get('/api/etiquetas/config', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const { config, regras } = await garantirEtiquetaSetup(req.user.empresaId);
+    res.json({ config, regras, conservacoes: CONSERVACOES });
+  } catch (err) { console.error('[etiquetas/config GET]', err); res.status(500).json({ error: 'Erro ao carregar a configuração.' }); }
+});
+
+app.put('/api/etiquetas/config', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const b = req.body || {};
+    const only = (v, max) => (v == null || String(v).trim() === '' ? null : String(v).trim().slice(0, max));
+    const { config: atual } = await garantirEtiquetaSetup(req.user.empresaId);
+    const config = await prisma.etiquetaConfig.update({
+      where: { id: atual.id },
+      data: {
+        razaoSocial: only(b.razaoSocial, 160),
+        cnpj: only(b.cnpj, 20),
+        responsavelTecnico: only(b.responsavelTecnico, 120),
+        sif: only(b.sif, 10),
+        sie: only(b.sie, 10),
+        larguraMm: Number.isFinite(+b.larguraMm) ? Math.min(50, Math.max(20, +b.larguraMm)) : 50,
+        alturaMm: Number.isFinite(+b.alturaMm) ? Math.min(100, Math.max(15, +b.alturaMm)) : 30,
+        campos: b.campos && typeof b.campos === 'object' ? b.campos : {},
+      },
+    });
+    res.json({ ok: true, config });
+  } catch (err) { console.error('[etiquetas/config PUT]', err); res.status(500).json({ error: 'Erro ao salvar a configuração.' }); }
+});
+
+app.put('/api/etiquetas/regras', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const entrada = Array.isArray(req.body?.regras) ? req.body.regras : [];
+    for (const r of entrada) {
+      if (!CONSERVACOES.includes(r.conservacao)) return res.status(400).json({ error: `Conservação inválida: ${r.conservacao}` });
+      const dias = parseInt(r.dias, 10);
+      if (!Number.isFinite(dias) || dias < 1 || dias > 3650) return res.status(400).json({ error: 'Validade deve ser de 1 a 3650 dias.' });
+    }
+    for (const r of entrada) {
+      await prisma.etiquetaRegra.updateMany({
+        where: { conservacao: r.conservacao },
+        data: { dias: parseInt(r.dias, 10), tempLabel: String(r.tempLabel || '').slice(0, 60) },
+      });
+    }
+    const regras = await prisma.etiquetaRegra.findMany({ orderBy: { ordem: 'asc' } });
+    res.json({ ok: true, regras });
+  } catch (err) { console.error('[etiquetas/regras PUT]', err); res.status(500).json({ error: 'Erro ao salvar as regras.' }); }
+});
+
+app.get('/api/etiquetas/itens', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const busca = typeof req.query.busca === 'string' ? req.query.busca.trim() : '';
+    const where = { ativo: true, tipo: { in: ETIQUETA_TIPOS_INSUMO } };
+    if (busca) where.nome = { contains: busca, mode: 'insensitive' };
+    const insumos = await prisma.insumo.findMany({ where, orderBy: { nome: 'asc' }, select: { id: true, nome: true, tipo: true, unidade: true } });
+    const cfgs = await prisma.etiquetaItemConfig.findMany();
+    const cMap = new Map(cfgs.map((c) => [c.insumoId, c]));
+    const regras = await prisma.etiquetaRegra.findMany();
+    const itens = insumos.map((i) => {
+      const c = cMap.get(i.id) || null;
+      const cons = c?.conservacaoPadrao || null;
+      const regra = cons ? regras.find((r) => r.conservacao === cons) : null;
+      return {
+        insumoId: i.id, nome: i.nome, tipo: i.tipo, unidade: i.unidade,
+        conservacaoPadrao: cons,
+        validadeDias: c?.validadeDias ?? null,
+        validadeEfetiva: c?.validadeDias ?? regra?.dias ?? null, // o que a cozinha vai ver
+        ativo: c ? c.ativo : true,
+      };
+    });
+    res.json({ itens, conservacoes: CONSERVACOES });
+  } catch (err) { console.error('[etiquetas/itens GET]', err); res.status(500).json({ error: 'Erro ao carregar os itens.' }); }
+});
+
+app.put('/api/etiquetas/itens/:insumoId', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const insumoId = parseInt(req.params.insumoId, 10);
+    if (!Number.isFinite(insumoId)) return res.status(400).json({ error: 'Insumo inválido.' });
+    // findFirst (não findUnique) passa pela extension de tenant: devolve null se o
+    // insumo existir mas for de outra loja — é isso que impede configurar insumo alheio.
+    const insumo = await prisma.insumo.findFirst({ where: { id: insumoId } });
+    if (!insumo) return res.status(404).json({ error: 'Insumo não encontrado.' });
+
+    const b = req.body || {};
+    if (b.conservacaoPadrao && !CONSERVACOES.includes(b.conservacaoPadrao)) return res.status(400).json({ error: 'Conservação inválida.' });
+    const dias = b.validadeDias == null || b.validadeDias === '' ? null : parseInt(b.validadeDias, 10);
+    if (dias !== null && (!Number.isFinite(dias) || dias < 1 || dias > 3650)) return res.status(400).json({ error: 'Validade deve ser de 1 a 3650 dias.' });
+
+    const dados = {
+      conservacaoPadrao: b.conservacaoPadrao || null,
+      validadeDias: dias,
+      ativo: b.ativo !== false,
+    };
+    const existente = await prisma.etiquetaItemConfig.findFirst({ where: { insumoId } });
+    const cfg = existente
+      ? await prisma.etiquetaItemConfig.update({ where: { id: existente.id }, data: dados })
+      : await prisma.etiquetaItemConfig.create({ data: { ...dados, insumoId } });
+    res.json({ ok: true, item: cfg });
+  } catch (err) { console.error('[etiquetas/itens PUT]', err); res.status(500).json({ error: 'Erro ao salvar o item.' }); }
 });
 
 app.listen(PORT, () => console.log(`Operação (PDV) API rodando em http://localhost:${PORT}`));
