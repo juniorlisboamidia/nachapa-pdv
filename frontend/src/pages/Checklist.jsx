@@ -14,6 +14,7 @@ const TABS = [
   { id: 'checklists', label: 'Checklists' },
   { id: 'templates', label: 'Templates' },
   { id: 'setores', label: 'Setores' },
+  { id: 'colaboradores', label: 'Colaboradores' },
 ]
 const TAB_IDS = TABS.map((t) => t.id)
 
@@ -61,8 +62,9 @@ export default function Checklist() {
 
       {tab === 'templates' && <AbaTemplates notify={notify} />}
       {tab === 'setores' && <AbaSetores notify={notify} />}
+      {tab === 'colaboradores' && <AbaColaboradores notify={notify} />}
       {tab === 'checklists' && <AbaChecklists notify={notify} />}
-      {tab === 'painel' && <AbaPainel />}
+      {tab === 'painel' && <AbaPainel notify={notify} />}
     </div>
   )
 }
@@ -72,9 +74,22 @@ export default function Checklist() {
 // concluídos) + em alerta (execução com item crítico não-conforme). "Hoje" já vem
 // resolvido pelo backend com o dia de expediente (corte 05:00 BR), não precisa de
 // nenhum cálculo de fuso aqui no front.
-function AbaPainel() {
+function AbaPainel({ notify }) {
   const [p, setP] = useState(null)
-  useEffect(() => { api.get('/checklist/painel').then((r) => setP(r.data)).catch(() => {}) }, [])
+  const [erro, setErro] = useState(false)
+  useEffect(() => {
+    api.get('/checklist/painel')
+      .then((r) => setP(r.data))
+      .catch((e) => {
+        // Painel é a aba DEFAULT — se engolir o erro em silêncio, a tela trava em
+        // "Carregando…" pra sempre sem o gestor entender o porquê. Mesmo padrão de
+        // notify das abas irmãs, e sai do loading pra um empty-state com o motivo.
+        notify(e?.response?.data?.error ?? 'Não foi possível carregar o painel.', 'error')
+        setErro(true)
+      })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  if (erro) return <div className="empty-state">Não foi possível carregar o painel.</div>
   if (!p) return <div className="empty-state">Carregando…</div>
   const KPI = ({ n, label }) => <div className="table-card" style={{ padding: 16 }}><div style={{ fontSize: 28, fontWeight: 800 }}>{n}</div><div style={{ fontSize: 12, color: '#777' }}>{label}</div></div>
   return (
@@ -204,6 +219,83 @@ function AbaSetores({ notify }) {
         onConfirm={confirmarExclusao}
         onCancel={() => setExcluir(null)}
       />
+    </div>
+  )
+}
+
+// ===================== COLABORADORES =====================
+// Atribui setor(es) a cada colaborador — o elo que faltava pra fechar o ciclo: sem
+// setor, Funcionario.setorIds fica sempre [] e a Área do Colaborador nunca mostra
+// checklist nenhum pro operador (GET /public/colaborador/checklists corta em
+// "meus.length === 0"). Aqui só liga/desliga por chip; quem cria os setores é a aba
+// Setores.
+function AbaColaboradores({ notify }) {
+  const [colaboradores, setColaboradores] = useState([])
+  const [setores, setSetores] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [salvandoId, setSalvandoId] = useState(null) // id do colaborador com PUT em voo — trava só os chips dele
+
+  function carregar() {
+    Promise.all([api.get('/checklist/colaboradores'), api.get('/checklist/setores')])
+      .then(([rc, rs]) => { setColaboradores(rc.data.colaboradores || []); setSetores(rs.data.setores || []) })
+      .catch((e) => notify(e?.response?.data?.error ?? 'Não foi possível carregar os colaboradores.', 'error'))
+      .finally(() => setLoading(false))
+  }
+  useEffect(() => { carregar() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Update otimista (chip muda na hora) — se o PUT falhar, notify + recarrega tudo do
+  // servidor pra desfazer o chute otimista (mesmo padrão de rollback já usado nas
+  // outras abas deste arquivo).
+  async function toggleSetor(colab, setorId) {
+    if (salvandoId) return
+    const setorIdsNovo = colab.setorIds.includes(setorId)
+      ? colab.setorIds.filter((x) => x !== setorId)
+      : [...colab.setorIds, setorId]
+    setColaboradores((cs) => cs.map((c) => (c.id === colab.id ? { ...c, setorIds: setorIdsNovo } : c)))
+    setSalvandoId(colab.id)
+    try {
+      await api.put(`/checklist/colaboradores/${colab.id}/setores`, { setorIds: setorIdsNovo })
+    } catch (err) {
+      notify(err?.response?.data?.error ?? 'Não foi possível salvar os setores.', 'error')
+      carregar()
+    } finally {
+      setSalvandoId(null)
+    }
+  }
+
+  if (loading) return <div className="loading-state">Carregando…</div>
+  if (colaboradores.length === 0) return <div className="empty-state">Nenhum colaborador ativo.</div>
+
+  return (
+    <div>
+      {setores.length === 0 && (
+        <div className="empty-state" style={{ marginBottom: 12 }}>Nenhum setor cadastrado ainda — crie na aba Setores antes de atribuir aos colaboradores.</div>
+      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {colaboradores.map((c) => (
+          <div key={c.id} className="table-card" style={{ padding: 12 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: setores.length ? 6 : 0 }}>
+              {c.nome}
+              {c.apelido ? <span style={{ fontWeight: 400, color: 'var(--app-text-soft, #888)' }}> ({c.apelido})</span> : null}
+            </div>
+            {setores.length > 0 && (
+              <div className="chip-row">
+                {setores.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className={'chip' + (c.setorIds.includes(s.id) ? ' chip-on' : '')}
+                    disabled={salvandoId === c.id}
+                    onClick={() => toggleSetor(c, s.id)}
+                  >
+                    {s.nome}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

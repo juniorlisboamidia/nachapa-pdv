@@ -2212,6 +2212,12 @@ app.get('/api/public/colaborador/checklists', async (req, res) => {
   } catch (err) { console.error('[colab/checklists]', err); res.status(500).json({ error: 'Erro ao carregar checklists.' }); }
 });
 
+// Interseção de setores — mesma regra usada tanto pra abrir uma execução nova
+// (chkAbrirExecucao) quanto pra checar posse de uma execução já existente
+// (chkPosseExecucao, logo abaixo). Um único ponto de verdade evita a regra de posse
+// divergir entre as duas.
+const chkSetoresIntersectam = (setoresA, setoresB) => Array.isArray(setoresA) && setoresA.some((s) => setoresB.includes(s));
+
 // Verifica posse (checklist do meu setor) e devolve a execução do dia com snapshot.
 async function chkAbrirExecucao(sess, checklistId) {
   const func = await prisma.funcionario.findFirst({ where: { id: sess.funcionarioId, empresaId: sess.empresaId } });
@@ -2219,7 +2225,7 @@ async function chkAbrirExecucao(sess, checklistId) {
   const meus = Array.isArray(func.setorIds) ? func.setorIds : [];
   const c = await prisma.checklist.findFirst({ where: { id: checklistId, empresaId: sess.empresaId, ativo: true }, include: { itens: { orderBy: { ordem: 'asc' } } } });
   if (!c) throw { http: 404, msg: 'Checklist não encontrado.' };
-  if (!c.setorIds.some((s) => meus.includes(s))) throw { http: 403, msg: 'Este checklist não é do seu setor.' };
+  if (!chkSetoresIntersectam(c.setorIds, meus)) throw { http: 403, msg: 'Este checklist não é do seu setor.' };
   const dataRef = chkDataRefAtual();
   // empresaId explícito mesmo com checklistId já validado acima — não depender só do pai.
   let exec = await prisma.checklistExecucao.findFirst({ where: { checklistId: c.id, dataRef, empresaId: sess.empresaId }, include: { respostas: true } });
@@ -2258,20 +2264,39 @@ function chkExecJson(exec) {
   return { id: exec.id, checklistId: exec.checklistId, status: exec.status, emAlerta: exec.emAlerta, itens: exec.itensSnapshotJson, respostas: rmap };
 }
 
+// Posse por SETOR de uma execução JÁ EXISTENTE — não basta filtrar por empresaId: dentro
+// da MESMA loja, um colaborador do setor A não pode ler/responder/concluir a execução de
+// um checklist do setor B só chutando o id (inteiros sequenciais, adivinháveis). A
+// execução é prova, então as 3 rotas de execução (GET, PUT resposta, POST concluir)
+// passam por aqui em vez de um findFirst bare por empresaId. Mesma regra de interseção de
+// chkAbrirExecucao (chkSetoresIntersectam), pra não divergir entre "abrir" e "continuar".
+async function chkPosseExecucao(sess, execucaoId, { comRespostas = false } = {}) {
+  const exec = await prisma.checklistExecucao.findFirst({
+    where: { id: execucaoId, empresaId: sess.empresaId },
+    include: comRespostas ? { respostas: true } : undefined,
+  });
+  if (!exec) throw { http: 404, msg: 'Execução não encontrada.' };
+  const func = await prisma.funcionario.findFirst({ where: { id: sess.funcionarioId, empresaId: sess.empresaId } });
+  if (!func || func.status !== 'ATIVO') throw { http: 401, msg: 'Acesso indisponível.' };
+  const checklist = await prisma.checklist.findFirst({ where: { id: exec.checklistId, empresaId: sess.empresaId } });
+  if (!checklist) throw { http: 404, msg: 'Checklist não encontrado.' };
+  const meus = Array.isArray(func.setorIds) ? func.setorIds : [];
+  if (!chkSetoresIntersectam(checklist.setorIds, meus)) throw { http: 403, msg: 'Esta execução não é do seu setor.' };
+  return exec;
+}
+
 app.get('/api/public/colaborador/execucoes/:id', async (req, res) => {
   try {
     const sess = exigirColaborador(req, res); if (!sess) return;
-    const exec = await prisma.checklistExecucao.findFirst({ where: { id: parseInt(req.params.id, 10), empresaId: sess.empresaId }, include: { respostas: true } });
-    if (!exec) return res.status(404).json({ error: 'Execução não encontrada.' });
+    const exec = await chkPosseExecucao(sess, parseInt(req.params.id, 10), { comRespostas: true });
     res.json({ execucao: chkExecJson(exec) });
-  } catch (err) { console.error('[colab/execucao GET]', err); res.status(500).json({ error: 'Erro ao carregar.' }); }
+  } catch (e) { if (e.http) return res.status(e.http).json({ error: e.msg }); console.error('[colab/execucao GET]', e); res.status(500).json({ error: 'Erro ao carregar.' }); }
 });
 
 app.put('/api/public/colaborador/execucoes/:id/resposta', async (req, res) => {
   try {
     const sess = exigirColaborador(req, res); if (!sess) return;
-    const exec = await prisma.checklistExecucao.findFirst({ where: { id: parseInt(req.params.id, 10), empresaId: sess.empresaId } });
-    if (!exec) return res.status(404).json({ error: 'Execução não encontrada.' });
+    const exec = await chkPosseExecucao(sess, parseInt(req.params.id, 10));
     if (exec.status === 'CONCLUIDA') return res.status(409).json({ error: 'Execução já concluída.' });
     const itemChave = String(req.body?.itemChave || '');
     const item = (exec.itensSnapshotJson || []).find((it) => it.chave === itemChave);
@@ -2290,21 +2315,20 @@ app.put('/api/public/colaborador/execucoes/:id/resposta', async (req, res) => {
       await prisma.checklistResposta.create({ data: { ...dados, empresaId: sess.empresaId, execucaoId: exec.id, itemChave } });
     }
     res.json({ ok: true, itemChave, conforme });
-  } catch (err) { console.error('[colab/resposta]', err); res.status(500).json({ error: 'Erro ao salvar resposta.' }); }
+  } catch (e) { if (e.http) return res.status(e.http).json({ error: e.msg }); console.error('[colab/resposta]', e); res.status(500).json({ error: 'Erro ao salvar resposta.' }); }
 });
 
 app.post('/api/public/colaborador/execucoes/:id/concluir', async (req, res) => {
   try {
     const sess = exigirColaborador(req, res); if (!sess) return;
-    const exec = await prisma.checklistExecucao.findFirst({ where: { id: parseInt(req.params.id, 10), empresaId: sess.empresaId }, include: { respostas: true } });
-    if (!exec) return res.status(404).json({ error: 'Execução não encontrada.' });
+    const exec = await chkPosseExecucao(sess, parseInt(req.params.id, 10), { comRespostas: true });
     const rmap = {}; for (const r of exec.respostas) rmap[r.itemChave] = { conforme: r.conforme };
     const emAlerta = execucaoEmAlerta(exec.itensSnapshotJson, rmap);
     // updateMany com empresaId no where: exec já veio validado com empresaId neste handler,
     // mas o filtro fica explícito aqui também para o isolamento sobreviver a um refactor futuro.
     await prisma.checklistExecucao.updateMany({ where: { id: exec.id, empresaId: sess.empresaId }, data: { status: 'CONCLUIDA', concluidaEm: new Date(), emAlerta } });
     res.json({ ok: true, status: 'CONCLUIDA', emAlerta });
-  } catch (err) { console.error('[colab/concluir]', err); res.status(500).json({ error: 'Erro ao concluir.' }); }
+  } catch (e) { if (e.http) return res.status(e.http).json({ error: e.msg }); console.error('[colab/concluir]', e); res.status(500).json({ error: 'Erro ao concluir.' }); }
 });
 
 app.get('/api/public/colaborador/checklists/historico', async (req, res) => {
