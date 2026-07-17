@@ -2358,3 +2358,67 @@ a.ind-act { text-decoration: none; }
 .insc-item:hover { border-color: #dcdcdc; }
 .cl-badge { box-shadow: none; }
 .insc-chk { display: inline-flex; align-items: center; gap: 3px; font-weight: 600; }
+
+/* ===== Checklist — Painel do gestor (layout inspirado na referência, cores da marca) ===== */
+.chkp-top { display: grid; grid-template-columns: repeat(auto-fit, minmax(212px, 1fr)); gap: 14px; margin-bottom: 16px; }
+.chkp-card { background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 14px; padding: 16px; }
+
+/* KPIs com ícone */
+.chkp-kpi { display: flex; align-items: center; gap: 13px; }
+.chkp-kpi-ic { width: 42px; height: 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.chkp-kpi-ic.is-gold { background: var(--app-highlight); color: var(--brand-gold-deep); }
+.chkp-kpi-ic.is-green { background: #ecfdf3; color: #16a34a; }
+.chkp-kpi-ic.is-red { background: #fef2f2; color: #dc2626; }
+.chkp-kpi-n { font-size: 26px; font-weight: 800; line-height: 1; color: var(--app-text); }
+.chkp-kpi-l { font-size: 12.5px; color: var(--app-text-3); margin-top: 4px; }
+
+/* Guia inicial */
+.chkp-guia { background: linear-gradient(135deg, var(--app-highlight), var(--app-surface)); border: 1px solid var(--app-border); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.chkp-guia-head { display: flex; align-items: center; gap: 11px; }
+.chkp-guia-ic { width: 40px; height: 40px; border-radius: 12px; background: var(--brand-gold); color: var(--brand-gold-ink); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.chkp-guia-title { font-weight: 700; font-size: 14px; color: var(--app-text); }
+.chkp-guia-frac { margin-left: auto; font-size: 12px; font-weight: 700; color: var(--brand-gold-deep); }
+.chkp-guia-track { height: 6px; border-radius: 999px; background: var(--app-surface-2); overflow: hidden; }
+.chkp-guia-fill { height: 100%; background: var(--brand-gold); border-radius: 999px; transition: width .35s ease; }
+.chkp-guia-btn { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; background: var(--brand-gold); color: var(--brand-gold-ink); border: none; border-radius: 999px; padding: 6px 14px; font-size: 12.5px; font-weight: 700; cursor: pointer; transition: background .12s ease; }
+.chkp-guia-btn:hover { background: var(--brand-gold-strong); }
+.chkp-guia-passos { display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
+.chkp-passo { display: flex; align-items: center; gap: 9px; padding: 6px 4px; border-radius: 8px; font-size: 13px; color: var(--app-text-2); background: none; border: none; text-align: left; width: 100%; cursor: pointer; }
+.chkp-passo:hover { background: var(--app-surface-2); }
+.chkp-passo[disabled] { cursor: default; }
+.chkp-passo[disabled]:hover { background: none; }
+.chkp-passo-mk { width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 1.5px solid var(--app-border); }
+.chkp-passo.is-ok .chkp-passo-mk { background: var(--brand-gold); border-color: var(--brand-gold); color: var(--brand-gold-ink); }
+.chkp-passo.is-ok { color: var(--app-text-3); text-decoration: line-through; }
+
+/* Colunas */
+.chkp-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+.chkp-col { background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 14px; display: flex; flex-direction: column; }
+.chkp-col-h { padding: 15px 16px 8px; font-size: 14.5px; font-weight: 700; color: var(--app-text); }
+.chkp-col-b { padding: 2px 16px 14px; flex: 1; min-height: 156px; display: flex; flex-direction: column; }
+.chkp-col-f { border-top: 1px solid var(--app-border); padding: 12px 16px; text-align: center; }
+.chkp-link { background: none; border: none; color: var(--brand-gold-deep); font-weight: 700; font-size: 12.5px; cursor: pointer; padding: 0; }
+.chkp-link:hover { text-decoration: underline; }
+
+/* Empty-state das colunas */
+.chkp-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 5px; padding: 20px 8px; }
+.chkp-empty-ic { width: 44px; height: 44px; border-radius: 50%; background: var(--app-surface-2); display: flex; align-items: center; justify-content: center; color: var(--app-text-3); margin-bottom: 4px; }
+.chkp-empty-ic.is-plus { background: var(--app-highlight); color: var(--brand-gold-deep); border: 1px dashed var(--brand-gold-deep); cursor: pointer; font-size: 22px; transition: background .12s ease; }
+.chkp-empty-ic.is-plus:hover { background: #fbeeb8; }
+.chkp-empty-t { font-size: 13.5px; font-weight: 700; color: var(--app-text-2); }
+.chkp-empty-s { font-size: 12px; color: var(--app-text-3); max-width: 210px; line-height: 1.5; }
+
+/* Linhas de checklist dentro das colunas */
+.chkp-row { padding: 9px 0; border-top: 1px solid var(--app-border); }
+.chkp-row:first-child { border-top: none; }
+.chkp-row.is-click { cursor: pointer; margin: 0 -8px; padding: 9px 8px; border-radius: 8px; }
+.chkp-row.is-click:hover { background: var(--app-surface-2); }
+.chkp-row-top { display: flex; align-items: center; gap: 8px; }
+.chkp-row-name { font-weight: 600; font-size: 13px; color: var(--app-text); }
+.chkp-row-sub { font-size: 11.5px; color: var(--app-text-3); margin-top: 3px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.chkp-tag { font-size: 10px; background: var(--app-surface-2); color: var(--app-text-2); border: 1px solid var(--app-border); border-radius: 5px; padding: 1px 6px; }
+
+/* Meus checklists */
+.chkp-meus-h { display: flex; align-items: center; gap: 10px; margin: 20px 0 10px; flex-wrap: wrap; }
+.chkp-meus-h h3 { font-size: 15px; font-weight: 700; color: var(--app-text); margin-right: auto; }
+.chkp-meus .hb-table thead th { background: var(--app-highlight); }

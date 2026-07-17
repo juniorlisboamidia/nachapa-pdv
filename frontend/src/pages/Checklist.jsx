@@ -3,7 +3,7 @@
 // checks em alerta e a tabela de checklists com criar), Templates (biblioteca pronta,
 // semeada pelo backend) e Checklists (CRUD + editor: nasce do zero ou de um template,
 // atribuído por Função — a mesma do cadastro/Ponto Facial).
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import api from '../services/api'
 import Toast from '../components/Toast'
@@ -81,58 +81,66 @@ export default function Checklist() {
 }
 
 // ===================== PAINEL =====================
-// Visão consolidada do gestor (adaptada da referência): KPIs do dia, três colunas
-// (próximos agendamentos, sem agendamento, checks em alerta) e a tabela "Meus checklists"
-// com o botão de criar direto por aqui. "Hoje" já vem resolvido pelo backend com o dia de
-// expediente (corte 05:00 BR) — sem cálculo de fuso no front. Abaixo, as execuções
-// recentes (Fatia 2) pra abrir o detalhe com foto.
+// Visão consolidada do gestor no layout da referência (Cardápio Web), com as cores da
+// marca (dourado sobre creme, tema-aware via tokens): Guia inicial + KPIs com ícone,
+// três colunas (próximos agendamentos, sem agendamento, checks em alerta) e a tabela
+// "Meus checklists". "Hoje" já vem resolvido pelo backend com o dia de expediente (corte
+// 05:00 BR). Abaixo, as execuções recentes (Fatia 2) pra abrir o detalhe com foto.
 
-// Botão-link discreto (sem depender de classe utilitária) usado nos cabeçalhos do painel.
-function LinkAcao({ children, onClick }) {
-  return (
-    <button type="button" onClick={onClick}
-      style={{ marginLeft: 'auto', fontSize: 12, background: 'none', border: 'none', color: 'var(--app-primary, #2563eb)', cursor: 'pointer', padding: 0 }}>
-      {children}
-    </button>
-  )
+// Ícones SVG (stroke = currentColor, herdam a cor do container). Lucide-like.
+function ChkIcon({ name, size = 20 }) {
+  const p = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' }
+  switch (name) {
+    case 'rocket': return <svg {...p}><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.79-.87.78-2.2-.02-3a2.12 2.12 0 0 0-2.98 0z" /><path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" /><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" /><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" /></svg>
+    case 'lista': return <svg {...p}><rect x="9" y="3" width="6" height="4" rx="1" /><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" /><path d="M9 12h6" /><path d="M9 16h6" /></svg>
+    case 'check': return <svg {...p}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><path d="M22 4L12 14.01l-3-3" /></svg>
+    case 'alerta': return <svg {...p}><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
+    case 'relogio': return <svg {...p}><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+    case 'chevron': return <svg {...p}><polyline points="9 18 15 12 9 6" /></svg>
+    case 'checkSm': return <svg {...p} strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>
+    default: return null
+  }
 }
 
-// Tags visuais (não clicáveis) das funções que executam um checklist.
-function FuncoesTags({ funcoes }) {
-  if (!funcoes || funcoes.length === 0) return <span style={{ fontSize: 11, color: '#999' }}>Sem função</span>
-  return (
-    <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 4 }}>
-      {funcoes.map((fn) => (
-        <span key={fn} style={{ fontSize: 10, background: 'var(--app-border, #eee)', color: 'var(--app-text-soft, #555)', borderRadius: 4, padding: '1px 6px' }}>{fn}</span>
-      ))}
-    </span>
-  )
+// Tags visuais das funções que executam um checklist.
+function ChkTags({ funcoes }) {
+  if (!funcoes || funcoes.length === 0) return <span className="chkp-tag" style={{ opacity: 0.65 }}>Sem função</span>
+  return <>{funcoes.map((fn) => <span key={fn} className="chkp-tag">{fn}</span>)}</>
 }
 
-// Uma coluna do painel (título + linhas), com "Ver todos" opcional e empty-state próprio.
-function PainelColuna({ titulo, cor, vazio, verTodos, temItens, children }) {
+// Uma coluna do painel: título + corpo + rodapé "Ver todos" opcional.
+function ChkColuna({ titulo, rodape, children }) {
   return (
-    <div className="table-card" style={{ padding: 14 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-        <h3 style={{ fontSize: 13, fontWeight: 800, color: cor || 'inherit' }}>{titulo}</h3>
-        {verTodos && <LinkAcao onClick={verTodos}>Ver todos</LinkAcao>}
-      </div>
-      {temItens ? children : <p className="empty-state" style={{ padding: 10 }}>{vazio}</p>}
+    <div className="chkp-col">
+      <div className="chkp-col-h">{titulo}</div>
+      <div className="chkp-col-b">{children}</div>
+      {rodape && <div className="chkp-col-f">{rodape}</div>}
     </div>
   )
 }
 
-// Uma linha de checklist dentro de uma coluna do painel.
-function PainelLinha({ nome, sub, funcoes, right, onClick }) {
+// Empty-state centralizado de uma coluna (ícone + título + subtítulo).
+function ChkEmpty({ icon, titulo, sub }) {
   return (
-    <div onClick={onClick} style={{ padding: '8px 0', borderTop: '1px solid var(--app-border, #eee)', cursor: onClick ? 'pointer' : 'default' }}>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
-        <span style={{ fontWeight: 600, fontSize: 13 }}>{nome}</span>
+    <div className="chkp-empty">
+      <div className="chkp-empty-ic"><ChkIcon name={icon} /></div>
+      <div className="chkp-empty-t">{titulo}</div>
+      <div className="chkp-empty-s">{sub}</div>
+    </div>
+  )
+}
+
+// Uma linha de checklist dentro de uma coluna.
+function ChkLinha({ nome, sub, funcoes, right, onClick }) {
+  return (
+    <div className={'chkp-row' + (onClick ? ' is-click' : '')} onClick={onClick}>
+      <div className="chkp-row-top">
+        <span className="chkp-row-name">{nome}</span>
         {right && <span style={{ marginLeft: 'auto', flexShrink: 0 }}>{right}</span>}
       </div>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 3 }}>
-        {sub && <span style={{ fontSize: 11, color: '#999' }}>{sub}</span>}
-        {funcoes && <FuncoesTags funcoes={funcoes} />}
+      <div className="chkp-row-sub">
+        {sub && <span>{sub}</span>}
+        {funcoes && <ChkTags funcoes={funcoes} />}
       </div>
     </div>
   )
@@ -148,6 +156,8 @@ function AbaPainel({ notify }) {
   const [carregandoExec, setCarregandoExec] = useState(true)
   const [erroExec, setErroExec] = useState(false)
   const [verExecucaoId, setVerExecucaoId] = useState(null) // id da execução aberta no modal de detalhe, ou null
+  const [verEtapas, setVerEtapas] = useState(false) // guia inicial expandido?
+  const execRef = useRef(null) // âncora da seção "Execuções recentes" (rolagem dos "Ver todos")
 
   useEffect(() => {
     api.get('/checklist/painel')
@@ -175,65 +185,119 @@ function AbaPainel({ notify }) {
 
   if (erro) return <div className="empty-state">Não foi possível carregar o painel.</div>
   if (!p) return <div className="empty-state">Carregando…</div>
-  const KPI = ({ n, label }) => <div className="table-card" style={{ padding: 16 }}><div style={{ fontSize: 28, fontWeight: 800 }}>{n}</div><div style={{ fontSize: 12, color: '#777' }}>{label}</div></div>
   const meusPreview = p.meus.slice(0, 8)
+  const g = p.guia || {}
+  const passos = [
+    { k: 'funcoes', label: 'Cadastrar as funções da equipe', ok: !!g.funcoes, ir: null },
+    { k: 'checklist', label: 'Criar o primeiro checklist', ok: !!g.checklist, ir: () => navigate('/checklist/checklists?novo=1') },
+    { k: 'atribuicao', label: 'Definir quem executa (função)', ok: !!g.atribuicao, ir: () => navigate('/checklist/checklists') },
+    { k: 'execucao', label: 'Acompanhar a primeira execução', ok: !!g.execucao, ir: () => execRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) },
+  ]
+  const feitos = passos.filter((s) => s.ok).length
   return (
     <div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 16 }}>
-        <KPI n={p.kpis.ativos} label="Checklists ativos" /><KPI n={p.kpis.venceHoje} label="Vencem hoje" />
-        <KPI n={p.kpis.concluidosHoje} label="Concluídos hoje" /><KPI n={p.kpis.emAlerta} label="Em alerta" />
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
-        <PainelColuna titulo="Próximos agendamentos" vazio="Nada vence hoje." temItens={p.proximos.length > 0} verTodos={() => navigate('/checklist/checklists')}>
-          {p.proximos.map((c) => (
-            <PainelLinha key={c.id} nome={c.nome} sub={c.categoria} funcoes={c.funcoes}
-              right={<span className="badge badge-gray">{c.status === 'EM_ANDAMENTO' ? 'Em andamento' : 'Pendente'}</span>} />
-          ))}
-        </PainelColuna>
-        <PainelColuna titulo="Sem agendamento" vazio="Nenhum avulso." temItens={p.semAgendamento.length > 0} verTodos={() => navigate('/checklist/checklists')}>
-          {p.semAgendamento.map((c) => (
-            <PainelLinha key={c.id} nome={c.nome} sub={`${c.categoria} · ${c.itens} ${c.itens === 1 ? 'item' : 'itens'}`} funcoes={c.funcoes} />
-          ))}
-        </PainelColuna>
-        <PainelColuna titulo="Checks em alerta" cor="#dc2626" vazio="Nenhum alerta." temItens={p.alertas.length > 0}>
-          {p.alertas.map((c) => (
-            <PainelLinha key={c.id} nome={c.nome} sub={c.categoria}
-              onClick={c.execId ? () => setVerExecucaoId(c.execId) : undefined}
-              right={<span className="badge badge-red">Fora do padrão</span>} />
-          ))}
-        </PainelColuna>
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '18px 0 8px' }}>
-        <h3 style={{ fontSize: 13, fontWeight: 800 }}>Meus checklists</h3>
-        {p.meus.length > meusPreview.length && <LinkAcao onClick={() => navigate('/checklist/checklists')}>Ver todos</LinkAcao>}
-        <button type="button" className="btn btn-primary btn-sm" style={{ marginLeft: p.meus.length > meusPreview.length ? 0 : 'auto' }} onClick={() => navigate('/checklist/checklists?novo=1')}>+ Novo checklist</button>
-      </div>
-      {meusPreview.length === 0 ? (
-        <div className="empty-state">Nenhum checklist ainda. Crie um do zero ou use um template pronto na aba Templates.</div>
-      ) : (
-        <div className="table-card">
-          <table className="hb-table">
-            <thead><tr><th>Nome</th><th>Categoria</th><th>Prioridade</th><th>Recorrência</th><th>Itens</th><th>Funções</th><th></th></tr></thead>
-            <tbody>
-              {meusPreview.map((c) => (
-                <tr key={c.id}>
-                  <td style={{ fontWeight: 600 }}>{c.nome}</td>
-                  <td>{c.categoria}</td>
-                  <td>{PRIORIDADE_LABEL[c.prioridade] || c.prioridade}</td>
-                  <td>{REC_LABEL[c.recorrenciaTipo] || c.recorrenciaTipo}</td>
-                  <td>{c.itens}</td>
-                  <td>{(c.funcoes && c.funcoes.length) ? c.funcoes.join(', ') : <span style={{ color: '#999' }}>—</span>}</td>
-                  <td style={{ textAlign: 'right' }}><button type="button" className="btn btn-secondary btn-sm" onClick={() => navigate(`/checklist/checklists?editar=${c.id}`)}>Editar</button></td>
-                </tr>
+      <div className="chkp-top">
+        <div className="chkp-guia">
+          <div className="chkp-guia-head">
+            <div className="chkp-guia-ic"><ChkIcon name="rocket" /></div>
+            <div className="chkp-guia-title">Guia inicial</div>
+            <div className="chkp-guia-frac">{feitos}/{passos.length}</div>
+          </div>
+          <div className="chkp-guia-track"><div className="chkp-guia-fill" style={{ width: `${(feitos / passos.length) * 100}%` }} /></div>
+          <button type="button" className="chkp-guia-btn" onClick={() => setVerEtapas((v) => !v)}>
+            <span style={{ display: 'inline-flex', transform: verEtapas ? 'rotate(90deg)' : 'none', transition: 'transform .15s ease' }}><ChkIcon name="chevron" size={13} /></span>
+            {verEtapas ? 'Ocultar etapas' : 'Ver etapas'}
+          </button>
+          {verEtapas && (
+            <div className="chkp-guia-passos">
+              {passos.map((s) => (
+                <button key={s.k} type="button" className={'chkp-passo' + (s.ok ? ' is-ok' : '')} disabled={s.ok || !s.ir} onClick={s.ir || undefined}>
+                  <span className="chkp-passo-mk">{s.ok && <ChkIcon name="checkSm" size={11} />}</span>
+                  {s.label}
+                </button>
               ))}
-            </tbody>
-          </table>
+            </div>
+          )}
         </div>
-      )}
+        <div className="chkp-card chkp-kpi">
+          <div className="chkp-kpi-ic is-gold"><ChkIcon name="lista" /></div>
+          <div><div className="chkp-kpi-n">{p.kpis.ativos}</div><div className="chkp-kpi-l">Checklists ativos</div></div>
+        </div>
+        <div className="chkp-card chkp-kpi">
+          <div className="chkp-kpi-ic is-green"><ChkIcon name="check" /></div>
+          <div><div className="chkp-kpi-n">{p.kpis.concluidosHoje}</div><div className="chkp-kpi-l">Concluídos hoje</div></div>
+        </div>
+        <div className="chkp-card chkp-kpi">
+          <div className="chkp-kpi-ic is-red"><ChkIcon name="alerta" /></div>
+          <div><div className="chkp-kpi-n">{p.kpis.emAlerta}</div><div className="chkp-kpi-l">Alertas pendentes</div></div>
+        </div>
+      </div>
 
-      <h3 style={{ fontSize: 13, fontWeight: 800, margin: '18px 0 8px' }}>Execuções recentes</h3>
+      <div className="chkp-cols">
+        <ChkColuna titulo="Próximos agendamentos"
+          rodape={<button type="button" className="chkp-link" onClick={() => execRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Ver todas execuções →</button>}>
+          {p.proximos.length === 0
+            ? <ChkEmpty icon="relogio" titulo="Sem agendamentos hoje" sub="Não há checklists programados para hoje." />
+            : p.proximos.map((c) => (
+              <ChkLinha key={c.id} nome={c.nome} sub={c.categoria} funcoes={c.funcoes}
+                right={<span className="badge badge-gray">{c.status === 'EM_ANDAMENTO' ? 'Em andamento' : 'Pendente'}</span>} />
+            ))}
+        </ChkColuna>
+        <ChkColuna titulo="Sem agendamento"
+          rodape={<button type="button" className="chkp-link" onClick={() => navigate('/checklist/checklists')}>Ver todos →</button>}>
+          {p.semAgendamento.length === 0 ? (
+            <div className="chkp-empty">
+              <div className="chkp-empty-ic is-plus" onClick={() => navigate('/checklist/checklists?novo=1')} title="Novo checklist avulso">+</div>
+              <div className="chkp-empty-t">Tudo agendado</div>
+              <div className="chkp-empty-s">Crie um checklist avulso para rodar sob demanda.</div>
+            </div>
+          ) : p.semAgendamento.map((c) => (
+            <ChkLinha key={c.id} nome={c.nome} sub={`${c.categoria} · ${c.itens} ${c.itens === 1 ? 'item' : 'itens'}`} funcoes={c.funcoes} />
+          ))}
+        </ChkColuna>
+        <ChkColuna titulo="Checks em alerta"
+          rodape={<button type="button" className="chkp-link" onClick={() => execRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Ver todos os alertas →</button>}>
+          {p.alertas.length === 0
+            ? <ChkEmpty icon="alerta" titulo="Sem alertas" sub="Nenhum check em alerta no momento." />
+            : p.alertas.map((c) => (
+              <ChkLinha key={c.id} nome={c.nome} sub={c.categoria}
+                onClick={c.execId ? () => setVerExecucaoId(c.execId) : undefined}
+                right={<span className="badge badge-red">Fora do padrão</span>} />
+            ))}
+        </ChkColuna>
+      </div>
+
+      <div className="chkp-meus">
+        <div className="chkp-meus-h">
+          <h3>Meus checklists</h3>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={() => navigate('/checklist/checklists')}>Ver todos</button>
+          <button type="button" className="btn btn-primary btn-sm" onClick={() => navigate('/checklist/checklists?novo=1')}>+ Novo checklist</button>
+        </div>
+        {meusPreview.length === 0 ? (
+          <div className="table-card" style={{ padding: 30, textAlign: 'center', color: 'var(--app-text-3)' }}>Nenhum checklist encontrado.</div>
+        ) : (
+          <div className="table-card">
+            <table className="hb-table">
+              <thead><tr><th>Nome</th><th>Categoria</th><th>Prioridade</th><th>Recorrência</th><th>Itens</th><th>Funções</th><th></th></tr></thead>
+              <tbody>
+                {meusPreview.map((c) => (
+                  <tr key={c.id}>
+                    <td style={{ fontWeight: 600 }}>{c.nome}</td>
+                    <td>{c.categoria}</td>
+                    <td>{PRIORIDADE_LABEL[c.prioridade] || c.prioridade}</td>
+                    <td>{REC_LABEL[c.recorrenciaTipo] || c.recorrenciaTipo}</td>
+                    <td>{c.itens}</td>
+                    <td>{(c.funcoes && c.funcoes.length) ? c.funcoes.join(', ') : <span style={{ color: '#999' }}>—</span>}</td>
+                    <td style={{ textAlign: 'right' }}><button type="button" className="btn btn-secondary btn-sm" onClick={() => navigate(`/checklist/checklists?editar=${c.id}`)}>Editar</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <h3 ref={execRef} style={{ fontSize: 15, fontWeight: 700, margin: '22px 0 10px', scrollMarginTop: 12 }}>Execuções recentes</h3>
       {carregandoExec ? (
         <div className="loading-state">Carregando…</div>
       ) : erroExec ? (
