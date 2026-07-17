@@ -3,10 +3,18 @@
 // internas): Configuração (estabelecimento + validade padrão por conservação),
 // Itens (validade própria por insumo) e Histórico (tudo que já foi impresso).
 // A seção atual vem da URL (/etiquetas/:tab).
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import api from '../services/api'
 import Toast from '../components/Toast'
+import { desenharEtiqueta, dadosExemplo, MODELOS } from '../lib/etiquetaCanvas'
+import { bluetoothDisponivel, conectar, conectado, imprimir, LARGURA_PX } from '../lib/niimbotB1'
+
+// Presets de altura do rolo (mm) oferecidos no select — "Personalizar" abre um input livre.
+const ALTURA_PRESETS = [30, 40, 50]
+// Largura útil sempre fixa (cabeça de impressão da B1, ver LARGURA_PX em niimbotB1.js):
+// 384px / 8 dots-por-mm (203dpi arredondado) = 48mm. Só informativa aqui — não é editável.
+const LARGURA_MM = Math.round(LARGURA_PX / 8)
 
 const TABS = [
   { id: 'config', label: 'Configuração', sub: 'Estabelecimento e validade padrão' },
@@ -56,13 +64,42 @@ function AbaConfig({ notify }) {
   const [config, setConfig] = useState(null)
   const [regras, setRegras] = useState([])
   const [salvando, setSalvando] = useState(false)
+  // Estado da impressora física — vive na Config (não no config salvo no banco): é uma
+  // sessão Bluetooth do navegador, não uma preferência da loja. `conn` é `{nome}` ou null.
+  const [conn, setConn] = useState(null)
+  const [imprimindo, setImprimindo] = useState(false)
+  // Controla se o select de altura está em modo "Personalizar" — precisa ser um estado
+  // próprio (e não derivado de `!ALTURA_PRESETS.includes(config.alturaMm)`), senão
+  // escolher "Personalizar" sem digitar nada faria o select "saltar" de volta pro preset
+  // no próximo render (o valor em si continuaria igual a um preset).
+  const [personalizarAltura, setPersonalizarAltura] = useState(false)
+  // Canvas da prévia ao vivo — redesenhado pelo useEffect abaixo a cada mudança de config.
+  const previaRef = useRef(null)
 
   function carregar() {
     api.get('/etiquetas/config')
-      .then((r) => { setConfig(r.data.config); setRegras(r.data.regras) })
+      .then((r) => {
+        const cfg = r.data.config
+        // modelo/fonte podem vir nulos por algum motivo (registro antigo, coluna nova) —
+        // trata como CLASSICO/NORMAL, os mesmos defaults do backend (Task 3).
+        const cfgSaneado = { ...cfg, modelo: cfg.modelo || 'CLASSICO', fonte: cfg.fonte || 'NORMAL' }
+        setConfig(cfgSaneado)
+        setRegras(r.data.regras)
+        setPersonalizarAltura(!ALTURA_PRESETS.includes(cfgSaneado.alturaMm))
+      })
       .catch((e) => notify(e?.response?.data?.error ?? 'Não foi possível carregar a configuração.', 'error'))
   }
   useEffect(() => { carregar() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Redesenha a prévia sempre que a config muda — mesmo `desenharEtiqueta` que o quiosque
+  // usa para imprimir de verdade (ver comentário no topo de etiquetaCanvas.js): o que
+  // aparece aqui é literalmente o que sai no papel. `config` inteiro como dependência
+  // (em vez de listar modelo/fonte/alturaMm/razaoSocial/cnpj/sif/sie um a um) porque `upd`
+  // sempre cria um objeto novo — cobre exatamente esses campos sem risco de esquecer um.
+  useEffect(() => {
+    if (!config || !previaRef.current) return
+    desenharEtiqueta(previaRef.current, dadosExemplo(), config)
+  }, [config])
 
   const upd = (k, v) => setConfig((c) => ({ ...c, [k]: v }))
   // Só os dias são editáveis — a temperatura (tempLabel) é fixa, definida pela
@@ -73,9 +110,9 @@ function AbaConfig({ notify }) {
   async function salvar() {
     setSalvando(true)
     try {
-      // config já traz de volta larguraMm/alturaMm/campos (layout de impressão,
-      // fora do escopo desta tela) — reenviar o objeto inteiro preserva o que já
-      // estava configurado lá em vez de resetar pro default do backend.
+      // config já traz de volta larguraMm/alturaMm/campos/modelo/fonte (layout de
+      // impressão) — reenviar o objeto inteiro preserva o que já estava configurado lá em
+      // vez de resetar pro default do backend.
       await api.put('/etiquetas/config', config)
       await api.put('/etiquetas/regras', {
         regras: regras.map((r) => ({ conservacao: r.conservacao, tempLabel: r.tempLabel, dias: r.dias })),
@@ -86,6 +123,33 @@ function AbaConfig({ notify }) {
       notify(e?.response?.data?.error ?? 'Não foi possível salvar.', 'error')
     } finally {
       setSalvando(false)
+    }
+  }
+
+  // Botão "Imprimir etiqueta de teste": usa a MESMA amostra fictícia da prévia, desenhada
+  // num canvas próprio (fora do DOM) — não depende do <canvas> de prévia estar montado nem
+  // corre risco de disputa com o useEffect de prévia redesenhando no meio da impressão.
+  async function imprimirTeste() {
+    if (imprimindo) return
+    // `conectado()` pode "mentir" depois de a impressora cair (ver niimbotB1.js) — mas
+    // aqui é a checagem de entrada mais barata antes de tentar, e o catch abaixo cobre o
+    // caso de a sessão já ter caído sem a gente saber.
+    if (!conectado()) {
+      notify('Conecte a impressora primeiro.', 'error')
+      return
+    }
+    setImprimindo(true)
+    try {
+      const canvas = document.createElement('canvas')
+      desenharEtiqueta(canvas, dadosExemplo(), config)
+      await imprimir(canvas, { copias: 1 })
+      notify('Etiqueta de teste enviada para a impressora.')
+    } catch (e) {
+      // niimbotB1 já devolve mensagens amigáveis em pt-BR (erroAmigavel) — usa e.message
+      // direto, sem o padrão e?.response?.data?.error das chamadas de API (isto não é uma).
+      notify(e?.message || 'Não foi possível imprimir a etiqueta de teste.', 'error')
+    } finally {
+      setImprimindo(false)
     }
   }
 
@@ -102,62 +166,154 @@ function AbaConfig({ notify }) {
   }
 
   return (
-    <div style={{ display: 'grid', gap: 16, maxWidth: 720 }}>
-      <div className="table-card" style={{ padding: 16 }}>
-        <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Identificação do estabelecimento</h2>
-        {/* Só pedimos o que o rodapé da etiqueta imprime de fato (ver etiquetaCanvas.js):
-            razão social, CNPJ, SIF e SIE. O responsável técnico NÃO é impresso hoje, então
-            não é pedido aqui — um campo que a tela coleta e o papel ignora é promessa
-            falsa. A coluna `responsavelTecnico` continua no banco e o PUT /config continua
-            aceitando: quando o RT entrar no rótulo, o campo volta sem migration. */}
-        <div className="form-group">
-          <label className="form-label">Razão social / nome fantasia</label>
-          <input className="form-input" value={config.razaoSocial || ''} onChange={(e) => upd('razaoSocial', e.target.value)} />
-        </div>
-        <div className="form-grid-2">
-          <div className="form-group">
-            <label className="form-label">CNPJ</label>
-            <input className="form-input" value={config.cnpj || ''} onChange={(e) => upd('cnpj', e.target.value)} />
+    <div style={{ display: 'grid', gap: 16 }}>
+      <div className="etq-grid">
+        {/* ESQUERDA: impressora + identificação + tamanho/fonte + regras de validade. */}
+        <div style={{ display: 'grid', gap: 16, alignContent: 'start' }}>
+          <CardImpressora conn={conn} setConn={setConn} notify={notify} />
+
+          <div className="table-card" style={{ padding: 16 }}>
+            <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Identificação do estabelecimento</h2>
+            {/* Só pedimos o que o rodapé da etiqueta imprime de fato (ver etiquetaCanvas.js):
+                razão social, CNPJ, SIF e SIE. O responsável técnico NÃO é impresso hoje, então
+                não é pedido aqui — um campo que a tela coleta e o papel ignora é promessa
+                falsa. A coluna `responsavelTecnico` continua no banco e o PUT /config continua
+                aceitando: quando o RT entrar no rótulo, o campo volta sem migration. */}
+            <div className="form-group">
+              <label className="form-label">Razão social / nome fantasia</label>
+              <input className="form-input" value={config.razaoSocial || ''} onChange={(e) => upd('razaoSocial', e.target.value)} />
+            </div>
+            <div className="form-grid-2">
+              <div className="form-group">
+                <label className="form-label">CNPJ</label>
+                <input className="form-input" value={config.cnpj || ''} onChange={(e) => upd('cnpj', e.target.value)} />
+              </div>
+            </div>
+            <div className="form-grid-2">
+              <div className="form-group">
+                <label className="form-label">SIF (inspeção federal)</label>
+                <input className="form-input" value={config.sif || ''} onChange={(e) => upd('sif', e.target.value)} placeholder="Ex.: 4231" />
+              </div>
+              <div className="form-group">
+                <label className="form-label">SIE (inspeção estadual)</label>
+                <input className="form-input" value={config.sie || ''} onChange={(e) => upd('sie', e.target.value)} placeholder="Ex.: 0987" />
+              </div>
+            </div>
+          </div>
+
+          <div className="table-card" style={{ padding: 16 }}>
+            <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Tamanho e fonte</h2>
+            <div className="page-header-sub" style={{ marginTop: 0, marginBottom: 12 }}>
+              Largura fixa em {LARGURA_MM} mm (cabeça da impressora). A altura depende do rolo da loja.
+            </div>
+            <div className="form-grid-2">
+              <div className="form-group">
+                <label className="form-label">Altura do rolo</label>
+                <select
+                  className="form-input"
+                  value={personalizarAltura ? 'custom' : String(config.alturaMm)}
+                  onChange={(e) => {
+                    if (e.target.value === 'custom') { setPersonalizarAltura(true); return }
+                    setPersonalizarAltura(false)
+                    upd('alturaMm', parseInt(e.target.value, 10))
+                  }}
+                >
+                  {ALTURA_PRESETS.map((mm) => <option key={mm} value={mm}>{mm} mm</option>)}
+                  <option value="custom">Personalizar…</option>
+                </select>
+                {personalizarAltura && (
+                  <input
+                    className="form-input"
+                    type="number"
+                    min={10}
+                    max={200}
+                    style={{ marginTop: 8 }}
+                    placeholder="Altura em mm"
+                    value={config.alturaMm}
+                    onChange={(e) => upd('alturaMm', parseInt(e.target.value, 10) || 1)}
+                  />
+                )}
+              </div>
+              <div className="form-group">
+                <label className="form-label">Fonte</label>
+                <select className="form-input" value={config.fonte} onChange={(e) => upd('fonte', e.target.value)}>
+                  <option value="NORMAL">Normal</option>
+                  <option value="GRANDE">Grande</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="table-card" style={{ padding: 16 }}>
+            <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Regras de validade (padrão)</h2>
+            <div className="page-header-sub" style={{ marginTop: 0, marginBottom: 12 }}>
+              Vale para todo item que não tem validade própria (aba Itens).
+            </div>
+            {regras.map((r) => (
+              <div key={r.conservacao} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: '1px solid var(--app-border, #eee)' }}>
+                <span style={{ flex: '1 1 220px', minWidth: 0, fontSize: 13, fontWeight: 600 }}>{CONS_LABEL[r.conservacao] || r.conservacao}</span>
+                <span style={{ flex: '0 0 150px', fontSize: 13 }} title="Temperatura impressa no rótulo">{r.tempLabel}</span>
+                <input
+                  className="form-input"
+                  type="number"
+                  min={1}
+                  max={3650}
+                  style={{ width: 76 }}
+                  value={r.dias}
+                  onChange={(e) => updRegraDias(r.conservacao, parseInt(e.target.value, 10) || 1)}
+                />
+                <span style={{ fontSize: 12, color: 'var(--app-text-soft, #888)', width: 34 }}>dias</span>
+              </div>
+            ))}
           </div>
         </div>
-        <div className="form-grid-2">
-          <div className="form-group">
-            <label className="form-label">SIF (inspeção federal)</label>
-            <input className="form-input" value={config.sif || ''} onChange={(e) => upd('sif', e.target.value)} placeholder="Ex.: 4231" />
-          </div>
-          <div className="form-group">
-            <label className="form-label">SIE (inspeção estadual)</label>
-            <input className="form-input" value={config.sie || ''} onChange={(e) => upd('sie', e.target.value)} placeholder="Ex.: 0987" />
+
+        {/* DIREITA: os 4 modelos + prévia ao vivo + teste de impressão. */}
+        <div style={{ display: 'grid', gap: 16, alignContent: 'start' }}>
+          <div className="table-card" style={{ padding: 16 }}>
+            <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Modelo e prévia</h2>
+            <div className="page-header-sub" style={{ marginTop: 0, marginBottom: 4 }}>
+              Escolha o modelo — a prévia abaixo mostra exatamente o que sai no papel.
+            </div>
+
+            <div className="etq-modelos">
+              {MODELOS.map((m) => (
+                <button
+                  type="button"
+                  key={m.id}
+                  className={`etq-modelo${config.modelo === m.id ? ' is-on' : ''}`}
+                  onClick={() => upd('modelo', m.id)}
+                >
+                  <span className="etq-modelo-nome">{m.nome}</span>
+                  <span className="etq-modelo-descr">{m.descr}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* A etiqueta pode ser mais alta que a moldura (rolos de 50mm+) — overflow:auto
+                deixa rolar em vez de espremer/cortar a prévia. */}
+            <div className="etq-previa">
+              <canvas ref={previaRef} />
+            </div>
+            <div className="page-header-sub" style={{ marginTop: 8, textAlign: 'center' }}>
+              {LARGURA_MM}×{config.alturaMm} mm · fonte {config.fonte === 'GRANDE' ? 'grande' : 'normal'} · 203 dpi
+            </div>
+
+            <button
+              type="button"
+              className="btn btn-primary etq-print-btn"
+              disabled={imprimindo}
+              onClick={imprimirTeste}
+            >
+              {imprimindo ? 'Imprimindo…' : 'Imprimir etiqueta de teste'}
+            </button>
           </div>
         </div>
       </div>
 
-      <div className="table-card" style={{ padding: 16 }}>
-        <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Regras de validade (padrão)</h2>
-        <div className="page-header-sub" style={{ marginTop: 0, marginBottom: 12 }}>
-          Vale para todo item que não tem validade própria (aba Itens).
-        </div>
-        {regras.map((r) => (
-          <div key={r.conservacao} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: '1px solid var(--app-border, #eee)' }}>
-            <span style={{ flex: '1 1 220px', minWidth: 0, fontSize: 13, fontWeight: 600 }}>{CONS_LABEL[r.conservacao] || r.conservacao}</span>
-            <span style={{ flex: '0 0 150px', fontSize: 13 }} title="Temperatura impressa no rótulo">{r.tempLabel}</span>
-            <input
-              className="form-input"
-              type="number"
-              min={1}
-              max={3650}
-              style={{ width: 76 }}
-              value={r.dias}
-              onChange={(e) => updRegraDias(r.conservacao, parseInt(e.target.value, 10) || 1)}
-            />
-            <span style={{ fontSize: 12, color: 'var(--app-text-soft, #888)', width: 34 }}>dias</span>
-          </div>
-        ))}
-      </div>
-
-      {/* O botão fica logo abaixo dos dois cards que ele de fato salva. Os aparelhos
-          vêm depois porque salvam sozinhos (criar/revogar são imediatos) — deixá-los
-          acima do botão sugeriria que precisam de "Salvar" pra valer. */}
+      {/* O botão fica logo abaixo do grid que ele de fato salva (config + regras). Os
+          aparelhos vêm depois porque salvam sozinhos (criar/revogar são imediatos) —
+          deixá-los acima do botão sugeriria que precisam de "Salvar" pra valer. */}
       <div>
         <button type="button" className="btn btn-primary" disabled={salvando} onClick={salvar}>
           {salvando ? 'Salvando…' : 'Salvar configurações'}
@@ -165,6 +321,59 @@ function AbaConfig({ notify }) {
       </div>
 
       <CardDispositivos notify={notify} />
+    </div>
+  )
+}
+
+// ===================== IMPRESSORA (NIIMBOT B1) =====================
+// Bluetooth só abre o seletor de dispositivos dentro de um gesto do usuário (clique) —
+// por isso não há tentativa de conectar sozinho ao montar a tela, só o botão. `conectado()`
+// pode "mentir" depois de a impressora cair (ver o aviso em niimbotB1.js): o botão deste
+// card serve tanto para conectar quanto para reconectar, sempre por um novo clique — nunca
+// reimprime nem reconecta sozinho.
+function CardImpressora({ conn, setConn, notify }) {
+  const [conectando, setConectando] = useState(false)
+  const disponivel = bluetoothDisponivel()
+
+  async function tentarConectar() {
+    if (conectando) return
+    setConectando(true)
+    try {
+      const info = await conectar()
+      setConn(info)
+      notify(`Impressora "${info.nome}" conectada.`)
+    } catch (e) {
+      notify(e?.message || 'Não foi possível conectar na impressora.', 'error')
+    } finally {
+      setConectando(false)
+    }
+  }
+
+  return (
+    <div className="table-card" style={{ padding: 16 }}>
+      <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Impressora (Niimbot B1)</h2>
+      <div className="page-header-sub" style={{ marginTop: 0, marginBottom: 12 }}>
+        Conecte a etiquetadora por Bluetooth para imprimir o teste e as etiquetas na cozinha.
+      </div>
+      {!disponivel && (
+        <div style={{ fontSize: 12.5, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '8px 10px', marginBottom: 10 }}>
+          Este navegador não tem Bluetooth. Abra esta tela no Chrome (Android ou desktop), perto da impressora.
+        </div>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>
+          {conn ? `Conectada: ${conn.nome}` : 'Não conectada'}
+        </span>
+        <button
+          type="button"
+          className="btn btn-secondary btn-sm"
+          style={{ marginLeft: 'auto' }}
+          disabled={!disponivel || conectando}
+          onClick={tentarConectar}
+        >
+          {conectando ? 'Conectando…' : conn ? 'Reconectar' : 'Conectar'}
+        </button>
+      </div>
     </div>
   )
 }

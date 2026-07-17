@@ -2436,3 +2436,36 @@ a.ind-act { text-decoration: none; }
 .chkp-meus-h { display: flex; align-items: center; gap: 10px; margin: 20px 0 10px; flex-wrap: wrap; }
 .chkp-meus-h h3 { font-size: 15px; font-weight: 700; color: var(--app-text); margin-right: auto; }
 .chkp-meus .hb-table thead th { background: var(--app-highlight); }
+
+/* ===================== ETIQUETAS — Configuração (Fatia A) =====================
+   Mesma linguagem visual dos cartões .chkp-* acima (cores da marca — dourado sobre
+   creme, tudo por token para acompanhar o tema escuro), aplicada ao layout 2 colunas:
+   esquerda = impressora/identificação/tamanho/regras; direita = modelo + prévia. */
+.etq-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 380px); gap: 16px; align-items: start; }
+@media (max-width: 1023px) {
+  .etq-grid { grid-template-columns: 1fr; }
+}
+
+/* Seletor de modelo: 4 cartões em grade 2×2, o ativo realçado em dourado. */
+.etq-modelos { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 10px 0 14px; }
+.etq-modelo {
+  text-align: left; cursor: pointer; background: var(--app-surface-2); border: 1.5px solid var(--app-border);
+  border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 3px;
+  transition: border-color .12s ease, background .12s ease;
+}
+.etq-modelo:hover { border-color: var(--brand-gold-deep); }
+.etq-modelo.is-on { background: var(--app-highlight); border-color: var(--brand-gold); box-shadow: inset 0 0 0 1px var(--brand-gold); }
+.etq-modelo-nome { font-size: 13px; font-weight: 700; color: var(--app-text); }
+.etq-modelo.is-on .etq-modelo-nome { color: var(--brand-gold-deep); }
+.etq-modelo-descr { font-size: 11px; color: var(--app-text-3); line-height: 1.4; }
+
+/* Moldura da prévia ao vivo — overflow:auto porque a etiqueta (rolo alto) pode ser maior
+   que a área disponível na coluna. */
+.etq-previa {
+  background: var(--app-surface-2); border: 1px solid var(--app-border); border-radius: 12px;
+  padding: 16px; display: flex; justify-content: center; overflow: auto; max-height: 420px;
+}
+.etq-previa canvas { display: block; flex-shrink: 0; image-rendering: pixelated; box-shadow: 0 1px 4px rgba(0, 0, 0, .15); }
+
+/* Botão de teste de impressão — herda a cor de .btn-primary (dourado), só ajusta layout. */
+.etq-print-btn { width: 100%; justify-content: center; margin-top: 12px; }
