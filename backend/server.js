@@ -7131,6 +7131,10 @@ app.put('/api/etiquetas/config', async (req, res) => {
       if (v === undefined || v === null || String(v).trim() === '') return def;
       return Number.isFinite(+v) ? Math.round(Math.min(max, Math.max(min, +v))) : def;
     };
+    // Valor fora da lista (ou ausente) cai no registro atual — nunca 500 por um
+    // enum inválido vindo do front.
+    const MODELOS_OK = new Set(['CLASSICO', 'VALIDADE', 'LATERAL_QR', 'COMPACTO']);
+    const FONTES_OK = new Set(['NORMAL', 'GRANDE']);
     const { config: atual } = await garantirEtiquetaSetup();
     const config = await prisma.etiquetaConfig.update({
       where: { id: atual.id },
@@ -7142,6 +7146,8 @@ app.put('/api/etiquetas/config', async (req, res) => {
         sie: only(b.sie, 10),
         larguraMm: numOuDefault(b.larguraMm, 20, 50, 50),
         alturaMm: numOuDefault(b.alturaMm, 15, 100, 30),
+        modelo: MODELOS_OK.has(b.modelo) ? b.modelo : (atual?.modelo || 'CLASSICO'),
+        fonte: FONTES_OK.has(b.fonte) ? b.fonte : (atual?.fonte || 'NORMAL'),
         campos: b.campos && typeof b.campos === 'object' ? b.campos : {},
       },
     });

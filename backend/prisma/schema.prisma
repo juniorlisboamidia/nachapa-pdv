@@ -1729,6 +1729,8 @@ model EtiquetaConfig {
   // larguraMm é o ROLO; a área desenhada trava em 48mm (384px), o limite da cabeça da B1.
   larguraMm          Int      @default(50)
   alturaMm           Int      @default(30)
+  modelo             String   @default("CLASSICO")
+  fonte              String   @default("NORMAL")
   campos             Json?    // { alergenos: false, instrucoes: false, ... }
   criadoEm           DateTime @default(now())
   atualizadoEm       DateTime @updatedAt
