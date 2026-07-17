@@ -21,9 +21,11 @@ function ok(desc, cond) {
 // detectar exceções (ex.: função undefined, .length de algo que não existe), não pixels.
 function criarCtxStub() {
   return {
-    fillStyle: '', font: '', textBaseline: '', textAlign: '',
+    fillStyle: '', strokeStyle: '', font: '', textBaseline: '', textAlign: '', lineWidth: 1,
     fillRect() {}, fillText() {}, save() {}, restore() {}, rotate() {}, translate() {},
-    beginPath() {}, closePath() {}, fill() {}, measureText: () => ({ width: 10 }),
+    beginPath() {}, closePath() {}, fill() {}, stroke() {},
+    moveTo() {}, lineTo() {}, arcTo() {}, arc() {}, strokeRect() {},
+    measureText: () => ({ width: 10 }),
   }
 }
 

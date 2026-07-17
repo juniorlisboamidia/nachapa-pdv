@@ -29,6 +29,20 @@ function ajustar(ctx, texto, max) {
   return t + '…'
 }
 
+// Traça o caminho de um retângulo de cantos arredondados (selo "MANIPULADO", faixa de
+// conservação). Só monta o path — quem chama decide fill() ou stroke(). arcTo é suportado
+// em todo navegador (mais que ctx.roundRect, que é recente).
+function caminhoRR(ctx, x, y, w, h, r) {
+  const rr = Math.min(r, w / 2, h / 2)
+  ctx.beginPath()
+  ctx.moveTo(x + rr, y)
+  ctx.arcTo(x + w, y, x + w, y + h, rr)
+  ctx.arcTo(x + w, y + h, x, y + h, rr)
+  ctx.arcTo(x, y + h, x, y, rr)
+  ctx.arcTo(x, y, x + w, y, rr)
+  ctx.closePath()
+}
+
 // Dimensões finais do canvas para um `config` de rolo. Exportada separada de
 // desenharEtiqueta porque quem monta a UI (prévia, canvas de impressão) precisa saber o
 // tamanho ANTES de desenhar, para criar/redimensionar o elemento <canvas>.
@@ -81,51 +95,81 @@ export function desenharEtiqueta(canvas, dados, config) {
   fn(ctx, dados, config, dims, k)
 }
 
-// CLASSICO — o layout original (era o único), só reorganizado em função própria e com a
-// escala de fonte `k`: cabeçalho de nome → conservação/temperatura → datas → responsável/
-// lote → rodapé com a identificação do estabelecimento, ancorado na base do canvas.
+// CLASSICO — o estilo da referência: cabeçalho (razão social + CNPJ à esquerda, selo
+// "MANIPULADO" arredondado à direita) → régua → nome do produto → campos com rótulo à
+// esquerda e valor alinhado à direita → faixa preta arredondada com a conservação → rodapé
+// RDC centralizado. Fonte monospace (térmica 1-bit, sem antialias útil).
 function desenharClassico(ctx, dados, config, dims, k) {
-  const { largura, altura } = dims
-  const M = 8 // margem — nada encosta na borda do rolo
-  const larguraTexto = largura - M * 2
+  const { largura } = dims
+  const M = 12
+  const dir = largura - M // borda direita útil (para valores alinhados à direita)
   let y = M
 
-  // Nome do item — o que a cozinha lê de longe, com a etiqueta colada num pote ou saco.
-  // Fonte grande e em negrito de propósito: é térmica 1-bit, sem antialias útil — fonte
-  // pequena demais vira borrão ilegível no vapor da cozinha.
-  ctx.font = `bold ${Math.round(22 * k)}px monospace`
-  ctx.fillText(ajustar(ctx, dados.nomeItem, larguraTexto), M, y)
-  y += Math.round(26 * k)
-
-  // Conservação (ex.: "Resfriado · 0-4°C")
-  ctx.font = `bold ${Math.round(13 * k)}px monospace`
-  ctx.fillText(ajustar(ctx, `${dados.conservacaoLabel} · ${dados.tempLabel}`, larguraTexto), M, y)
-  y += Math.round(18 * k)
-
-  // Datas — o motivo da etiqueta existir: ANVISA exige preparo e validade legíveis no
-  // alimento manipulado.
-  ctx.font = `${Math.round(14 * k)}px monospace`
-  ctx.fillText(`PREP.: ${fmt(dados.manipuladoEm)}`, M, y)
+  // --- Cabeçalho: razão social + CNPJ (esq) · selo "MANIPULADO" (dir) ---
+  ctx.textAlign = 'left'
+  ctx.font = `bold ${Math.round(12 * k)}px monospace`
+  ctx.fillText(ajustar(ctx, (config?.razaoSocial || '').toUpperCase(), largura * 0.6), M, y + Math.round(2 * k))
+  // selo arredondado (contorno), no topo direito, alinhado com a razão social
+  const selo = 'MANIPULADO'
+  ctx.font = `bold ${Math.round(8 * k)}px monospace`
+  const selH = Math.round(15 * k)
+  const selW = ctx.measureText(selo).width + Math.round(16 * k)
+  caminhoRR(ctx, dir - selW, y, selW, selH, selH / 2)
+  ctx.lineWidth = Math.max(1, Math.round(1 * k))
+  ctx.strokeStyle = '#000'
+  ctx.stroke()
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  ctx.fillText(selo, dir - selW / 2, y + selH / 2)
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top'
   y += Math.round(17 * k)
-  ctx.font = `bold ${Math.round(14 * k)}px monospace`
-  ctx.fillText(`VAL.:  ${fmt(dados.validoAte)}`, M, y)
-  y += Math.round(19 * k)
+  // CNPJ (+ SIF/SIE se houver) numa linha miúda
+  const idLinha = [config?.cnpj ? `CNPJ ${config.cnpj}` : null, config?.sif ? `SIF ${config.sif}` : null,
+    config?.sie ? `SIE ${config.sie}` : null].filter(Boolean).join(' · ')
+  if (idLinha) { ctx.font = `${Math.round(9 * k)}px monospace`; ctx.fillText(ajustar(ctx, idLinha, largura - M * 2), M, y); y += Math.round(14 * k) }
 
-  // Responsável + lote. O lote é a chave de rastreabilidade: liga a etiqueta impressa ao
-  // registro gravado no banco.
-  ctx.font = `${Math.round(11 * k)}px monospace`
-  ctx.fillText(ajustar(ctx, `RESP: ${dados.responsavelNome} · LOTE ${dados.lote}`, larguraTexto), M, y)
+  // --- régua separadora ---
+  y += Math.round(5 * k)
+  ctx.fillRect(M, y, largura - M * 2, 1)
+  y += Math.round(11 * k)
 
-  // Rodapé: identificação do estabelecimento, ancorado na BASE do canvas (calculado a
-  // partir de `altura`, não empilhado depois do conteúdo acima) — assim a posição não
-  // pula conforme o texto de cima varia em tamanho.
-  const rodape = [config?.razaoSocial, config?.cnpj ? `CNPJ ${config.cnpj}` : null,
-    config?.sif ? `SIF ${config.sif}` : null, config?.sie ? `SIE ${config.sie}` : null]
-    .filter(Boolean).join(' · ')
-  if (rodape) {
-    ctx.font = `${Math.round(10 * k)}px monospace`
-    ctx.fillText(ajustar(ctx, rodape, largura - M * 2), M, altura - M - Math.round(11 * k))
+  // --- Nome do produto — o que a cozinha lê de longe ---
+  ctx.font = `bold ${Math.round(20 * k)}px monospace`
+  ctx.fillText(ajustar(ctx, (dados.nomeItem || '').toUpperCase(), largura - M * 2), M, y)
+  y += Math.round(30 * k)
+
+  // --- Campos: rótulo à esquerda, valor alinhado à direita ---
+  const linha = (rotulo, valor) => {
+    ctx.textAlign = 'left'
+    ctx.font = `${Math.round(9 * k)}px monospace`
+    ctx.fillText(rotulo, M, y + Math.round(2 * k))
+    ctx.textAlign = 'right'
+    ctx.font = `bold ${Math.round(11 * k)}px monospace`
+    ctx.fillText(ajustar(ctx, valor, largura * 0.5), dir, y + Math.round(1 * k))
+    ctx.textAlign = 'left'
+    y += Math.round(19 * k)
   }
+  linha('MANIPULAÇÃO', fmt(dados.manipuladoEm))
+  linha('VALIDADE', fmt(dados.validoAte))
+  linha('LOTE', dados.lote)
+  linha('RESPONSÁVEL', dados.responsavelNome)
+
+  // --- Faixa preta arredondada: conservação · temperatura (branco, centralizado) ---
+  y += Math.round(6 * k)
+  const bandaH = Math.round(26 * k)
+  caminhoRR(ctx, M, y, largura - M * 2, bandaH, Math.round(6 * k))
+  ctx.fillStyle = '#000'; ctx.fill()
+  ctx.fillStyle = '#fff'
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+  ctx.font = `bold ${Math.round(12 * k)}px monospace`
+  ctx.fillText(ajustar(ctx, `${(dados.conservacaoLabel || '').toUpperCase()} · ${(dados.tempLabel || '').toUpperCase()}`, largura - M * 2 - 14), largura / 2, y + bandaH / 2)
+  ctx.fillStyle = '#000'; ctx.textAlign = 'left'; ctx.textBaseline = 'top'
+  y += bandaH + Math.round(9 * k)
+
+  // --- Rodapé RDC, centralizado ---
+  ctx.font = `${Math.round(8 * k)}px monospace`
+  ctx.textAlign = 'center'
+  ctx.fillText('Conforme RDC 216/2004 (ANVISA)', largura / 2, y)
+  ctx.textAlign = 'left'
 }
 
 // VALIDADE — a data de validade é o dado mais importante desta etiqueta (é a pergunta que
@@ -174,61 +218,67 @@ function desenharValidade(ctx, dados, config, dims, k) {
 // direito com o mesmo conteúdo em texto (payload offline, sem servidor de rastreio).
 function desenharLateralQr(ctx, dados, config, dims, k) {
   const { largura, altura } = dims
-  const M = 8
-  const FAIXA = 34 // largura da faixa preta lateral
-  const xConteudo = FAIXA + 10 // ≈44 — onde a área útil começa
+  const M = 10
+  const FAIXA = 38 // largura da faixa preta lateral
+  const xConteudo = FAIXA + 14 // ≈52 — onde a área útil começa (folga da faixa)
 
-  // faixa preta vertical + conservação girada -90°
+  // faixa preta vertical + conservação girada -90° e CENTRALIZADA no meio da faixa
+  // (translate para o centro da faixa/altura + textAlign center + baseline middle).
   ctx.fillStyle = '#000'
   ctx.fillRect(0, 0, FAIXA, altura)
   ctx.save()
   ctx.fillStyle = '#fff'
-  ctx.font = `bold ${Math.round(12 * k)}px monospace`
-  ctx.textAlign = 'left'
+  ctx.font = `bold ${Math.round(13 * k)}px monospace`
+  ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.translate(Math.round(FAIXA / 2) + 4, altura - 8)
+  ctx.translate(Math.round(FAIXA / 2), Math.round(altura / 2))
   ctx.rotate(-Math.PI / 2)
-  ctx.fillText(String(dados.conservacaoLabel || '').toUpperCase(), 0, 0)
+  ctx.fillText(ajustar(ctx, String(dados.conservacaoLabel || '').toUpperCase(), altura - 24), 0, 0)
   ctx.restore()
   ctx.fillStyle = '#000'
   ctx.textAlign = 'left'
   ctx.textBaseline = 'top'
 
-  let y = M
   const larguraConteudo = largura - xConteudo - M
+  let y = M + Math.round(2 * k)
 
   // cabeçalho: razão social · CNPJ
-  ctx.font = `${Math.round(10 * k)}px monospace`
-  ctx.fillText(ajustar(ctx, `${config?.razaoSocial || ''} · CNPJ ${config?.cnpj || ''}`, larguraConteudo), xConteudo, y)
-  y += Math.round(15 * k)
+  ctx.font = `${Math.round(9 * k)}px monospace`
+  ctx.fillText(ajustar(ctx, [config?.razaoSocial, config?.cnpj ? `CNPJ ${config.cnpj}` : null].filter(Boolean).join(' · '), larguraConteudo), xConteudo, y)
+  y += Math.round(17 * k)
 
   // nome do item
-  ctx.font = `bold ${Math.round(18 * k)}px monospace`
-  ctx.fillText(ajustar(ctx, dados.nomeItem, largura - xConteudo - 8), xConteudo, y)
-  y += Math.round(24 * k)
+  ctx.font = `bold ${Math.round(17 * k)}px monospace`
+  ctx.fillText(ajustar(ctx, dados.nomeItem, larguraConteudo), xConteudo, y)
+  y += Math.round(23 * k)
 
-  // campos em 2 colunas: VALIDADE/MANIPULAÇÃO à esquerda, RESPONSÁVEL/LOTE à direita
+  // separador (dá respiro entre o nome e os campos)
+  ctx.fillRect(xConteudo, y, larguraConteudo, 1)
+  y += Math.round(13 * k)
+
+  // campos em 2 colunas, bem espaçados: VALIDADE/MANIPULAÇÃO à esquerda, RESPONSÁVEL/LOTE à direita
   const colEsqX = xConteudo
-  const colDirX = xConteudo + Math.round(larguraConteudo / 2)
-  const larguraCol = Math.round(larguraConteudo / 2) - 6
-
-  const campo = (x, yy, rotulo, valor) => {
+  const colDirX = xConteudo + Math.round(larguraConteudo * 0.52)
+  const larguraColEsq = Math.round(larguraConteudo * 0.52) - 10
+  const larguraColDir = larguraConteudo - Math.round(larguraConteudo * 0.52) - 4
+  const campo = (x, yy, rotulo, valor, wmax) => {
     ctx.font = `bold ${Math.round(9 * k)}px monospace`
     ctx.fillText(rotulo, x, yy)
     ctx.font = `${Math.round(12 * k)}px monospace`
-    ctx.fillText(ajustar(ctx, valor, larguraCol), x, yy + Math.round(12 * k))
+    ctx.fillText(ajustar(ctx, valor, wmax), x, yy + Math.round(13 * k))
   }
-  campo(colEsqX, y, 'VALIDADE', fmt(dados.validoAte))
-  campo(colDirX, y, 'RESPONSÁVEL', dados.responsavelNome)
-  y += Math.round(26 * k)
-  campo(colEsqX, y, 'MANIPULAÇÃO', fmt(dados.manipuladoEm))
-  campo(colDirX, y, 'LOTE', dados.lote)
+  const rowGap = Math.round(33 * k)
+  campo(colEsqX, y, 'VALIDADE', fmt(dados.validoAte), larguraColEsq)
+  campo(colDirX, y, 'RESPONSÁVEL', dados.responsavelNome, larguraColDir)
+  y += rowGap
+  campo(colEsqX, y, 'MANIPULAÇÃO', fmt(dados.manipuladoEm), larguraColEsq)
+  campo(colDirX, y, 'LOTE', dados.lote, larguraColDir)
 
   // QR no canto inferior direito — payload explícito (`dados.qr`) ou o padrão montado a
-  // partir dos próprios dados da etiqueta.
+  // partir dos próprios dados. Tamanho limitado para não colidir com os campos acima.
   const m = matrizQr(dados.qr || textoPadraoQr(dados, config))
   const n = m.length
-  const lado = Math.min(96, altura / 2)
+  const lado = Math.min(84, Math.max(56, Math.round(altura * 0.34)))
   const qrX = largura - M - lado
   const qrY = altura - M - lado
   const cel = lado / n
