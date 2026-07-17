@@ -229,7 +229,6 @@ const grupos = [
     itens: [
       { to: '/etiquetas/config', label: 'Configuração', icon: 'gestao' },
       { to: '/etiquetas/itens', label: 'Itens', icon: 'ficha' },
-      { to: '/etiquetas/painel', label: 'Vencimentos', icon: 'calendario' },
       { to: '/etiquetas/historico', label: 'Histórico', icon: 'relatorios' },
     ]
   },

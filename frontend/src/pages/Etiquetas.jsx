@@ -1,8 +1,8 @@
 // Etiquetas — rotulagem de alimentos manipulados (ANVISA RDC 216/2004).
-// Quatro seções, cada uma uma subcategoria da sidebar (padrão do PDV, sem abas
+// Três seções, cada uma uma subcategoria da sidebar (padrão do PDV, sem abas
 // internas): Configuração (estabelecimento + validade padrão por conservação),
-// Itens (validade própria por insumo), Vencimentos (o que venceu/vence hoje/amanhã)
-// e Histórico (tudo que já foi impresso). A seção atual vem da URL (/etiquetas/:tab).
+// Itens (validade própria por insumo) e Histórico (tudo que já foi impresso).
+// A seção atual vem da URL (/etiquetas/:tab).
 import { Fragment, useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import api from '../services/api'
@@ -11,7 +11,6 @@ import Toast from '../components/Toast'
 const TABS = [
   { id: 'config', label: 'Configuração', sub: 'Estabelecimento e validade padrão' },
   { id: 'itens', label: 'Itens', sub: 'Validade própria por insumo' },
-  { id: 'painel', label: 'Vencimentos', sub: 'O que venceu, vence hoje e amanhã' },
   { id: 'historico', label: 'Histórico', sub: 'Tudo que já foi impresso' },
 ]
 const TAB_IDS = TABS.map((t) => t.id)
@@ -47,7 +46,6 @@ export default function Etiquetas() {
 
       {tab === 'config' && <AbaConfig notify={notify} />}
       {tab === 'itens' && <AbaItens notify={notify} />}
-      {tab === 'painel' && <AbaPainel notify={notify} />}
       {tab === 'historico' && <AbaHistorico notify={notify} />}
     </div>
   )
@@ -213,7 +211,9 @@ function CardDispositivos({ notify }) {
     // Endpoints do Ponto Facial (ADMIN) — dispositivo é model de tenant, a extension do
     // Prisma injeta o empresaId sozinha. Nada de filtrar por loja aqui.
     api.get('/ponto/dispositivos')
-      .then((r) => setLista(Array.isArray(r.data) ? r.data : []))
+      // Só tablets de etiqueta (serialColetor NULL). O coletor facial (DIXI) é do Ponto
+      // Facial, não imprime etiqueta — então fica de fora desta lista.
+      .then((r) => setLista(Array.isArray(r.data) ? r.data.filter((d) => !d.ehColetor) : []))
       .catch((e) => notify(e?.response?.data?.error ?? 'Não foi possível carregar os aparelhos.', 'error'))
       .finally(() => setLoading(false))
   }
@@ -477,76 +477,11 @@ function AbaItens({ notify }) {
   )
 }
 
-// Data/hora curta em pt-BR — aba Vencimentos. Sem ano de propósito: os 3 baldes são
-// "vencidas/hoje/amanhã", quem lê está decidindo o que tirar da prateleira agora e o ano
-// só rouba espaço da linha.
-const dt = (v) => new Date(v).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-
-// Idem, COM ano — aba Histórico. Lá o ano não é enfeite: o histórico é rastreabilidade
+// Data/hora curta COM ano — aba Histórico. O ano não é enfeite: o histórico é rastreabilidade
 // sanitária e acumula para sempre (nada apaga etiqueta), então "15/07 14:00" fica ambíguo
 // já no segundo ano de uso — exatamente numa tela cujo motivo de existir é provar quando
 // um alimento foi manipulado. 2 dígitos bastam e cabem na coluna.
 const dtAno = (v) => new Date(v).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
-
-// Espelha o `take: 200` de cada balde do GET /etiquetas/painel (server.js). Bater neste
-// número quer dizer "tem no mínimo isto", não "tem isto": o backend cortou a lista.
-const LIMITE_PAINEL = 200
-
-// ===================== VENCIMENTOS =====================
-// GET /etiquetas/painel já devolve os 3 baldes prontos (vencidas/hoje/amanhã),
-// cada um calculado pelo dia civil BR no backend — nada de data aqui no front.
-function AbaPainel({ notify }) {
-  const [g, setG] = useState({ vencidas: [], hoje: [], amanha: [] })
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    api.get('/etiquetas/painel')
-      .then((r) => setG(r.data))
-      .catch((e) => notify(e?.response?.data?.error ?? 'Não foi possível carregar o painel.', 'error'))
-      .finally(() => setLoading(false))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  if (loading) return <div className="loading-state">Carregando…</div>
-
-  return (
-    <div style={{ display: 'grid', gap: 16, maxWidth: 760 }}>
-      <BlocoVencimento titulo="Vencidas" cor="#dc2626" lista={g.vencidas} />
-      <BlocoVencimento titulo="Vencem hoje" cor="#b45309" lista={g.hoje} />
-      <BlocoVencimento titulo="Vencem amanhã" cor="#647087" lista={g.amanha} />
-    </div>
-  )
-}
-
-function BlocoVencimento({ titulo, cor, lista }) {
-  return (
-    <div className="table-card" style={{ padding: 16 }}>
-      {/* "200+" quando bate no teto: o backend corta em LIMITE_PAINEL, e "Vencidas" só
-          cresce (o model não tem baixa/descarte). Sem o "+", o bloco estacionaria em
-          "Vencidas · 200" para sempre e seria lido como contagem real num painel
-          sanitário — que é justamente o número que alguém usaria para dizer "está tudo
-          sob controle". */}
-      <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12, color: cor }}>
-        {titulo} · {lista.length >= LIMITE_PAINEL ? `${LIMITE_PAINEL}+` : lista.length}
-      </h2>
-      {lista.length === 0 ? (
-        <div className="empty-state">Nada aqui.</div>
-      ) : (
-        lista.map((e) => (
-          <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, padding: '8px 0', borderTop: '1px solid var(--app-border, #eee)', fontSize: 13 }}>
-            <span style={{ fontWeight: 600, minWidth: 0 }}>
-              {e.nomeItem}{' '}
-              <span style={{ fontWeight: 400, color: 'var(--app-text-soft, #888)' }}>({CONS_LABEL[e.conservacao] || e.conservacao})</span>
-            </span>
-            <span style={{ color: 'var(--app-text-soft, #888)', flexShrink: 0, textAlign: 'right' }}>
-              {dt(e.validoAte)} · {e.responsavelNome}
-            </span>
-          </div>
-        ))
-      )}
-    </div>
-  )
-}
 
 // ===================== HISTÓRICO =====================
 function AbaHistorico({ notify }) {

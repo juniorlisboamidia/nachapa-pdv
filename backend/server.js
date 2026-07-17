@@ -6559,7 +6559,7 @@ app.get('/api/ponto/dispositivos', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
   try {
     const ds = await prisma.dispositivo.findMany({ orderBy: { criadoEm: 'asc' } });
-    res.json(ds.map((d) => ({ id: d.id, nome: d.nome, token: d.token, ativo: d.ativo, ultimaSync: d.ultimaSync })));
+    res.json(ds.map((d) => ({ id: d.id, nome: d.nome, token: d.token, ativo: d.ativo, ultimaSync: d.ultimaSync, ehColetor: !!d.serialColetor })));
   } catch (err) { console.error('[ponto/dispositivos GET]', err); res.status(500).json({ error: 'Erro ao carregar dispositivos.' }); }
 });
 app.post('/api/ponto/dispositivos', async (req, res) => {
