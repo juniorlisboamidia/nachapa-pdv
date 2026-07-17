@@ -2463,9 +2463,11 @@ a.ind-act { text-decoration: none; }
    que a área disponível na coluna. */
 .etq-previa {
   background: var(--app-surface-2); border: 1px solid var(--app-border); border-radius: 12px;
-  padding: 16px; display: flex; justify-content: center; overflow: auto; max-height: 420px;
+  padding: 16px; display: flex; justify-content: center; overflow-x: hidden; overflow-y: auto; max-height: 460px;
 }
-.etq-previa canvas { display: block; flex-shrink: 0; image-rendering: pixelated; box-shadow: 0 1px 4px rgba(0, 0, 0, .15); }
+/* Resolução interna do canvas é 384px (a largura real de impressão da B1); aqui só a
+   EXIBIÇÃO encolhe para caber na coluna, sem transbordar. height:auto mantém a proporção. */
+.etq-previa canvas { display: block; max-width: 100%; height: auto; box-shadow: 0 1px 4px rgba(0, 0, 0, .15); }
 
 /* Botão de teste de impressão — herda a cor de .btn-primary (dourado), só ajusta layout. */
 .etq-print-btn { width: 100%; justify-content: center; margin-top: 12px; }
