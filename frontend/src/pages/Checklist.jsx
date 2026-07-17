@@ -1,8 +1,8 @@
 // Checklist Inteligente — rotinas padronizadas da operação, com registro exigido e
-// acompanhamento de longe. Painel do gestor (Task 10: KPIs + pendentes de hoje + em
-// alerta) com Templates (biblioteca pronta, semeada pelo backend), Setores (onde cada
-// checklist roda — Cozinha, Salão…) e Checklists (CRUD + editor, Task 7: nasce do zero
-// ou de um template).
+// acompanhamento de longe. Painel do gestor (próximos agendamentos, sem agendamento,
+// checks em alerta e a tabela de checklists com criar), Templates (biblioteca pronta,
+// semeada pelo backend) e Checklists (CRUD + editor: nasce do zero ou de um template,
+// atribuído por Função — a mesma do cadastro/Ponto Facial).
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import api from '../services/api'
@@ -13,8 +13,6 @@ const TABS = [
   { id: 'painel', label: 'Painel' },
   { id: 'checklists', label: 'Checklists' },
   { id: 'templates', label: 'Templates' },
-  { id: 'setores', label: 'Setores' },
-  { id: 'colaboradores', label: 'Colaboradores' },
   { id: 'notificacoes', label: 'Notificações' },
 ]
 const TAB_IDS = TABS.map((t) => t.id)
@@ -75,8 +73,6 @@ export default function Checklist() {
       </div>
 
       {tab === 'templates' && <AbaTemplates notify={notify} />}
-      {tab === 'setores' && <AbaSetores notify={notify} />}
-      {tab === 'colaboradores' && <AbaColaboradores notify={notify} />}
       {tab === 'checklists' && <AbaChecklists notify={notify} />}
       {tab === 'notificacoes' && <AbaNotificacoes notify={notify} />}
       {tab === 'painel' && <AbaPainel notify={notify} />}
@@ -85,11 +81,65 @@ export default function Checklist() {
 }
 
 // ===================== PAINEL =====================
-// Visão consolidada do gestor: KPIs do dia + pendentes (vencem hoje e ainda não foram
-// concluídos) + em alerta (execução com item crítico não-conforme). "Hoje" já vem
-// resolvido pelo backend com o dia de expediente (corte 05:00 BR), não precisa de
-// nenhum cálculo de fuso aqui no front.
+// Visão consolidada do gestor (adaptada da referência): KPIs do dia, três colunas
+// (próximos agendamentos, sem agendamento, checks em alerta) e a tabela "Meus checklists"
+// com o botão de criar direto por aqui. "Hoje" já vem resolvido pelo backend com o dia de
+// expediente (corte 05:00 BR) — sem cálculo de fuso no front. Abaixo, as execuções
+// recentes (Fatia 2) pra abrir o detalhe com foto.
+
+// Botão-link discreto (sem depender de classe utilitária) usado nos cabeçalhos do painel.
+function LinkAcao({ children, onClick }) {
+  return (
+    <button type="button" onClick={onClick}
+      style={{ marginLeft: 'auto', fontSize: 12, background: 'none', border: 'none', color: 'var(--app-primary, #2563eb)', cursor: 'pointer', padding: 0 }}>
+      {children}
+    </button>
+  )
+}
+
+// Tags visuais (não clicáveis) das funções que executam um checklist.
+function FuncoesTags({ funcoes }) {
+  if (!funcoes || funcoes.length === 0) return <span style={{ fontSize: 11, color: '#999' }}>Sem função</span>
+  return (
+    <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 4 }}>
+      {funcoes.map((fn) => (
+        <span key={fn} style={{ fontSize: 10, background: 'var(--app-border, #eee)', color: 'var(--app-text-soft, #555)', borderRadius: 4, padding: '1px 6px' }}>{fn}</span>
+      ))}
+    </span>
+  )
+}
+
+// Uma coluna do painel (título + linhas), com "Ver todos" opcional e empty-state próprio.
+function PainelColuna({ titulo, cor, vazio, verTodos, temItens, children }) {
+  return (
+    <div className="table-card" style={{ padding: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+        <h3 style={{ fontSize: 13, fontWeight: 800, color: cor || 'inherit' }}>{titulo}</h3>
+        {verTodos && <LinkAcao onClick={verTodos}>Ver todos</LinkAcao>}
+      </div>
+      {temItens ? children : <p className="empty-state" style={{ padding: 10 }}>{vazio}</p>}
+    </div>
+  )
+}
+
+// Uma linha de checklist dentro de uma coluna do painel.
+function PainelLinha({ nome, sub, funcoes, right, onClick }) {
+  return (
+    <div onClick={onClick} style={{ padding: '8px 0', borderTop: '1px solid var(--app-border, #eee)', cursor: onClick ? 'pointer' : 'default' }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+        <span style={{ fontWeight: 600, fontSize: 13 }}>{nome}</span>
+        {right && <span style={{ marginLeft: 'auto', flexShrink: 0 }}>{right}</span>}
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 3 }}>
+        {sub && <span style={{ fontSize: 11, color: '#999' }}>{sub}</span>}
+        {funcoes && <FuncoesTags funcoes={funcoes} />}
+      </div>
+    </div>
+  )
+}
+
 function AbaPainel({ notify }) {
+  const navigate = useNavigate()
   const [p, setP] = useState(null)
   const [erro, setErro] = useState(false)
   // Execuções recentes (Task 8) — carga independente do restante do painel: se essa
@@ -126,22 +176,62 @@ function AbaPainel({ notify }) {
   if (erro) return <div className="empty-state">Não foi possível carregar o painel.</div>
   if (!p) return <div className="empty-state">Carregando…</div>
   const KPI = ({ n, label }) => <div className="table-card" style={{ padding: 16 }}><div style={{ fontSize: 28, fontWeight: 800 }}>{n}</div><div style={{ fontSize: 12, color: '#777' }}>{label}</div></div>
+  const meusPreview = p.meus.slice(0, 8)
   return (
     <div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12, marginBottom: 16 }}>
         <KPI n={p.kpis.ativos} label="Checklists ativos" /><KPI n={p.kpis.venceHoje} label="Vencem hoje" />
         <KPI n={p.kpis.concluidosHoje} label="Concluídos hoje" /><KPI n={p.kpis.emAlerta} label="Em alerta" />
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12 }}>
-        <div className="table-card" style={{ padding: 14 }}>
-          <h3 style={{ fontSize: 13, fontWeight: 800, marginBottom: 8 }}>Pendentes de hoje</h3>
-          {p.pendentes.length === 0 ? <p className="empty-state">Tudo em dia.</p> : p.pendentes.map((c) => <div key={c.id} style={{ padding: '6px 0', borderTop: '1px solid var(--app-border,#eee)', fontSize: 13 }}>{c.nome} <span style={{ color: '#999' }}>· {c.categoria}</span></div>)}
-        </div>
-        <div className="table-card" style={{ padding: 14 }}>
-          <h3 style={{ fontSize: 13, fontWeight: 800, color: '#dc2626', marginBottom: 8 }}>Em alerta</h3>
-          {p.alertas.length === 0 ? <p className="empty-state">Nenhum alerta.</p> : p.alertas.map((c) => <div key={c.id} style={{ padding: '6px 0', borderTop: '1px solid var(--app-border,#eee)', fontSize: 13 }}>{c.nome}</div>)}
-        </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 12 }}>
+        <PainelColuna titulo="Próximos agendamentos" vazio="Nada vence hoje." temItens={p.proximos.length > 0} verTodos={() => navigate('/checklist/checklists')}>
+          {p.proximos.map((c) => (
+            <PainelLinha key={c.id} nome={c.nome} sub={c.categoria} funcoes={c.funcoes}
+              right={<span className="badge badge-gray">{c.status === 'EM_ANDAMENTO' ? 'Em andamento' : 'Pendente'}</span>} />
+          ))}
+        </PainelColuna>
+        <PainelColuna titulo="Sem agendamento" vazio="Nenhum avulso." temItens={p.semAgendamento.length > 0} verTodos={() => navigate('/checklist/checklists')}>
+          {p.semAgendamento.map((c) => (
+            <PainelLinha key={c.id} nome={c.nome} sub={`${c.categoria} · ${c.itens} ${c.itens === 1 ? 'item' : 'itens'}`} funcoes={c.funcoes} />
+          ))}
+        </PainelColuna>
+        <PainelColuna titulo="Checks em alerta" cor="#dc2626" vazio="Nenhum alerta." temItens={p.alertas.length > 0}>
+          {p.alertas.map((c) => (
+            <PainelLinha key={c.id} nome={c.nome} sub={c.categoria}
+              onClick={c.execId ? () => setVerExecucaoId(c.execId) : undefined}
+              right={<span className="badge badge-red">Fora do padrão</span>} />
+          ))}
+        </PainelColuna>
       </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '18px 0 8px' }}>
+        <h3 style={{ fontSize: 13, fontWeight: 800 }}>Meus checklists</h3>
+        {p.meus.length > meusPreview.length && <LinkAcao onClick={() => navigate('/checklist/checklists')}>Ver todos</LinkAcao>}
+        <button type="button" className="btn btn-primary btn-sm" style={{ marginLeft: p.meus.length > meusPreview.length ? 0 : 'auto' }} onClick={() => navigate('/checklist/checklists?novo=1')}>+ Novo checklist</button>
+      </div>
+      {meusPreview.length === 0 ? (
+        <div className="empty-state">Nenhum checklist ainda. Crie um do zero ou use um template pronto na aba Templates.</div>
+      ) : (
+        <div className="table-card">
+          <table className="hb-table">
+            <thead><tr><th>Nome</th><th>Categoria</th><th>Prioridade</th><th>Recorrência</th><th>Itens</th><th>Funções</th><th></th></tr></thead>
+            <tbody>
+              {meusPreview.map((c) => (
+                <tr key={c.id}>
+                  <td style={{ fontWeight: 600 }}>{c.nome}</td>
+                  <td>{c.categoria}</td>
+                  <td>{PRIORIDADE_LABEL[c.prioridade] || c.prioridade}</td>
+                  <td>{REC_LABEL[c.recorrenciaTipo] || c.recorrenciaTipo}</td>
+                  <td>{c.itens}</td>
+                  <td>{(c.funcoes && c.funcoes.length) ? c.funcoes.join(', ') : <span style={{ color: '#999' }}>—</span>}</td>
+                  <td style={{ textAlign: 'right' }}><button type="button" className="btn btn-secondary btn-sm" onClick={() => navigate(`/checklist/checklists?editar=${c.id}`)}>Editar</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       <h3 style={{ fontSize: 13, fontWeight: 800, margin: '18px 0 8px' }}>Execuções recentes</h3>
       {carregandoExec ? (
@@ -311,194 +401,6 @@ function FotoMiniatura({ fotoId }) {
   )
 }
 
-// ===================== SETORES =====================
-// Setores alimentam a atribuição de "onde" cada checklist roda — usados pelas telas que
-// chegam nas próximas tasks (Checklists/Painel). Nesta F1: só criar e excluir, o
-// suficiente pra popular a lista antes de existir quem consuma.
-function AbaSetores({ notify }) {
-  const [setores, setSetores] = useState([])
-  const [nome, setNome] = useState('')
-  const [criando, setCriando] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [excluir, setExcluir] = useState(null) // setor em confirmação de exclusão
-  const [excluindo, setExcluindo] = useState(false)
-
-  function carregar() {
-    api.get('/checklist/setores')
-      .then((r) => setSetores(r.data.setores || []))
-      .catch((e) => notify(e?.response?.data?.error ?? 'Não foi possível carregar os setores.', 'error'))
-      .finally(() => setLoading(false))
-  }
-  useEffect(() => { carregar() }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  async function criar(e) {
-    e.preventDefault()
-    const n = nome.trim()
-    if (!n || criando) return
-    setCriando(true)
-    try {
-      await api.post('/checklist/setores', { nome: n })
-      setNome('')
-      notify('Setor criado.')
-      carregar()
-    } catch (err) {
-      notify(err?.response?.data?.error ?? 'Não foi possível criar o setor.', 'error')
-    } finally {
-      setCriando(false)
-    }
-  }
-
-  async function confirmarExclusao() {
-    if (!excluir) return
-    setExcluindo(true)
-    try {
-      await api.delete(`/checklist/setores/${excluir.id}`)
-      notify(`"${excluir.nome}" excluído.`)
-      setExcluir(null)
-      carregar()
-    } catch (err) {
-      notify(err?.response?.data?.error ?? 'Não foi possível excluir o setor.', 'error')
-    } finally {
-      setExcluindo(false)
-    }
-  }
-
-  return (
-    <div style={{ maxWidth: 560 }}>
-      <form onSubmit={criar} className="table-card" style={{ padding: 16, display: 'flex', gap: 8, marginBottom: 12 }}>
-        <input
-          className="form-input"
-          style={{ flex: 1 }}
-          placeholder="Novo setor (ex.: Cozinha)"
-          maxLength={60}
-          value={nome}
-          onChange={(e) => setNome(e.target.value)}
-        />
-        <button type="submit" className="btn btn-primary" disabled={criando || !nome.trim()}>
-          {criando ? 'Criando…' : 'Adicionar'}
-        </button>
-      </form>
-
-      {loading ? (
-        <div className="loading-state">Carregando…</div>
-      ) : setores.length === 0 ? (
-        <div className="empty-state">Nenhum setor ainda.</div>
-      ) : (
-        <div className="table-card">
-          <table className="hb-table">
-            <thead>
-              <tr>
-                <th>Setor</th>
-                <th style={{ textAlign: 'right' }}>Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {setores.map((s) => (
-                <tr key={s.id}>
-                  <td style={{ fontWeight: 600 }}>{s.nome}</td>
-                  <td style={{ textAlign: 'right' }}>
-                    <button type="button" className="btn btn-danger btn-sm" onClick={() => setExcluir(s)}>Excluir</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      <ConfirmDialog
-        open={!!excluir}
-        title="Excluir setor"
-        message={excluir ? `Excluir "${excluir.nome}"?` : ''}
-        description="Esta ação não pode ser desfeita."
-        confirmLabel="Excluir"
-        cancelLabel="Cancelar"
-        variant="danger"
-        loading={excluindo}
-        onConfirm={confirmarExclusao}
-        onCancel={() => setExcluir(null)}
-      />
-    </div>
-  )
-}
-
-// ===================== COLABORADORES =====================
-// Atribui setor(es) a cada colaborador — o elo que faltava pra fechar o ciclo: sem
-// setor, Funcionario.setorIds fica sempre [] e a Área do Colaborador nunca mostra
-// checklist nenhum pro operador (GET /public/colaborador/checklists corta em
-// "meus.length === 0"). Aqui só liga/desliga por chip; quem cria os setores é a aba
-// Setores.
-function AbaColaboradores({ notify }) {
-  const [colaboradores, setColaboradores] = useState([])
-  const [setores, setSetores] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [salvandoId, setSalvandoId] = useState(null) // id do colaborador com PUT em voo — trava só os chips dele
-
-  function carregar() {
-    Promise.all([api.get('/checklist/colaboradores'), api.get('/checklist/setores')])
-      .then(([rc, rs]) => { setColaboradores(rc.data.colaboradores || []); setSetores(rs.data.setores || []) })
-      .catch((e) => notify(e?.response?.data?.error ?? 'Não foi possível carregar os colaboradores.', 'error'))
-      .finally(() => setLoading(false))
-  }
-  useEffect(() => { carregar() }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Update otimista (chip muda na hora) — se o PUT falhar, notify + recarrega tudo do
-  // servidor pra desfazer o chute otimista (mesmo padrão de rollback já usado nas
-  // outras abas deste arquivo).
-  async function toggleSetor(colab, setorId) {
-    if (salvandoId) return
-    const setorIdsNovo = colab.setorIds.includes(setorId)
-      ? colab.setorIds.filter((x) => x !== setorId)
-      : [...colab.setorIds, setorId]
-    setColaboradores((cs) => cs.map((c) => (c.id === colab.id ? { ...c, setorIds: setorIdsNovo } : c)))
-    setSalvandoId(colab.id)
-    try {
-      await api.put(`/checklist/colaboradores/${colab.id}/setores`, { setorIds: setorIdsNovo })
-    } catch (err) {
-      notify(err?.response?.data?.error ?? 'Não foi possível salvar os setores.', 'error')
-      carregar()
-    } finally {
-      setSalvandoId(null)
-    }
-  }
-
-  if (loading) return <div className="loading-state">Carregando…</div>
-  if (colaboradores.length === 0) return <div className="empty-state">Nenhum colaborador ativo.</div>
-
-  return (
-    <div>
-      {setores.length === 0 && (
-        <div className="empty-state" style={{ marginBottom: 12 }}>Nenhum setor cadastrado ainda — crie na aba Setores antes de atribuir aos colaboradores.</div>
-      )}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {colaboradores.map((c) => (
-          <div key={c.id} className="table-card" style={{ padding: 12 }}>
-            <div style={{ fontWeight: 700, fontSize: 13, marginBottom: setores.length ? 6 : 0 }}>
-              {c.nome}
-              {c.apelido ? <span style={{ fontWeight: 400, color: 'var(--app-text-soft, #888)' }}> ({c.apelido})</span> : null}
-            </div>
-            {setores.length > 0 && (
-              <div className="chip-row">
-                {setores.map((s) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    className={'chip' + (c.setorIds.includes(s.id) ? ' chip-on' : '')}
-                    disabled={salvandoId === c.id}
-                    onClick={() => toggleSetor(c, s.id)}
-                  >
-                    {s.nome}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 // ===================== TEMPLATES =====================
 // Biblioteca de templates prontos (semeada por loja na 1ª leitura pelo backend —
 // garantirChecklistTemplatesSeed em server.js). Nesta F1 só visualização com filtro por
@@ -600,8 +502,8 @@ function AbaTemplates({ notify }) {
 
 // ===================== CHECKLISTS =====================
 // CRUD dos checklists que a operação executa: nasce do zero (+ Novo checklist) ou de um
-// template ("Usar como base" na aba Templates). Nome, categoria, prioridade, setores
-// responsáveis, recorrência (todo dia / dias da semana / avulso) e a lista de itens.
+// template ("Usar como base" na aba Templates). Nome, categoria, prioridade, funções que
+// executam, recorrência (todo dia / dias da semana / avulso) e a lista de itens.
 function AbaChecklists({ notify }) {
   const [searchParams, setSearchParams] = useSearchParams()
   const [lista, setLista] = useState([])
@@ -619,27 +521,35 @@ function AbaChecklists({ notify }) {
   // carga inicial (busca começa vazia, o efeito roda no mount).
   useEffect(() => { const t = setTimeout(carregar, 250); return () => clearTimeout(t) }, [busca]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Chegando de "Usar como base" (aba Templates) com ?editar=<id>: abre o editor já
-  // carregado nesse checklist, mesmo caminho do botão "Editar" (GET completo, exigido
-  // pelo full-replace do PUT). Só no mount — depois limpa o parâmetro da URL pra um
-  // F5 não reabrir o editor sozinho.
+  // Chegando com querystring no mount: `?editar=<id>` (de "Usar como base" na aba
+  // Templates ou do "Editar" no Painel) abre o editor já carregado nesse checklist —
+  // mesmo caminho do botão "Editar" (GET completo, exigido pelo full-replace do PUT);
+  // `?novo=1` (do "+ Novo checklist" no Painel) abre o editor vazio. Depois limpa o
+  // parâmetro da URL pra um F5 não reabrir o editor sozinho.
   useEffect(() => {
     const id = searchParams.get('editar')
-    if (!id) return
-    api.get(`/checklist/checklists/${id}`)
-      .then((r) => setEdit(r.data.checklist))
-      .catch((e) => notify(e?.response?.data?.error ?? 'Não foi possível carregar o checklist.', 'error'))
-      .finally(() => {
-        searchParams.delete('editar')
-        setSearchParams(searchParams, { replace: true })
-      })
+    if (id) {
+      api.get(`/checklist/checklists/${id}`)
+        .then((r) => setEdit(r.data.checklist))
+        .catch((e) => notify(e?.response?.data?.error ?? 'Não foi possível carregar o checklist.', 'error'))
+        .finally(() => {
+          searchParams.delete('editar')
+          setSearchParams(searchParams, { replace: true })
+        })
+      return
+    }
+    if (searchParams.get('novo')) {
+      novo()
+      searchParams.delete('novo')
+      setSearchParams(searchParams, { replace: true })
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   function novo() {
     setEdit({
       novo: true, nome: '', categoria: CHECKLIST_CATEGORIAS[0], descricao: '', prioridade: 'MEDIA',
-      setorIds: [], recorrenciaTipo: 'AVULSO', recorrenciaConfig: { diasSemana: [], horarioLimite: '' }, itens: [],
+      funcoes: [], recorrenciaTipo: 'AVULSO', recorrenciaConfig: { diasSemana: [], horarioLimite: '' }, itens: [],
     })
   }
 
@@ -691,19 +601,25 @@ function ChecklistEditor({ inicial, notify, onClose, onSalvou }) {
   const [f, setF] = useState(() => ({
     ...inicial,
     descricao: inicial.descricao || '',
+    funcoes: inicial.funcoes || [],
     recorrenciaConfig: inicial.recorrenciaConfig || { diasSemana: [], horarioLimite: '' },
     itens: inicial.itens || [],
   }))
-  const [setores, setSetores] = useState([])
+  const [funcoesDisp, setFuncoesDisp] = useState([]) // funções cadastradas (reusa /funcoes)
   const [salvando, setSalvando] = useState(false)
 
   useEffect(() => {
-    api.get('/checklist/setores').then((r) => setSetores(r.data.setores || [])).catch(() => {})
+    // Reusa a lista de Funções que já existe (mesma do Ponto Facial/Bonificação).
+    api.get('/funcoes').then((r) => setFuncoesDisp(Array.isArray(r.data) ? r.data : [])).catch(() => {})
   }, [])
 
   const upd = (k, v) => setF((s) => ({ ...s, [k]: v }))
   const updRc = (k, v) => setF((s) => ({ ...s, recorrenciaConfig: { ...s.recorrenciaConfig, [k]: v } }))
-  const toggleSetor = (id) => setF((s) => ({ ...s, setorIds: s.setorIds.includes(id) ? s.setorIds.filter((x) => x !== id) : [...s.setorIds, id] }))
+  const toggleFuncao = (nome) => setF((s) => ({ ...s, funcoes: s.funcoes.includes(nome) ? s.funcoes.filter((x) => x !== nome) : [...s.funcoes, nome] }))
+  // Opções = funções registradas (Dep. Pessoal › Funções) + as já atribuídas ao checklist
+  // que porventura não estejam na lista (a função do colaborador é texto livre — ex.:
+  // "Chapeira"). Assim editar nunca some com um chip já marcado.
+  const funcoesOpcoes = [...new Set([...funcoesDisp.map((fn) => fn.nome), ...(f.funcoes || [])])]
   const toggleDow = (d) => updRc('diasSemana', f.recorrenciaConfig.diasSemana.includes(d) ? f.recorrenciaConfig.diasSemana.filter((x) => x !== d) : [...f.recorrenciaConfig.diasSemana, d])
   const setItem = (i, patch) => setF((s) => ({ ...s, itens: s.itens.map((it, j) => (j === i ? { ...it, ...patch } : it)) }))
   const addItem = () => setF((s) => ({ ...s, itens: [...s.itens, { tipo: 'CHECK', titulo: '', descricao: '', critico: false, config: {} }] }))
@@ -725,7 +641,7 @@ function ChecklistEditor({ inicial, notify, onClose, onSalvou }) {
         categoria: f.categoria,
         descricao: f.descricao,
         prioridade: f.prioridade,
-        setorIds: f.setorIds,
+        funcoes: f.funcoes,
         recorrenciaTipo: f.recorrenciaTipo,
         recorrenciaConfig: f.recorrenciaConfig,
         itens: f.itens,
@@ -791,16 +707,17 @@ function ChecklistEditor({ inicial, notify, onClose, onSalvou }) {
         )}
 
         <div className="form-group">
-          <label className="form-label">Setores</label>
-          {setores.length === 0 ? (
-            <span style={{ fontSize: 12, color: '#999' }}>Nenhum setor cadastrado — crie na aba Setores.</span>
+          <label className="form-label">Funções que executam</label>
+          {funcoesOpcoes.length === 0 ? (
+            <span style={{ fontSize: 12, color: '#999' }}>Nenhuma função cadastrada — cadastre em Dep. Pessoal › Funções.</span>
           ) : (
             <div className="chip-row">
-              {setores.map((s) => (
-                <button key={s.id} type="button" className={'chip' + (f.setorIds.includes(s.id) ? ' chip-on' : '')} onClick={() => toggleSetor(s.id)}>{s.nome}</button>
+              {funcoesOpcoes.map((nome) => (
+                <button key={nome} type="button" className={'chip' + (f.funcoes.includes(nome) ? ' chip-on' : '')} onClick={() => toggleFuncao(nome)}>{nome}</button>
               ))}
             </div>
           )}
+          <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>Quem tem essa função (no cadastro do Ponto Facial) vê o checklist na Área do Colaborador.</div>
         </div>
 
         <label className="form-label" style={{ display: 'block', marginBottom: 6 }}>Itens</label>
@@ -884,8 +801,8 @@ function AbaNotificacoes({ notify }) {
   }
   useEffect(() => { carregar(); carregarHist() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Update otimista (mesmo padrão do toggle de setor em AbaColaboradores) — se o PUT
-  // falhar, notify + recarrega do servidor pra desfazer o chute otimista.
+  // Update otimista — se o PUT falhar, notify + recarrega do servidor pra desfazer o
+  // chute otimista.
   async function toggleAtivo() {
     if (salvandoConfig) return
     const novo = !config.alertaImediatoAtivo

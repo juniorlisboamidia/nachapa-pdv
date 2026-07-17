@@ -42,7 +42,7 @@ const MODELS_TENANT = new Set([
   'bonificacaoMoeda', 'mercadoItem', 'mercadoResgate',
   'funcionarioFace', 'pontoRegistro', 'dispositivo', 'jornada', 'coletorBatidaPendente', 'coletorComando', 'pontoConfig', 'funcao',
   'etiquetaConfig', 'etiquetaRegra', 'etiquetaItemConfig', 'etiquetaImpressa',
-  'setor', 'checklistTemplate', 'checklistTemplateItem', 'checklist', 'checklistItem', 'checklistExecucao', 'checklistResposta', 'checklistFoto',
+  'checklistTemplate', 'checklistTemplateItem', 'checklist', 'checklistItem', 'checklistExecucao', 'checklistResposta', 'checklistFoto',
   'checklistNotificacaoConfig', 'checklistDestinatario', 'checklistNotificacaoLog',
 ]);
 const OPS_WHERE = new Set([
@@ -2190,15 +2190,29 @@ function chkSnapshot(itens) {
   return itens.map((it) => ({ chave: String(it.id), ordem: it.ordem, tipo: it.tipo, titulo: it.titulo, descricao: it.descricao || null, critico: it.critico, config: it.config || null }));
 }
 
+// Atribuição por FUNÇÃO: o checklist guarda os NOMES das funções que o executam (reusa a
+// Funcao existente — Aux. de Cozinha, Caixa…) e o colaborador já tem a sua função no
+// cadastro. Casa pelo nome normalizado (trim + minúsculas) — a função é uma string livre e
+// pode divergir em caixa/espaço do rótulo salvo no checklist. Ponto único de verdade da
+// posse, usado tanto pra listar (abaixo) quanto pra abrir/checar execução.
+const chkFuncaoNorm = (s) => String(s || '').trim().toLowerCase();
+const chkFuncaoAtende = (funcoesChecklist, funcaoColab) => {
+  const alvo = chkFuncaoNorm(funcaoColab);
+  if (!alvo) return false;
+  return Array.isArray(funcoesChecklist) && funcoesChecklist.some((fn) => chkFuncaoNorm(fn) === alvo);
+};
+
 app.get('/api/public/colaborador/checklists', async (req, res) => {
   try {
     const sess = exigirColaborador(req, res); if (!sess) return;
     const func = await prisma.funcionario.findFirst({ where: { id: sess.funcionarioId, empresaId: sess.empresaId } });
     if (!func || func.status !== 'ATIVO') return res.status(401).json({ error: 'Acesso indisponível. Fale com a liderança.' });
-    const meus = Array.isArray(func.setorIds) ? func.setorIds : [];
-    if (meus.length === 0) return res.json({ hoje: [], disponiveis: [] });
+    if (!chkFuncaoNorm(func.funcao)) return res.json({ hoje: [], disponiveis: [] });
 
-    const checklists = await prisma.checklist.findMany({ where: { empresaId: sess.empresaId, ativo: true, setorIds: { hasSome: meus } }, include: { _count: { select: { itens: true } } } });
+    // Filtro fino por função em JS (poucos checklists por loja) — o nome é string livre,
+    // então o casamento é normalizado, não um where exato no banco.
+    const todos = await prisma.checklist.findMany({ where: { empresaId: sess.empresaId, ativo: true }, include: { _count: { select: { itens: true } } } });
+    const checklists = todos.filter((c) => chkFuncaoAtende(c.funcoes, func.funcao));
     const dataRef = chkDataRefAtual();
     const dow = chkDiaSemanaExpediente();
     // Execuções do dia (para saber o que já foi concluído).
@@ -2214,20 +2228,13 @@ app.get('/api/public/colaborador/checklists', async (req, res) => {
   } catch (err) { console.error('[colab/checklists]', err); res.status(500).json({ error: 'Erro ao carregar checklists.' }); }
 });
 
-// Interseção de setores — mesma regra usada tanto pra abrir uma execução nova
-// (chkAbrirExecucao) quanto pra checar posse de uma execução já existente
-// (chkPosseExecucao, logo abaixo). Um único ponto de verdade evita a regra de posse
-// divergir entre as duas.
-const chkSetoresIntersectam = (setoresA, setoresB) => Array.isArray(setoresA) && setoresA.some((s) => setoresB.includes(s));
-
-// Verifica posse (checklist do meu setor) e devolve a execução do dia com snapshot.
+// Verifica posse (checklist da minha função) e devolve a execução do dia com snapshot.
 async function chkAbrirExecucao(sess, checklistId) {
   const func = await prisma.funcionario.findFirst({ where: { id: sess.funcionarioId, empresaId: sess.empresaId } });
   if (!func || func.status !== 'ATIVO') throw { http: 401, msg: 'Acesso indisponível.' };
-  const meus = Array.isArray(func.setorIds) ? func.setorIds : [];
   const c = await prisma.checklist.findFirst({ where: { id: checklistId, empresaId: sess.empresaId, ativo: true }, include: { itens: { orderBy: { ordem: 'asc' } } } });
   if (!c) throw { http: 404, msg: 'Checklist não encontrado.' };
-  if (!chkSetoresIntersectam(c.setorIds, meus)) throw { http: 403, msg: 'Este checklist não é do seu setor.' };
+  if (!chkFuncaoAtende(c.funcoes, func.funcao)) throw { http: 403, msg: 'Este checklist não é da sua função.' };
   const dataRef = chkDataRefAtual();
   // empresaId explícito mesmo com checklistId já validado acima — não depender só do pai.
   let exec = await prisma.checklistExecucao.findFirst({ where: { checklistId: c.id, dataRef, empresaId: sess.empresaId }, include: { respostas: true, fotos: true } });
@@ -2267,12 +2274,12 @@ function chkExecJson(exec) {
   return { id: exec.id, checklistId: exec.checklistId, status: exec.status, emAlerta: exec.emAlerta, itens: exec.itensSnapshotJson, respostas: rmap, fotos: fmap };
 }
 
-// Posse por SETOR de uma execução JÁ EXISTENTE — não basta filtrar por empresaId: dentro
-// da MESMA loja, um colaborador do setor A não pode ler/responder/concluir a execução de
-// um checklist do setor B só chutando o id (inteiros sequenciais, adivinháveis). A
+// Posse por FUNÇÃO de uma execução JÁ EXISTENTE — não basta filtrar por empresaId: dentro
+// da MESMA loja, um colaborador de uma função não pode ler/responder/concluir a execução de
+// um checklist de outra função só chutando o id (inteiros sequenciais, adivinháveis). A
 // execução é prova, então as 3 rotas de execução (GET, PUT resposta, POST concluir)
-// passam por aqui em vez de um findFirst bare por empresaId. Mesma regra de interseção de
-// chkAbrirExecucao (chkSetoresIntersectam), pra não divergir entre "abrir" e "continuar".
+// passam por aqui em vez de um findFirst bare por empresaId. Mesma regra de chkAbrirExecucao
+// (chkFuncaoAtende), pra não divergir entre "abrir" e "continuar".
 async function chkPosseExecucao(sess, execucaoId, { comRespostas = false } = {}) {
   const exec = await prisma.checklistExecucao.findFirst({
     where: { id: execucaoId, empresaId: sess.empresaId },
@@ -2283,8 +2290,7 @@ async function chkPosseExecucao(sess, execucaoId, { comRespostas = false } = {})
   if (!func || func.status !== 'ATIVO') throw { http: 401, msg: 'Acesso indisponível.' };
   const checklist = await prisma.checklist.findFirst({ where: { id: exec.checklistId, empresaId: sess.empresaId } });
   if (!checklist) throw { http: 404, msg: 'Checklist não encontrado.' };
-  const meus = Array.isArray(func.setorIds) ? func.setorIds : [];
-  if (!chkSetoresIntersectam(checklist.setorIds, meus)) throw { http: 403, msg: 'Esta execução não é do seu setor.' };
+  if (!chkFuncaoAtende(checklist.funcoes, func.funcao)) throw { http: 403, msg: 'Esta execução não é da sua função.' };
   return exec;
 }
 
@@ -7567,47 +7573,6 @@ async function garantirChecklistTemplatesSeed() {
 
 const chkOnly = (v, max) => (v == null || String(v).trim() === '' ? null : String(v).trim().slice(0, max));
 
-// ---- Setores
-app.get('/api/checklist/setores', async (req, res) => {
-  if (!exigirAdmin(req, res)) return;
-  try { res.json({ setores: await prisma.setor.findMany({ orderBy: [{ ordem: 'asc' }, { nome: 'asc' }] }) }); }
-  catch (err) { console.error('[checklist/setores GET]', err); res.status(500).json({ error: 'Erro ao carregar setores.' }); }
-});
-app.post('/api/checklist/setores', async (req, res) => {
-  if (!exigirAdmin(req, res)) return;
-  try {
-    const nome = chkOnly(req.body?.nome, 60);
-    if (!nome) return res.status(400).json({ error: 'Informe o nome do setor.' });
-    const setor = await prisma.setor.create({ data: { nome, ordem: parseInt(req.body?.ordem, 10) || 0 } });
-    res.status(201).json({ ok: true, setor });
-  } catch (err) {
-    if (err?.code === 'P2002') return res.status(409).json({ error: 'Já existe um setor com esse nome.' });
-    console.error('[checklist/setores POST]', err); res.status(500).json({ error: 'Erro ao criar setor.' });
-  }
-});
-app.put('/api/checklist/setores/:id', async (req, res) => {
-  if (!exigirAdmin(req, res)) return;
-  try {
-    const id = parseInt(req.params.id, 10);
-    const atual = await prisma.setor.findFirst({ where: { id } });
-    if (!atual) return res.status(404).json({ error: 'Setor não encontrado.' });
-    const data = {};
-    if (req.body?.nome !== undefined) data.nome = chkOnly(req.body.nome, 60) || atual.nome;
-    if (req.body?.ativo !== undefined) data.ativo = req.body.ativo !== false;
-    if (req.body?.ordem !== undefined) data.ordem = parseInt(req.body.ordem, 10) || 0;
-    const setor = await prisma.setor.update({ where: { id }, data });
-    res.json({ ok: true, setor });
-  } catch (err) {
-    if (err?.code === 'P2002') return res.status(409).json({ error: 'Já existe um setor com esse nome.' });
-    console.error('[checklist/setores PUT]', err); res.status(500).json({ error: 'Erro ao salvar setor.' });
-  }
-});
-app.delete('/api/checklist/setores/:id', async (req, res) => {
-  if (!exigirAdmin(req, res)) return;
-  try { await prisma.setor.delete({ where: { id: parseInt(req.params.id, 10) } }); res.json({ ok: true }); }
-  catch (err) { console.error('[checklist/setores DELETE]', err); res.status(500).json({ error: 'Erro ao excluir setor.' }); }
-});
-
 // ---- Templates
 app.get('/api/checklist/templates', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
@@ -7705,7 +7670,7 @@ app.delete('/api/checklist/templates/:id', async (req, res) => {
   catch (err) { console.error('[checklist/templates DELETE]', err); res.status(500).json({ error: 'Erro ao arquivar template.' }); }
 });
 
-// ---- Checklists (a partir de template ou do zero) + atribuição de setor ao colaborador
+// ---- Checklists (a partir de template ou do zero) — atribuídos por função
 const PRIORIDADES = new Set(['BAIXA', 'MEDIA', 'ALTA']);
 const RECORRENCIAS = new Set(['DIARIA', 'DIAS_SEMANA', 'AVULSO']);
 
@@ -7714,7 +7679,10 @@ const RECORRENCIAS = new Set(['DIARIA', 'DIAS_SEMANA', 'AVULSO']);
 function chkDadosChecklist(body, fallback) {
   const nome = chkOnly(body?.nome, 120);
   if (!nome && !fallback) throw { http: 400, msg: 'Informe o nome do checklist.' };
-  const setorIds = Array.isArray(body?.setorIds) ? [...new Set(body.setorIds.map((n) => parseInt(n, 10)).filter(Number.isFinite))] : (fallback?.setorIds || []);
+  // Funções que executam: nomes (reusa a Funcao existente). Dedup, sem vazios, teto 20.
+  const funcoes = Array.isArray(body?.funcoes)
+    ? [...new Set(body.funcoes.map((s) => String(s).trim()).filter(Boolean))].slice(0, 20)
+    : (fallback?.funcoes || []);
   const rc = body?.recorrenciaConfig && typeof body.recorrenciaConfig === 'object' ? body.recorrenciaConfig : {};
   const diasSemana = Array.isArray(rc.diasSemana) ? [...new Set(rc.diasSemana.map((n) => parseInt(n, 10)).filter((n) => n >= 0 && n <= 6))] : [];
   return {
@@ -7722,7 +7690,7 @@ function chkDadosChecklist(body, fallback) {
     categoria: CHECKLIST_CATEGORIAS.includes(body?.categoria) ? body.categoria : (fallback?.categoria || CHECKLIST_CATEGORIAS[0]),
     descricao: chkOnly(body?.descricao, 300),
     prioridade: PRIORIDADES.has(body?.prioridade) ? body.prioridade : (fallback?.prioridade || 'MEDIA'),
-    setorIds,
+    funcoes,
     recorrenciaTipo: RECORRENCIAS.has(body?.recorrenciaTipo) ? body.recorrenciaTipo : (fallback?.recorrenciaTipo || 'AVULSO'),
     recorrenciaConfig: { diasSemana, horarioLimite: chkOnly(rc.horarioLimite, 5) },
   };
@@ -7813,26 +7781,6 @@ app.post('/api/checklist/templates/:id/usar', async (req, res) => {
   } catch (err) { console.error('[checklist/templates/usar]', err); res.status(500).json({ error: 'Erro ao criar a partir do template.' }); }
 });
 
-// Colaboradores + atribuição de setor
-app.get('/api/checklist/colaboradores', async (req, res) => {
-  if (!exigirAdmin(req, res)) return;
-  try {
-    const fs = await prisma.funcionario.findMany({ where: { status: 'ATIVO' }, orderBy: { nome: 'asc' }, select: { id: true, nome: true, apelido: true, setorIds: true } });
-    res.json({ colaboradores: fs });
-  } catch (err) { console.error('[checklist/colaboradores GET]', err); res.status(500).json({ error: 'Erro ao carregar colaboradores.' }); }
-});
-app.put('/api/checklist/colaboradores/:id/setores', async (req, res) => {
-  if (!exigirAdmin(req, res)) return;
-  try {
-    const id = parseInt(req.params.id, 10);
-    const func = await prisma.funcionario.findFirst({ where: { id } });
-    if (!func) return res.status(404).json({ error: 'Colaborador não encontrado.' });
-    const setorIds = Array.isArray(req.body?.setorIds) ? [...new Set(req.body.setorIds.map((n) => parseInt(n, 10)).filter(Number.isFinite))] : [];
-    await prisma.funcionario.update({ where: { id }, data: { setorIds } });
-    res.json({ ok: true, setorIds });
-  } catch (err) { console.error('[checklist/colaboradores setores]', err); res.status(500).json({ error: 'Erro ao salvar setores.' }); }
-});
-
 // Painel do gestor (Task 10): KPIs + pendentes de hoje + em alerta. "Hoje" aqui é o dia
 // de EXPEDIENTE (corte 05:00 BR via janelaExpedienteAtual), não o dia civil do VPS
 // (que roda em UTC) — mesmo dataRef/dow usados pela Área do Colaborador (chkDataRefAtual/
@@ -7843,19 +7791,27 @@ app.get('/api/checklist/painel', async (req, res) => {
     const dataRef = janelaExpedienteAtual().de;
     const f = brFields(dataRef.getTime());
     const dow = new Date(Date.UTC(f.y, f.mo, f.day)).getUTCDay();
-    const checklists = await prisma.checklist.findMany({ where: { ativo: true }, include: { _count: { select: { itens: true } } } });
-    const execs = await prisma.checklistExecucao.findMany({ where: { dataRef }, select: { checklistId: true, status: true, emAlerta: true } });
+    const checklists = await prisma.checklist.findMany({ where: { ativo: true }, orderBy: { nome: 'asc' }, include: { _count: { select: { itens: true } } } });
+    const execs = await prisma.checklistExecucao.findMany({ where: { dataRef }, select: { id: true, checklistId: true, status: true, emAlerta: true } });
     const execMap = new Map(execs.map((e) => [e.checklistId, e]));
     const venceHojeLista = checklists.filter((c) => venceHoje({ recorrenciaTipo: c.recorrenciaTipo, recorrenciaConfig: c.recorrenciaConfig }, dow));
     const concluidosHoje = execs.filter((e) => e.status === 'CONCLUIDA').length;
     const emAlerta = execs.filter((e) => e.emAlerta).length;
-    const pendentes = venceHojeLista.filter((c) => execMap.get(c.id)?.status !== 'CONCLUIDA')
-      .map((c) => ({ id: c.id, nome: c.nome, categoria: c.categoria, prioridade: c.prioridade, status: execMap.get(c.id)?.status || 'PENDENTE' }));
-    const alertas = checklists.filter((c) => execMap.get(c.id)?.emAlerta).map((c) => ({ id: c.id, nome: c.nome }));
+    // Linha padrão do checklist para as listas do painel (inclui as funções que executam).
+    const linha = (c) => ({ id: c.id, nome: c.nome, categoria: c.categoria, prioridade: c.prioridade, funcoes: c.funcoes || [], recorrenciaTipo: c.recorrenciaTipo, itens: c._count.itens });
+    // Próximos agendamentos: vencem hoje e ainda não foram concluídos.
+    const proximos = venceHojeLista.filter((c) => execMap.get(c.id)?.status !== 'CONCLUIDA')
+      .map((c) => ({ ...linha(c), status: execMap.get(c.id)?.status || 'PENDENTE' }));
+    // Sem agendamento: checklists avulsos, disponíveis sob demanda a qualquer dia.
+    const semAgendamento = checklists.filter((c) => c.recorrenciaTipo === 'AVULSO').map(linha);
+    // Checks em alerta: execução de hoje com item crítico fora do padrão. Leva o execId
+    // para abrir o Detalhe da Execução direto do painel.
+    const alertas = checklists.filter((c) => execMap.get(c.id)?.emAlerta)
+      .map((c) => ({ id: c.id, nome: c.nome, categoria: c.categoria, execId: execMap.get(c.id)?.id || null }));
     res.json({
       kpis: { ativos: checklists.length, venceHoje: venceHojeLista.length, concluidosHoje, emAlerta },
-      pendentes, alertas,
-      meus: checklists.slice(0, 20).map((c) => ({ id: c.id, nome: c.nome, categoria: c.categoria, prioridade: c.prioridade, recorrenciaTipo: c.recorrenciaTipo, itens: c._count.itens })),
+      proximos, semAgendamento, alertas,
+      meus: checklists.map(linha),
     });
   } catch (err) { console.error('[checklist/painel]', err); res.status(500).json({ error: 'Erro ao carregar o painel.' }); }
 });

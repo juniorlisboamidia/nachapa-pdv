@@ -620,7 +620,6 @@ model Funcionario {
   termoBiometriaEm DateTime? // aceite do termo LGPD de uso da biometria
   enrollidColetor Int?     // ID do usuário no coletor DIXI (casa as batidas). Auto-aprendido pelo nome.
   folgaSemana  Int[]    @default([]) // dias de folga fixa (0=dom..6=sáb). Sobrepõe a jornada. Vazio = usa só a jornada.
-  setorIds     Int[]    @default([])
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
@@ -1825,18 +1824,6 @@ enum StatusExecucao {
   CONCLUIDA
 }
 
-model Setor {
-  id           Int      @id @default(autoincrement())
-  empresaId    Int
-  nome         String
-  ordem        Int      @default(0)
-  ativo        Boolean  @default(true)
-  criadoEm     DateTime @default(now())
-  atualizadoEm DateTime @updatedAt
-  @@unique([empresaId, nome])
-  @@index([empresaId])
-}
-
 model ChecklistTemplate {
   id               Int      @id @default(autoincrement())
   empresaId        Int
@@ -1875,7 +1862,7 @@ model Checklist {
   categoria         String
   descricao         String?
   prioridade        PrioridadeChecklist @default(MEDIA)
-  setorIds          Int[]
+  funcoes           String[] @default([]) // nomes das Funções que executam este checklist (reusa a Funcao existente)
   recorrenciaTipo   RecorrenciaTipo @default(AVULSO)
   recorrenciaConfig Json?
   ativo             Boolean  @default(true)
