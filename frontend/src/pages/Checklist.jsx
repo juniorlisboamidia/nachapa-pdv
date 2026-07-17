@@ -609,14 +609,15 @@ function ChecklistEditor({ inicial, notify, onClose, onSalvou }) {
   const [salvando, setSalvando] = useState(false)
 
   useEffect(() => {
-    // Reusa a lista de Funções que já existe (mesma do Ponto Facial/Bonificação).
+    // Reusa a lista de Funções que já existe (a mesma de Bonificação › Configuração ›
+    // Funções da equipe, usada no cadastro do colaborador).
     api.get('/funcoes').then((r) => setFuncoesDisp(Array.isArray(r.data) ? r.data : [])).catch(() => {})
   }, [])
 
   const upd = (k, v) => setF((s) => ({ ...s, [k]: v }))
   const updRc = (k, v) => setF((s) => ({ ...s, recorrenciaConfig: { ...s.recorrenciaConfig, [k]: v } }))
   const toggleFuncao = (nome) => setF((s) => ({ ...s, funcoes: s.funcoes.includes(nome) ? s.funcoes.filter((x) => x !== nome) : [...s.funcoes, nome] }))
-  // Opções = funções registradas (Dep. Pessoal › Funções) + as já atribuídas ao checklist
+  // Opções = funções registradas (Bonificação › Funções da equipe) + as já atribuídas ao checklist
   // que porventura não estejam na lista (a função do colaborador é texto livre e pode
   // divergir das registradas). Assim editar nunca some com um chip já marcado.
   const funcoesOpcoes = [...new Set([...funcoesDisp.map((fn) => fn.nome), ...(f.funcoes || [])])]
@@ -709,7 +710,7 @@ function ChecklistEditor({ inicial, notify, onClose, onSalvou }) {
         <div className="form-group">
           <label className="form-label">Funções que executam</label>
           {funcoesOpcoes.length === 0 ? (
-            <span style={{ fontSize: 12, color: '#999' }}>Nenhuma função cadastrada — cadastre em Dep. Pessoal › Funções.</span>
+            <span style={{ fontSize: 12, color: '#999' }}>Nenhuma função cadastrada — cadastre em Bonificação › Configuração › Funções da equipe.</span>
           ) : (
             <div className="chip-row">
               {funcoesOpcoes.map((nome) => (
@@ -717,7 +718,7 @@ function ChecklistEditor({ inicial, notify, onClose, onSalvou }) {
               ))}
             </div>
           )}
-          <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>Quem tem essa função (no cadastro do Ponto Facial) vê o checklist na Área do Colaborador.</div>
+          <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>Quem tem essa função no cadastro (Ponto Facial › Colaboradores) vê o checklist na Área do Colaborador.</div>
         </div>
 
         <label className="form-label" style={{ display: 'block', marginBottom: 6 }}>Itens</label>
