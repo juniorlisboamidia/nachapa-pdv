@@ -225,10 +225,10 @@ function AbaConfig({ notify }) {
                   <input
                     className="form-input"
                     type="number"
-                    min={10}
-                    max={200}
+                    min={15}
+                    max={100}
                     style={{ marginTop: 8 }}
-                    placeholder="Altura em mm"
+                    placeholder="Altura em mm (15 a 100)"
                     value={config.alturaMm}
                     onChange={(e) => upd('alturaMm', parseInt(e.target.value, 10) || 1)}
                   />

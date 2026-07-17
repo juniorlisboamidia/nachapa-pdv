@@ -152,9 +152,9 @@ export default function EtiquetasQuiosque() {
   }
 
   // Desenha no canvas SEMPRE a partir do que o servidor devolveu (datas, lote e
-  // tempLabel): é o registro do banco que vira papel.
-  // Sem QR: nada carrega `qrImg` nesta tela, e o desenhista só desenha o QR se a
-  // imagem chegar pronta — ver o comentário da assinatura em etiquetaCanvas.js.
+  // tempLabel): é o registro do banco que vira papel. O modelo/fonte vêm da config
+  // da loja (dados.config) — se ela escolher "Faixa lateral + QR", o quiosque imprime
+  // o QR (gerado offline a partir dos próprios dados, ver etiquetaCanvas.js).
   function desenhar(e) {
     desenharEtiqueta(canvasRef.current, {
       nomeItem: e.nomeItem, conservacaoLabel: CONS_LABEL[e.conservacao] || e.conservacao,
