@@ -215,8 +215,24 @@ const grupos = [
       { to: '/rh/bonificacao/config', label: 'Configuração', icon: 'gestao' },
     ]
   },
-  { label: 'Checklist', icon: 'ficha', to: '/checklist', area: 'checklist' },
-  { label: 'Etiquetas', icon: 'ficha', to: '/etiquetas', area: 'etiquetas' },
+  {
+    label: 'Checklist', icon: 'ficha', area: 'checklist',
+    itens: [
+      { to: '/checklist/painel', label: 'Painel', icon: 'gestao' },
+      { to: '/checklist/checklists', label: 'Checklists', icon: 'ficha' },
+      { to: '/checklist/templates', label: 'Templates', icon: 'produtos' },
+      { to: '/checklist/notificacoes', label: 'Notificações', icon: 'marketing' },
+    ]
+  },
+  {
+    label: 'Etiquetas', icon: 'ficha', area: 'etiquetas',
+    itens: [
+      { to: '/etiquetas/config', label: 'Configuração', icon: 'gestao' },
+      { to: '/etiquetas/itens', label: 'Itens', icon: 'ficha' },
+      { to: '/etiquetas/painel', label: 'Vencimentos', icon: 'calendario' },
+      { to: '/etiquetas/historico', label: 'Histórico', icon: 'relatorios' },
+    ]
+  },
   {
     label: 'Banco de talentos', icon: 'clientes', area: 'talentos',
     itens: [

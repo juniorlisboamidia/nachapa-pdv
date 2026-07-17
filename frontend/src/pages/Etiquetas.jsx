@@ -1,20 +1,18 @@
-// Ferramentas › Etiquetas — rotulagem de alimentos manipulados (ANVISA RDC 216/2004).
-// Quatro abas: Configuração (identificação do estabelecimento + validade padrão
-// por conservação), Itens (conservação/validade própria por insumo, quando
-// difere da regra), Vencimentos (painel do que já venceu/vence hoje/amanhã) e
-// Histórico (tudo que já foi impresso, com busca).
-// Sem sub-rota na sidebar (item único "Etiquetas") — a troca de aba é local,
-// por isso navega via useNavigate em vez de itens de menu.
+// Etiquetas — rotulagem de alimentos manipulados (ANVISA RDC 216/2004).
+// Quatro seções, cada uma uma subcategoria da sidebar (padrão do PDV, sem abas
+// internas): Configuração (estabelecimento + validade padrão por conservação),
+// Itens (validade própria por insumo), Vencimentos (o que venceu/vence hoje/amanhã)
+// e Histórico (tudo que já foi impresso). A seção atual vem da URL (/etiquetas/:tab).
 import { Fragment, useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import api from '../services/api'
 import Toast from '../components/Toast'
 
 const TABS = [
-  { id: 'config', label: 'Configuração' },
-  { id: 'itens', label: 'Itens' },
-  { id: 'painel', label: 'Vencimentos' },
-  { id: 'historico', label: 'Histórico' },
+  { id: 'config', label: 'Configuração', sub: 'Estabelecimento e validade padrão' },
+  { id: 'itens', label: 'Itens', sub: 'Validade própria por insumo' },
+  { id: 'painel', label: 'Vencimentos', sub: 'O que venceu, vence hoje e amanhã' },
+  { id: 'historico', label: 'Histórico', sub: 'Tudo que já foi impresso' },
 ]
 const TAB_IDS = TABS.map((t) => t.id)
 
@@ -31,8 +29,8 @@ const CONS_LABEL = {
 
 export default function Etiquetas() {
   const { tab: tabParam } = useParams()
-  const navigate = useNavigate()
   const tab = TAB_IDS.includes(tabParam) ? tabParam : 'config'
+  const tabDef = TABS.find((t) => t.id === tab) || TABS[0]
   const [toast, setToast] = useState(null)
   const notify = (message, type = 'success') => setToast({ message, type })
 
@@ -40,25 +38,12 @@ export default function Etiquetas() {
     <div>
       <div className="page-header">
         <div>
-          <h1>Etiquetas</h1>
-          <div className="page-header-sub">Rotulagem de alimentos manipulados conforme ANVISA (RDC 216/2004).</div>
+          <h1>{tabDef.label}</h1>
+          <div className="page-header-sub">{tabDef.sub}</div>
         </div>
       </div>
 
       <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />
-
-      <div className="modal-tabs" style={{ marginBottom: 16 }}>
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            className={'av-tab' + (tab === t.id ? ' active' : '')}
-            onClick={() => navigate(`/etiquetas/${t.id}`)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
 
       {tab === 'config' && <AbaConfig notify={notify} />}
       {tab === 'itens' && <AbaItens notify={notify} />}

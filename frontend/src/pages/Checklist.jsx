@@ -10,10 +10,10 @@ import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
 
 const TABS = [
-  { id: 'painel', label: 'Painel' },
-  { id: 'checklists', label: 'Checklists' },
-  { id: 'templates', label: 'Templates' },
-  { id: 'notificacoes', label: 'Notificações' },
+  { id: 'painel', label: 'Painel', sub: 'Visão geral do dia' },
+  { id: 'checklists', label: 'Checklists', sub: 'Modelos que a operação executa' },
+  { id: 'templates', label: 'Templates', sub: 'Biblioteca pronta de rotinas' },
+  { id: 'notificacoes', label: 'Notificações', sub: 'Alerta imediato no WhatsApp' },
 ]
 const TAB_IDS = TABS.map((t) => t.id)
 
@@ -43,8 +43,8 @@ function fmtDataHora(iso) {
 
 export default function Checklist() {
   const { tab: tabParam } = useParams()
-  const navigate = useNavigate()
   const tab = TAB_IDS.includes(tabParam) ? tabParam : 'painel'
+  const tabDef = TABS.find((t) => t.id === tab) || TABS[0]
   const [toast, setToast] = useState(null)
   const notify = (message, type = 'success') => setToast({ message, type })
 
@@ -52,25 +52,12 @@ export default function Checklist() {
     <div>
       <div className="page-header">
         <div>
-          <h1>Checklist Inteligente</h1>
-          <div className="page-header-sub">Padronize rotinas, exija registro e acompanhe de longe.</div>
+          <h1>{tabDef.label}</h1>
+          <div className="page-header-sub">{tabDef.sub}</div>
         </div>
       </div>
 
       <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />
-
-      <div className="modal-tabs" style={{ marginBottom: 16 }}>
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            className={'av-tab' + (tab === t.id ? ' active' : '')}
-            onClick={() => navigate(`/checklist/${t.id}`)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
 
       {tab === 'templates' && <AbaTemplates notify={notify} />}
       {tab === 'checklists' && <AbaChecklists notify={notify} />}
@@ -146,6 +133,77 @@ function ChkLinha({ nome, sub, funcoes, right, onClick }) {
   )
 }
 
+// ===================== GUIA INICIAL (modal) =====================
+// Onboarding no formato da referência (passos coloridos + "marcar como aprendido"),
+// mas com o conteúdo REAL do nosso Checklist: foto SEM IA, execução por login WhatsApp
+// na Área do Colaborador (não é QR/anônimo) e só alerta imediato (sem lembrete/boletim).
+// Progresso é manual e guardado no localStorage.
+const GUIA_KEY = 'chk-guia-aprendidos'
+function lerGuiaAprendidos() {
+  try { const v = JSON.parse(localStorage.getItem(GUIA_KEY) || '[]'); return Array.isArray(v) ? v : [] } catch { return [] }
+}
+function salvarGuiaAprendidos(arr) {
+  try { localStorage.setItem(GUIA_KEY, JSON.stringify(arr)) } catch { /* storage indisponível — segue sem persistir */ }
+}
+const GUIA_PASSOS = [
+  { k: 'checklist', n: 1, cor: '#eab802', corTxt: '#0e1319', titulo: 'Crie seu primeiro checklist',
+    desc: 'Em Checklist › Checklists, clique em "+ Novo checklist". Monte as informações, os itens e a recorrência (todo dia / dias da semana / avulso) — ou parta de um Template pronto.',
+    chips: ['Check', 'Avaliação', 'Texto', 'Numérico', 'Seleção', 'Foto'] },
+  { k: 'funcao', n: 2, cor: '#e8850c', corTxt: '#ffffff', titulo: 'Defina quem executa',
+    desc: 'No editor do checklist, marque as Funções que executam. Quem tem essa função no cadastro (Ponto Facial › Colaboradores) vê o checklist na Área do Colaborador.',
+    chips: ['Por função', 'Gestor acompanha', 'Operador executa'] },
+  { k: 'alerta', n: 3, cor: '#16a34a', corTxt: '#ffffff', titulo: 'Ative o alerta no WhatsApp',
+    desc: 'Em Checklist › Notificações, ligue o alerta imediato e cadastre quem recebe. Quando um item crítico sair do padrão ao concluir, o WhatsApp dispara na hora.',
+    chips: ['Alerta imediato', 'WhatsApp'] },
+  { k: 'execucao', n: 4, cor: '#2563eb', corTxt: '#ffffff', titulo: 'Acompanhe a primeira execução',
+    desc: 'O colaborador executa pelo celular na Área do Colaborador (login por WhatsApp). Você acompanha aqui no Painel: próximos, alertas e execuções recentes com foto.',
+    chips: ['Área do Colaborador', 'Login por WhatsApp'] },
+]
+
+// Modal do guia (fecha só pelo X/overlay-sem-onClick — padrão dos modais deste arquivo).
+function GuiaModal({ aprendidos, onToggle, onAbrirEtapa, onClose }) {
+  const feitos = GUIA_PASSOS.filter((s) => aprendidos.includes(s.k)).length
+  return (
+    <div className="modal-overlay">
+      <div className="modal chkg-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="chkg-head">
+          <div className="chkg-head-ic"><ChkIcon name="rocket" /></div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="chkg-head-t">Como usar o Checklist Inteligente</div>
+            <div className="chkg-head-s">Guia passo a passo · {feitos} de {GUIA_PASSOS.length} concluídas</div>
+          </div>
+          <button type="button" className="chkg-x" onClick={onClose} aria-label="Fechar">×</button>
+        </div>
+        <div className="chkg-body">
+          {GUIA_PASSOS.map((s) => {
+            const ok = aprendidos.includes(s.k)
+            return (
+              <div key={s.k} className="chkg-step">
+                <div className="chkg-step-h" style={{ background: s.cor, color: s.corTxt }}>
+                  <span className="chkg-step-n" style={{ color: s.cor }}>{s.n}</span>
+                  <span className="chkg-step-t">{s.titulo}</span>
+                  <button type="button" className="chkg-mark" onClick={() => onToggle(s.k)}
+                    style={ok ? { background: '#ffffff', color: s.cor, borderColor: '#ffffff' } : { color: s.corTxt, borderColor: s.corTxt }}>
+                    {ok ? '✓ Aprendido' : 'Marcar como aprendido'}
+                  </button>
+                </div>
+                <div className="chkg-step-b">
+                  <p className="chkg-step-desc">{s.desc}</p>
+                  <div className="chkg-recursos">
+                    <div className="chkg-recursos-t">Ações e recursos:</div>
+                    <div className="chkg-chips">{s.chips.map((c) => <span key={c} className="chkg-chip">{c}</span>)}</div>
+                  </div>
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => onAbrirEtapa(s.k)}>Abrir etapa</button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function AbaPainel({ notify }) {
   const navigate = useNavigate()
   const [p, setP] = useState(null)
@@ -156,7 +214,8 @@ function AbaPainel({ notify }) {
   const [carregandoExec, setCarregandoExec] = useState(true)
   const [erroExec, setErroExec] = useState(false)
   const [verExecucaoId, setVerExecucaoId] = useState(null) // id da execução aberta no modal de detalhe, ou null
-  const [verEtapas, setVerEtapas] = useState(false) // guia inicial expandido?
+  const [verGuia, setVerGuia] = useState(false) // modal do guia inicial aberto?
+  const [aprendidos, setAprendidos] = useState(lerGuiaAprendidos) // etapas marcadas como aprendidas (localStorage)
   const execRef = useRef(null) // âncora da seção "Execuções recentes" (rolagem dos "Ver todos")
 
   useEffect(() => {
@@ -186,14 +245,19 @@ function AbaPainel({ notify }) {
   if (erro) return <div className="empty-state">Não foi possível carregar o painel.</div>
   if (!p) return <div className="empty-state">Carregando…</div>
   const meusPreview = p.meus.slice(0, 8)
-  const g = p.guia || {}
-  const passos = [
-    { k: 'funcoes', label: 'Cadastrar as funções da equipe', ok: !!g.funcoes, ir: null },
-    { k: 'checklist', label: 'Criar o primeiro checklist', ok: !!g.checklist, ir: () => navigate('/checklist/checklists?novo=1') },
-    { k: 'atribuicao', label: 'Definir quem executa (função)', ok: !!g.atribuicao, ir: () => navigate('/checklist/checklists') },
-    { k: 'execucao', label: 'Acompanhar a primeira execução', ok: !!g.execucao, ir: () => execRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }) },
-  ]
-  const feitos = passos.filter((s) => s.ok).length
+  const feitos = GUIA_PASSOS.filter((s) => aprendidos.includes(s.k)).length
+  const toggleAprendido = (k) => setAprendidos((prev) => {
+    const next = prev.includes(k) ? prev.filter((x) => x !== k) : [...prev, k]
+    salvarGuiaAprendidos(next)
+    return next
+  })
+  const abrirEtapa = (k) => {
+    setVerGuia(false)
+    if (k === 'checklist') navigate('/checklist/checklists?novo=1')
+    else if (k === 'funcao') navigate('/checklist/checklists')
+    else if (k === 'alerta') navigate('/checklist/notificacoes')
+    else if (k === 'execucao') setTimeout(() => execRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0)
+  }
   return (
     <div>
       <div className="chkp-top">
@@ -201,23 +265,12 @@ function AbaPainel({ notify }) {
           <div className="chkp-guia-head">
             <div className="chkp-guia-ic"><ChkIcon name="rocket" /></div>
             <div className="chkp-guia-title">Guia inicial</div>
-            <div className="chkp-guia-frac">{feitos}/{passos.length}</div>
+            <div className="chkp-guia-frac">{feitos}/{GUIA_PASSOS.length}</div>
           </div>
-          <div className="chkp-guia-track"><div className="chkp-guia-fill" style={{ width: `${(feitos / passos.length) * 100}%` }} /></div>
-          <button type="button" className="chkp-guia-btn" onClick={() => setVerEtapas((v) => !v)}>
-            <span style={{ display: 'inline-flex', transform: verEtapas ? 'rotate(90deg)' : 'none', transition: 'transform .15s ease' }}><ChkIcon name="chevron" size={13} /></span>
-            {verEtapas ? 'Ocultar etapas' : 'Ver etapas'}
+          <div className="chkp-guia-track"><div className="chkp-guia-fill" style={{ width: `${(feitos / GUIA_PASSOS.length) * 100}%` }} /></div>
+          <button type="button" className="chkp-guia-btn" onClick={() => setVerGuia(true)}>
+            <ChkIcon name="chevron" size={13} /> Ver etapas
           </button>
-          {verEtapas && (
-            <div className="chkp-guia-passos">
-              {passos.map((s) => (
-                <button key={s.k} type="button" className={'chkp-passo' + (s.ok ? ' is-ok' : '')} disabled={s.ok || !s.ir} onClick={s.ir || undefined}>
-                  <span className="chkp-passo-mk">{s.ok && <ChkIcon name="checkSm" size={11} />}</span>
-                  {s.label}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
         <div className="chkp-card chkp-kpi">
           <div className="chkp-kpi-ic is-gold"><ChkIcon name="lista" /></div>
@@ -332,6 +385,7 @@ function AbaPainel({ notify }) {
       )}
 
       {verExecucaoId != null && <DetalheExecucao id={verExecucaoId} onClose={() => setVerExecucaoId(null)} />}
+      {verGuia && <GuiaModal aprendidos={aprendidos} onToggle={toggleAprendido} onAbrirEtapa={abrirEtapa} onClose={() => setVerGuia(false)} />}
     </div>
   )
 }

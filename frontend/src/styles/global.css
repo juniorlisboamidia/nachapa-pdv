@@ -2382,14 +2382,28 @@ a.ind-act { text-decoration: none; }
 .chkp-guia-fill { height: 100%; background: var(--brand-gold); border-radius: 999px; transition: width .35s ease; }
 .chkp-guia-btn { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; background: var(--brand-gold); color: var(--brand-gold-ink); border: none; border-radius: 999px; padding: 6px 14px; font-size: 12.5px; font-weight: 700; cursor: pointer; transition: background .12s ease; }
 .chkp-guia-btn:hover { background: var(--brand-gold-strong); }
-.chkp-guia-passos { display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
-.chkp-passo { display: flex; align-items: center; gap: 9px; padding: 6px 4px; border-radius: 8px; font-size: 13px; color: var(--app-text-2); background: none; border: none; text-align: left; width: 100%; cursor: pointer; }
-.chkp-passo:hover { background: var(--app-surface-2); }
-.chkp-passo[disabled] { cursor: default; }
-.chkp-passo[disabled]:hover { background: none; }
-.chkp-passo-mk { width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 1.5px solid var(--app-border); }
-.chkp-passo.is-ok .chkp-passo-mk { background: var(--brand-gold); border-color: var(--brand-gold); color: var(--brand-gold-ink); }
-.chkp-passo.is-ok { color: var(--app-text-3); text-decoration: line-through; }
+
+/* Guia inicial — modal (passos coloridos, "marcar como aprendido") */
+.chkg-modal { max-width: 640px; width: 100%; max-height: 88vh; padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+.chkg-head { display: flex; align-items: center; gap: 12px; padding: 18px 20px; border-bottom: 1px solid var(--app-border); }
+.chkg-head-ic { width: 42px; height: 42px; border-radius: 12px; background: var(--brand-gold); color: var(--brand-gold-ink); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.chkg-head-t { font-size: 16px; font-weight: 800; color: var(--app-text); }
+.chkg-head-s { font-size: 12.5px; color: var(--app-text-3); margin-top: 2px; }
+.chkg-x { margin-left: auto; background: none; border: none; font-size: 24px; line-height: 1; color: var(--app-text-3); cursor: pointer; padding: 0 4px; flex-shrink: 0; }
+.chkg-x:hover { color: var(--app-text); }
+.chkg-body { padding: 16px 20px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+.chkg-step { border: 1px solid var(--app-border); border-radius: 14px; overflow: hidden; }
+.chkg-step-h { display: flex; align-items: center; gap: 12px; padding: 13px 16px; }
+.chkg-step-n { width: 26px; height: 26px; border-radius: 50%; background: #fff; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 800; flex-shrink: 0; }
+.chkg-step-t { font-size: 15px; font-weight: 700; flex: 1; min-width: 0; }
+.chkg-mark { background: rgba(255, 255, 255, 0.2); border: 1px solid currentColor; border-radius: 999px; padding: 5px 13px; font-size: 12px; font-weight: 700; cursor: pointer; flex-shrink: 0; transition: opacity 0.12s ease; }
+.chkg-mark:hover { opacity: 0.82; }
+.chkg-step-b { padding: 14px 16px 16px; background: var(--app-surface); }
+.chkg-step-desc { font-size: 13.5px; color: var(--app-text-2); line-height: 1.55; margin: 0 0 12px; }
+.chkg-recursos { background: var(--app-surface-2); border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; }
+.chkg-recursos-t { font-size: 12px; font-weight: 700; color: var(--brand-gold-deep); margin-bottom: 8px; }
+.chkg-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chkg-chip { display: inline-flex; align-items: center; background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 999px; padding: 5px 12px; font-size: 12px; color: var(--app-text-2); }
 
 /* Colunas */
 .chkp-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }

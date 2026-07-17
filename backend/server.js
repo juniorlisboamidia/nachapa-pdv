@@ -7808,17 +7808,9 @@ app.get('/api/checklist/painel', async (req, res) => {
     // para abrir o Detalhe da Execução direto do painel.
     const alertas = checklists.filter((c) => execMap.get(c.id)?.emAlerta)
       .map((c) => ({ id: c.id, nome: c.nome, categoria: c.categoria, execId: execMap.get(c.id)?.id || null }));
-    // Guia inicial (onboarding): 4 marcos derivados de dados reais.
-    const [funcoesCount, execTotal] = await Promise.all([prisma.funcao.count(), prisma.checklistExecucao.count()]);
-    const guia = {
-      funcoes: funcoesCount > 0,
-      checklist: checklists.length > 0,
-      atribuicao: checklists.some((c) => (c.funcoes || []).length > 0),
-      execucao: execTotal > 0,
-    };
     res.json({
       kpis: { ativos: checklists.length, venceHoje: venceHojeLista.length, concluidosHoje, emAlerta },
-      proximos, semAgendamento, alertas, guia,
+      proximos, semAgendamento, alertas,
       meus: checklists.map(linha),
     });
   } catch (err) { console.error('[checklist/painel]', err); res.status(500).json({ error: 'Erro ao carregar o painel.' }); }
