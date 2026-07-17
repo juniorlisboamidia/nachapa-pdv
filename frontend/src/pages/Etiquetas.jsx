@@ -844,7 +844,7 @@ function AbaItens({ notify }) {
           onChange={(e) => setBusca(e.target.value)}
         />
 
-        <div className="table-card etqi-manual" style={{ padding: 14 }}>
+        <div className="table-card" style={{ padding: 14 }}>
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Adicionar item manual</div>
           <div className="page-header-sub" style={{ marginTop: 0, marginBottom: 10 }}>
             Para etiquetar algo que ainda não está cadastrado como insumo.
@@ -975,7 +975,13 @@ function AbaItens({ notify }) {
               <div className="form-grid-2">
                 <div className="form-group">
                   <label className="form-label">Conservação</label>
-                  <select className="form-input" value={sel.conservacao} onChange={(e) => updSel({ conservacao: e.target.value })}>
+                  {/* Ao trocar a conservação, re-sugere a validade (dias) padrão daquela regra —
+                      o operador ainda pode ajustar na mão depois. */}
+                  <select className="form-input" value={sel.conservacao} onChange={(e) => {
+                    const c = e.target.value
+                    const diasRegra = regras.find((r) => r.conservacao === c)?.dias
+                    updSel({ conservacao: c, ...(diasRegra ? { validadeDias: diasRegra } : {}) })
+                  }}>
                     {cons.map((c) => <option key={c} value={c}>{CONS_LABEL[c] || c}</option>)}
                   </select>
                 </div>
