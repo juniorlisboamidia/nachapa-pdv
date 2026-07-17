@@ -464,7 +464,7 @@ function TabPonto({ ponto, ano, mes }) {
   )
 }
 
-/* ══════════ ABA: CHECKLISTS (execução do setor) ══════════ */
+/* ══════════ ABA: CHECKLISTS (execução por função) ══════════ */
 function TabChecklists({ setAviso }) {
   const [dados, setDados] = useState(null)
   const [erroCarga, setErroCarga] = useState(false)

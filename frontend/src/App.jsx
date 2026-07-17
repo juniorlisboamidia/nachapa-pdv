@@ -95,7 +95,7 @@ export default function App() {
             <Route path="rh/bonificacao/:aba" element={<Bonificacao />} />
             <Route path="rh/banco-de-talentos" element={<BancoTalentos />} />
             <Route path="rh/banco-de-talentos/:tab" element={<BancoTalentos />} />
-            {/* Checklist Inteligente — tela do gestor (Templates/Setores nesta F1) */}
+            {/* Checklist Inteligente — tela do gestor (Painel/Checklists/Templates/Notificações) */}
             <Route path="checklist" element={<Checklist />} />
             <Route path="checklist/:tab" element={<Checklist />} />
             {/* Em construção */}

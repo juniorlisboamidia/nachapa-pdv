@@ -2246,7 +2246,7 @@ async function chkAbrirExecucao(sess, checklistId) {
       });
     } catch (e) {
       // @@unique([checklistId, dataRef]): dois "iniciar" simultâneos do mesmo checklist/dia
-      // (ex.: dois colaboradores do mesmo setor clicando ao mesmo tempo) fazem os dois
+      // (ex.: dois colaboradores da mesma função clicando ao mesmo tempo) fazem os dois
       // findFirst→null e os dois create; o segundo esbarra no unique — relê a execução
       // que a outra requisição acabou de criar e retoma, em vez de 500 no perdedor.
       if (e?.code === 'P2002') {
@@ -2359,13 +2359,13 @@ app.put('/api/public/colaborador/execucoes/:id/foto', async (req, res) => {
   } catch (e) { if (e.http) return res.status(e.http).json({ error: e.msg }); console.error('[colab/foto PUT]', e); res.status(500).json({ error: 'Erro ao salvar a foto.' }); }
 });
 
-// Bytes da foto sob demanda (o operador vê a própria; posse por setor garante isolamento).
+// Bytes da foto sob demanda (o operador vê a própria; posse por função garante isolamento).
 app.get('/api/public/colaborador/fotos/:id', async (req, res) => {
   try {
     const sess = exigirColaborador(req, res); if (!sess) return;
     const foto = await prisma.checklistFoto.findFirst({ where: { id: parseInt(req.params.id, 10), empresaId: sess.empresaId } });
     if (!foto) return res.status(404).json({ error: 'Foto não encontrada.' });
-    await chkPosseExecucao(sess, foto.execucaoId); // 403 se não for do setor
+    await chkPosseExecucao(sess, foto.execucaoId); // 403 se não for da função
     res.json({ dataUrl: foto.dataUrl });
   } catch (e) { if (e.http) return res.status(e.http).json({ error: e.msg }); console.error('[colab/fotos GET]', e); res.status(500).json({ error: 'Erro ao carregar a foto.' }); }
 });
