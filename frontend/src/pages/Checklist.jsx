@@ -617,8 +617,8 @@ function ChecklistEditor({ inicial, notify, onClose, onSalvou }) {
   const updRc = (k, v) => setF((s) => ({ ...s, recorrenciaConfig: { ...s.recorrenciaConfig, [k]: v } }))
   const toggleFuncao = (nome) => setF((s) => ({ ...s, funcoes: s.funcoes.includes(nome) ? s.funcoes.filter((x) => x !== nome) : [...s.funcoes, nome] }))
   // Opções = funções registradas (Dep. Pessoal › Funções) + as já atribuídas ao checklist
-  // que porventura não estejam na lista (a função do colaborador é texto livre — ex.:
-  // "Chapeira"). Assim editar nunca some com um chip já marcado.
+  // que porventura não estejam na lista (a função do colaborador é texto livre e pode
+  // divergir das registradas). Assim editar nunca some com um chip já marcado.
   const funcoesOpcoes = [...new Set([...funcoesDisp.map((fn) => fn.nome), ...(f.funcoes || [])])]
   const toggleDow = (d) => updRc('diasSemana', f.recorrenciaConfig.diasSemana.includes(d) ? f.recorrenciaConfig.diasSemana.filter((x) => x !== d) : [...f.recorrenciaConfig.diasSemana, d])
   const setItem = (i, patch) => setF((s) => ({ ...s, itens: s.itens.map((it, j) => (j === i ? { ...it, ...patch } : it)) }))
