@@ -2471,3 +2471,26 @@ a.ind-act { text-decoration: none; }
 
 /* Botão de teste de impressão — herda a cor de .btn-primary (dourado), só ajusta layout. */
 .etq-print-btn { width: 100%; justify-content: center; margin-top: 12px; }
+
+/* ===================== ETIQUETAS — Itens (Fatia B, Task 2) =====================
+   Mesma linguagem visual da Configuração (.etq-* acima): catálogo à esquerda, painel
+   "Etiqueta selecionada" à direita — dourado sobre creme, tudo por token de tema. */
+.etqi-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 380px); gap: 16px; align-items: start; }
+@media (max-width: 1023px) {
+  .etqi-grid { grid-template-columns: 1fr; }
+}
+
+/* Linha do catálogo carregada no painel à direita — mesmo realce (.is-on) do modelo
+   selecionado na Config, aplicado à linha inteira. */
+.etqi-cat tr.is-sel td { background: var(--app-highlight); }
+
+/* Painel "Etiqueta selecionada" fica "grudado" ao rolar (o catálogo à esquerda pode
+   crescer mais que a viewport) — só faz sentido no layout de 2 colunas. */
+.etqi-painel { position: sticky; top: 16px; }
+@media (max-width: 1023px) {
+  .etqi-painel { position: static; }
+}
+
+/* Prévia ao vivo do painel — mesma moldura de .etq-previa, um pouco mais baixa porque
+   aqui ela divide o cartão com os campos do formulário acima dela. */
+.etqi-previa { max-height: 340px; margin-top: 4px; }

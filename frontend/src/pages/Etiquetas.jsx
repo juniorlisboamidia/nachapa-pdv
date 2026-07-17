@@ -560,12 +560,41 @@ function CardDispositivos({ notify }) {
   )
 }
 
+// datetime-local prefill = agora, no fuso local (mesmo helper de PontoFacial.jsx —
+// pequeno demais para justificar compartilhar módulo entre as duas telas).
+function agoraLocal() {
+  const d = new Date()
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset())
+  return d.toISOString().slice(0, 16)
+}
+
 // ===================== ITENS =====================
+// Reforma (Fatia B, Task 2): 2 colunas — catálogo à esquerda (busca + edição inline
+// que já existia + botão "Usar" + item manual) e painel "Etiqueta selecionada" à
+// direita, com prévia ao vivo (mesmo desenharEtiqueta da Config) e "Imprimir agora"
+// via Niimbot B1 (POST /etiquetas/registrar, que é quem sorteia o lote de verdade).
 function AbaItens({ notify }) {
   const [itens, setItens] = useState([])
   const [busca, setBusca] = useState('')
   const [cons, setCons] = useState([])
   const [loading, setLoading] = useState(true)
+
+  // Config + regras — só para a prévia/impressão do painel: modelo/fonte/identificação
+  // da loja e o tempLabel por conservação. Esta aba não edita nenhum dos dois (isso é a
+  // aba Configuração) — busca uma vez no mount, sem depender da busca do catálogo.
+  const [config, setConfig] = useState(null)
+  const [regras, setRegras] = useState([])
+
+  // Impressora — mesmo estado/padrão da AbaConfig (sessão Bluetooth do navegador, não
+  // uma preferência salva). Reusa o card CardImpressora já definido acima neste arquivo.
+  const [conn, setConn] = useState(null)
+  const [imprimindo, setImprimindo] = useState(false)
+
+  // Etiqueta selecionada no painel à direita. null = nada carregado ainda (painel mostra
+  // um estado vazio em vez de uma prévia sem sentido).
+  const [sel, setSel] = useState(null)
+  const [novoNome, setNovoNome] = useState('') // "Adicionar item manual"
+  const previaRef = useRef(null)
 
   function carregar() {
     api.get('/etiquetas/itens', { params: busca ? { busca } : {} })
@@ -579,6 +608,13 @@ function AbaItens({ notify }) {
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [busca])
+
+  useEffect(() => {
+    api.get('/etiquetas/config')
+      .then((r) => { setConfig(r.data.config); setRegras(r.data.regras || []) })
+      .catch((e) => notify(e?.response?.data?.error ?? 'Não foi possível carregar a configuração da etiqueta.', 'error'))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function salvarItem(it, patch) {
     const novo = { ...it, ...patch }
@@ -600,88 +636,316 @@ function AbaItens({ notify }) {
     }
   }
 
+  // Carrega um item do catálogo no painel à direita. Preserva o responsável entre
+  // trocas — é comum a mesma pessoa etiquetar vários itens seguidos — mas sempre
+  // reseta manipulação (para "agora") e cópias (para 1): os dois são específicos de
+  // CADA etiqueta, não do operador.
+  function usarItem(it) {
+    const conservacao = it.conservacaoPadrao || cons[0] || ''
+    const dias = it.validadeEfetiva ?? regras.find((r) => r.conservacao === conservacao)?.dias ?? 1
+    setSel((s) => ({
+      insumoId: it.insumoId, nomeAvulso: '', nome: it.nome, conservacao,
+      manipuladoEm: agoraLocal(), validadeDias: dias,
+      responsavelNome: s?.responsavelNome || '', copias: 1,
+    }))
+  }
+
+  // Item fora do catálogo (nunca cadastrado como insumo): carrega no painel como
+  // `nomeAvulso` — o POST /etiquetas/registrar aceita os dois caminhos.
+  function usarManual() {
+    const nome = novoNome.trim()
+    if (!nome) return
+    const conservacao = cons[0] || ''
+    const dias = regras.find((r) => r.conservacao === conservacao)?.dias ?? 1
+    setSel((s) => ({
+      insumoId: null, nomeAvulso: nome, nome, conservacao,
+      manipuladoEm: agoraLocal(), validadeDias: dias,
+      responsavelNome: s?.responsavelNome || '', copias: 1,
+    }))
+    setNovoNome('')
+  }
+
+  const updSel = (patch) => setSel((s) => (s ? { ...s, ...patch } : s))
+
+  // Prévia ao vivo — o MESMO desenharEtiqueta que a Config usa e que o POST de
+  // impressão (abaixo) também chama: o que aparece aqui é o layout real. O lote é
+  // sempre "—": só o backend sorteia o lote de verdade, no momento do registro —
+  // por isso a nota logo abaixo da prévia avisa que o código real sai ao imprimir.
+  useEffect(() => {
+    if (!sel || !config || !previaRef.current) return
+    const manipMs = Date.parse(sel.manipuladoEm)
+    const manipuladoEm = Number.isFinite(manipMs) ? new Date(manipMs) : new Date()
+    const dias = Number(sel.validadeDias) || 0
+    desenharEtiqueta(previaRef.current, {
+      nomeItem: sel.nome,
+      conservacaoLabel: CONS_LABEL[sel.conservacao] || sel.conservacao || '',
+      tempLabel: regras.find((r) => r.conservacao === sel.conservacao)?.tempLabel || '',
+      manipuladoEm,
+      validoAte: new Date(manipuladoEm.getTime() + dias * 86400000),
+      responsavelNome: sel.responsavelNome || '—',
+      lote: '—',
+    }, config)
+  }, [sel, config, regras])
+
+  // "Imprimir agora": registra a etiqueta de verdade (o servidor sorteia o lote e
+  // recalcula a validade — ver o comentário do POST /etiquetas/registrar no backend)
+  // e imprime o retorno na Niimbot. `conectado()` pode "mentir" depois de a impressora
+  // cair (ver niimbotB1.js) — o catch cobre esse caso mostrando o erro amigável da lib.
+  async function imprimirAgora() {
+    if (imprimindo || !sel) return
+    if (!sel.insumoId && !sel.nomeAvulso.trim()) return
+    if (!conectado()) {
+      notify('Conecte a impressora primeiro.', 'error')
+      return
+    }
+    setImprimindo(true)
+    try {
+      const r = await api.post('/etiquetas/registrar', {
+        insumoId: sel.insumoId,
+        nomeAvulso: sel.nomeAvulso,
+        conservacao: sel.conservacao,
+        responsavelNome: (sel.responsavelNome || '').trim(),
+        manipuladoEm: new Date(sel.manipuladoEm).toISOString(),
+        validadeDias: sel.validadeDias,
+        quantidade: sel.copias,
+      })
+      const etiqueta = r.data.etiqueta
+      // Canvas próprio (fora do DOM) para o bitmap de impressão — não depende do
+      // <canvas> da prévia estar montado nem corre risco de disputa com o useEffect
+      // de prévia redesenhando no meio da impressão (mesmo padrão de imprimirTeste,
+      // na AbaConfig acima).
+      const canvas = document.createElement('canvas')
+      desenharEtiqueta(canvas, {
+        nomeItem: etiqueta.nomeItem,
+        conservacaoLabel: CONS_LABEL[etiqueta.conservacao] || etiqueta.conservacao,
+        tempLabel: etiqueta.tempLabel,
+        manipuladoEm: new Date(etiqueta.manipuladoEm),
+        validoAte: new Date(etiqueta.validoAte),
+        responsavelNome: etiqueta.responsavelNome,
+        lote: etiqueta.lote,
+      }, config)
+      await imprimir(canvas, { copias: sel.copias })
+      notify(`Etiqueta de "${etiqueta.nomeItem}" (lote ${etiqueta.lote}) enviada para a impressora.`)
+    } catch (e) {
+      notify(e?.response?.data?.error || e?.message || 'Falha ao imprimir', 'error')
+    } finally {
+      setImprimindo(false)
+    }
+  }
+
   return (
-    <div>
-      <input
-        className="form-input"
-        style={{ maxWidth: 320, marginBottom: 12 }}
-        placeholder="Buscar item…"
-        value={busca}
-        onChange={(e) => setBusca(e.target.value)}
-      />
-      {loading ? (
-        <div className="loading-state">Carregando…</div>
-      ) : itens.length === 0 ? (
-        <div className="empty-state">Nenhum item encontrado.</div>
-      ) : (
-        <div className="table-card">
-          <table className="hb-table">
-            <thead>
-              <tr>
-                <th>Item</th>
-                <th>Conservação padrão</th>
-                <th>Validade própria</th>
-                <th>Vale na cozinha</th>
-                <th>Ativo</th>
-              </tr>
-            </thead>
-            <tbody>
-              {itens.map((it) => (
-                <tr key={it.insumoId}>
-                  <td style={{ fontWeight: 600 }}>{it.nome}</td>
-                  <td>
-                    <select
-                      className="form-input"
-                      style={{ minWidth: 170 }}
-                      value={it.conservacaoPadrao || ''}
-                      onChange={(e) => salvarItem(it, { conservacaoPadrao: e.target.value || null })}
-                    >
-                      <option value="">— escolher na hora —</option>
-                      {cons.map((c) => <option key={c} value={c}>{CONS_LABEL[c] || c}</option>)}
-                    </select>
-                  </td>
-                  <td>
-                    {/* Input não-controlado: salva só no blur (mesmo padrão do ID do
-                        coletor em PontoFacial.jsx), pra não disparar um PUT + reload
-                        da lista a cada tecla digitada e sobrescrever o que a pessoa
-                        está digitando. A `key` muda junto com o valor do servidor pra
-                        forçar o React a remontar o campo com o defaultValue atualizado
-                        depois que carregar() resincroniza (sucesso ou falha). */}
-                    <input
-                      key={'dias-' + it.insumoId + '-' + (it.validadeDias ?? 'x')}
-                      className="form-input"
-                      type="number"
-                      min={1}
-                      max={3650}
-                      style={{ width: 90 }}
-                      placeholder="usa a regra"
-                      defaultValue={it.validadeDias ?? ''}
-                      onBlur={(e) => {
-                        const bruto = e.target.value.trim()
-                        const validadeDias = bruto === '' ? null : parseInt(bruto, 10)
-                        if (validadeDias === (it.validadeDias ?? null)) return // sem mudança, evita PUT à toa
-                        salvarItem(it, { validadeDias })
-                      }}
-                      onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
-                    />
-                  </td>
-                  <td style={{ color: 'var(--app-text-soft, #888)' }}>
-                    {it.validadeEfetiva ? `${it.validadeEfetiva} dia(s)` : '—'}
-                  </td>
-                  <td>
-                    <input
-                      type="checkbox"
-                      checked={it.ativo !== false}
-                      onChange={(e) => salvarItem(it, { ativo: e.target.checked })}
-                      title="Desligado, o item some da tela de impressão de etiquetas na cozinha"
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+    <div className="etqi-grid">
+      {/* ESQUERDA: catálogo — busca, item manual, tabela com edição inline (preservada)
+          e o botão "Usar" que carrega a linha no painel à direita. */}
+      <div style={{ display: 'grid', gap: 12, alignContent: 'start', minWidth: 0 }}>
+        <input
+          className="form-input"
+          style={{ maxWidth: 320 }}
+          placeholder="Buscar item…"
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+        />
+
+        <div className="table-card etqi-manual" style={{ padding: 14 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Adicionar item manual</div>
+          <div className="page-header-sub" style={{ marginTop: 0, marginBottom: 10 }}>
+            Para etiquetar algo que ainda não está cadastrado como insumo.
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              className="form-input"
+              placeholder="Nome do item"
+              value={novoNome}
+              onChange={(e) => setNovoNome(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') usarManual() }}
+            />
+            <button type="button" className="btn btn-secondary" disabled={!novoNome.trim()} onClick={usarManual}>Usar</button>
+          </div>
         </div>
-      )}
+
+        {loading ? (
+          <div className="loading-state">Carregando…</div>
+        ) : itens.length === 0 ? (
+          <div className="empty-state">Nenhum item encontrado.</div>
+        ) : (
+          <div className="table-card etqi-cat">
+            <table className="hb-table">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Conservação padrão</th>
+                  <th>Validade própria</th>
+                  <th>Vale na cozinha</th>
+                  <th>Ativo</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {itens.map((it) => (
+                  <tr key={it.insumoId} className={sel?.insumoId === it.insumoId ? 'is-sel' : undefined}>
+                    <td style={{ fontWeight: 600 }}>{it.nome}</td>
+                    <td>
+                      <select
+                        className="form-input"
+                        style={{ minWidth: 170 }}
+                        value={it.conservacaoPadrao || ''}
+                        onChange={(e) => salvarItem(it, { conservacaoPadrao: e.target.value || null })}
+                      >
+                        <option value="">— escolher na hora —</option>
+                        {cons.map((c) => <option key={c} value={c}>{CONS_LABEL[c] || c}</option>)}
+                      </select>
+                    </td>
+                    <td>
+                      {/* Input não-controlado: salva só no blur (mesmo padrão do ID do
+                          coletor em PontoFacial.jsx), pra não disparar um PUT + reload
+                          da lista a cada tecla digitada e sobrescrever o que a pessoa
+                          está digitando. A `key` muda junto com o valor do servidor pra
+                          forçar o React a remontar o campo com o defaultValue atualizado
+                          depois que carregar() resincroniza (sucesso ou falha). */}
+                      <input
+                        key={'dias-' + it.insumoId + '-' + (it.validadeDias ?? 'x')}
+                        className="form-input"
+                        type="number"
+                        min={1}
+                        max={3650}
+                        style={{ width: 90 }}
+                        placeholder="usa a regra"
+                        defaultValue={it.validadeDias ?? ''}
+                        onBlur={(e) => {
+                          const bruto = e.target.value.trim()
+                          const validadeDias = bruto === '' ? null : parseInt(bruto, 10)
+                          if (validadeDias === (it.validadeDias ?? null)) return // sem mudança, evita PUT à toa
+                          salvarItem(it, { validadeDias })
+                        }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+                      />
+                    </td>
+                    <td style={{ color: 'var(--app-text-soft, #888)' }}>
+                      {it.validadeEfetiva ? `${it.validadeEfetiva} dia(s)` : '—'}
+                    </td>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={it.ativo !== false}
+                        onChange={(e) => salvarItem(it, { ativo: e.target.checked })}
+                        title="Desligado, o item some da tela de impressão de etiquetas na cozinha"
+                      />
+                    </td>
+                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => usarItem(it)}>Usar</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* DIREITA: impressora + painel "Etiqueta selecionada" (campos + prévia ao vivo +
+          Imprimir agora). A fila ("Sequência de impressão") fica para a Task 3 — aqui só
+          o item único carregado no painel. */}
+      <div style={{ display: 'grid', gap: 12, alignContent: 'start' }}>
+        <CardImpressora conn={conn} setConn={setConn} notify={notify} />
+
+        <div className="table-card etqi-painel" style={{ padding: 16 }}>
+          <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Etiqueta selecionada</h2>
+
+          {!sel ? (
+            <div className="empty-state">
+              Escolha um item na lista (botão "Usar") ou adicione um item manual à esquerda.
+            </div>
+          ) : (
+            <>
+              <div className="page-header-sub" style={{ marginTop: 0, marginBottom: 12 }}>
+                Confira os campos e imprima — a validade e o lote finais são recalculados pelo servidor.
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Item</label>
+                {sel.insumoId ? (
+                  <input className="form-input" value={sel.nome} disabled />
+                ) : (
+                  <input
+                    className="form-input"
+                    value={sel.nome}
+                    onChange={(e) => updSel({ nome: e.target.value, nomeAvulso: e.target.value })}
+                  />
+                )}
+              </div>
+
+              <div className="form-grid-2">
+                <div className="form-group">
+                  <label className="form-label">Conservação</label>
+                  <select className="form-input" value={sel.conservacao} onChange={(e) => updSel({ conservacao: e.target.value })}>
+                    {cons.map((c) => <option key={c} value={c}>{CONS_LABEL[c] || c}</option>)}
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Validade (dias)</label>
+                  <input
+                    className="form-input"
+                    type="number"
+                    min={1}
+                    max={3650}
+                    value={sel.validadeDias}
+                    onChange={(e) => updSel({ validadeDias: parseInt(e.target.value, 10) || 1 })}
+                  />
+                </div>
+              </div>
+
+              <div className="form-grid-2">
+                <div className="form-group">
+                  <label className="form-label">Manipulação / Abertura</label>
+                  <input
+                    className="form-input"
+                    type="datetime-local"
+                    value={sel.manipuladoEm}
+                    onChange={(e) => updSel({ manipuladoEm: e.target.value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Cópias</label>
+                  <input
+                    className="form-input"
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={sel.copias}
+                    onChange={(e) => updSel({ copias: Math.min(50, Math.max(1, parseInt(e.target.value, 10) || 1)) })}
+                  />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Responsável (quem manipulou)</label>
+                <input
+                  className="form-input"
+                  placeholder="Nome de quem manipulou"
+                  value={sel.responsavelNome}
+                  onChange={(e) => updSel({ responsavelNome: e.target.value })}
+                />
+              </div>
+
+              <div className="etq-previa etqi-previa">
+                {config ? <canvas ref={previaRef} /> : <div className="loading-state">Carregando prévia…</div>}
+              </div>
+              <div className="page-header-sub" style={{ marginTop: 8, textAlign: 'center' }}>
+                Lote de exemplo (—) — o código real sai ao imprimir.
+              </div>
+
+              <button
+                type="button"
+                className="btn btn-primary etq-print-btn"
+                disabled={imprimindo || !(sel.insumoId || sel.nomeAvulso.trim()) || !sel.responsavelNome.trim()}
+                onClick={imprimirAgora}
+              >
+                {imprimindo ? 'Imprimindo…' : 'Imprimir agora'}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
