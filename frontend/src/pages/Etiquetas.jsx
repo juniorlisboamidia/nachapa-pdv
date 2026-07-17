@@ -568,6 +568,14 @@ function agoraLocal() {
   return d.toISOString().slice(0, 16)
 }
 
+// Guarda contra o campo de manipulação vazio/inválido (achado do review da Task 2):
+// `new Date('').toISOString()` estoura "Invalid time value" — um erro críptico para quem
+// só esqueceu de preencher a hora. `Date.parse` devolve NaN para string vazia ou inválida,
+// então isto é o que decide se dá para chamar registrarEDesenhar com este valor.
+function manipuladoEmValido(v) {
+  return Number.isFinite(Date.parse(v))
+}
+
 // ===================== ITENS =====================
 // Reforma (Fatia B, Task 2): 2 colunas — catálogo à esquerda (busca + edição inline
 // que já existia + botão "Usar" + item manual) e painel "Etiqueta selecionada" à
@@ -595,6 +603,14 @@ function AbaItens({ notify }) {
   const [sel, setSel] = useState(null)
   const [novoNome, setNovoNome] = useState('') // "Adicionar item manual"
   const previaRef = useRef(null)
+
+  // Sequência de impressão (Fatia B, Task 3): fila de itens a registrar+imprimir em
+  // ordem. `id` local vem de um contador incremental — NÃO Date.now()/Math.random(): a
+  // fila é só desta sessão de tela, um contador simples já garante ids sem colisão e sem
+  // as armadilhas de Date.now() (duas chamadas no mesmo milissegundo, relógio do sistema).
+  const [fila, setFila] = useState([])
+  const filaSeqRef = useRef(0)
+  const [imprimindoFila, setImprimindoFila] = useState(false)
 
   function carregar() {
     api.get('/etiquetas/itens', { params: busca ? { busca } : {} })
@@ -687,49 +703,131 @@ function AbaItens({ notify }) {
     }, config)
   }, [sel, config, regras])
 
-  // "Imprimir agora": registra a etiqueta de verdade (o servidor sorteia o lote e
-  // recalcula a validade — ver o comentário do POST /etiquetas/registrar no backend)
-  // e imprime o retorno na Niimbot. `conectado()` pode "mentir" depois de a impressora
+  // Bloqueia "Adicionar à fila" e "Imprimir agora" quando falta item/responsável, ou
+  // quando o campo de manipulação está vazio/inválido (ver manipuladoEmValido acima).
+  // Um único cálculo usado nos dois `disabled` e nos dois handlers — não dá para os
+  // botões discordarem de quando é seguro chamar registrarEDesenhar.
+  const selInvalido = !sel || !(sel.insumoId || sel.nomeAvulso.trim()) || !sel.responsavelNome.trim() || !manipuladoEmValido(sel.manipuladoEm)
+
+  // Registra a etiqueta de verdade (o servidor sorteia o lote e recalcula a validade —
+  // ver o comentário do POST /etiquetas/registrar no backend) e desenha o canvas de
+  // impressão. Compartilhada por "Imprimir agora" (um item) e "Imprimir sequência" (a
+  // fila, um item de cada vez): as duas passam por exatamente este registrar→desenhar —
+  // só o chamador decide o `copias` e quando de fato chamar `imprimir()`, porque a fila
+  // precisa aguardar cada envio Bluetooth terminar antes do próximo item.
+  async function registrarEDesenhar(item) {
+    const r = await api.post('/etiquetas/registrar', {
+      insumoId: item.insumoId,
+      nomeAvulso: item.nomeAvulso,
+      conservacao: item.conservacao,
+      responsavelNome: (item.responsavelNome || '').trim(),
+      manipuladoEm: new Date(item.manipuladoEm).toISOString(),
+      validadeDias: item.validadeDias,
+      quantidade: item.copias,
+    })
+    const etiqueta = r.data.etiqueta
+    // Canvas próprio (fora do DOM) para o bitmap de impressão — não depende do
+    // <canvas> da prévia estar montado nem corre risco de disputa com o useEffect
+    // de prévia redesenhando no meio da impressão (mesmo padrão de imprimirTeste,
+    // na AbaConfig acima).
+    const canvas = document.createElement('canvas')
+    desenharEtiqueta(canvas, {
+      nomeItem: etiqueta.nomeItem,
+      conservacaoLabel: CONS_LABEL[etiqueta.conservacao] || etiqueta.conservacao,
+      tempLabel: etiqueta.tempLabel,
+      manipuladoEm: new Date(etiqueta.manipuladoEm),
+      validoAte: new Date(etiqueta.validoAte),
+      responsavelNome: etiqueta.responsavelNome,
+      lote: etiqueta.lote,
+    }, config)
+    return { canvas, etiqueta }
+  }
+
+  // "Imprimir agora": um item só. `conectado()` pode "mentir" depois de a impressora
   // cair (ver niimbotB1.js) — o catch cobre esse caso mostrando o erro amigável da lib.
   async function imprimirAgora() {
-    if (imprimindo || !sel) return
-    if (!sel.insumoId && !sel.nomeAvulso.trim()) return
+    if (imprimindo || selInvalido) return
     if (!conectado()) {
       notify('Conecte a impressora primeiro.', 'error')
       return
     }
     setImprimindo(true)
     try {
-      const r = await api.post('/etiquetas/registrar', {
-        insumoId: sel.insumoId,
-        nomeAvulso: sel.nomeAvulso,
-        conservacao: sel.conservacao,
-        responsavelNome: (sel.responsavelNome || '').trim(),
-        manipuladoEm: new Date(sel.manipuladoEm).toISOString(),
-        validadeDias: sel.validadeDias,
-        quantidade: sel.copias,
-      })
-      const etiqueta = r.data.etiqueta
-      // Canvas próprio (fora do DOM) para o bitmap de impressão — não depende do
-      // <canvas> da prévia estar montado nem corre risco de disputa com o useEffect
-      // de prévia redesenhando no meio da impressão (mesmo padrão de imprimirTeste,
-      // na AbaConfig acima).
-      const canvas = document.createElement('canvas')
-      desenharEtiqueta(canvas, {
-        nomeItem: etiqueta.nomeItem,
-        conservacaoLabel: CONS_LABEL[etiqueta.conservacao] || etiqueta.conservacao,
-        tempLabel: etiqueta.tempLabel,
-        manipuladoEm: new Date(etiqueta.manipuladoEm),
-        validoAte: new Date(etiqueta.validoAte),
-        responsavelNome: etiqueta.responsavelNome,
-        lote: etiqueta.lote,
-      }, config)
+      const { canvas, etiqueta } = await registrarEDesenhar(sel)
       await imprimir(canvas, { copias: sel.copias })
       notify(`Etiqueta de "${etiqueta.nomeItem}" (lote ${etiqueta.lote}) enviada para a impressora.`)
     } catch (e) {
       notify(e?.response?.data?.error || e?.message || 'Falha ao imprimir', 'error')
     } finally {
       setImprimindo(false)
+    }
+  }
+
+  // "Adicionar à fila": empurra um SNAPSHOT do painel atual — trocar de item ou editar
+  // `sel` de novo depois não deve alterar o que já está na fila.
+  function adicionarFila() {
+    if (selInvalido) return
+    filaSeqRef.current += 1
+    setFila((fs) => [...fs, {
+      id: filaSeqRef.current,
+      insumoId: sel.insumoId,
+      nomeAvulso: sel.nomeAvulso,
+      nome: sel.nome,
+      conservacao: sel.conservacao,
+      conservacaoLabel: CONS_LABEL[sel.conservacao] || sel.conservacao,
+      manipuladoEm: sel.manipuladoEm,
+      validadeDias: sel.validadeDias,
+      responsavelNome: sel.responsavelNome,
+      copias: sel.copias,
+    }])
+    notify(`"${sel.nome}" adicionado à fila.`)
+  }
+
+  function removerDaFila(id) {
+    setFila((fs) => fs.filter((f) => f.id !== id))
+  }
+
+  function limparFila() {
+    setFila([])
+  }
+
+  // "Imprimir sequência": registra e imprime item por item, EM ORDEM, aguardando cada
+  // `imprimir()` terminar antes do próximo (a impressora Bluetooth não aceita dois
+  // envios ao mesmo tempo). Se um item falhar, PARA — não pula para o próximo escondendo
+  // o erro — e avisa quantos já saíram e qual travou. Os que já imprimiram saem da fila a
+  // cada sucesso, para não reimprimir se a pessoa tentar de novo depois de corrigir o que
+  // travou; os que faltaram continuam lá. `pendentes` é um snapshot da fila no início:
+  // itens adicionados enquanto a sequência já está rodando entram só na próxima rodada.
+  async function imprimirSequencia() {
+    if (imprimindoFila || fila.length === 0) return
+    if (!conectado()) {
+      notify('Conecte a impressora primeiro.', 'error')
+      return
+    }
+    setImprimindoFila(true)
+    const pendentes = fila
+    let feitos = 0
+    try {
+      for (const item of pendentes) {
+        try {
+          const { canvas } = await registrarEDesenhar(item)
+          await imprimir(canvas, { copias: item.copias })
+          feitos += 1
+          setFila((fs) => fs.filter((f) => f.id !== item.id))
+        } catch (e) {
+          const msg = e?.response?.data?.error || e?.message || 'Falha ao imprimir'
+          notify(
+            feitos > 0
+              ? `${feitos} de ${pendentes.length} etiqueta(s) impressa(s) da sequência. Parou em "${item.nome}": ${msg}`
+              : `Não foi possível imprimir "${item.nome}" — a sequência parou aqui: ${msg}`,
+            'error',
+          )
+          return
+        }
+      }
+      notify(`${feitos} etiqueta(s) da sequência impressa(s) com sucesso.`)
+    } finally {
+      setImprimindoFila(false)
     }
   }
 
@@ -843,8 +941,8 @@ function AbaItens({ notify }) {
       </div>
 
       {/* DIREITA: impressora + painel "Etiqueta selecionada" (campos + prévia ao vivo +
-          Imprimir agora). A fila ("Sequência de impressão") fica para a Task 3 — aqui só
-          o item único carregado no painel. */}
+          Adicionar à fila/Imprimir agora) + card "Sequência de impressão" (Task 3),
+          que registra e imprime a fila em ordem. */}
       <div style={{ display: 'grid', gap: 12, alignContent: 'start' }}>
         <CardImpressora conn={conn} setConn={setConn} notify={notify} />
 
@@ -934,16 +1032,76 @@ function AbaItens({ notify }) {
                 Lote de exemplo (—) — o código real sai ao imprimir.
               </div>
 
-              <button
-                type="button"
-                className="btn btn-primary etq-print-btn"
-                disabled={imprimindo || !(sel.insumoId || sel.nomeAvulso.trim()) || !sel.responsavelNome.trim()}
-                onClick={imprimirAgora}
-              >
-                {imprimindo ? 'Imprimindo…' : 'Imprimir agora'}
-              </button>
+              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ flex: 1, justifyContent: 'center' }}
+                  disabled={selInvalido}
+                  onClick={adicionarFila}
+                >
+                  Adicionar à fila
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ flex: 1, justifyContent: 'center' }}
+                  disabled={imprimindo || selInvalido}
+                  onClick={imprimirAgora}
+                >
+                  {imprimindo ? 'Imprimindo…' : 'Imprimir agora'}
+                </button>
+              </div>
             </>
           )}
+        </div>
+
+        {/* Sequência de impressão (Fatia B, Task 3) — fila de itens a registrar e
+            imprimir em ordem, independente do que estiver carregado no painel acima. */}
+        <div className="table-card etqi-fila" style={{ padding: 16 }}>
+          <div className="etqi-fila-head">
+            <h2 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>Sequência de impressão</h2>
+            <span className="etqi-fila-count">{fila.length} {fila.length === 1 ? 'item' : 'itens'}</span>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              disabled={imprimindoFila || fila.length === 0}
+              onClick={limparFila}
+            >
+              Limpar
+            </button>
+          </div>
+
+          {fila.length === 0 ? (
+            <div className="empty-state">Nenhum item na fila. Adicione itens ao lado.</div>
+          ) : (
+            <div className="etqi-fila-list">
+              {fila.map((f) => (
+                <div key={f.id} className="etqi-fila-row">
+                  <span className="etqi-fila-nome" title={f.nome}>{f.nome}</span>
+                  <span className="etqi-fila-cons">{f.conservacaoLabel}</span>
+                  <span className="etqi-fila-copias">{f.copias}×</span>
+                  <button
+                    type="button"
+                    className="btn btn-danger btn-sm"
+                    disabled={imprimindoFila}
+                    onClick={() => removerDaFila(f.id)}
+                  >
+                    Remover
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <button
+            type="button"
+            className="btn btn-primary etqi-fila-print"
+            disabled={imprimindoFila || fila.length === 0}
+            onClick={imprimirSequencia}
+          >
+            {imprimindoFila ? 'Imprimindo sequência…' : 'Imprimir sequência'}
+          </button>
         </div>
       </div>
     </div>
