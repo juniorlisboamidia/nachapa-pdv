@@ -836,37 +836,23 @@ function AbaItens({ notify }) {
       {/* ESQUERDA: catálogo — busca, item manual, tabela com edição inline (preservada)
           e o botão "Usar" que carrega a linha no painel à direita. */}
       <div style={{ display: 'grid', gap: 12, alignContent: 'start', minWidth: 0 }}>
-        <input
-          className="form-input"
-          style={{ maxWidth: 320 }}
-          placeholder="Buscar item…"
-          value={busca}
-          onChange={(e) => setBusca(e.target.value)}
-        />
-
-        <div className="table-card" style={{ padding: 14 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Adicionar item manual</div>
-          <div className="page-header-sub" style={{ marginTop: 0, marginBottom: 10 }}>
-            Para etiquetar algo que ainda não está cadastrado como insumo.
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
+        {/* Catálogo no TOPO da coluna, alinhado com o card da Impressora à direita: a busca
+            fica no cabeçalho do próprio card, então o card começa na mesma altura da coluna
+            da direita — sem o desalinhamento que a busca/‌item-manual soltos acima criavam. */}
+        <div className="table-card etqi-cat">
+          <div style={{ padding: 12, borderBottom: '1px solid var(--app-border)' }}>
             <input
               className="form-input"
-              placeholder="Nome do item"
-              value={novoNome}
-              onChange={(e) => setNovoNome(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') usarManual() }}
+              placeholder="Buscar item…"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
             />
-            <button type="button" className="btn btn-secondary" disabled={!novoNome.trim()} onClick={usarManual}>Usar</button>
           </div>
-        </div>
-
-        {loading ? (
-          <div className="loading-state">Carregando…</div>
-        ) : itens.length === 0 ? (
-          <div className="empty-state">Nenhum item encontrado.</div>
-        ) : (
-          <div className="table-card etqi-cat">
+          {loading ? (
+            <div className="loading-state" style={{ padding: 24 }}>Carregando…</div>
+          ) : itens.length === 0 ? (
+            <div className="empty-state" style={{ padding: 24 }}>Nenhum item encontrado.</div>
+          ) : (
             <table className="hb-table">
               <thead>
                 <tr>
@@ -936,8 +922,26 @@ function AbaItens({ notify }) {
                 ))}
               </tbody>
             </table>
+          )}
+        </div>
+
+        {/* Item manual abaixo do catálogo — ação secundária. */}
+        <div className="table-card" style={{ padding: 14 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Adicionar item manual</div>
+          <div className="page-header-sub" style={{ marginTop: 0, marginBottom: 10 }}>
+            Para etiquetar algo que ainda não está cadastrado como insumo.
           </div>
-        )}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              className="form-input"
+              placeholder="Nome do item"
+              value={novoNome}
+              onChange={(e) => setNovoNome(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') usarManual() }}
+            />
+            <button type="button" className="btn btn-secondary" disabled={!novoNome.trim()} onClick={usarManual}>Usar</button>
+          </div>
+        </div>
       </div>
 
       {/* DIREITA: impressora + painel "Etiqueta selecionada" (campos + prévia ao vivo +
