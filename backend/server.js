@@ -7460,6 +7460,65 @@ app.post('/api/public/etiquetas/:token/registrar', async (req, res) => {
   } catch (err) { console.error('[public/etiquetas/registrar]', err); res.status(500).json({ error: 'Erro ao registrar a etiqueta.' }); }
 });
 
+// ===== Etiquetas (ADMIN) — registro direto pelo admin, para a Niimbot =====
+//
+// Espelha o /public/etiquetas/:token/registrar acima, mas autenticado (dentro do
+// gate de tenant, não por token de dispositivo) e com responsável em TEXTO LIVRE
+// em vez de funcionário cadastrado — é o admin digitando na hora, não a cozinha
+// escolhendo o próprio nome numa lista. `getEmpresaIdAtual()` (nunca
+// req.user.empresaId: para ADMIN é o JWT cru do HUB, sem esse campo) é a mesma
+// função que garantirEtiquetaSetup() já usa por este mesmo motivo.
+app.post('/api/etiquetas/registrar', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const empresaId = getEmpresaIdAtual();
+    const b = req.body || {};
+    const insumoId = b.insumoId ? parseInt(b.insumoId, 10) : null;
+    const nomeAvulso = typeof b.nomeAvulso === 'string' ? b.nomeAvulso.trim().slice(0, 120) : '';
+    if (!insumoId && !nomeAvulso) return res.status(400).json({ error: 'Escolha um item ou informe o nome.' });
+
+    let nomeItem = nomeAvulso, itemConfig = null;
+    if (insumoId) {
+      const insumo = await prisma.insumo.findFirst({ where: { id: insumoId, ativo: true, tipo: { in: ETIQUETA_TIPOS_INSUMO } } });
+      if (!insumo) return res.status(404).json({ error: 'Item não encontrado.' });
+      nomeItem = insumo.nome;
+      itemConfig = await prisma.etiquetaItemConfig.findFirst({ where: { insumoId } });
+      if (itemConfig?.ativo === false) return res.status(400).json({ error: 'Este item está desativado para etiquetagem.' });
+    }
+
+    const responsavelNome = typeof b.responsavelNome === 'string' ? b.responsavelNome.trim().slice(0, 120) : '';
+    if (!responsavelNome) return res.status(400).json({ error: 'Informe o responsável (quem manipulou).' });
+
+    const manipuladoEmMs = b.manipuladoEm ? Date.parse(b.manipuladoEm) : Date.now();
+    if (!Number.isFinite(manipuladoEmMs)) return res.status(400).json({ error: 'Data de manipulação inválida.' });
+
+    const regras = await prisma.etiquetaRegra.findMany({ where: { ativo: true } });
+    let calc;
+    try { calc = validadeDe({ manipuladoEmMs, conservacao: b.conservacao, regras, itemConfig }); }
+    catch (e) { return res.status(e.http || 400).json({ error: e.msg || 'Conservação inválida.' }); }
+
+    // Override opcional de validade (dias) — aplicado NO SERVIDOR, mantendo o tempLabel da regra.
+    const override = b.validadeDias == null || b.validadeDias === '' ? null : parseInt(b.validadeDias, 10);
+    let validoAte = calc.validoAte, validadeDias = calc.dias;
+    if (override !== null) {
+      if (!Number.isFinite(override) || override < 1 || override > 3650) return res.status(400).json({ error: 'Validade deve ser de 1 a 3650 dias.' });
+      validadeDias = override;
+      validoAte = new Date(manipuladoEmMs + override * 86400000);
+    }
+
+    const quantidade = Math.min(50, Math.max(1, parseInt(b.quantidade, 10) || 1));
+    let etiqueta;
+    try {
+      etiqueta = await criarEtiquetaComLote({
+        empresaId, insumoId, nomeItem, conservacao: b.conservacao, tempLabel: calc.tempLabel,
+        manipuladoEm: new Date(manipuladoEmMs), validoAte, validadeDias,
+        responsavelId: null, responsavelNome, dispositivoId: null, quantidade,
+      });
+    } catch (e) { if (e?.http) return res.status(e.http).json({ error: e.msg }); throw e; }
+    res.status(201).json({ ok: true, etiqueta });
+  } catch (err) { console.error('[etiquetas/registrar admin]', err); res.status(500).json({ error: 'Erro ao registrar a etiqueta.' }); }
+});
+
 // O QR da etiqueta ficou para a v2, e com ele a consulta pública por lote que existia
 // aqui (GET /api/public/etiquetas/lote/:lote). Ela era pública e sem auth, mas nada a
 // chamava: não há rota /etq/:lote no App.jsx e o quiosque nunca desenha QR. Endpoint sem
