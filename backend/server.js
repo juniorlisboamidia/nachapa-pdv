@@ -16,6 +16,7 @@ import { avaliarResposta, execucaoEmAlerta, fotosCriticasFaltando } from './chec
 import { venceHoje } from './checklistRecorrencia.js';
 import { itensCriticosNaoConformes, montarMensagemAlerta } from './checklistAlerta.js';
 import { montarMensagemLembrete, atrasado } from './checklistLembrete.js';
+import { calcularEstatisticas } from './checklistEstatisticas.js';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 
@@ -8148,6 +8149,79 @@ app.get('/api/checklist/checklists/:id/execucoes', async (req, res) => {
     });
     res.json({ execucoes: linhas });
   } catch (e) { console.error('[checklist/historico]', e); res.status(500).json({ error: 'Erro ao carregar histórico.' }); }
+});
+
+// Estatísticas do checklist no período (KPIs, série diária, ranking de operadores/itens,
+// heatmap dow×faixa). Reusa o padrão de fuso BR de brFields/brToUtcMs/venceHoje (mesmo
+// usado no histórico acima e em dispararLembretesLoja, ~linha 2477) e delega o cálculo
+// puro pra calcularEstatisticas (checklistEstatisticas.js).
+app.get('/api/checklist/checklists/:id/estatisticas', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const checklistId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(checklistId)) return res.status(400).json({ error: 'ID inválido.' });
+    const c = await prisma.checklist.findFirst({ where: { id: checklistId } });
+    if (!c) return res.status(404).json({ error: 'Checklist não encontrado.' });
+
+    // período: default últimos 30 dias de expediente; teto 180 dias
+    const hoje = janelaExpedienteAtual().de;
+    const fh = brFields(hoje.getTime());
+    const parseDia = (s) => (/^\d{4}-\d{2}-\d{2}$/.test(s) ? s.split('-').map(Number) : null);
+    let deP = parseDia(String(req.query.de || ''));
+    let ateP = parseDia(String(req.query.ate || ''));
+    if (!ateP) ateP = [fh.y, fh.mo + 1, fh.day];          // brFields.mo é 0-index → +1 p/ o array [y,m,d] 1-index
+    if (!deP) { const dm = new Date(Date.UTC(ateP[0], ateP[1] - 1, ateP[2] - 30)); deP = [dm.getUTCFullYear(), dm.getUTCMonth() + 1, dm.getUTCDate()]; }
+    // limites BR
+    const deMs = brToUtcMs(deP[0], deP[1] - 1, deP[2], 5, 0);   // 05:00 BR (início do dia de expediente)
+    let ateMs = brToUtcMs(ateP[0], ateP[1] - 1, ateP[2], 5, 0);
+    if (ateMs < deMs) ateMs = deMs;
+    if ((ateMs - deMs) / 86400000 > 180) return res.status(400).json({ error: 'Período máximo de 180 dias.' });
+
+    // execuções no intervalo (dataRef entre os inícios de expediente de de..ate)
+    const execs = await prisma.checklistExecucao.findMany({
+      where: { checklistId, dataRef: { gte: new Date(deMs), lte: new Date(ateMs + 86400000) } },
+      include: { respostas: { select: { itemChave: true, conforme: true } } },
+      orderBy: { dataRef: 'asc' }, take: 2000,
+    });
+
+    // nomes dos operadores (sem pin)
+    const ids = [...new Set(execs.map((e) => e.funcionarioId))];
+    const funcs = ids.length ? await prisma.funcionario.findMany({ where: { id: { in: ids } }, select: { id: true, nome: true, apelido: true } }) : [];
+    const fmap = new Map(funcs.map((f) => [f.id, f.apelido || f.nome]));
+
+    // helper: 'YYYY-MM-DD' BR de um instante (dia de expediente ao qual o instante pertence)
+    const diaStr = (ms) => { const f = brFields(ms); return `${f.y}-${String(f.mo + 1).padStart(2, '0')}-${String(f.day).padStart(2, '0')}`; };
+    // deadline (ms) de um dia BR [y,m0,d] a partir do horarioLimite+tolerância; null se sem horário
+    const hl = (typeof c.recorrenciaConfig?.horarioLimite === 'string') ? c.recorrenciaConfig.horarioLimite : '';
+    const tol = Math.max(0, Number(c.recorrenciaConfig?.toleranciaMin) || 0);
+    const mHL = /^(\d{1,2}):(\d{2})$/.exec(hl);
+    const agendado = (c.recorrenciaTipo === 'DIARIA' || c.recorrenciaTipo === 'DIAS_SEMANA') && !!mHL;
+    const deadlineDoDia = (y, m0, d) => (mHL ? brToUtcMs(y, m0, d, parseInt(mHL[1], 10), parseInt(mHL[2], 10)) + tol * 60000 : null);
+
+    // normalizar execuções
+    const execucoes = execs.map((e) => {
+      const dref = e.dataRef.getTime(); const f = brFields(dref);
+      return { id: e.id, funcionarioId: e.funcionarioId, funcionario: fmap.get(e.funcionarioId) || '—', dia: diaStr(dref), iniciadaMs: e.iniciadaEm ? e.iniciadaEm.getTime() : null, concluidaMs: e.concluidaEm ? e.concluidaEm.getTime() : null, status: e.status, emAlerta: e.emAlerta, deadlineMs: deadlineDoDia(f.y, f.mo, f.day), respostas: e.respostas };
+    });
+
+    // dias do intervalo + ocorrências esperadas (itera dia a dia)
+    const dias = []; const ocorrenciasEsperadas = [];
+    for (let ms = deMs; ms <= ateMs; ms += 86400000) {
+      const f = brFields(ms); const dstr = `${f.y}-${String(f.mo + 1).padStart(2, '0')}-${String(f.day).padStart(2, '0')}`;
+      dias.push(dstr);
+      const dow = new Date(Date.UTC(f.y, f.mo, f.day)).getUTCDay();
+      if (agendado && venceHoje({ recorrenciaTipo: c.recorrenciaTipo, recorrenciaConfig: c.recorrenciaConfig }, dow)) {
+        ocorrenciasEsperadas.push({ dia: dstr, dow, horaLimite: parseInt(mHL[1], 10), deadlineMs: deadlineDoDia(f.y, f.mo, f.day) });
+      }
+    }
+
+    // itensMap: chave -> título (último visto)
+    const itensMap = {};
+    for (const e of execs) for (const it of (Array.isArray(e.itensSnapshotJson) ? e.itensSnapshotJson : [])) if (it?.chave != null) itensMap[String(it.chave)] = it.titulo || `Item ${it.chave}`;
+
+    const stats = calcularEstatisticas({ execucoes, ocorrenciasEsperadas, dias, tempoEstimadoMin: c.tempoEstimadoMin ?? null, itensMap, agendado });
+    res.json({ periodo: { de: dias[0] || null, ate: dias[dias.length - 1] || null }, checklist: { nome: c.nome, recorrenciaTipo: c.recorrenciaTipo, horarioLimite: hl || null, tempoEstimadoMin: c.tempoEstimadoMin ?? null }, ...stats });
+  } catch (e) { console.error('[checklist/estatisticas]', e); res.status(500).json({ error: 'Erro ao calcular estatísticas.' }); }
 });
 
 // Detalhe de uma execução (respostas + fotos metadata; bytes por /fotos/:id).
