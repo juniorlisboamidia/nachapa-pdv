@@ -612,6 +612,7 @@ model Funcionario {
   whatsapp     String?
   status       String   @default("ATIVO") // ATIVO | INATIVO
   tokenPrivado String?  @unique // link privado do funcionário (XP/nível/perfil)
+  pin          String?  // PIN de 4 dígitos p/ entrar na execução pública do Checklist (por link+PIN)
   // Ponto Facial
   jornadaId       Int?     // jornada de trabalho atribuída (horário previsto)
   pinPonto        String?  // PIN de reserva p/ bater ponto quando o rosto não é reconhecido
@@ -1870,6 +1871,7 @@ model Checklist {
   recorrenciaTipo   RecorrenciaTipo @default(AVULSO)
   recorrenciaConfig Json?
   tempoEstimadoMin  Int?     // tempo estimado de execução (min), exibido pro colaborador
+  publicoToken      String?  @unique // token do link público (execução por PIN, sem OTP) — gerado sob demanda
   ativo             Boolean  @default(true)
   criadoEm          DateTime @default(now())
   atualizadoEm      DateTime @updatedAt

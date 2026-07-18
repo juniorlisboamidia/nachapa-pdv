@@ -363,7 +363,7 @@ app.get('/api/funcionarios', async (req, res) => {
       ];
     }
     const lista = await prisma.funcionario.findMany({ where, orderBy: [{ status: 'asc' }, { nome: 'asc' }] });
-    res.json(lista);
+    res.json(lista.map(({ pin, ...f }) => f));
   } catch (err) { console.error('[funcionarios GET]', err); res.status(500).json({ error: 'Erro ao listar a equipe.' }); }
 });
 
@@ -372,7 +372,7 @@ app.post('/api/funcionarios', async (req, res) => {
   try {
     const d = dadosFuncionario(req.body);
     if (d.error) return res.status(400).json({ error: d.error });
-    const f = await prisma.funcionario.create({ data: d.campos });
+    const { pin, ...f } = await prisma.funcionario.create({ data: d.campos });
     res.status(201).json(f);
   } catch (err) { console.error('[funcionarios POST]', err); res.status(500).json({ error: 'Erro ao criar o funcionário.' }); }
 });
@@ -386,7 +386,7 @@ app.put('/api/funcionarios/:id', async (req, res) => {
     if (!existe) return res.status(404).json({ error: 'Funcionário não encontrado.' });
     const d = dadosFuncionario(req.body);
     if (d.error) return res.status(400).json({ error: d.error });
-    const f = await prisma.funcionario.update({ where: { id }, data: d.campos });
+    const { pin, ...f } = await prisma.funcionario.update({ where: { id }, data: d.campos });
     res.json(f);
   } catch (err) { console.error('[funcionarios PUT]', err); res.status(500).json({ error: 'Erro ao salvar o funcionário.' }); }
 });
@@ -2211,6 +2211,53 @@ const chkColabAtende = (checklist, func) => {
   }
   return chkFuncaoAtende(checklist?.funcoes, func.funcao);
 };
+
+// ===== PÚBLICO — execução do Checklist por link+PIN (sem OTP; ativado por checklist,
+// achado pelo publicoToken gerado no Detalhe admin). Fora do gate de tenant (empresaId
+// explícito em toda query, vem do checklist resolvido pelo token) — mesmo padrão do
+// EtiquetasQuiosque (resolverDispositivo). =====
+
+// Dados do checklist + colaboradores elegíveis (mesma regra de posse do modo OTP —
+// chkColabAtende) para o combo de "quem sou eu" na tela pública. NUNCA devolve pin/whatsapp.
+app.get('/api/public/checklist/:token/bootstrap', async (req, res) => {
+  try {
+    const c = await prisma.checklist.findFirst({ where: { publicoToken: String(req.params.token), ativo: true }, include: { itens: { orderBy: { ordem: 'asc' } } } });
+    if (!c) return res.status(404).json({ error: 'Checklist não encontrado.' });
+    const ativos = await prisma.funcionario.findMany({ where: { empresaId: c.empresaId, status: 'ATIVO' }, select: { id: true, nome: true, apelido: true, funcao: true } });
+    const elegiveis = ativos.filter((f) => chkColabAtende(c, f)).map((f) => ({ id: f.id, nome: f.apelido || f.nome, funcao: f.funcao || null }));
+    res.json({ checklist: { id: c.id, nome: c.nome, categoria: c.categoria, descricao: c.descricao, tempoEstimadoMin: c.tempoEstimadoMin ?? null }, colaboradores: elegiveis });
+  } catch (e) { console.error('[public/checklist/bootstrap]', e); res.status(500).json({ error: 'Erro ao carregar.' }); }
+});
+
+// Entra na execução com o colaborador escolhido (id, vindo do bootstrap) + PIN de 4
+// dígitos. Rate-limit em memória por funcionarioId (5 falhas → trava 5min) e mensagem
+// SEMPRE genérica ("Nome ou PIN inválido") — não vaza quais colaboradores têm PIN
+// cadastrado nem se o motivo foi PIN errado, sem posse ou sem PIN. Emite o mesmo token
+// de sessão do login OTP (tipo 'colab'), só que de vida curta (6h — dispositivo
+// compartilhado, não é o celular do colaborador).
+const pinTentativas = new Map(); // funcionarioId -> { fails, lockUntil }
+app.post('/api/public/checklist/:token/entrar', async (req, res) => {
+  try {
+    if (!JWT_SECRET) return res.status(500).json({ error: 'Configuração de sessão ausente.' });
+    const c = await prisma.checklist.findFirst({ where: { publicoToken: String(req.params.token), ativo: true }, select: { id: true, empresaId: true, atribuicaoTipo: true, funcoes: true, funcionarioIds: true } });
+    if (!c) return res.status(404).json({ error: 'Checklist não encontrado.' });
+    const fid = parseInt(req.body?.funcionarioId, 10);
+    const pin = String(req.body?.pin || '').trim();
+    if (!Number.isInteger(fid)) return res.status(401).json({ error: 'Nome ou PIN inválido.' });
+    const st = pinTentativas.get(fid) || { fails: 0, lockUntil: 0 };
+    if (st.lockUntil > Date.now()) return res.status(429).json({ error: 'Muitas tentativas. Aguarde um instante e tente de novo.' });
+    const func = await prisma.funcionario.findFirst({ where: { id: fid, empresaId: c.empresaId, status: 'ATIVO' } });
+    const ok = !!func && !!func.pin && /^\d{4}$/.test(pin) && func.pin === pin && chkColabAtende(c, func);
+    if (!ok) {
+      const fails = st.fails + 1;
+      pinTentativas.set(fid, { fails, lockUntil: fails >= 5 ? Date.now() + 5 * 60000 : 0 });
+      return res.status(401).json({ error: 'Nome ou PIN inválido.' });
+    }
+    pinTentativas.delete(fid);
+    const token = jwt.sign({ fid: func.id, eid: c.empresaId, tipo: 'colab' }, JWT_SECRET, { expiresIn: '6h' });
+    res.json({ token, checklistId: c.id });
+  } catch (e) { console.error('[public/checklist/entrar]', e); res.status(500).json({ error: 'Erro ao entrar.' }); }
+});
 
 app.get('/api/public/colaborador/checklists', async (req, res) => {
   try {
@@ -7911,8 +7958,14 @@ app.get('/api/checklist/checklists', async (req, res) => {
 app.get('/api/checklist/checklists/:id', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
   try {
-    const c = await prisma.checklist.findFirst({ where: { id: parseInt(req.params.id, 10) }, include: { itens: { orderBy: { ordem: 'asc' } } } });
+    let c = await prisma.checklist.findFirst({ where: { id: parseInt(req.params.id, 10) }, include: { itens: { orderBy: { ordem: 'asc' } } } });
     if (!c) return res.status(404).json({ error: 'Checklist não encontrado.' });
+    // Link público (execução por PIN) é gerado sob demanda, na 1ª vez que o admin abre o
+    // Detalhe — assim o front sempre tem um publicoToken pra montar a URL, sem exigir uma
+    // ação explícita de "gerar link" antes.
+    if (!c.publicoToken) {
+      c = await prisma.checklist.update({ where: { id: c.id }, data: { publicoToken: randomBytes(12).toString('base64url') }, include: { itens: { orderBy: { ordem: 'asc' } } } });
+    }
     res.json({ checklist: c });
   } catch (err) { console.error('[checklist/checklists/:id GET]', err); res.status(500).json({ error: 'Erro ao carregar checklist.' }); }
 });
