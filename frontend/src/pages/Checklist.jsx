@@ -14,6 +14,7 @@ const TABS = [
   { id: 'checklists', label: 'Checklists', sub: 'Modelos que a operação executa' },
   { id: 'templates', label: 'Templates', sub: 'Biblioteca pronta de rotinas' },
   { id: 'notificacoes', label: 'Notificações', sub: 'Alerta imediato no WhatsApp' },
+  { id: 'configuracoes', label: 'Configurações', sub: 'Lembrete de atraso e destinatários' },
 ]
 const TAB_IDS = TABS.map((t) => t.id)
 
@@ -62,6 +63,7 @@ export default function Checklist() {
       {tab === 'templates' && <AbaTemplates notify={notify} />}
       {tab === 'checklists' && <AbaChecklists notify={notify} />}
       {tab === 'notificacoes' && <AbaNotificacoes notify={notify} />}
+      {tab === 'configuracoes' && <AbaConfiguracoes notify={notify} />}
       {tab === 'painel' && <AbaPainel notify={notify} />}
     </div>
   )
@@ -961,7 +963,15 @@ function AbaNotificacoes({ notify }) {
     setConfig((c) => ({ ...c, alertaImediatoAtivo: novo }))
     setSalvandoConfig(true)
     try {
-      await api.put('/checklist/notificacoes/config', { alertaImediatoAtivo: novo })
+      // O PUT é full-replace-ish: campo ausente = reseta (lembreteAtivo->false,
+      // lembreteTemplate->'', lembreteMinutosAntes->30). Manda o que já está salvo
+      // pros 3 campos de lembrete (aba Configurações) pra não zerá-los sem querer.
+      await api.put('/checklist/notificacoes/config', {
+        alertaImediatoAtivo: novo,
+        lembreteAtivo: config.lembreteAtivo,
+        lembreteTemplate: config.lembreteTemplate,
+        lembreteMinutosAntes: config.lembreteMinutosAntes,
+      })
     } catch (err) {
       notify(err?.response?.data?.error ?? 'Não foi possível salvar a configuração.', 'error')
       carregar()
@@ -1092,6 +1102,250 @@ function AbaNotificacoes({ notify }) {
           </table>
         )}
       </div>
+    </div>
+  )
+}
+
+// ===================== CONFIGURAÇÕES (lembrete de atraso) =====================
+// Mesmo padrão da AbaNotificacoes (alerta imediato): toggle otimista + card de
+// destinatários com form de adicionar + ConfirmDialog na exclusão. A diferença é o
+// card do lembrete em si (modelo de mensagem editável + minutos antes) e a lista de
+// destinatários é filtrada por tipo==='ATRASO' (o alerta imediato usa 'IMEDIATO').
+const LEMBRETE_TOKENS = [
+  { label: 'Nome do checklist', token: '[nome do checklist]' },
+  { label: 'Horário do checklist', token: '[horário do checklist]' },
+  { label: 'Nome do responsável', token: '[nome do responsável]' },
+]
+
+function AbaConfiguracoes({ notify }) {
+  const [config, setConfig] = useState(null)
+  const [destsAll, setDestsAll] = useState([])
+  const [template, setTemplate] = useState('')
+  const [minutos, setMinutos] = useState(30)
+  const [previa, setPrevia] = useState('')
+  const [carregandoPrevia, setCarregandoPrevia] = useState(false)
+  const [salvandoConfig, setSalvandoConfig] = useState(false) // trava o toggle
+  const [salvando, setSalvando] = useState(false) // trava o botão Salvar
+  const [nome, setNome] = useState('')
+  const [whats, setWhats] = useState('')
+  const [salvandoDest, setSalvandoDest] = useState(false)
+  const [excluir, setExcluir] = useState(null)
+  const [excluindo, setExcluindo] = useState(false)
+  const templateRef = useRef(null)
+
+  const dests = destsAll.filter((d) => d.tipo === 'ATRASO')
+
+  function carregar() {
+    api.get('/checklist/notificacoes')
+      .then((r) => {
+        setConfig(r.data.config)
+        setDestsAll(r.data.destinatarios || [])
+        setTemplate(r.data.config?.lembreteTemplate || '')
+        setMinutos(r.data.config?.lembreteMinutosAntes || 30)
+      })
+      .catch((e) => notify(e?.response?.data?.error ?? 'Não foi possível carregar as configurações.', 'error'))
+  }
+  useEffect(() => { carregar() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Toggle otimista — só mexe em lembreteAtivo; os outros 3 campos vão com o valor já
+  // salvo (não a edição em andamento no textarea/minutos) pra não commitar rascunho
+  // sem querer. Mesmo cuidado do PUT full-replace-ish explicado no toggleAtivo acima.
+  async function toggleLembrete() {
+    if (salvandoConfig || !config) return
+    const novo = !config.lembreteAtivo
+    setConfig((c) => ({ ...c, lembreteAtivo: novo }))
+    setSalvandoConfig(true)
+    try {
+      await api.put('/checklist/notificacoes/config', {
+        alertaImediatoAtivo: config.alertaImediatoAtivo,
+        lembreteAtivo: novo,
+        lembreteTemplate: config.lembreteTemplate,
+        lembreteMinutosAntes: config.lembreteMinutosAntes,
+      })
+    } catch (err) {
+      notify(err?.response?.data?.error ?? 'Não foi possível salvar a configuração.', 'error')
+      carregar()
+    } finally {
+      setSalvandoConfig(false)
+    }
+  }
+
+  // Insere o token na posição do cursor (ou no fim, se o textarea ainda não tiver foco).
+  function inserirToken(token) {
+    const el = templateRef.current
+    const start = el && typeof el.selectionStart === 'number' ? el.selectionStart : template.length
+    const end = el && typeof el.selectionEnd === 'number' ? el.selectionEnd : template.length
+    setTemplate((atual) => atual.slice(0, start) + token + atual.slice(end))
+  }
+
+  async function salvar() {
+    if (salvando || !config) return
+    setSalvando(true)
+    try {
+      const r = await api.put('/checklist/notificacoes/config', {
+        alertaImediatoAtivo: config.alertaImediatoAtivo,
+        lembreteAtivo: config.lembreteAtivo,
+        lembreteTemplate: template,
+        lembreteMinutosAntes: Number(minutos),
+      })
+      setConfig(r.data.config)
+      setTemplate(r.data.config.lembreteTemplate)
+      setMinutos(r.data.config.lembreteMinutosAntes)
+      notify('Configurações do lembrete salvas.')
+    } catch (err) {
+      notify(err?.response?.data?.error ?? 'Não foi possível salvar.', 'error')
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  async function verPrevia() {
+    setCarregandoPrevia(true)
+    try {
+      const r = await api.get('/checklist/notificacoes/lembrete/previa')
+      setPrevia(r.data.previa)
+    } catch (err) {
+      notify(err?.response?.data?.error ?? 'Não foi possível carregar a prévia.', 'error')
+    } finally {
+      setCarregandoPrevia(false)
+    }
+  }
+
+  async function addDest(e) {
+    e.preventDefault()
+    if (!nome.trim() || !whats.trim() || salvandoDest) return
+    setSalvandoDest(true)
+    try {
+      await api.post('/checklist/notificacoes/destinatarios', { nome, whatsapp: whats, tipo: 'ATRASO' })
+      setNome('')
+      setWhats('')
+      notify('Destinatário adicionado.')
+      carregar()
+    } catch (err) {
+      notify(err?.response?.data?.error ?? 'Não foi possível adicionar o destinatário.', 'error')
+    } finally {
+      setSalvandoDest(false)
+    }
+  }
+
+  async function confirmarExclusao() {
+    if (!excluir) return
+    setExcluindo(true)
+    try {
+      await api.delete(`/checklist/notificacoes/destinatarios/${excluir.id}`)
+      notify('Destinatário removido.')
+      setExcluir(null)
+      carregar()
+    } catch (err) {
+      notify(err?.response?.data?.error ?? 'Não foi possível remover o destinatário.', 'error')
+    } finally {
+      setExcluindo(false)
+    }
+  }
+
+  if (!config) return <div className="loading-state">Carregando…</div>
+
+  return (
+    <div style={{ maxWidth: 720 }}>
+      <div className="table-card" style={{ padding: 16, marginBottom: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+          <div>
+            <div style={{ fontWeight: 700 }}>Lembrete de atraso</div>
+            <div style={{ fontSize: 12, color: 'var(--app-text-soft, #888)' }}>
+              Quando um checklist passa do horário-limite sem ser concluído, os destinatários de atraso recebem um lembrete no WhatsApp (uma vez por checklist, por dia).
+            </div>
+          </div>
+          <label style={{ cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+            <input type="checkbox" checked={!!config.lembreteAtivo} disabled={salvandoConfig} onChange={toggleLembrete} />
+            {config.lembreteAtivo ? 'Ativo' : 'Inativo'}
+          </label>
+        </div>
+
+        <div style={{ marginTop: 14 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 6 }}>Modelo da mensagem</label>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+            {LEMBRETE_TOKENS.map((t) => (
+              <button key={t.token} type="button" className="btn btn-secondary btn-sm" onClick={() => inserirToken(t.token)}>
+                + {t.label}
+              </button>
+            ))}
+          </div>
+          <textarea
+            ref={templateRef}
+            className="form-input"
+            style={{ width: '100%', minHeight: 90, resize: 'vertical', fontFamily: 'inherit' }}
+            placeholder="Aviso: o checklist [nome do checklist] previsto para as [horário do checklist] não foi concluído. Colaborador responsável: [nome do responsável]. Por favor, verifique."
+            value={template}
+            maxLength={600}
+            onChange={(e) => setTemplate(e.target.value)}
+          />
+        </div>
+
+        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <label style={{ fontSize: 12, fontWeight: 600 }}>Avisar</label>
+          <input
+            type="number"
+            className="form-input"
+            style={{ width: 80 }}
+            min={5}
+            max={240}
+            value={minutos}
+            onChange={(e) => setMinutos(e.target.value)}
+          />
+          <span style={{ fontSize: 12, color: 'var(--app-text-soft, #888)' }}>minutos depois do horário-limite (5 a 240)</span>
+        </div>
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={verPrevia} disabled={carregandoPrevia}>
+            {carregandoPrevia ? 'Carregando…' : 'Ver prévia'}
+          </button>
+          <button type="button" className="btn btn-primary btn-sm" onClick={salvar} disabled={salvando}>
+            {salvando ? 'Salvando…' : 'Salvar'}
+          </button>
+        </div>
+        {previa && (
+          <pre style={{ whiteSpace: 'pre-wrap', background: 'var(--app-surface-2,#f7f7f7)', border: '1px solid var(--app-border,#eee)', borderRadius: 8, padding: 10, marginTop: 10, fontSize: 12 }}>
+            {previa}
+          </pre>
+        )}
+      </div>
+
+      <form onSubmit={addDest} className="table-card" style={{ padding: 16, marginBottom: 12 }}>
+        <div style={{ fontWeight: 700, marginBottom: 8 }}>Notificações de atraso</div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+          <input className="form-input" style={{ flex: 1 }} placeholder="Nome" value={nome} onChange={(e) => setNome(e.target.value)} />
+          <input className="form-input" style={{ flex: 1 }} placeholder="WhatsApp (DDD+número)" value={whats} onChange={(e) => setWhats(e.target.value)} />
+          <button type="submit" className="btn btn-primary" disabled={salvandoDest || !nome.trim() || !whats.trim()}>
+            {salvandoDest ? 'Adicionando…' : 'Adicionar'}
+          </button>
+        </div>
+        {dests.length === 0 ? (
+          <p className="empty-state">Nenhum destinatário. Adicione quem deve receber os lembretes de atraso.</p>
+        ) : (
+          dests.map((d) => (
+            <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderTop: '1px solid var(--app-border,#eee)' }}>
+              <span>
+                <strong>{d.nome}</strong> <span style={{ color: 'var(--app-text-soft, #888)', fontSize: 12 }}>{d.whatsapp}</span>
+                {!d.ativo && <span className="badge badge-gray" style={{ marginLeft: 6 }}>inativo</span>}
+              </span>
+              <button type="button" className="btn btn-danger btn-sm" onClick={() => setExcluir(d)}>Excluir</button>
+            </div>
+          ))
+        )}
+      </form>
+
+      <ConfirmDialog
+        open={!!excluir}
+        title="Excluir destinatário"
+        message={excluir ? `Excluir "${excluir.nome}"?` : ''}
+        description="Esta ação não pode ser desfeita."
+        confirmLabel="Excluir"
+        cancelLabel="Cancelar"
+        variant="danger"
+        loading={excluindo}
+        onConfirm={confirmarExclusao}
+        onCancel={() => setExcluir(null)}
+      />
     </div>
   )
 }

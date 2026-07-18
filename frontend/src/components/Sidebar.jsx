@@ -222,6 +222,7 @@ const grupos = [
       { to: '/checklist/checklists', label: 'Checklists', icon: 'ficha' },
       { to: '/checklist/templates', label: 'Templates', icon: 'produtos' },
       { to: '/checklist/notificacoes', label: 'Notificações', icon: 'marketing' },
+      { to: '/checklist/configuracoes', label: 'Configurações', icon: 'gestao' },
     ]
   },
   {
