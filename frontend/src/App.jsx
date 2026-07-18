@@ -22,7 +22,7 @@ import Faturamento from './pages/Faturamento'
 import MinhaEmpresa from './pages/MinhaEmpresa'
 import Etiquetas from './pages/Etiquetas'
 import EtiquetasQuiosque from './pages/EtiquetasQuiosque'
-import Checklist, { ChecklistDetalhe } from './pages/Checklist'
+import Checklist, { ChecklistDetalhe, ChecklistHistorico } from './pages/Checklist'
 import ChecklistPublico from './pages/ChecklistPublico'
 
 function TelaCarregando() {
@@ -100,6 +100,7 @@ export default function App() {
             <Route path="checklist" element={<Checklist />} />
             <Route path="checklist/:tab" element={<Checklist />} />
             <Route path="checklist/detalhe/:id" element={<ChecklistDetalhe />} />
+            <Route path="checklist/historico/:id" element={<ChecklistHistorico />} />
             {/* Em construção */}
             <Route path="etiquetas" element={<Etiquetas />} />
             <Route path="etiquetas/:tab" element={<Etiquetas />} />

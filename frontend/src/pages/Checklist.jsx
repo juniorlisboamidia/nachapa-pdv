@@ -86,6 +86,7 @@ function ChkIcon({ name, size = 20 }) {
     case 'check': return <svg {...p}><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><path d="M22 4L12 14.01l-3-3" /></svg>
     case 'alerta': return <svg {...p}><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
     case 'relogio': return <svg {...p}><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+    case 'calendario': return <svg {...p}><rect x="3" y="4" width="18" height="18" rx="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
     case 'chevron': return <svg {...p}><polyline points="9 18 15 12 9 6" /></svg>
     case 'checkSm': return <svg {...p} strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>
     case 'eye': return <svg {...p}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
@@ -762,6 +763,7 @@ function AbaChecklists({ notify }) {
                   <td style={{ textAlign: 'right' }}>
                     <div className="chk-row-acoes">
                       <ChkAcaoBtn icon="eye" title="Ver detalhes" onClick={() => navigate(`/checklist/detalhe/${c.id}`)} />
+                      <ChkAcaoBtn icon="calendario" title="Ver histórico" onClick={() => navigate(`/checklist/historico/${c.id}`)} />
                       <ChkAcaoBtn icon="play" title="Executar" onClick={() => executar(c)} />
                       <ChkAcaoBtn icon="edit" title="Editar" onClick={() => editar(c)} />
                       <ChkAcaoBtn icon="trash" title="Excluir" danger onClick={() => setExcluir(c)} />
@@ -1263,6 +1265,9 @@ export function ChecklistDetalhe() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-secondary" onClick={() => navigate(`/checklist/historico/${c.id}`)}>
+            <ChkIcon name="calendario" size={15} /> Ver histórico
+          </button>
           <button type="button" className="btn btn-secondary" onClick={() => navigate(`/checklist/checklists?editar=${c.id}`)}>
             <ChkIcon name="edit" size={15} /> Editar
           </button>
@@ -1306,6 +1311,137 @@ export function ChecklistDetalhe() {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ===================== HISTÓRICO DE EXECUÇÕES (Ação 2) =====================
+// Todas as execuções de um checklist (não só as "recentes" do Painel), com filtro por
+// status/operador/período — pro gestor investigar um padrão de atraso ou auditar uma
+// data específica sem abrir execução por execução. Reusa o MESMO DetalheExecucao do
+// Painel/AbaChecklists (mesmo modal, mesma trava de fechar só pelo botão) — não duplica
+// a UI de respostas+fotos aqui.
+export function ChecklistHistorico() {
+  const { id } = useParams()
+  const navigate = useNavigate()
+  const [checklist, setChecklist] = useState(null)
+  const [funcionarios, setFuncionarios] = useState([])
+  const [execucoes, setExecucoes] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [erro, setErro] = useState(false)
+  const [status, setStatus] = useState('')
+  const [funcId, setFuncId] = useState('')
+  const [de, setDe] = useState('')
+  const [ate, setAte] = useState('')
+  const [verExecucaoId, setVerExecucaoId] = useState(null)
+
+  useEffect(() => {
+    api.get(`/checklist/checklists/${id}`)
+      .then((r) => setChecklist(r.data.checklist))
+      .catch(() => {}) // título cai pro placeholder "…" — a tabela abaixo tem seu próprio erro
+  }, [id])
+
+  useEffect(() => {
+    api.get('/funcionarios', { params: { status: 'ATIVO' } })
+      .then((r) => setFuncionarios(Array.isArray(r.data) ? r.data : []))
+      .catch(() => {})
+  }, [])
+
+  // Querystring só com os filtros preenchidos — status/funcionarioId/de/ate são todos
+  // opcionais no endpoint (Task 1).
+  useEffect(() => {
+    setLoading(true)
+    setErro(false)
+    const params = {}
+    if (status) params.status = status
+    if (funcId) params.funcionarioId = funcId
+    if (de) params.de = de
+    if (ate) params.ate = ate
+    api.get(`/checklist/checklists/${id}/execucoes`, { params })
+      .then((r) => setExecucoes(r.data.execucoes || []))
+      .catch(() => setErro(true))
+      .finally(() => setLoading(false))
+  }, [id, status, funcId, de, ate])
+
+  return (
+    <div>
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+        <div>
+          <button type="button" className="chkp-link" style={{ display: 'block', marginBottom: 8 }} onClick={() => navigate('/checklist/checklists')}>‹ Voltar</button>
+          <h1>Histórico — {checklist?.nome || '…'}</h1>
+          <div className="page-header-sub">Todas as execuções deste checklist. Filtre por status, operador ou período.</div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-secondary" onClick={() => navigate(`/checklist/detalhe/${id}`)}>
+            <ChkIcon name="eye" size={15} /> Ver detalhes
+          </button>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Status</label>
+          <select className="form-input" style={{ minWidth: 160 }} value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value="">Todos</option>
+            <option value="CONCLUIDA">Concluída</option>
+            <option value="EM_ANDAMENTO">Em andamento</option>
+            <option value="ALERTA">Em alerta</option>
+          </select>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Operador</label>
+          <select className="form-input" style={{ minWidth: 180 }} value={funcId} onChange={(e) => setFuncId(e.target.value)}>
+            <option value="">Todos</option>
+            {funcionarios.map((f) => <option key={f.id} value={f.id}>{f.apelido || f.nome}</option>)}
+          </select>
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Data de</label>
+          <input type="date" className="form-input" value={de} onChange={(e) => setDe(e.target.value)} />
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Data até</label>
+          <input type="date" className="form-input" value={ate} onChange={(e) => setAte(e.target.value)} />
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="loading-state">Carregando…</div>
+      ) : erro ? (
+        <div className="empty-state">Não foi possível carregar as execuções deste checklist.</div>
+      ) : execucoes.length === 0 ? (
+        <div className="empty-state">Nenhuma execução no período.</div>
+      ) : (
+        <div className="table-card">
+          <table className="hb-table">
+            <thead>
+              <tr><th>Data</th><th>Operador</th><th>Status</th><th>Conformidade</th><th>Início</th><th>Conclusão</th></tr>
+            </thead>
+            <tbody>
+              {/* Linha inteira clicável, mesmo padrão de "Execuções recentes" no Painel. */}
+              {execucoes.map((e) => (
+                <tr key={e.id} style={{ cursor: 'pointer' }} onClick={() => setVerExecucaoId(e.id)}>
+                  <td style={{ fontWeight: 600 }}>{new Date(e.dataRef).toLocaleDateString('pt-BR')}</td>
+                  <td>{e.funcionario}</td>
+                  <td>
+                    <span className={'badge ' + (e.status === 'CONCLUIDA' ? 'badge-green' : 'badge-gray')}>{STATUS_EXEC_LABEL[e.status] || e.status}</span>
+                    {e.emAlerta && <span className="badge badge-red" style={{ marginLeft: 6 }}>Em alerta</span>}
+                  </td>
+                  <td>
+                    {e.score == null
+                      ? <span style={{ color: 'var(--app-text-soft, #888)' }}>—</span>
+                      : <span className={'badge ' + (e.score >= 90 ? 'badge-green' : e.score >= 70 ? 'badge-yellow' : 'badge-red')}>{e.score}%</span>}
+                  </td>
+                  <td>{e.iniciadaEm ? new Date(e.iniciadaEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+                  <td>{e.concluidaEm ? new Date(e.concluidaEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {verExecucaoId != null && <DetalheExecucao id={verExecucaoId} onClose={() => setVerExecucaoId(null)} />}
     </div>
   )
 }
