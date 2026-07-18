@@ -2283,12 +2283,12 @@ function chkExecJson(exec) {
   return { id: exec.id, checklistId: exec.checklistId, status: exec.status, emAlerta: exec.emAlerta, itens: exec.itensSnapshotJson, respostas: rmap, fotos: fmap };
 }
 
-// Posse por FUNÇÃO de uma execução JÁ EXISTENTE — não basta filtrar por empresaId: dentro
-// da MESMA loja, um colaborador de uma função não pode ler/responder/concluir a execução de
-// um checklist de outra função só chutando o id (inteiros sequenciais, adivinháveis). A
-// execução é prova, então as 3 rotas de execução (GET, PUT resposta, POST concluir)
-// passam por aqui em vez de um findFirst bare por empresaId. Mesma regra de chkAbrirExecucao
-// (chkFuncaoAtende), pra não divergir entre "abrir" e "continuar".
+// Posse de uma execução JÁ EXISTENTE — não basta filtrar por empresaId: dentro da MESMA loja,
+// um colaborador não pode ler/responder/concluir a execução de um checklist que não é dele só
+// chutando o id (inteiros sequenciais, adivinháveis). A execução é prova, então as 3 rotas de
+// execução (GET, PUT resposta, POST concluir) passam por aqui em vez de um findFirst bare por
+// empresaId. Mesma regra de atribuição de chkAbrirExecucao (chkColabAtende — função OU
+// colaborador), pra não divergir entre "abrir" e "continuar".
 async function chkPosseExecucao(sess, execucaoId, { comRespostas = false } = {}) {
   const exec = await prisma.checklistExecucao.findFirst({
     where: { id: execucaoId, empresaId: sess.empresaId },
