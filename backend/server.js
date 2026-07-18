@@ -15,7 +15,7 @@ import { validadeDe, gerarLote, colisaoDeLote, CONSERVACOES } from './etiquetas.
 import { avaliarResposta, execucaoEmAlerta, fotosCriticasFaltando } from './checklistConformidade.js';
 import { venceHoje } from './checklistRecorrencia.js';
 import { itensCriticosNaoConformes, montarMensagemAlerta } from './checklistAlerta.js';
-import { montarMensagemLembrete, estaNaJanelaDeLembrete } from './checklistLembrete.js';
+import { montarMensagemLembrete, atrasado } from './checklistLembrete.js';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 
@@ -2445,7 +2445,7 @@ async function dispararLembretesLoja(empresaId) {
         // ms do horário-limite de HOJE (dia de expediente) em BR→UTC — brToUtcMs (linha ~6378)
         // já faz a conta BR_OFFSET_MIN certa; NUNCA usar `new Date(y,mo,day,h,m)` (fuso do VPS/UTC).
         const limiteMs = brToUtcMs(f.y, f.mo, f.day, hh, mm || 0);
-        if (!estaNaJanelaDeLembrete(agoraMs, limiteMs, cfg.lembreteMinutosAntes)) continue;
+        if (!atrasado(agoraMs, limiteMs, c.recorrenciaConfig?.toleranciaMin)) continue;
 
         const exec = await prisma.checklistExecucao.findFirst({ where: { empresaId, checklistId: c.id, dataRef } });
         if (exec?.status === 'CONCLUIDA') continue;
@@ -7772,7 +7772,17 @@ function chkNormalizarItens(itensRaw) {
     if (!TIPOS.has(it.tipo)) throw { http: 400, msg: `Tipo de item inválido: ${it.tipo}` };
     const titulo = chkOnly(it.titulo, 160);
     if (!titulo) throw { http: 400, msg: 'Todo item precisa de um título.' };
-    itens.push({ ordem: i, tipo: it.tipo, titulo, descricao: chkOnly(it.descricao, 300), critico: !!it.critico, config: it.config && typeof it.config === 'object' ? it.config : null });
+    // config: mantém os campos por-tipo já existentes (min/max do numérico, opções da
+    // seleção, unidade, ...) tal como vieram, e soma dica de execução (colaborador) e
+    // instrução da gestão (quando o item fica fora do padrão) — comuns a todos os tipos.
+    let config = it.config && typeof it.config === 'object' ? { ...it.config } : null;
+    if (it.config && typeof it.config === 'object') {
+      if (it.config.dica != null && String(it.config.dica).trim() !== '') config.dica = String(it.config.dica).slice(0, 300);
+      else if (config) delete config.dica;
+      if (it.config.instrucaoAlerta != null && String(it.config.instrucaoAlerta).trim() !== '') config.instrucaoAlerta = String(it.config.instrucaoAlerta).slice(0, 300);
+      else if (config) delete config.instrucaoAlerta;
+    }
+    itens.push({ ordem: i, tipo: it.tipo, titulo, descricao: chkOnly(it.descricao, 300), critico: !!it.critico, config });
   }
   return itens;
 }
@@ -7862,6 +7872,15 @@ function chkDadosChecklist(body, fallback) {
     : (fallback?.funcionarioIds || []);
   const rc = body?.recorrenciaConfig && typeof body.recorrenciaConfig === 'object' ? body.recorrenciaConfig : {};
   const diasSemana = Array.isArray(rc.diasSemana) ? [...new Set(rc.diasSemana.map((n) => parseInt(n, 10)).filter((n) => n >= 0 && n <= 6))] : [];
+  // Tolerância (min) do alerta de atraso — por checklist, dentro do recorrenciaConfig.
+  // Ausente/inválida = 0 (dispara no horário); clamp 0–240 (4h).
+  const toleranciaBruta = Number(rc.toleranciaMin);
+  const toleranciaMin = Number.isFinite(toleranciaBruta)
+    ? Math.max(0, Math.min(240, Math.round(toleranciaBruta)))
+    : (Number.isFinite(fallback?.recorrenciaConfig?.toleranciaMin) ? fallback.recorrenciaConfig.toleranciaMin : 0);
+  // Tempo estimado (min) — opcional, exibido pro colaborador na execução.
+  const tempoBruto = parseInt(body?.tempoEstimadoMin, 10);
+  const tempoEstimadoMin = Number.isFinite(tempoBruto) && tempoBruto >= 0 ? tempoBruto : (fallback?.tempoEstimadoMin ?? null);
   return {
     nome: nome || fallback.nome,
     categoria: CHECKLIST_CATEGORIAS.includes(body?.categoria) ? body.categoria : (fallback?.categoria || CHECKLIST_CATEGORIAS[0]),
@@ -7870,8 +7889,9 @@ function chkDadosChecklist(body, fallback) {
     atribuicaoTipo,
     funcoes,
     funcionarioIds,
+    tempoEstimadoMin,
     recorrenciaTipo: RECORRENCIAS.has(body?.recorrenciaTipo) ? body.recorrenciaTipo : (fallback?.recorrenciaTipo || 'AVULSO'),
-    recorrenciaConfig: { diasSemana, horarioLimite: chkOnly(rc.horarioLimite, 5) },
+    recorrenciaConfig: { diasSemana, horarioLimite: chkOnly(rc.horarioLimite, 5), toleranciaMin },
   };
 }
 

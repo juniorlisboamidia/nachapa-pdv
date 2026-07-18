@@ -1,4 +1,4 @@
-// Regra pura do lembrete de atraso: a mensagem e a janela de disparo. Sem Prisma, sem Express,
+// Regra pura do lembrete de atraso: a mensagem e a checagem de atraso. Sem Prisma, sem Express,
 // sem zapi — igual ao padrão de checklistConformidade/checklistAlerta.
 export const TEMPLATE_PADRAO = 'Aviso: o checklist [nome do checklist] previsto para as [horário do checklist] não foi concluído. Colaborador responsável: [nome do responsável]. Por favor, verifique.';
 
@@ -11,9 +11,10 @@ export function montarMensagemLembrete(template, { checklist = '', horario = '',
     .split('[nome do responsável]').join(String(responsavel || ''));
 }
 
-// `agora` está na janela [limite - minutosAntes, limite]? (tudo em ms). minutosAntes >= 1.
-export function estaNaJanelaDeLembrete(agoraMs, limiteMs, minutosAntes) {
-  if (!Number.isFinite(agoraMs) || !Number.isFinite(limiteMs)) return false;
-  const inicio = limiteMs - Math.max(1, Number(minutosAntes) || 0) * 60000;
-  return agoraMs >= inicio && agoraMs <= limiteMs;
+// O checklist atrasou? `agora` já passou de (horário + tolerância)? (ms). tolerância >= 0.
+// Sem teto — o dedup (1x/dia) evita repetir. tolerância ausente/inválida = 0 (dispara no horário).
+export function atrasado(agoraMs, horarioMs, toleranciaMin) {
+  if (!Number.isFinite(agoraMs) || !Number.isFinite(horarioMs)) return false;
+  const alvo = horarioMs + Math.max(0, Number(toleranciaMin) || 0) * 60000;
+  return agoraMs >= alvo;
 }

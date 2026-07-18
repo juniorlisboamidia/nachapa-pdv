@@ -1869,6 +1869,7 @@ model Checklist {
   funcionarioIds    Int[]    @default([]) // modo COLABORADOR: ids dos Funcionários responsáveis
   recorrenciaTipo   RecorrenciaTipo @default(AVULSO)
   recorrenciaConfig Json?
+  tempoEstimadoMin  Int?     // tempo estimado de execução (min), exibido pro colaborador
   ativo             Boolean  @default(true)
   criadoEm          DateTime @default(now())
   atualizadoEm      DateTime @updatedAt

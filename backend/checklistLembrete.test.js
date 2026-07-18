@@ -1,4 +1,4 @@
-import { TEMPLATE_PADRAO, montarMensagemLembrete, estaNaJanelaDeLembrete } from './checklistLembrete.js';
+import { TEMPLATE_PADRAO, montarMensagemLembrete, atrasado } from './checklistLembrete.js';
 let ok = 0, fail = 0;
 const t = (n, real, esp) => { if (JSON.stringify(real) === JSON.stringify(esp)) { ok++; console.log(`  ok   ${n}`); } else { fail++; console.log(`  FALHA ${n}: ${JSON.stringify(real)} != ${JSON.stringify(esp)}`); } };
 const has = (n, txt, sub) => { if (String(txt).includes(sub)) { ok++; console.log(`  ok   ${n}`); } else { fail++; console.log(`  FALHA ${n}: falta "${sub}" em: ${txt}`); } };
@@ -19,14 +19,16 @@ has('template vazio usa o padrão', msgVazio, 'Aviso:');
 const msgSemResponsavel = montarMensagemLembrete(null, { checklist: 'Fechamento', horario: '22:00' });
 not('responsável ausente não deixa o token', msgSemResponsavel, '[nome do responsável]');
 
-console.log('\n== estaNaJanelaDeLembrete ==');
-const limite = 1_000_000_000;
-t('agora=limite-10min, antes=30 → true', estaNaJanelaDeLembrete(limite - 10 * 60000, limite, 30), true);
-t('agora=limite+1min → false', estaNaJanelaDeLembrete(limite + 1 * 60000, limite, 30), false);
-t('agora=limite-31min, antes=30 → false', estaNaJanelaDeLembrete(limite - 31 * 60000, limite, 30), false);
-t('exatamente no limite → true', estaNaJanelaDeLembrete(limite, limite, 30), true);
-t('exatamente no início → true', estaNaJanelaDeLembrete(limite - 30 * 60000, limite, 30), true);
-t('limite não-finito → false', estaNaJanelaDeLembrete(limite, NaN, 30), false);
+console.log('\n== atrasado (horário + tolerância) ==');
+const horario = 1_000_000_000;
+t('antes do horário (tol 0) → false', atrasado(horario - 1 * 60000, horario, 0), false);
+t('exatamente no horário (tol 0) → true', atrasado(horario, horario, 0), true);
+t('horário+15min, tol 15 → true (limite)', atrasado(horario + 15 * 60000, horario, 15), true);
+t('horário+14min, tol 15 → false', atrasado(horario + 14 * 60000, horario, 15), false);
+t('depois do horário+tol → true', atrasado(horario + 30 * 60000, horario, 15), true);
+t('tolerância negativa tratada como 0 → true no horário', atrasado(horario, horario, -5), true);
+t('tolerância ausente = 0 → true no horário', atrasado(horario, horario), true);
+t('horário não-finito → false', atrasado(horario, NaN, 15), false);
 
 console.log(`\n${ok} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);
