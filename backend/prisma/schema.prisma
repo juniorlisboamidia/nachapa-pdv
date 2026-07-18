@@ -1941,11 +1941,14 @@ model ChecklistFoto {
 }
 
 model ChecklistNotificacaoConfig {
-  id                  Int      @id @default(autoincrement())
-  empresaId           Int
-  alertaImediatoAtivo Boolean  @default(false)
-  criadoEm            DateTime @default(now())
-  atualizadoEm        DateTime @updatedAt
+  id                   Int      @id @default(autoincrement())
+  empresaId            Int
+  alertaImediatoAtivo  Boolean  @default(false)
+  lembreteAtivo        Boolean  @default(false)
+  lembreteTemplate     String   @default("")
+  lembreteMinutosAntes Int      @default(30)
+  criadoEm             DateTime @default(now())
+  atualizadoEm         DateTime @updatedAt
   @@unique([empresaId])
   @@index([empresaId])
 }
@@ -1955,6 +1958,7 @@ model ChecklistDestinatario {
   empresaId    Int
   nome         String
   whatsapp     String
+  tipo         String   @default("IMEDIATO")
   ativo        Boolean  @default(true)
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
@@ -1974,4 +1978,14 @@ model ChecklistNotificacaoLog {
   erro             String?
   criadoEm         DateTime @default(now())
   @@index([empresaId, criadoEm])
+}
+
+model ChecklistLembreteEnviado {
+  id          Int      @id @default(autoincrement())
+  empresaId   Int
+  checklistId Int
+  dataRef     DateTime
+  criadoEm    DateTime @default(now())
+  @@unique([empresaId, checklistId, dataRef])
+  @@index([empresaId])
 }

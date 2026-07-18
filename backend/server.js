@@ -15,6 +15,7 @@ import { validadeDe, gerarLote, colisaoDeLote, CONSERVACOES } from './etiquetas.
 import { avaliarResposta, execucaoEmAlerta, fotosCriticasFaltando } from './checklistConformidade.js';
 import { venceHoje } from './checklistRecorrencia.js';
 import { itensCriticosNaoConformes, montarMensagemAlerta } from './checklistAlerta.js';
+import { montarMensagemLembrete } from './checklistLembrete.js';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 
@@ -43,7 +44,7 @@ const MODELS_TENANT = new Set([
   'funcionarioFace', 'pontoRegistro', 'dispositivo', 'jornada', 'coletorBatidaPendente', 'coletorComando', 'pontoConfig', 'funcao',
   'etiquetaConfig', 'etiquetaRegra', 'etiquetaItemConfig', 'etiquetaImpressa',
   'checklistTemplate', 'checklistTemplateItem', 'checklist', 'checklistItem', 'checklistExecucao', 'checklistResposta', 'checklistFoto',
-  'checklistNotificacaoConfig', 'checklistDestinatario', 'checklistNotificacaoLog',
+  'checklistNotificacaoConfig', 'checklistDestinatario', 'checklistNotificacaoLog', 'checklistLembreteEnviado',
 ]);
 const OPS_WHERE = new Set([
   'findMany', 'findFirst', 'findFirstOrThrow', 'findUnique', 'findUniqueOrThrow',
@@ -7970,7 +7971,17 @@ app.put('/api/checklist/notificacoes/config', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
   try {
     const atual = await garantirNotifConfig();
-    const config = await prisma.checklistNotificacaoConfig.update({ where: { id: atual.id }, data: { alertaImediatoAtivo: req.body?.alertaImediatoAtivo !== false && !!req.body?.alertaImediatoAtivo } });
+    const minutosBrutos = Number(req.body?.lembreteMinutosAntes);
+    const lembreteMinutosAntes = Number.isFinite(minutosBrutos) ? Math.max(5, Math.min(240, Math.round(minutosBrutos))) : 30;
+    const config = await prisma.checklistNotificacaoConfig.update({
+      where: { id: atual.id },
+      data: {
+        alertaImediatoAtivo: req.body?.alertaImediatoAtivo !== false && !!req.body?.alertaImediatoAtivo,
+        lembreteAtivo: req.body?.lembreteAtivo !== false && !!req.body?.lembreteAtivo,
+        lembreteTemplate: req.body?.lembreteTemplate == null ? '' : String(req.body.lembreteTemplate).slice(0, 600),
+        lembreteMinutosAntes,
+      },
+    });
     res.json({ ok: true, config });
   } catch (err) { console.error('[checklist/notificacoes config PUT]', err); res.status(500).json({ error: 'Erro ao salvar.' }); }
 });
@@ -7981,7 +7992,8 @@ app.post('/api/checklist/notificacoes/destinatarios', async (req, res) => {
     const whatsapp = req.body?.whatsapp == null ? '' : String(req.body.whatsapp).trim().slice(0, 30);
     if (!nome) return res.status(400).json({ error: 'Informe o nome.' });
     if (soDigitos(whatsapp).length < 10) return res.status(400).json({ error: 'Informe o WhatsApp com DDD.' });
-    const dest = await prisma.checklistDestinatario.create({ data: { nome, whatsapp } });
+    const tipo = req.body?.tipo === 'ATRASO' ? 'ATRASO' : 'IMEDIATO';
+    const dest = await prisma.checklistDestinatario.create({ data: { nome, whatsapp, tipo } });
     res.status(201).json({ ok: true, destinatario: dest });
   } catch (err) { console.error('[checklist/destinatarios POST]', err); res.status(500).json({ error: 'Erro ao adicionar.' }); }
 });
@@ -8016,6 +8028,14 @@ app.get('/api/checklist/notificacoes/previa', async (req, res) => {
     const msg = montarMensagemAlerta({ lojaNome: loja?.nome || 'Sua loja', checklistNome: 'Fechamento Cozinha', funcionarioNome: 'Rafaely', quando: '22:10', itensForaDoPadrao: ['Temperatura do freezer', 'EPIs sendo utilizados'] });
     res.json({ previa: msg });
   } catch (err) { console.error('[checklist/notificacoes previa]', err); res.status(500).json({ error: 'Erro ao gerar prévia.' }); }
+});
+app.get('/api/checklist/notificacoes/lembrete/previa', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const config = await garantirNotifConfig();
+    const previa = montarMensagemLembrete(config.lembreteTemplate, { checklist: 'Abertura Cozinha', horario: '09:00', responsavel: 'Diego Alves' });
+    res.json({ previa });
+  } catch (err) { console.error('[checklist/notificacoes lembrete previa]', err); res.status(500).json({ error: 'Erro ao gerar prévia.' }); }
 });
 
 app.listen(PORT, () => console.log(`Operação (PDV) API rodando em http://localhost:${PORT}`));
