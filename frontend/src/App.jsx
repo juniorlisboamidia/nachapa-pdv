@@ -23,6 +23,7 @@ import MinhaEmpresa from './pages/MinhaEmpresa'
 import Etiquetas from './pages/Etiquetas'
 import EtiquetasQuiosque from './pages/EtiquetasQuiosque'
 import Checklist, { ChecklistDetalhe } from './pages/Checklist'
+import ChecklistPublico from './pages/ChecklistPublico'
 
 function TelaCarregando() {
   return (
@@ -118,6 +119,9 @@ export default function App() {
               O caminho é /etiquetas/:token/imprimir e não /etiquetas/:token para não
               colidir com o /etiquetas/:tab da tela de admin, logo acima. */}
           <Route path="etiquetas/:token/imprimir" element={<EtiquetasQuiosque />} />
+          {/* Checklist Inteligente — execução pública por link/QR (nome + PIN), sem
+              login: o token identifica o checklist, o PIN identifica o colaborador. */}
+          <Route path="checklist/publico/:token" element={<ChecklistPublico />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
