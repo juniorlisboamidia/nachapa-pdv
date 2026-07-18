@@ -17,6 +17,7 @@ import { venceHoje } from './checklistRecorrencia.js';
 import { itensCriticosNaoConformes, montarMensagemAlerta } from './checklistAlerta.js';
 import { montarMensagemLembrete, atrasado } from './checklistLembrete.js';
 import { calcularEstatisticas } from './checklistEstatisticas.js';
+import { classificarOcorrencia, agregar, STATUS } from './checklistHistoricoGeral.js';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 
@@ -8222,6 +8223,111 @@ app.get('/api/checklist/checklists/:id/estatisticas', async (req, res) => {
     const stats = calcularEstatisticas({ execucoes, ocorrenciasEsperadas, dias, tempoEstimadoMin: c.tempoEstimadoMin ?? null, itensMap, agendado });
     res.json({ periodo: { de: dias[0] || null, ate: dias[dias.length - 1] || null }, checklist: { nome: c.nome, recorrenciaTipo: c.recorrenciaTipo, horarioLimite: hl || null, tempoEstimadoMin: c.tempoEstimadoMin ?? null }, ...stats });
   } catch (e) { console.error('[checklist/estatisticas]', e); res.status(500).json({ error: 'Erro ao calcular estatísticas.' }); }
+});
+
+// Histórico geral (Painel do Checklist, reforma): ocorrências esperadas + execuções avulsas
+// no período, classificadas e agregadas (KPIs do período + contagens/registros filtrados por
+// status/colaborador). Mesmo padrão de fuso BR de /estatisticas acima; classificação e
+// agregação são puras, delegadas a checklistHistoricoGeral.js.
+const STATUS_VALIDO = (s) => STATUS.includes(s);
+app.get('/api/checklist/historico-geral', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const hojeRef = janelaExpedienteAtual().de;               // 05:00 BR de hoje (dia de expediente)
+    const fh = brFields(hojeRef.getTime());
+    const diaStr = (ms) => { const f = brFields(ms); return `${f.y}-${String(f.mo + 1).padStart(2, '0')}-${String(f.day).padStart(2, '0')}`; };
+    const hojeStr = diaStr(hojeRef.getTime());
+    // período: preset (hoje/7/30/90) ou de/ate custom; teto 180 dias; nunca depois de hoje
+    const preset = String(req.query.periodo || 'hoje').toLowerCase();
+    const diasPreset = { hoje: 1, '7': 7, '30': 30, '90': 90 }[preset] || 1;
+    const parseDia = (s) => (/^\d{4}-\d{2}-\d{2}$/.test(s) ? s.split('-').map(Number) : null);
+    let deP = parseDia(String(req.query.de || ''));
+    let ateP = parseDia(String(req.query.ate || ''));
+    if (!ateP) ateP = [fh.y, fh.mo + 1, fh.day];              // hoje (fh.mo é 0-index → +1 p/ array 1-index)
+    if (!deP) { const dm = new Date(Date.UTC(ateP[0], ateP[1] - 1, ateP[2] - (diasPreset - 1))); deP = [dm.getUTCFullYear(), dm.getUTCMonth() + 1, dm.getUTCDate()]; }
+    let deMs = brToUtcMs(deP[0], deP[1] - 1, deP[2], 5, 0);
+    let ateMs = brToUtcMs(ateP[0], ateP[1] - 1, ateP[2], 5, 0);
+    if (ateMs > hojeRef.getTime()) ateMs = hojeRef.getTime(); // não passa de hoje
+    if (deMs > ateMs) deMs = ateMs;
+    if ((ateMs - deMs) / 86400000 > 180) return res.status(400).json({ error: 'Período máximo de 180 dias.' });
+    const agoraMs = Date.now();
+
+    const checklists = await prisma.checklist.findMany({ where: { ativo: true } });
+    const execs = await prisma.checklistExecucao.findMany({
+      where: { dataRef: { gte: new Date(deMs), lte: new Date(ateMs) } },
+      include: { checklist: { select: { nome: true, categoria: true } }, respostas: { select: { conforme: true } } },
+      take: 5000,
+    });
+
+    // funcionários necessários: executores + atribuídos por COLABORADOR
+    const idsExec = execs.map((e) => e.funcionarioId);
+    const idsAtrib = checklists.filter((c) => c.atribuicaoTipo === 'COLABORADOR').flatMap((c) => c.funcionarioIds || []);
+    const ids = [...new Set([...idsExec, ...idsAtrib])];
+    const funcs = ids.length ? await prisma.funcionario.findMany({ where: { id: { in: ids } }, select: { id: true, nome: true, apelido: true } }) : [];
+    const nomeFunc = new Map(funcs.map((f) => [f.id, f.apelido || f.nome]));
+    const responsavelDe = (c) => c.atribuicaoTipo === 'COLABORADOR'
+      ? (c.funcionarioIds || []).map((id) => nomeFunc.get(id)).filter(Boolean)
+      : (c.funcoes || []);
+    const scoreDe = (respostas) => { const av = respostas.filter((r) => r.conforme !== null).length; const co = respostas.filter((r) => r.conforme === true).length; return av ? Math.round((co / av) * 100) : null; };
+
+    const chById = new Map(checklists.map((c) => [c.id, c]));
+    const execByKey = new Map();                              // `${checklistId}|${dia}` -> exec
+    for (const e of execs) execByKey.set(`${e.checklistId}|${diaStr(e.dataRef.getTime())}`, e);
+
+    const linhas = [];
+    const usados = new Set();
+    // 1) ocorrências esperadas (checklists agendados)
+    for (const c of checklists) {
+      const hl = (typeof c.recorrenciaConfig?.horarioLimite === 'string') ? c.recorrenciaConfig.horarioLimite : '';
+      const mHL = /^(\d{1,2}):(\d{2})$/.exec(hl);
+      const tol = Math.max(0, Number(c.recorrenciaConfig?.toleranciaMin) || 0);
+      const agendado = (c.recorrenciaTipo === 'DIARIA' || c.recorrenciaTipo === 'DIAS_SEMANA');
+      if (!agendado) continue;
+      for (let ms = deMs; ms <= ateMs; ms += 86400000) {
+        const f = brFields(ms);
+        const dow = new Date(Date.UTC(f.y, f.mo, f.day)).getUTCDay();
+        if (!venceHoje({ recorrenciaTipo: c.recorrenciaTipo, recorrenciaConfig: c.recorrenciaConfig }, dow)) continue;
+        const dia = `${f.y}-${String(f.mo + 1).padStart(2, '0')}-${String(f.day).padStart(2, '0')}`;
+        const key = `${c.id}|${dia}`;
+        const exec = execByKey.get(key) || null;
+        if (exec) usados.add(key);
+        const deadlineMs = mHL ? brToUtcMs(f.y, f.mo, f.day, parseInt(mHL[1], 10), parseInt(mHL[2], 10)) + tol * 60000 : null;
+        const ehPassado = dia < hojeStr;
+        const status = classificarOcorrencia({ execucao: exec, ehPassado, agoraMs, deadlineMs });
+        linhas.push({
+          checklistId: c.id, checklistNome: c.nome, categoria: c.categoria, dia, dataRef: new Date(ms).toISOString(),
+          horario: hl || null, responsavel: exec ? [nomeFunc.get(exec.funcionarioId) || '—'] : responsavelDe(c),
+          funcionario: exec ? (nomeFunc.get(exec.funcionarioId) || '—') : null, funcionarioId: exec ? exec.funcionarioId : null,
+          status, scorePct: exec ? scoreDe(exec.respostas) : 0, emAlerta: exec ? exec.emAlerta : false, execId: exec ? exec.id : null, esperada: true,
+        });
+      }
+    }
+    // 2) execuções reais SEM ocorrência esperada (avulsos, ou dia fora da recorrência)
+    for (const e of execs) {
+      const dia = diaStr(e.dataRef.getTime());
+      const key = `${e.checklistId}|${dia}`;
+      if (usados.has(key)) continue;
+      const c = chById.get(e.checklistId);
+      linhas.push({
+        checklistId: e.checklistId, checklistNome: e.checklist?.nome || (c?.nome) || '—', categoria: e.checklist?.categoria || c?.categoria || '—', dia, dataRef: e.dataRef.toISOString(),
+        horario: (typeof c?.recorrenciaConfig?.horarioLimite === 'string' ? c.recorrenciaConfig.horarioLimite : null),
+        responsavel: [nomeFunc.get(e.funcionarioId) || '—'], funcionario: nomeFunc.get(e.funcionarioId) || '—', funcionarioId: e.funcionarioId,
+        status: e.status === 'CONCLUIDA' ? 'CONCLUIDO' : 'EM_ANDAMENTO', scorePct: scoreDe(e.respostas), emAlerta: e.emAlerta, execId: e.id, esperada: false,
+      });
+    }
+
+    // KPIs (só período, ignoram chips) / contagens (período + colaborador) / registros (todos os filtros)
+    const { kpis } = agregar(linhas, { ativos: checklists.length });
+    const fid = parseInt(req.query.funcionarioId, 10);
+    const casaColab = (l) => l.funcionarioId === fid || (l.execId == null && (chById.get(l.checklistId)?.atribuicaoTipo === 'COLABORADOR') && (chById.get(l.checklistId)?.funcionarioIds || []).includes(fid));
+    const linhasColab = Number.isFinite(fid) ? linhas.filter(casaColab) : linhas;
+    const { contagens } = agregar(linhasColab, { ativos: checklists.length });
+    const statusF = String(req.query.status || '').toUpperCase();
+    const linhasFinal = STATUS_VALIDO(statusF) ? linhasColab.filter((l) => l.status === statusF) : linhasColab;
+    linhasFinal.sort((a, b) => (a.dia < b.dia ? 1 : a.dia > b.dia ? -1 : a.checklistNome.localeCompare(b.checklistNome)));
+
+    res.json({ periodo: { de: diaStr(deMs), ate: diaStr(ateMs), chave: preset }, kpis, contagens, registros: linhasFinal.length, ocorrencias: linhasFinal.slice(0, 1000) });
+  } catch (e) { console.error('[checklist/historico-geral]', e); res.status(500).json({ error: 'Erro ao carregar o histórico geral.' }); }
 });
 
 // Detalhe de uma execução (respostas + fotos metadata; bytes por /fotos/:id).
