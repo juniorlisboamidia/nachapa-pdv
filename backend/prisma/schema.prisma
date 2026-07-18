@@ -1864,7 +1864,9 @@ model Checklist {
   categoria         String
   descricao         String?
   prioridade        PrioridadeChecklist @default(MEDIA)
-  funcoes           String[] @default([]) // nomes das Funções que executam este checklist (reusa a Funcao existente)
+  atribuicaoTipo    String   @default("FUNCAO") // FUNCAO | COLABORADOR — qual dos dois campos abaixo vale
+  funcoes           String[] @default([]) // modo FUNCAO: nomes das Funções que executam (reusa a Funcao existente)
+  funcionarioIds    Int[]    @default([]) // modo COLABORADOR: ids dos Funcionários responsáveis
   recorrenciaTipo   RecorrenciaTipo @default(AVULSO)
   recorrenciaConfig Json?
   ativo             Boolean  @default(true)

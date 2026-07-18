@@ -91,7 +91,7 @@ function ChkIcon({ name, size = 20 }) {
 
 // Tags visuais das funções que executam um checklist.
 function ChkTags({ funcoes }) {
-  if (!funcoes || funcoes.length === 0) return <span className="chkp-tag" style={{ opacity: 0.65 }}>Sem função</span>
+  if (!funcoes || funcoes.length === 0) return <span className="chkp-tag" style={{ opacity: 0.65 }}>Sem responsável</span>
   return <>{funcoes.map((fn) => <span key={fn} className="chkp-tag">{fn}</span>)}</>
 }
 
@@ -292,7 +292,7 @@ function AbaPainel({ notify }) {
           {p.proximos.length === 0
             ? <ChkEmpty icon="relogio" titulo="Sem agendamentos hoje" sub="Não há checklists programados para hoje." />
             : p.proximos.map((c) => (
-              <ChkLinha key={c.id} nome={c.nome} sub={c.categoria} funcoes={c.funcoes}
+              <ChkLinha key={c.id} nome={c.nome} sub={c.categoria} funcoes={c.responsavel}
                 right={<span className="badge badge-gray">{c.status === 'EM_ANDAMENTO' ? 'Em andamento' : 'Pendente'}</span>} />
             ))}
         </ChkColuna>
@@ -305,7 +305,7 @@ function AbaPainel({ notify }) {
               <div className="chkp-empty-s">Crie um checklist avulso para rodar sob demanda.</div>
             </div>
           ) : p.semAgendamento.map((c) => (
-            <ChkLinha key={c.id} nome={c.nome} sub={`${c.categoria} · ${c.itens} ${c.itens === 1 ? 'item' : 'itens'}`} funcoes={c.funcoes} />
+            <ChkLinha key={c.id} nome={c.nome} sub={`${c.categoria} · ${c.itens} ${c.itens === 1 ? 'item' : 'itens'}`} funcoes={c.responsavel} />
           ))}
         </ChkColuna>
         <ChkColuna titulo="Checks em alerta"
@@ -331,7 +331,7 @@ function AbaPainel({ notify }) {
         ) : (
           <div className="table-card">
             <table className="hb-table">
-              <thead><tr><th>Nome</th><th>Categoria</th><th>Prioridade</th><th>Recorrência</th><th>Itens</th><th>Funções</th><th></th></tr></thead>
+              <thead><tr><th>Nome</th><th>Categoria</th><th>Prioridade</th><th>Recorrência</th><th>Itens</th><th>Responsável</th><th></th></tr></thead>
               <tbody>
                 {meusPreview.map((c) => (
                   <tr key={c.id}>
@@ -340,7 +340,7 @@ function AbaPainel({ notify }) {
                     <td>{PRIORIDADE_LABEL[c.prioridade] || c.prioridade}</td>
                     <td>{REC_LABEL[c.recorrenciaTipo] || c.recorrenciaTipo}</td>
                     <td>{c.itens}</td>
-                    <td>{(c.funcoes && c.funcoes.length) ? c.funcoes.join(', ') : <span style={{ color: '#999' }}>—</span>}</td>
+                    <td>{(c.responsavel && c.responsavel.length) ? c.responsavel.join(', ') : <span style={{ color: '#999' }}>—</span>}</td>
                     <td style={{ textAlign: 'right' }}><button type="button" className="btn btn-secondary btn-sm" onClick={() => navigate(`/checklist/checklists?editar=${c.id}`)}>Editar</button></td>
                   </tr>
                 ))}
@@ -719,22 +719,27 @@ function ChecklistEditor({ inicial, notify, onClose, onSalvou }) {
   const [f, setF] = useState(() => ({
     ...inicial,
     descricao: inicial.descricao || '',
+    atribuicaoTipo: inicial.atribuicaoTipo || 'FUNCAO',
     funcoes: inicial.funcoes || [],
+    funcionarioIds: inicial.funcionarioIds || [],
     recorrenciaConfig: inicial.recorrenciaConfig || { diasSemana: [], horarioLimite: '' },
     itens: inicial.itens || [],
   }))
   const [funcoesDisp, setFuncoesDisp] = useState([]) // funções cadastradas (reusa /funcoes)
+  const [equipe, setEquipe] = useState([]) // funcionários ativos (modo COLABORADOR)
   const [salvando, setSalvando] = useState(false)
 
   useEffect(() => {
-    // Reusa a lista de Funções que já existe (a mesma de Bonificação › Configuração ›
-    // Funções da equipe, usada no cadastro do colaborador).
+    // Modo FUNCAO reusa /funcoes (Bonificação › Funções da equipe); modo COLABORADOR usa a
+    // equipe ativa (Ponto Facial). Carrega os dois — o editor alterna sem novo fetch.
     api.get('/funcoes').then((r) => setFuncoesDisp(Array.isArray(r.data) ? r.data : [])).catch(() => {})
+    api.get('/funcionarios', { params: { status: 'ATIVO' } }).then((r) => setEquipe(Array.isArray(r.data) ? r.data : [])).catch(() => {})
   }, [])
 
   const upd = (k, v) => setF((s) => ({ ...s, [k]: v }))
   const updRc = (k, v) => setF((s) => ({ ...s, recorrenciaConfig: { ...s.recorrenciaConfig, [k]: v } }))
   const toggleFuncao = (nome) => setF((s) => ({ ...s, funcoes: s.funcoes.includes(nome) ? s.funcoes.filter((x) => x !== nome) : [...s.funcoes, nome] }))
+  const toggleFuncionario = (id) => setF((s) => ({ ...s, funcionarioIds: s.funcionarioIds.includes(id) ? s.funcionarioIds.filter((x) => x !== id) : [...s.funcionarioIds, id] }))
   // Opções = funções registradas (Bonificação › Funções da equipe) + as já atribuídas ao checklist
   // que porventura não estejam na lista (a função do colaborador é texto livre e pode
   // divergir das registradas). Assim editar nunca some com um chip já marcado.
@@ -760,7 +765,9 @@ function ChecklistEditor({ inicial, notify, onClose, onSalvou }) {
         categoria: f.categoria,
         descricao: f.descricao,
         prioridade: f.prioridade,
+        atribuicaoTipo: f.atribuicaoTipo,
         funcoes: f.funcoes,
+        funcionarioIds: f.funcionarioIds,
         recorrenciaTipo: f.recorrenciaTipo,
         recorrenciaConfig: f.recorrenciaConfig,
         itens: f.itens,
@@ -826,17 +833,43 @@ function ChecklistEditor({ inicial, notify, onClose, onSalvou }) {
         )}
 
         <div className="form-group">
-          <label className="form-label">Funções que executam</label>
-          {funcoesOpcoes.length === 0 ? (
-            <span style={{ fontSize: 12, color: '#999' }}>Nenhuma função cadastrada — cadastre em Bonificação › Configuração › Funções da equipe.</span>
+          <label className="form-label">Atribuir a</label>
+          {/* Modo: por FUNÇÃO (qualquer um do cargo) ou por COLABORADOR (pessoas específicas —
+              responsabilidade clara, sem "jogar a culpa pra outra"). */}
+          <div className="chip-row" style={{ marginBottom: 8 }}>
+            <button type="button" className={'chip' + (f.atribuicaoTipo !== 'COLABORADOR' ? ' chip-on' : '')} onClick={() => upd('atribuicaoTipo', 'FUNCAO')}>Função</button>
+            <button type="button" className={'chip' + (f.atribuicaoTipo === 'COLABORADOR' ? ' chip-on' : '')} onClick={() => upd('atribuicaoTipo', 'COLABORADOR')}>Colaborador</button>
+          </div>
+
+          {f.atribuicaoTipo === 'COLABORADOR' ? (
+            equipe.length === 0 ? (
+              <span style={{ fontSize: 12, color: '#999' }}>Nenhum colaborador ativo — cadastre em Ponto Facial › Colaboradores.</span>
+            ) : (
+              <>
+                <div className="chip-row">
+                  {equipe.map((fn) => (
+                    <button key={fn.id} type="button" className={'chip' + (f.funcionarioIds.includes(fn.id) ? ' chip-on' : '')} onClick={() => toggleFuncionario(fn.id)} title={fn.funcao || ''}>
+                      {fn.apelido || fn.nome}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>Só essas pessoas veem o checklist na Área do Colaborador — e são cobradas no lembrete de atraso.</div>
+              </>
+            )
           ) : (
-            <div className="chip-row">
-              {funcoesOpcoes.map((nome) => (
-                <button key={nome} type="button" className={'chip' + (f.funcoes.includes(nome) ? ' chip-on' : '')} onClick={() => toggleFuncao(nome)}>{nome}</button>
-              ))}
-            </div>
+            <>
+              {funcoesOpcoes.length === 0 ? (
+                <span style={{ fontSize: 12, color: '#999' }}>Nenhuma função cadastrada — cadastre em Bonificação › Configuração › Funções da equipe.</span>
+              ) : (
+                <div className="chip-row">
+                  {funcoesOpcoes.map((nome) => (
+                    <button key={nome} type="button" className={'chip' + (f.funcoes.includes(nome) ? ' chip-on' : '')} onClick={() => toggleFuncao(nome)}>{nome}</button>
+                  ))}
+                </div>
+              )}
+              <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>Quem tem essa função no cadastro (Ponto Facial › Colaboradores) vê o checklist na Área do Colaborador.</div>
+            </>
           )}
-          <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>Quem tem essa função no cadastro (Ponto Facial › Colaboradores) vê o checklist na Área do Colaborador.</div>
         </div>
 
         <label className="form-label" style={{ display: 'block', marginBottom: 6 }}>Itens</label>

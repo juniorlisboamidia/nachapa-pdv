@@ -2201,18 +2201,27 @@ const chkFuncaoAtende = (funcoesChecklist, funcaoColab) => {
   if (!alvo) return false;
   return Array.isArray(funcoesChecklist) && funcoesChecklist.some((fn) => chkFuncaoNorm(fn) === alvo);
 };
+// Atribuição dupla: um colaborador atende um checklist se for modo COLABORADOR e ele estiver
+// em funcionarioIds, OU modo FUNCAO e a função dele casar. Ponto único de verdade da posse,
+// usado pra listar (abaixo) e pra abrir/checar execução (chkAbrir/chkPosseExecucao).
+const chkColabAtende = (checklist, func) => {
+  if (checklist?.atribuicaoTipo === 'COLABORADOR') {
+    return Array.isArray(checklist.funcionarioIds) && checklist.funcionarioIds.includes(func.id);
+  }
+  return chkFuncaoAtende(checklist?.funcoes, func.funcao);
+};
 
 app.get('/api/public/colaborador/checklists', async (req, res) => {
   try {
     const sess = exigirColaborador(req, res); if (!sess) return;
     const func = await prisma.funcionario.findFirst({ where: { id: sess.funcionarioId, empresaId: sess.empresaId } });
     if (!func || func.status !== 'ATIVO') return res.status(401).json({ error: 'Acesso indisponível. Fale com a liderança.' });
-    if (!chkFuncaoNorm(func.funcao)) return res.json({ hoje: [], disponiveis: [] });
 
-    // Filtro fino por função em JS (poucos checklists por loja) — o nome é string livre,
-    // então o casamento é normalizado, não um where exato no banco.
+    // Filtro fino em JS (poucos checklists por loja): modo FUNCAO casa o nome normalizado
+    // (string livre), modo COLABORADOR casa o id — ambos via chkColabAtende. Sem early-return
+    // por função: quem não tem função ainda pode ter checklists atribuídos por colaborador.
     const todos = await prisma.checklist.findMany({ where: { empresaId: sess.empresaId, ativo: true }, include: { _count: { select: { itens: true } } } });
-    const checklists = todos.filter((c) => chkFuncaoAtende(c.funcoes, func.funcao));
+    const checklists = todos.filter((c) => chkColabAtende(c, func));
     const dataRef = chkDataRefAtual();
     const dow = chkDiaSemanaExpediente();
     // Execuções do dia (para saber o que já foi concluído).
@@ -2234,7 +2243,7 @@ async function chkAbrirExecucao(sess, checklistId) {
   if (!func || func.status !== 'ATIVO') throw { http: 401, msg: 'Acesso indisponível.' };
   const c = await prisma.checklist.findFirst({ where: { id: checklistId, empresaId: sess.empresaId, ativo: true }, include: { itens: { orderBy: { ordem: 'asc' } } } });
   if (!c) throw { http: 404, msg: 'Checklist não encontrado.' };
-  if (!chkFuncaoAtende(c.funcoes, func.funcao)) throw { http: 403, msg: 'Este checklist não é da sua função.' };
+  if (!chkColabAtende(c, func)) throw { http: 403, msg: 'Este checklist não é atribuído a você.' };
   const dataRef = chkDataRefAtual();
   // empresaId explícito mesmo com checklistId já validado acima — não depender só do pai.
   let exec = await prisma.checklistExecucao.findFirst({ where: { checklistId: c.id, dataRef, empresaId: sess.empresaId }, include: { respostas: true, fotos: true } });
@@ -2290,7 +2299,7 @@ async function chkPosseExecucao(sess, execucaoId, { comRespostas = false } = {})
   if (!func || func.status !== 'ATIVO') throw { http: 401, msg: 'Acesso indisponível.' };
   const checklist = await prisma.checklist.findFirst({ where: { id: exec.checklistId, empresaId: sess.empresaId } });
   if (!checklist) throw { http: 404, msg: 'Checklist não encontrado.' };
-  if (!chkFuncaoAtende(checklist.funcoes, func.funcao)) throw { http: 403, msg: 'Esta execução não é da sua função.' };
+  if (!chkColabAtende(checklist, func)) throw { http: 403, msg: 'Esta execução não é atribuída a você.' };
   return exec;
 }
 
@@ -7744,10 +7753,18 @@ const RECORRENCIAS = new Set(['DIARIA', 'DIAS_SEMANA', 'AVULSO']);
 function chkDadosChecklist(body, fallback) {
   const nome = chkOnly(body?.nome, 120);
   if (!nome && !fallback) throw { http: 400, msg: 'Informe o nome do checklist.' };
-  // Funções que executam: nomes (reusa a Funcao existente). Dedup, sem vazios, teto 20.
+  // Atribuição: FUNCAO (nomes de Funções) OU COLABORADOR (ids de Funcionário). Grava os dois;
+  // o `atribuicaoTipo` decide qual vale. Função: dedup, sem vazios, teto 20. Colaborador: ids
+  // finitos, dedup, teto 50.
+  const atribuicaoTipo = body?.atribuicaoTipo === 'COLABORADOR' ? 'COLABORADOR'
+    : body?.atribuicaoTipo === 'FUNCAO' ? 'FUNCAO'
+    : (fallback?.atribuicaoTipo || 'FUNCAO');
   const funcoes = Array.isArray(body?.funcoes)
     ? [...new Set(body.funcoes.map((s) => String(s).trim()).filter(Boolean))].slice(0, 20)
     : (fallback?.funcoes || []);
+  const funcionarioIds = Array.isArray(body?.funcionarioIds)
+    ? [...new Set(body.funcionarioIds.map((n) => parseInt(n, 10)).filter(Number.isFinite))].slice(0, 50)
+    : (fallback?.funcionarioIds || []);
   const rc = body?.recorrenciaConfig && typeof body.recorrenciaConfig === 'object' ? body.recorrenciaConfig : {};
   const diasSemana = Array.isArray(rc.diasSemana) ? [...new Set(rc.diasSemana.map((n) => parseInt(n, 10)).filter((n) => n >= 0 && n <= 6))] : [];
   return {
@@ -7755,7 +7772,9 @@ function chkDadosChecklist(body, fallback) {
     categoria: CHECKLIST_CATEGORIAS.includes(body?.categoria) ? body.categoria : (fallback?.categoria || CHECKLIST_CATEGORIAS[0]),
     descricao: chkOnly(body?.descricao, 300),
     prioridade: PRIORIDADES.has(body?.prioridade) ? body.prioridade : (fallback?.prioridade || 'MEDIA'),
+    atribuicaoTipo,
     funcoes,
+    funcionarioIds,
     recorrenciaTipo: RECORRENCIAS.has(body?.recorrenciaTipo) ? body.recorrenciaTipo : (fallback?.recorrenciaTipo || 'AVULSO'),
     recorrenciaConfig: { diasSemana, horarioLimite: chkOnly(rc.horarioLimite, 5) },
   };
@@ -7862,8 +7881,15 @@ app.get('/api/checklist/painel', async (req, res) => {
     const venceHojeLista = checklists.filter((c) => venceHoje({ recorrenciaTipo: c.recorrenciaTipo, recorrenciaConfig: c.recorrenciaConfig }, dow));
     const concluidosHoje = execs.filter((e) => e.status === 'CONCLUIDA').length;
     const emAlerta = execs.filter((e) => e.emAlerta).length;
-    // Linha padrão do checklist para as listas do painel (inclui as funções que executam).
-    const linha = (c) => ({ id: c.id, nome: c.nome, categoria: c.categoria, prioridade: c.prioridade, funcoes: c.funcoes || [], recorrenciaTipo: c.recorrenciaTipo, itens: c._count.itens });
+    // Nomes dos colaboradores atribuídos (modo COLABORADOR) para exibir "Responsável".
+    const idsColab = [...new Set(checklists.filter((c) => c.atribuicaoTipo === 'COLABORADOR').flatMap((c) => c.funcionarioIds || []))];
+    const funcs = idsColab.length ? await prisma.funcionario.findMany({ where: { id: { in: idsColab } }, select: { id: true, nome: true, apelido: true } }) : [];
+    const nomeFunc = new Map(funcs.map((f) => [f.id, f.apelido || f.nome]));
+    const responsavelDe = (c) => c.atribuicaoTipo === 'COLABORADOR'
+      ? (c.funcionarioIds || []).map((id) => nomeFunc.get(id)).filter(Boolean)
+      : (c.funcoes || []);
+    // Linha padrão do checklist para as listas do painel (com o responsável já resolvido).
+    const linha = (c) => ({ id: c.id, nome: c.nome, categoria: c.categoria, prioridade: c.prioridade, atribuicaoTipo: c.atribuicaoTipo, funcoes: c.funcoes || [], responsavel: responsavelDe(c), recorrenciaTipo: c.recorrenciaTipo, itens: c._count.itens });
     // Próximos agendamentos: vencem hoje e ainda não foram concluídos.
     const proximos = venceHojeLista.filter((c) => execMap.get(c.id)?.status !== 'CONCLUIDA')
       .map((c) => ({ ...linha(c), status: execMap.get(c.id)?.status || 'PENDENTE' }));
