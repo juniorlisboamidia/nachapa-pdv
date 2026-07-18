@@ -7,7 +7,7 @@ import { Fragment, useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import api from '../services/api'
 import Toast from '../components/Toast'
-import { desenharEtiqueta, dadosExemplo, MODELOS } from '../lib/etiquetaCanvas'
+import { desenharEtiqueta, dadosExemplo, MODELOS, camposDe } from '../lib/etiquetaCanvas'
 import { bluetoothDisponivel, conectar, conectado, imprimir, LARGURA_PX, calibracao, setCalibracao } from '../lib/niimbotB1'
 
 // Presets de altura do rolo (mm) oferecidos no select — "Personalizar" abre um input livre.
@@ -36,6 +36,41 @@ const CONS_LABEL = {
 // Ordem fixa de exibição (a temperatura sai da coluna própria `tempLabel`, não do nome).
 const CONS_ORDER = ['CONGELADO', 'RESFRIADO_0_4', 'RESFRIADO_4_6', 'AMBIENTE', 'DESCONGELADO', 'ABERTO']
 const ordenarCons = (rs) => [...rs].sort((a, b) => CONS_ORDER.indexOf(a.conservacao) - CONS_ORDER.indexOf(b.conservacao))
+
+// Linhas do card "Campos impressos na etiqueta" (Config). `chave` é a chave em
+// `config.campos` (ver contrato em `camposDe`, etiquetaCanvas.js); `obrigatorio: true` são
+// os 3 campos SEMPRE desenhados nos 4 modelos — nome, manipulação e validade — que nunca
+// passaram a ser opcionais, então o toggle deles fica ligado e travado (só existem aqui
+// pra deixar claro pro gestor que eles estão na etiqueta, não pra ele poder desligar).
+const CAMPOS_LISTA = [
+  { chave: null, titulo: 'Nome do produto *', sub: 'Obrigatório', obrigatorio: true },
+  { chave: null, titulo: 'Data e hora de manipulação *', sub: 'Quando o item foi preparado/aberto', obrigatorio: true },
+  { chave: null, titulo: 'Data e hora de validade *', sub: 'Calculada pela regra de conservação', obrigatorio: true },
+  { chave: 'conservacao', titulo: 'Conservação e temperatura', sub: 'Congelado / Refrigerado / Resfriado / Ambiente' },
+  { chave: 'responsavel', titulo: 'Responsável pela manipulação', sub: 'Colaborador que preparou' },
+  { chave: 'lote', titulo: 'Lote', sub: 'Gerado automaticamente' },
+  { chave: 'cnpj', titulo: 'CNPJ do estabelecimento', sub: 'Identificação no rodapé' },
+  { chave: 'instrucoes', titulo: 'Instruções de conservação', sub: 'Texto livre no rodapé' },
+]
+
+// Toggle switch simples (pill dourada quando ligada) — não achei um componente de switch
+// já pronto no projeto (grep em checkbox/switch/toggle não deu nada reaproveitável), então
+// este é local à tela de Etiquetas. `role="switch"` + `aria-checked` pra acessibilidade,
+// já que visualmente é um <button>, não um <input type="checkbox">.
+function ToggleSwitch({ ligado, disabled, onChange }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={ligado}
+      disabled={disabled}
+      className={`etq-toggle${ligado ? ' is-on' : ''}`}
+      onClick={() => !disabled && onChange(!ligado)}
+    >
+      <span className="etq-toggle-knob" />
+    </button>
+  )
+}
 
 export default function Etiquetas() {
   const { tab: tabParam } = useParams()
@@ -109,6 +144,13 @@ function AbaConfig({ notify }) {
   }, [config])
 
   const upd = (k, v) => setConfig((c) => ({ ...c, [k]: v }))
+  // Campos impressos na etiqueta (card "Campos impressos"): normaliza `config.campos` com
+  // os mesmos defaults do desenho (camposDe, etiquetaCanvas.js) — se a loja nunca configurou
+  // isso, os 4 primeiros contam como ligados (retrocompat). `updCampo` só troca UMA chave,
+  // preservando o resto; `salvar()` já envia `config` inteiro (incluindo `campos`), então
+  // não precisa de nenhum wiring extra no PUT.
+  const campos = camposDe(config)
+  const updCampo = (chave, valor) => upd('campos', { ...campos, [chave]: valor })
   // Só os dias são editáveis — a temperatura (tempLabel) é fixa, definida pela
   // conservação, e nunca passa por input: o PUT /etiquetas/regras rejeita com
   // 400 se algum tempLabel vier vazio, o que travaria a tela sem recarregar.
@@ -277,6 +319,37 @@ function AbaConfig({ notify }) {
                 />
                 <span style={{ fontSize: 12, color: 'var(--app-text-soft, #888)', width: 34 }}>dias</span>
               </div>
+            ))}
+          </div>
+
+          <div className="table-card" style={{ padding: 16 }}>
+            <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Campos impressos na etiqueta</h2>
+            <div className="page-header-sub" style={{ marginTop: 0, marginBottom: 4 }}>
+              * sempre impressos. Os demais você liga ou desliga — a prévia ao lado atualiza na hora.
+            </div>
+            {CAMPOS_LISTA.map((item) => (
+              <Fragment key={item.titulo}>
+                <div className="etq-campos-row">
+                  <div className="etq-campos-info">
+                    <div className="etq-campos-titulo">{item.titulo}</div>
+                    <div className="etq-campos-sub">{item.sub}</div>
+                  </div>
+                  <ToggleSwitch
+                    ligado={item.obrigatorio ? true : !!campos[item.chave]}
+                    disabled={item.obrigatorio}
+                    onChange={(v) => updCampo(item.chave, v)}
+                  />
+                </div>
+                {item.chave === 'instrucoes' && campos.instrucoes && (
+                  <input
+                    className="form-input etq-campos-instr"
+                    maxLength={200}
+                    placeholder="Ex.: Manter tampado e ao abrigo da luz."
+                    value={campos.instrucoesTexto}
+                    onChange={(e) => updCampo('instrucoesTexto', e.target.value)}
+                  />
+                )}
+              </Fragment>
             ))}
           </div>
         </div>

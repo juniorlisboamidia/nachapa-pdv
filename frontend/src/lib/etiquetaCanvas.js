@@ -50,6 +50,27 @@ export function dimensoes(config) {
   return { largura: LARGURA_PX, altura: Math.round((config?.alturaMm || 30) * DOTS_POR_MM) }
 }
 
+// Normaliza `config.campos` (Json? — pode vir null/undefined/objeto incompleto de um
+// registro salvo antes desta feature) com os MESMOS defaults do contrato sanitizado no
+// backend (server.js, PUT /etiquetas/config): conservacao/responsavel/lote/cnpj default
+// TRUE — retrocompat, uma loja sem `campos` continua mostrando tudo, como sempre mostrou —
+// e instrucoes default FALSE. Chamada no início de cada `desenhar*` abaixo, para os 4
+// modelos lerem o mesmo objeto normalizado em vez de cada um reimplementar os defaults.
+// Exportada porque a tela de Config (Etiquetas.jsx, card "Campos impressos") também
+// precisa ler `config.campos` com os mesmos defaults, pros toggles refletirem o que já
+// está de fato desenhado — reusar em vez de duplicar a lógica dos defaults nos dois lados.
+export function camposDe(config) {
+  const c = config?.campos && typeof config.campos === 'object' ? config.campos : {}
+  return {
+    conservacao: c.conservacao !== false,
+    responsavel: c.responsavel !== false,
+    lote: c.lote !== false,
+    cnpj: c.cnpj !== false,
+    instrucoes: c.instrucoes === true,
+    instrucoesTexto: typeof c.instrucoesTexto === 'string' ? c.instrucoesTexto : '',
+  }
+}
+
 // Os 4 modelos selecionáveis (Config › Modelo e prévia). `id` é o valor gravado em
 // EtiquetaConfig.modelo; `nome`/`descr` são só para a UI (cartões do seletor).
 export const MODELOS = [
@@ -101,6 +122,7 @@ export function desenharEtiqueta(canvas, dados, config) {
 // RDC centralizado. Fonte monospace (térmica 1-bit, sem antialias útil).
 function desenharClassico(ctx, dados, config, dims, k) {
   const { largura } = dims
+  const campos = camposDe(config)
   const M = 12
   const dir = largura - M // borda direita útil (para valores alinhados à direita)
   let y = M
@@ -122,10 +144,13 @@ function desenharClassico(ctx, dados, config, dims, k) {
   ctx.fillText(selo, dir - selW / 2, y + selH / 2)
   ctx.textAlign = 'left'; ctx.textBaseline = 'top'
   y += Math.round(17 * k)
-  // CNPJ (+ SIF/SIE se houver) numa linha miúda
-  const idLinha = [config?.cnpj ? `CNPJ ${config.cnpj}` : null, config?.sif ? `SIF ${config.sif}` : null,
-    config?.sie ? `SIE ${config.sie}` : null].filter(Boolean).join(' · ')
-  if (idLinha) { ctx.font = `${Math.round(9 * k)}px monospace`; ctx.fillText(ajustar(ctx, idLinha, largura - M * 2), M, y); y += Math.round(14 * k) }
+  // CNPJ (+ SIF/SIE se houver) numa linha miúda — a linha inteira é togláve por `campos.cnpj`
+  // (SIF/SIE andam junto do CNPJ no contrato, não têm toggle próprio).
+  if (campos.cnpj) {
+    const idLinha = [config?.cnpj ? `CNPJ ${config.cnpj}` : null, config?.sif ? `SIF ${config.sif}` : null,
+      config?.sie ? `SIE ${config.sie}` : null].filter(Boolean).join(' · ')
+    if (idLinha) { ctx.font = `${Math.round(9 * k)}px monospace`; ctx.fillText(ajustar(ctx, idLinha, largura - M * 2), M, y); y += Math.round(14 * k) }
+  }
 
   // --- régua separadora ---
   y += Math.round(5 * k)
@@ -150,26 +175,43 @@ function desenharClassico(ctx, dados, config, dims, k) {
   }
   linha('MANIPULAÇÃO', fmt(dados.manipuladoEm))
   linha('VALIDADE', fmt(dados.validoAte))
-  linha('LOTE', dados.lote)
-  linha('RESPONSÁVEL', dados.responsavelNome)
+  // LOTE/RESPONSÁVEL são opcionais: como `linha()` só avança `y` quando é chamada, pular a
+  // chamada já faz o reflow sozinho — sem buraco no layout sequencial.
+  if (campos.lote) linha('LOTE', dados.lote)
+  if (campos.responsavel) linha('RESPONSÁVEL', dados.responsavelNome)
 
   // --- Faixa preta arredondada: conservação · temperatura (branco, centralizado) ---
-  y += Math.round(6 * k)
-  const bandaH = Math.round(26 * k)
-  caminhoRR(ctx, M, y, largura - M * 2, bandaH, Math.round(6 * k))
-  ctx.fillStyle = '#000'; ctx.fill()
-  ctx.fillStyle = '#fff'
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-  ctx.font = `bold ${Math.round(12 * k)}px monospace`
-  ctx.fillText(ajustar(ctx, `${(dados.conservacaoLabel || '').toUpperCase()} · ${(dados.tempLabel || '').toUpperCase()}`, largura - M * 2 - 14), largura / 2, y + bandaH / 2)
-  ctx.fillStyle = '#000'; ctx.textAlign = 'left'; ctx.textBaseline = 'top'
-  y += bandaH + Math.round(9 * k)
+  if (campos.conservacao) {
+    y += Math.round(6 * k)
+    const bandaH = Math.round(26 * k)
+    caminhoRR(ctx, M, y, largura - M * 2, bandaH, Math.round(6 * k))
+    ctx.fillStyle = '#000'; ctx.fill()
+    ctx.fillStyle = '#fff'
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.font = `bold ${Math.round(12 * k)}px monospace`
+    ctx.fillText(ajustar(ctx, `${(dados.conservacaoLabel || '').toUpperCase()} · ${(dados.tempLabel || '').toUpperCase()}`, largura - M * 2 - 14), largura / 2, y + bandaH / 2)
+    ctx.fillStyle = '#000'; ctx.textAlign = 'left'; ctx.textBaseline = 'top'
+    y += bandaH + Math.round(9 * k)
+  } else {
+    y += Math.round(6 * k) // mesmo respiro antes do rodapé, sem a faixa
+  }
 
   // --- Rodapé RDC, centralizado ---
   ctx.font = `${Math.round(8 * k)}px monospace`
   ctx.textAlign = 'center'
   ctx.fillText('Conforme RDC 216/2004 (ANVISA)', largura / 2, y)
   ctx.textAlign = 'left'
+
+  // --- Instruções de conservação (opcional): uma linha centralizada logo abaixo do
+  // rodapé RDC — como o layout aqui é sequencial (y sempre cresce), basta continuar
+  // avançando `y`, sem risco de sobrepor o que já foi desenhado.
+  if (campos.instrucoes && campos.instrucoesTexto) {
+    y += Math.round(12 * k)
+    ctx.font = `${Math.round(8 * k)}px monospace`
+    ctx.textAlign = 'center'
+    ctx.fillText(ajustar(ctx, campos.instrucoesTexto, largura - M * 2), largura / 2, y)
+    ctx.textAlign = 'left'
+  }
 }
 
 // VALIDADE — a data de validade é o dado mais importante desta etiqueta (é a pergunta que
@@ -177,17 +219,20 @@ function desenharClassico(ctx, dados, config, dims, k) {
 // maior de todo o desenho, centralizada no meio da etiqueta.
 function desenharValidade(ctx, dados, config, dims, k) {
   const { largura, altura } = dims
+  const campos = camposDe(config)
   const M = 8
   let y = M
 
-  // topo: razão social (miúda, à esquerda) + selo de conservação (à direita)
+  // topo: razão social (miúda, à esquerda) + selo de conservação (à direita, opcional)
   ctx.font = `${Math.round(10 * k)}px monospace`
   ctx.textAlign = 'left'
   ctx.fillText(ajustar(ctx, config?.razaoSocial || '', largura * 0.6), M, y)
-  ctx.font = `bold ${Math.round(10 * k)}px monospace`
-  ctx.textAlign = 'right'
-  ctx.fillText(String(dados.conservacaoLabel || '').toUpperCase(), largura - M, y)
-  ctx.textAlign = 'left'
+  if (campos.conservacao) {
+    ctx.font = `bold ${Math.round(10 * k)}px monospace`
+    ctx.textAlign = 'right'
+    ctx.fillText(String(dados.conservacaoLabel || '').toUpperCase(), largura - M, y)
+    ctx.textAlign = 'left'
+  }
   y += Math.round(16 * k)
 
   // centro: "VÁLIDO ATÉ" + data/hora em destaque
@@ -206,10 +251,21 @@ function desenharValidade(ctx, dados, config, dims, k) {
   ctx.fillText(ajustar(ctx, dados.nomeItem, largura - M * 2), largura / 2, y)
   ctx.textAlign = 'left'
 
-  // rodapé: manipulação/lote/responsável numa linha só, ancorado na base
+  // rodapé: manipulação (sempre) + lote/responsável (opcionais), numa linha só, ancorado
+  // na base
+  const rodapePartes = [`Manip ${fmt(dados.manipuladoEm)}`]
+  if (campos.lote) rodapePartes.push(`Lote ${dados.lote}`)
+  if (campos.responsavel) rodapePartes.push(dados.responsavelNome)
+  const rodape = rodapePartes.join(' · ')
+  const rodapeY = altura - M - Math.round(11 * k)
   ctx.font = `${Math.round(10 * k)}px monospace`
-  const rodape = `Manip ${fmt(dados.manipuladoEm)} · Lote ${dados.lote} · ${dados.responsavelNome}`
-  ctx.fillText(ajustar(ctx, rodape, largura - M * 2), M, altura - M - Math.round(11 * k))
+  ctx.fillText(ajustar(ctx, rodape, largura - M * 2), M, rodapeY)
+
+  // Instruções de conservação (opcional): uma linha acima do rodapé de base.
+  if (campos.instrucoes && campos.instrucoesTexto) {
+    ctx.font = `${Math.round(8 * k)}px monospace`
+    ctx.fillText(ajustar(ctx, campos.instrucoesTexto, largura - M * 2), M, rodapeY - Math.round(12 * k))
+  }
 }
 
 // LATERAL_QR — faixa preta vertical à esquerda com a conservação (texto girado, lida
@@ -218,33 +274,40 @@ function desenharValidade(ctx, dados, config, dims, k) {
 // direito com o mesmo conteúdo em texto (payload offline, sem servidor de rastreio).
 function desenharLateralQr(ctx, dados, config, dims, k) {
   const { largura, altura } = dims
+  const campos = camposDe(config)
   const M = 10
-  const FAIXA = 38 // largura da faixa preta lateral
-  const xConteudo = FAIXA + 14 // ≈52 — onde a área útil começa (folga da faixa)
+  // Faixa preta lateral: só existe quando `campos.conservacao` está ligado. Desligada, o
+  // conteúdo usa a largura CHEIA da etiqueta (FAIXA=0, xConteudo=M) — sem a faixa a
+  // etiqueta não tem mais como comunicar a conservação, então não faz sentido reservar o
+  // espaço vazio dela.
+  const FAIXA = campos.conservacao ? 38 : 0 // largura da faixa preta lateral
+  const xConteudo = campos.conservacao ? FAIXA + 14 : M // ≈52 c/ faixa; sem ela, cola na margem
 
-  // faixa preta vertical + conservação girada -90° e CENTRALIZADA no meio da faixa
-  // (translate para o centro da faixa/altura + textAlign center + baseline middle).
-  ctx.fillStyle = '#000'
-  ctx.fillRect(0, 0, FAIXA, altura)
-  ctx.save()
-  ctx.fillStyle = '#fff'
-  ctx.font = `bold ${Math.round(13 * k)}px monospace`
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-  ctx.translate(Math.round(FAIXA / 2), Math.round(altura / 2))
-  ctx.rotate(-Math.PI / 2)
-  ctx.fillText(ajustar(ctx, String(dados.conservacaoLabel || '').toUpperCase(), altura - 24), 0, 0)
-  ctx.restore()
-  ctx.fillStyle = '#000'
-  ctx.textAlign = 'left'
-  ctx.textBaseline = 'top'
+  if (campos.conservacao) {
+    // faixa preta vertical + conservação girada -90° e CENTRALIZADA no meio da faixa
+    // (translate para o centro da faixa/altura + textAlign center + baseline middle).
+    ctx.fillStyle = '#000'
+    ctx.fillRect(0, 0, FAIXA, altura)
+    ctx.save()
+    ctx.fillStyle = '#fff'
+    ctx.font = `bold ${Math.round(13 * k)}px monospace`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.translate(Math.round(FAIXA / 2), Math.round(altura / 2))
+    ctx.rotate(-Math.PI / 2)
+    ctx.fillText(ajustar(ctx, String(dados.conservacaoLabel || '').toUpperCase(), altura - 24), 0, 0)
+    ctx.restore()
+    ctx.fillStyle = '#000'
+    ctx.textAlign = 'left'
+    ctx.textBaseline = 'top'
+  }
 
   const larguraConteudo = largura - xConteudo - M
   let y = M + Math.round(2 * k)
 
-  // cabeçalho: razão social · CNPJ
+  // cabeçalho: razão social · CNPJ (CNPJ opcional, `campos.cnpj`)
   ctx.font = `${Math.round(9 * k)}px monospace`
-  ctx.fillText(ajustar(ctx, [config?.razaoSocial, config?.cnpj ? `CNPJ ${config.cnpj}` : null].filter(Boolean).join(' · '), larguraConteudo), xConteudo, y)
+  ctx.fillText(ajustar(ctx, [config?.razaoSocial, (campos.cnpj && config?.cnpj) ? `CNPJ ${config.cnpj}` : null].filter(Boolean).join(' · '), larguraConteudo), xConteudo, y)
   y += Math.round(17 * k)
 
   // nome do item
@@ -268,11 +331,14 @@ function desenharLateralQr(ctx, dados, config, dims, k) {
     ctx.fillText(ajustar(ctx, valor, wmax), x, yy + Math.round(13 * k))
   }
   const rowGap = Math.round(33 * k)
+  // VALIDADE/MANIPULAÇÃO (esquerda) são sempre desenhadas; RESPONSÁVEL/LOTE (direita) são
+  // opcionais — como as 2 colunas são independentes (não é lista sequencial), desligar um
+  // campo só deixa a célula da direita vazia, sem precisar reflow.
   campo(colEsqX, y, 'VALIDADE', fmt(dados.validoAte), larguraColEsq)
-  campo(colDirX, y, 'RESPONSÁVEL', dados.responsavelNome, larguraColDir)
+  if (campos.responsavel) campo(colDirX, y, 'RESPONSÁVEL', dados.responsavelNome, larguraColDir)
   y += rowGap
   campo(colEsqX, y, 'MANIPULAÇÃO', fmt(dados.manipuladoEm), larguraColEsq)
-  campo(colDirX, y, 'LOTE', dados.lote, larguraColDir)
+  if (campos.lote) campo(colDirX, y, 'LOTE', dados.lote, larguraColDir)
 
   // QR no canto inferior direito — payload explícito (`dados.qr`) ou o padrão montado a
   // partir dos próprios dados. Na impressão térmica 203dpi o calor ESPALHA o ponto: se a
@@ -303,6 +369,21 @@ function desenharLateralQr(ctx, dados, config, dims, k) {
       if (m[r][c]) ctx.fillRect(qrX + c * cel, qrY + r * cel, cel, cel)
     }
   }
+
+  // Instruções de conservação (opcional): uma linha à esquerda do QR, embaixo, truncada
+  // na largura disponível até o QR (`qrX - xConteudo`). Este é o modelo mais apertado dos
+  // 4 — a faixa lateral já come largura à esquerda (quando ligada) e o QR já ocupa o canto
+  // inferior direito — então, se não sobrar espaço horizontal utilizável (< ~40px) ou
+  // vertical (a linha cairia por cima da última linha de campos, em `y`), OMITIMOS a
+  // instrução em vez de desenhar algo ilegível/sobreposto.
+  if (campos.instrucoes && campos.instrucoesTexto) {
+    const larguraDisp = qrX - xConteudo - 6
+    const yInstr = altura - M - Math.round(10 * k)
+    if (larguraDisp > 40 && yInstr > y + Math.round(20 * k)) {
+      ctx.font = `${Math.round(8 * k)}px monospace`
+      ctx.fillText(ajustar(ctx, campos.instrucoesTexto, larguraDisp), xConteudo, yInstr)
+    }
+  }
 }
 
 // Payload legível do QR quando `dados.qr` não vem explícito: qualquer leitor de QR comum
@@ -326,6 +407,7 @@ function textoPadraoQr(dados, config) { // eslint-disable-line no-unused-vars
 // espaço sobrando.
 function desenharCompacto(ctx, dados, config, dims, k) {
   const { largura, altura } = dims
+  const campos = camposDe(config)
   const M = 6
   let y = M
 
@@ -352,21 +434,40 @@ function desenharCompacto(ctx, dados, config, dims, k) {
   ctx.fillText(ajustar(ctx, fmt(dados.validoAte), larguraCol), colDirX, y)
   y += Math.round(18 * k)
 
-  // faixa preta: conservação · temperatura
-  const alturaFaixa = Math.round(16 * k)
-  ctx.fillStyle = '#000'
-  ctx.fillRect(0, y, largura, alturaFaixa)
-  ctx.fillStyle = '#fff'
-  ctx.textAlign = 'center'
-  ctx.font = `bold ${Math.round(11 * k)}px monospace`
-  ctx.fillText(ajustar(ctx, `${dados.conservacaoLabel} · ${dados.tempLabel}`, largura - M * 2), largura / 2, y + Math.round(3 * k))
-  ctx.textAlign = 'left'
-  ctx.fillStyle = '#000'
+  // faixa preta: conservação · temperatura (opcional). O rodapé abaixo é ANCORADO na base
+  // (independente de `y`), então pular a faixa aqui não deixa buraco em cima dele — só
+  // sobra o mesmo espaço em branco que já haveria com o campo ligado numa etiqueta alta.
+  if (campos.conservacao) {
+    const alturaFaixa = Math.round(16 * k)
+    ctx.fillStyle = '#000'
+    ctx.fillRect(0, y, largura, alturaFaixa)
+    ctx.fillStyle = '#fff'
+    ctx.textAlign = 'center'
+    ctx.font = `bold ${Math.round(11 * k)}px monospace`
+    ctx.fillText(ajustar(ctx, `${dados.conservacaoLabel} · ${dados.tempLabel}`, largura - M * 2), largura / 2, y + Math.round(3 * k))
+    ctx.textAlign = 'left'
+    ctx.fillStyle = '#000'
+  }
 
-  // rodapé: loja · CNPJ · lote · responsável, numa linha só, ancorado na base
+  // rodapé: loja · CNPJ (opcional) · lote (opcional) · responsável (opcional), numa linha
+  // só, ancorado na base. Instruções (opcional) são uma 2ª linha abaixo dele — como o
+  // rodapé é ancorado na base (não sequencial a partir de `y`), pra abrir espaço pra essa
+  // 2ª linha SEM sobrepor a margem inferior a gente sobe o próprio rodapé (rodapeY) em vez
+  // de tentar empurrar algo para "além" da margem, que sairia do canvas.
+  const rodapePartes = [config?.razaoSocial || '']
+  if (campos.cnpj && config?.cnpj) rodapePartes.push(`CNPJ ${config.cnpj}`)
+  if (campos.lote) rodapePartes.push(`Lote ${dados.lote}`)
+  if (campos.responsavel) rodapePartes.push(dados.responsavelNome)
+  const rodape = rodapePartes.filter(Boolean).join(' · ')
+  const temInstrucoes = campos.instrucoes && campos.instrucoesTexto
+  const rodapeY = altura - M - Math.round(9 * k) - (temInstrucoes ? Math.round(10 * k) : 0)
   ctx.font = `${Math.round(8 * k)}px monospace`
-  const rodape = `${config?.razaoSocial || ''} · CNPJ ${config?.cnpj || ''} · Lote ${dados.lote} · ${dados.responsavelNome}`
-  ctx.fillText(ajustar(ctx, rodape, largura - M * 2), M, altura - M - Math.round(9 * k))
+  ctx.fillText(ajustar(ctx, rodape, largura - M * 2), M, rodapeY)
+  if (temInstrucoes) {
+    ctx.textAlign = 'center'
+    ctx.fillText(ajustar(ctx, campos.instrucoesTexto, largura - M * 2), largura / 2, rodapeY + Math.round(10 * k))
+    ctx.textAlign = 'left'
+  }
 }
 
 // Amostra fictícia para a prévia da Config e o teste de impressão: nenhuma das duas tem

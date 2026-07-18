@@ -2553,6 +2553,32 @@ body.theme-dark .chk-ic-btn.is-danger:hover { background: rgba(220, 38, 38, 0.16
 /* Botão de teste de impressão — herda a cor de .btn-primary (dourado), só ajusta layout. */
 .etq-print-btn { width: 100%; justify-content: center; margin-top: 12px; }
 
+/* ===================== ETIQUETAS — Campos impressos (toggles) =====================
+   Card "Campos impressos na etiqueta": lista de linhas título+subtítulo à esquerda, um
+   toggle switch (pill) à direita. Mesma linguagem de cor (dourado sobre creme, tokens de
+   tema) dos demais .etq-*. */
+.etq-campos-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--app-border); }
+.etq-campos-row:first-child { border-top: none; }
+.etq-campos-info { flex: 1 1 auto; min-width: 0; }
+.etq-campos-titulo { font-size: 13px; font-weight: 600; color: var(--app-text); }
+.etq-campos-sub { font-size: 11.5px; color: var(--app-text-3); margin-top: 1px; }
+.etq-campos-instr { margin: -2px 0 10px; }
+
+/* Toggle switch — pill dourada quando ligada, cinza quando desligada; desabilitada (os 3
+   campos obrigatórios) fica com metade da opacidade e sem cursor de clique. */
+.etq-toggle {
+  position: relative; width: 40px; height: 22px; flex: 0 0 auto; padding: 0; cursor: pointer;
+  border: 1px solid var(--app-border); border-radius: 999px; background: var(--app-surface-2);
+  transition: background .15s ease, border-color .15s ease;
+}
+.etq-toggle.is-on { background: var(--brand-gold); border-color: var(--brand-gold-deep); }
+.etq-toggle:disabled { cursor: default; opacity: .55; }
+.etq-toggle-knob {
+  position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .25); transition: left .15s ease;
+}
+.etq-toggle.is-on .etq-toggle-knob { left: 20px; }
+
 /* ===================== ETIQUETAS — Itens (Fatia B, Task 2) =====================
    Mesma linguagem visual da Configuração (.etq-* acima): catálogo à esquerda, painel
    "Etiqueta selecionada" à direita — dourado sobre creme, tudo por token de tema. */

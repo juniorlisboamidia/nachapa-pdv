@@ -7299,6 +7299,21 @@ app.put('/api/etiquetas/config', async (req, res) => {
     // enum inválido vindo do front.
     const MODELOS_OK = new Set(['CLASSICO', 'VALIDADE', 'LATERAL_QR', 'COMPACTO']);
     const FONTES_OK = new Set(['NORMAL', 'GRANDE']);
+    // Sanitiza os campos impressos na etiqueta (toggles da Config): grava sempre as MESMAS
+    // 6 chaves com o default do contrato — conservacao/responsavel/lote/cnpj default TRUE
+    // (retrocompat: loja sem `campos` já mostrava tudo, então "ausente"≠"desligado" pra
+    // esses 4), instrucoes default FALSE. Sem isso, lixo do body (chaves extras, valores não
+    // booleanos) seria gravado direto no Json e o desenho (etiquetaCanvas.js, que espera
+    // exatamente este contrato) teria que adivinhar tipos na hora de imprimir.
+    const c = b.campos && typeof b.campos === 'object' ? b.campos : {};
+    const camposSaneados = {
+      conservacao: c.conservacao !== false,
+      responsavel: c.responsavel !== false,
+      lote: c.lote !== false,
+      cnpj: c.cnpj !== false,
+      instrucoes: c.instrucoes === true,
+      instrucoesTexto: typeof c.instrucoesTexto === 'string' ? c.instrucoesTexto.trim().slice(0, 200) : '',
+    };
     const { config: atual } = await garantirEtiquetaSetup();
     const config = await prisma.etiquetaConfig.update({
       where: { id: atual.id },
@@ -7312,7 +7327,7 @@ app.put('/api/etiquetas/config', async (req, res) => {
         alturaMm: numOuDefault(b.alturaMm, 15, 100, 30),
         modelo: MODELOS_OK.has(b.modelo) ? b.modelo : (atual?.modelo || 'CLASSICO'),
         fonte: FONTES_OK.has(b.fonte) ? b.fonte : (atual?.fonte || 'NORMAL'),
-        campos: b.campos && typeof b.campos === 'object' ? b.campos : {},
+        campos: camposSaneados,
       },
     });
     res.json({ ok: true, config });
