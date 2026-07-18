@@ -24,6 +24,7 @@ import Etiquetas from './pages/Etiquetas'
 import EtiquetasQuiosque from './pages/EtiquetasQuiosque'
 import Checklist, { ChecklistDetalhe, ChecklistHistorico, ChecklistEstatisticas } from './pages/Checklist'
 import ChecklistPublico from './pages/ChecklistPublico'
+import CentralAjuda from './pages/CentralAjuda'
 
 function TelaCarregando() {
   return (
@@ -108,7 +109,7 @@ export default function App() {
             <Route path="automacoes" element={<EmConstrucao titulo="Automações" descricao="Automações da operação." />} />
             {/* Extras */}
             <Route path="minha-empresa" element={<MinhaEmpresa />} />
-            <Route path="central-de-ajuda" element={<EmConstrucao titulo="Central de Ajuda" descricao="Artigos e ajuda do sistema." />} />
+            <Route path="central-de-ajuda" element={<CentralAjuda />} />
           </Route>
           {/* Públicas — ranking da equipe (por token) e Área do Colaborador (login por WhatsApp) */}
           <Route path="bonificacao/:token" element={<BonificacaoPublica />} />
