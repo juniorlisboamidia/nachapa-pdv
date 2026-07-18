@@ -130,6 +130,10 @@ const CSS = `
 .be-cl-item-ds{font-size:11.5px;color:var(--muted);margin-bottom:9px;line-height:1.4}
 .be-cl-crit{color:#dc2626;font-weight:800}
 .be-cl-warn{font-size:11.5px;color:#dc2626;font-weight:700;margin-top:8px}
+.be-cl-dica{font-size:11.5px;color:var(--muted);margin-bottom:9px;line-height:1.4;font-style:italic}
+.be-cl-alerta{margin-top:8px;padding:9px 11px;border-radius:11px;background:rgba(220,38,38,.1);border:1px solid rgba(220,38,38,.28);font-size:12px;color:#dc2626;font-weight:650;line-height:1.4}
+.be-cl-alerta b{font-weight:850}
+.be-cl-tempo{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:750;color:var(--muted);background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:5px 12px;margin-bottom:12px}
 .be-cl-check{display:inline-flex;align-items:center;gap:7px;border-radius:11px;padding:9px 16px;font-size:13px;font-weight:800;cursor:pointer;border:1.5px solid var(--line);background:var(--surface-2);color:var(--ink-soft);font-family:inherit}
 .be-cl-check.on{border-color:var(--money);background:rgba(15,138,84,.14);color:var(--money)}
 .be-cl-stars{display:flex;gap:3px}
@@ -523,7 +527,7 @@ function CardChecklist({ c, onAbrir }) {
       <span className="be-cl-ic">{icone}</span>
       <span className="be-cl-info">
         <span className="be-cl-nm">{c.nome}</span>
-        <span className="be-cl-meta">{c.categoria} · {c.itens} {c.itens === 1 ? 'item' : 'itens'}</span>
+        <span className="be-cl-meta">{c.categoria} · {c.itens} {c.itens === 1 ? 'item' : 'itens'}{c.tempoEstimadoMin > 0 ? ` · ~${c.tempoEstimadoMin} min` : ''}</span>
       </span>
       {c.emAlerta && <span className="be-st" style={{ color: '#dc2626', background: '#dc262622' }}>⚠️ Alerta</span>}
       {st && <span className="be-st" style={{ color: st.cor, background: st.cor + '22' }}>{st.label}</span>}
@@ -584,6 +588,7 @@ function ExecutarChecklist({ exec, setAviso, onSair }) {
   return (
     <section>
       <button type="button" className="be-login-voltar" style={{ marginTop: 0, marginBottom: 12 }} onClick={onSair}>‹ Voltar</button>
+      {exec.tempoEstimadoMin > 0 && <div className="be-cl-tempo">⏱️ ~{exec.tempoEstimadoMin} min</div>}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {exec.itens.map((it) => (
           <ItemChecklist key={it.chave} item={it} resposta={respostas[it.chave] || {}} onSalvar={salvar} foto={fotos[it.chave] || null} onFoto={fotoSalva} execId={exec.id} setAviso={setAviso} />
@@ -606,6 +611,7 @@ function ItemChecklist({ item, resposta: r, onSalvar, foto, onFoto, execId, setA
     <div className="be-cl-item">
       <div className="be-cl-item-tt">{item.titulo}{item.critico && <span className="be-cl-crit"> *</span>}</div>
       {item.descricao && <div className="be-cl-item-ds">{item.descricao}</div>}
+      {item.config?.dica && <div className="be-cl-dica">💡 {item.config.dica}</div>}
 
       {item.tipo === 'CHECK' && (
         <button type="button" className={'be-cl-check' + (r.valor === true ? ' on' : '')} onClick={() => onSalvar(item.chave, !(r.valor === true), r.observacao)}>
@@ -649,6 +655,9 @@ function ItemChecklist({ item, resposta: r, onSalvar, foto, onFoto, execId, setA
       )}
 
       {r.conforme === false && <div className="be-cl-warn">⚠ Fora do padrão{item.critico ? ' · item crítico' : ''}</div>}
+      {r.conforme === false && item.config?.instrucaoAlerta && (
+        <div className="be-cl-alerta"><b>O que fazer:</b> {item.config.instrucaoAlerta}</div>
+      )}
     </div>
   )
 }

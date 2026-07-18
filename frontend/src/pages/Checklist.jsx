@@ -1251,7 +1251,8 @@ function AbaNotificacoes({ notify }) {
 // ===================== CONFIGURAÇÕES (lembrete de atraso) =====================
 // Mesmo padrão da AbaNotificacoes (alerta imediato): toggle otimista + card de
 // destinatários com form de adicionar + ConfirmDialog na exclusão. A diferença é o
-// card do lembrete em si (modelo de mensagem editável + minutos antes) e a lista de
+// card do lembrete em si (modelo de mensagem editável — a tolerância em minutos agora
+// é por checklist, configurada na etapa de Agendamento do wizard) e a lista de
 // destinatários é filtrada por tipo==='ATRASO' (o alerta imediato usa 'IMEDIATO').
 const LEMBRETE_TOKENS = [
   { label: 'Nome do checklist', token: '[nome do checklist]' },
@@ -1263,7 +1264,6 @@ function AbaConfiguracoes({ notify }) {
   const [config, setConfig] = useState(null)
   const [destsAll, setDestsAll] = useState([])
   const [template, setTemplate] = useState('')
-  const [minutos, setMinutos] = useState(30)
   const [previa, setPrevia] = useState('')
   const [carregandoPrevia, setCarregandoPrevia] = useState(false)
   const [salvandoConfig, setSalvandoConfig] = useState(false) // trava o toggle
@@ -1283,15 +1283,14 @@ function AbaConfiguracoes({ notify }) {
         setConfig(r.data.config)
         setDestsAll(r.data.destinatarios || [])
         setTemplate(r.data.config?.lembreteTemplate || '')
-        setMinutos(r.data.config?.lembreteMinutosAntes || 30)
       })
       .catch((e) => notify(e?.response?.data?.error ?? 'Não foi possível carregar as configurações.', 'error'))
   }
   useEffect(() => { carregar() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Toggle otimista — só mexe em lembreteAtivo; os outros 3 campos vão com o valor já
-  // salvo (não a edição em andamento no textarea/minutos) pra não commitar rascunho
-  // sem querer. Mesmo cuidado do PUT full-replace-ish explicado no toggleAtivo acima.
+  // Toggle otimista — só mexe em lembreteAtivo; os outros campos vão com o valor já
+  // salvo (não a edição em andamento no textarea) pra não commitar rascunho sem
+  // querer. Mesmo cuidado do PUT full-replace-ish explicado no toggleAtivo acima.
   async function toggleLembrete() {
     if (salvandoConfig || !config) return
     const novo = !config.lembreteAtivo
@@ -1302,7 +1301,6 @@ function AbaConfiguracoes({ notify }) {
         alertaImediatoAtivo: config.alertaImediatoAtivo,
         lembreteAtivo: novo,
         lembreteTemplate: config.lembreteTemplate,
-        lembreteMinutosAntes: config.lembreteMinutosAntes,
       })
     } catch (err) {
       notify(err?.response?.data?.error ?? 'Não foi possível salvar a configuração.', 'error')
@@ -1328,11 +1326,9 @@ function AbaConfiguracoes({ notify }) {
         alertaImediatoAtivo: config.alertaImediatoAtivo,
         lembreteAtivo: config.lembreteAtivo,
         lembreteTemplate: template,
-        lembreteMinutosAntes: Number(minutos),
       })
       setConfig(r.data.config)
       setTemplate(r.data.config.lembreteTemplate)
-      setMinutos(r.data.config.lembreteMinutosAntes)
       notify('Configurações do lembrete salvas.')
     } catch (err) {
       notify(err?.response?.data?.error ?? 'Não foi possível salvar.', 'error')
@@ -1421,20 +1417,6 @@ function AbaConfiguracoes({ notify }) {
             maxLength={600}
             onChange={(e) => setTemplate(e.target.value)}
           />
-        </div>
-
-        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <label style={{ fontSize: 12, fontWeight: 600 }}>Avisar</label>
-          <input
-            type="number"
-            className="form-input"
-            style={{ width: 80 }}
-            min={5}
-            max={240}
-            value={minutos}
-            onChange={(e) => setMinutos(e.target.value)}
-          />
-          <span style={{ fontSize: 12, color: 'var(--app-text-soft, #888)' }}>minutos antes do horário-limite (5 a 240)</span>
         </div>
 
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>

@@ -2228,7 +2228,7 @@ app.get('/api/public/colaborador/checklists', async (req, res) => {
     // Execuções do dia (para saber o que já foi concluído).
     const execs = await prisma.checklistExecucao.findMany({ where: { empresaId: sess.empresaId, dataRef }, select: { checklistId: true, status: true, emAlerta: true } });
     const execMap = new Map(execs.map((e) => [e.checklistId, e]));
-    const mapear = (c) => ({ id: c.id, nome: c.nome, categoria: c.categoria, prioridade: c.prioridade, itens: c._count.itens, recorrenciaTipo: c.recorrenciaTipo, status: execMap.get(c.id)?.status || null, emAlerta: execMap.get(c.id)?.emAlerta || false });
+    const mapear = (c) => ({ id: c.id, nome: c.nome, categoria: c.categoria, prioridade: c.prioridade, itens: c._count.itens, recorrenciaTipo: c.recorrenciaTipo, tempoEstimadoMin: c.tempoEstimadoMin ?? null, status: execMap.get(c.id)?.status || null, emAlerta: execMap.get(c.id)?.emAlerta || false });
     const hoje = [], disponiveis = [];
     for (const c of checklists) {
       if (venceHoje({ recorrenciaTipo: c.recorrenciaTipo, recorrenciaConfig: c.recorrenciaConfig }, dow)) hoje.push(mapear(c));
@@ -2273,15 +2273,17 @@ async function chkAbrirExecucao(sess, checklistId) {
 app.post('/api/public/colaborador/checklists/:id/iniciar', async (req, res) => {
   try {
     const sess = exigirColaborador(req, res); if (!sess) return;
-    const { exec } = await chkAbrirExecucao(sess, parseInt(req.params.id, 10));
-    res.status(201).json({ execucao: chkExecJson(exec) });
+    const { exec, checklist } = await chkAbrirExecucao(sess, parseInt(req.params.id, 10));
+    res.status(201).json({ execucao: chkExecJson(exec, checklist) });
   } catch (e) { if (e.http) return res.status(e.http).json({ error: e.msg }); console.error('[colab/iniciar]', e); res.status(500).json({ error: 'Erro ao iniciar.' }); }
 });
 
-function chkExecJson(exec) {
+// `checklist` é opcional (só o `iniciar` e o GET de retomada o passam) — carrega o
+// tempoEstimadoMin pro cabeçalho da execução no colaborador.
+function chkExecJson(exec, checklist) {
   const rmap = {}; for (const r of exec.respostas || []) rmap[r.itemChave] = { valor: r.valorJson, conforme: r.conforme, observacao: r.observacao };
   const fmap = {}; for (const f of exec.fotos || []) fmap[f.itemChave] = { id: f.id };
-  return { id: exec.id, checklistId: exec.checklistId, status: exec.status, emAlerta: exec.emAlerta, itens: exec.itensSnapshotJson, respostas: rmap, fotos: fmap };
+  return { id: exec.id, checklistId: exec.checklistId, status: exec.status, emAlerta: exec.emAlerta, tempoEstimadoMin: checklist?.tempoEstimadoMin ?? null, itens: exec.itensSnapshotJson, respostas: rmap, fotos: fmap };
 }
 
 // Posse de uma execução JÁ EXISTENTE — não basta filtrar por empresaId: dentro da MESMA loja,
@@ -2308,7 +2310,8 @@ app.get('/api/public/colaborador/execucoes/:id', async (req, res) => {
   try {
     const sess = exigirColaborador(req, res); if (!sess) return;
     const exec = await chkPosseExecucao(sess, parseInt(req.params.id, 10), { comRespostas: true });
-    res.json({ execucao: chkExecJson(exec) });
+    const checklist = await prisma.checklist.findFirst({ where: { id: exec.checklistId, empresaId: sess.empresaId }, select: { tempoEstimadoMin: true } });
+    res.json({ execucao: chkExecJson(exec, checklist) });
   } catch (e) { if (e.http) return res.status(e.http).json({ error: e.msg }); console.error('[colab/execucao GET]', e); res.status(500).json({ error: 'Erro ao carregar.' }); }
 });
 
