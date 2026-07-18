@@ -8,7 +8,7 @@ import { useParams } from 'react-router-dom'
 import api from '../services/api'
 import Toast from '../components/Toast'
 import { desenharEtiqueta, dadosExemplo, MODELOS } from '../lib/etiquetaCanvas'
-import { bluetoothDisponivel, conectar, conectado, imprimir, LARGURA_PX } from '../lib/niimbotB1'
+import { bluetoothDisponivel, conectar, conectado, imprimir, LARGURA_PX, calibracao, setCalibracao } from '../lib/niimbotB1'
 
 // Presets de altura do rolo (mm) oferecidos no select — "Personalizar" abre um input livre.
 const ALTURA_PRESETS = [30, 40, 50]
@@ -27,12 +27,15 @@ const TAB_IDS = TABS.map((t) => t.id)
 // de exibição ficam no front.
 const CONS_LABEL = {
   CONGELADO: 'Congelado',
-  RESFRIADO_0_4: 'Resfriado (0 a 4 °C)',
-  RESFRIADO_4_6: 'Resfriado (4 a 6 °C)',
-  AMBIENTE: 'Ambiente (seco)',
+  RESFRIADO_0_4: 'Refrigerado',
+  RESFRIADO_4_6: 'Resfriado',
+  AMBIENTE: 'Ambiente Seco',
   DESCONGELADO: 'Descongelado',
   ABERTO: 'Produto aberto',
 }
+// Ordem fixa de exibição (a temperatura sai da coluna própria `tempLabel`, não do nome).
+const CONS_ORDER = ['CONGELADO', 'RESFRIADO_0_4', 'RESFRIADO_4_6', 'AMBIENTE', 'DESCONGELADO', 'ABERTO']
+const ordenarCons = (rs) => [...rs].sort((a, b) => CONS_ORDER.indexOf(a.conservacao) - CONS_ORDER.indexOf(b.conservacao))
 
 export default function Etiquetas() {
   const { tab: tabParam } = useParams()
@@ -73,6 +76,10 @@ function AbaConfig({ notify }) {
   // escolher "Personalizar" sem digitar nada faria o select "saltar" de volta pro preset
   // no próximo render (o valor em si continuaria igual a um preset).
   const [personalizarAltura, setPersonalizarAltura] = useState(false)
+  // Calibração da impressão (densidade + ajuste vertical) — POR APARELHO (localStorage, via
+  // niimbotB1), não vai no config do banco: depende do rolo/impressora daquele aparelho.
+  const [cal, setCal] = useState(() => calibracao())
+  const updCal = (patch) => { const nc = { ...cal, ...patch }; setCal(nc); setCalibracao(nc) }
   // Canvas da prévia ao vivo — redesenhado pelo useEffect abaixo a cada mudança de config.
   const previaRef = useRef(null)
 
@@ -142,7 +149,7 @@ function AbaConfig({ notify }) {
     try {
       const canvas = document.createElement('canvas')
       desenharEtiqueta(canvas, dadosExemplo(), config)
-      await imprimir(canvas, { copias: 1 })
+      await imprimir(canvas, { copias: 1, densidade: cal.densidade, ajusteY: cal.ajusteY })
       notify('Etiqueta de teste enviada para a impressora.')
     } catch (e) {
       // niimbotB1 já devolve mensagens amigáveis em pt-BR (erroAmigavel) — usa e.message
@@ -249,7 +256,13 @@ function AbaConfig({ notify }) {
             <div className="page-header-sub" style={{ marginTop: 0, marginBottom: 12 }}>
               Vale para todo item que não tem validade própria (aba Itens).
             </div>
-            {regras.map((r) => (
+            {/* Cabeçalho das colunas */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 6, fontSize: 11, fontWeight: 700, letterSpacing: 0.4, color: 'var(--app-text-soft, #888)' }}>
+              <span style={{ flex: '1 1 220px', minWidth: 0 }}>CONSERVAÇÃO</span>
+              <span style={{ flex: '0 0 150px' }}>TEMPERATURA</span>
+              <span style={{ flex: '0 0 110px' }}>VALIDADE</span>
+            </div>
+            {ordenarCons(regras).map((r) => (
               <div key={r.conservacao} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: '1px solid var(--app-border, #eee)' }}>
                 <span style={{ flex: '1 1 220px', minWidth: 0, fontSize: 13, fontWeight: 600 }}>{CONS_LABEL[r.conservacao] || r.conservacao}</span>
                 <span style={{ flex: '0 0 150px', fontSize: 13 }} title="Temperatura impressa no rótulo">{r.tempLabel}</span>
@@ -297,6 +310,46 @@ function AbaConfig({ notify }) {
             </div>
             <div className="page-header-sub" style={{ marginTop: 8, textAlign: 'center' }}>
               {LARGURA_MM}×{config.alturaMm} mm · fonte {config.fonte === 'GRANDE' ? 'grande' : 'normal'} · 203 dpi
+            </div>
+
+            {/* Calibração da impressora física (por aparelho). Densidade corrige impressão
+                apagada; ajuste vertical corrige corte no topo/base do rolo. */}
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end', marginTop: 12 }}>
+              <div>
+                <label className="form-label" style={{ display: 'block', marginBottom: 4 }}>Densidade</label>
+                <div style={{ display: 'flex', gap: 4 }}>
+                  {[1, 2, 3, 4, 5].map((d) => (
+                    <button
+                      type="button"
+                      key={d}
+                      onClick={() => updCal({ densidade: d })}
+                      style={{
+                        width: 34, height: 34, borderRadius: 8, fontWeight: 700, cursor: 'pointer',
+                        border: '1px solid var(--app-border, #e7dcc2)',
+                        background: cal.densidade === d ? 'var(--brand-gold, #eab802)' : 'var(--app-surface, #fffdf8)',
+                        color: cal.densidade === d ? '#0e1319' : 'var(--app-text, #333)',
+                      }}
+                    >
+                      {d}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="form-label" style={{ display: 'block', marginBottom: 4 }}>Ajuste vertical (px)</label>
+                <input
+                  type="number"
+                  className="form-input"
+                  style={{ width: 92 }}
+                  min={-40}
+                  max={40}
+                  value={cal.ajusteY}
+                  onChange={(e) => updCal({ ajusteY: Math.max(-40, Math.min(40, parseInt(e.target.value, 10) || 0)) })}
+                />
+              </div>
+            </div>
+            <div className="page-header-sub" style={{ marginTop: 4 }}>
+              Densidade maior = impressão mais escura. Ajuste vertical: valor positivo empurra pra baixo (corrige corte no topo).
             </div>
 
             <button

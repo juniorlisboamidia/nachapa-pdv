@@ -275,17 +275,32 @@ function desenharLateralQr(ctx, dados, config, dims, k) {
   campo(colDirX, y, 'LOTE', dados.lote, larguraColDir)
 
   // QR no canto inferior direito — payload explícito (`dados.qr`) ou o padrão montado a
-  // partir dos próprios dados. Tamanho limitado para não colidir com os campos acima.
+  // partir dos próprios dados. Na impressão térmica 203dpi o calor ESPALHA o ponto: se a
+  // célula do módulo for fracionária/pequena (<3px) os módulos grudam e o QR fica
+  // ilegível. Por isso: (1) a célula é INTEIRA (Math.floor) para os quadrados caírem no
+  // grid de dots sem antialias; (2) reservamos "quiet zone" (borda branca de 1 módulo) que
+  // todo leitor exige; (3) o payload padrão é curto (ver textoPadraoQr) para o QR ter
+  // poucos módulos e a célula sobrar grande. O tamanho é o maior que cabe sem encostar nos
+  // campos acima.
   const m = matrizQr(dados.qr || textoPadraoQr(dados, config))
   const n = m.length
-  const lado = Math.min(84, Math.max(56, Math.round(altura * 0.34)))
-  const qrX = largura - M - lado
-  const qrY = altura - M - lado
-  const cel = lado / n
+  const alvo = Math.min(100, Math.max(60, Math.round(altura * 0.4)))
+  // +2 = a quiet zone (1 módulo de cada lado). Célula inteira, mínimo 2px.
+  const cel = Math.max(2, Math.floor(alvo / (n + 2)))
+  const quiet = cel
+  const bloco = n * cel + quiet * 2 // QR + quiet zone dos dois lados
+  const bx = largura - M - bloco
+  const by = altura - M - bloco
+  // Fundo branco do bloco inteiro = quiet zone garantida (contraste mesmo sobre qualquer
+  // coisa desenhada antes).
+  ctx.fillStyle = '#fff'
+  ctx.fillRect(bx, by, bloco, bloco)
   ctx.fillStyle = '#000'
+  const qrX = bx + quiet
+  const qrY = by + quiet
   for (let r = 0; r < n; r++) {
     for (let c = 0; c < n; c++) {
-      if (m[r][c]) ctx.fillRect(qrX + c * cel, qrY + r * cel, Math.ceil(cel), Math.ceil(cel))
+      if (m[r][c]) ctx.fillRect(qrX + c * cel, qrY + r * cel, cel, cel)
     }
   }
 }
@@ -293,16 +308,16 @@ function desenharLateralQr(ctx, dados, config, dims, k) {
 // Payload legível do QR quando `dados.qr` não vem explícito: qualquer leitor de QR comum
 // (câmera de celular) lê este texto direto, sem internet e sem página de rastreabilidade
 // (decisão da Fatia A — ver docs/superpowers/specs/2026-07-16-etiquetas-modelos-config-design.md).
-function textoPadraoQr(dados, config) {
+// Payload CURTO de propósito: numa etiqueta térmica de 48mm, um QR só é escaneável com
+// poucos módulos (célula ≥3px). Enfiar 8 linhas (nome+datas+conservação+lote+responsável+
+// loja+CNPJ) faz o QR passar de ~50 módulos e virar borrão. Ficam os 3 dados de
+// rastreabilidade essenciais (item, validade, lote); o resto já está impresso em texto na
+// própria etiqueta, ao lado do QR.
+function textoPadraoQr(dados, config) { // eslint-disable-line no-unused-vars
   return [
     dados.nomeItem,
-    `Validade: ${fmt(dados.validoAte)}`,
-    `Manipulado: ${fmt(dados.manipuladoEm)}`,
-    `Conservação: ${dados.conservacaoLabel}`,
-    `Lote: ${dados.lote}`,
-    `Responsável: ${dados.responsavelNome}`,
-    config?.razaoSocial ? `Loja: ${config.razaoSocial}` : null,
-    config?.cnpj ? `CNPJ: ${config.cnpj}` : null,
+    `Val ${fmt(dados.validoAte)}`,
+    dados.lote ? `Lote ${dados.lote}` : null,
   ].filter(Boolean).join('\n')
 }
 

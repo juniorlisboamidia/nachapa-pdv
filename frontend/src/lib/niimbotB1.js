@@ -52,6 +52,42 @@ const MODELO_B1 = {
 // o rodapé (CNPJ/SIF/SIE, que é exigência sanitária) é o primeiro a ser cortado.
 const OFFSET_Y_PX = 4
 
+// Calibração da impressão POR APARELHO (localStorage): densidade térmica (1–5, quanto
+// maior mais escuro) e um ajuste vertical fino em px, somado ao OFFSET_Y_PX base. Vive no
+// navegador porque depende do rolo/impressora física daquele aparelho — não é preferência
+// da loja (por isso não vai para o EtiquetaConfig do banco). Todo print (teste, item,
+// sequência) lê daqui quando o chamador não passa valor explícito.
+const CAL_KEY = 'etq-calibracao'
+const DENSIDADE_PADRAO = 4
+function clampDensidade(d) {
+  const n = Math.round(Number(d))
+  return Number.isFinite(n) ? Math.min(5, Math.max(1, n)) : DENSIDADE_PADRAO
+}
+export function calibracao() {
+  try {
+    const c = JSON.parse(localStorage.getItem(CAL_KEY) || '{}')
+    return {
+      densidade: clampDensidade(c.densidade ?? DENSIDADE_PADRAO),
+      ajusteY: Number.isFinite(c.ajusteY) ? Math.trunc(c.ajusteY) : 0,
+    }
+  } catch {
+    return { densidade: DENSIDADE_PADRAO, ajusteY: 0 }
+  }
+}
+export function setCalibracao({ densidade, ajusteY } = {}) {
+  try {
+    localStorage.setItem(
+      CAL_KEY,
+      JSON.stringify({
+        densidade: clampDensidade(densidade),
+        ajusteY: Number.isFinite(Number(ajusteY)) ? Math.trunc(Number(ajusteY)) : 0,
+      }),
+    )
+  } catch {
+    /* localStorage indisponível (aba privada) — segue no padrão, sem quebrar */
+  }
+}
+
 // Pega a API global instalada pelo import acima.
 function niimbot() {
   const api = globalThis.Niimbot
