@@ -15,7 +15,7 @@ import { validadeDe, gerarLote, colisaoDeLote, CONSERVACOES } from './etiquetas.
 import { avaliarResposta, execucaoEmAlerta, fotosCriticasFaltando } from './checklistConformidade.js';
 import { venceHoje } from './checklistRecorrencia.js';
 import { itensCriticosNaoConformes, montarMensagemAlerta } from './checklistAlerta.js';
-import { montarMensagemLembrete } from './checklistLembrete.js';
+import { montarMensagemLembrete, estaNaJanelaDeLembrete, TEMPLATE_PADRAO } from './checklistLembrete.js';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 
@@ -2396,7 +2396,9 @@ async function dispararAlertaImediato(empresaId, execucaoId) {
     const quando = new Date(exec.concluidaEm || Date.now()).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
     const msg = montarMensagemAlerta({ lojaNome: loja?.nome || 'Loja', checklistNome: exec.checklist?.nome || 'Checklist', funcionarioNome: func ? (func.apelido || func.nome) : '—', quando, itensForaDoPadrao });
 
-    const dests = await prisma.checklistDestinatario.findMany({ where: { empresaId, ativo: true } });
+    // tipo:'IMEDIATO' — um destinatário cadastrado só-de-atraso (tipo ATRASO) não deve
+    // receber o alerta imediato (review da Task 2).
+    const dests = await prisma.checklistDestinatario.findMany({ where: { empresaId, tipo: 'IMEDIATO', ativo: true } });
     if (!dests.length) return;
     const podeEnviar = zapiConfigurado();
     for (const d of dests) {
@@ -2407,6 +2409,98 @@ async function dispararAlertaImediato(empresaId, execucaoId) {
       await prisma.checklistNotificacaoLog.create({ data: { empresaId, regra: 'ALERTA_IMEDIATO', canal: 'WHATSAPP', destino, destinatarioNome: d.nome, execucaoId: exec.id, conteudo: msg, status, erro } });
     }
   } catch (e) { console.error('[dispararAlertaImediato]', e?.message || e); }
+}
+
+// Dispara o LEMBRETE de atraso de uma loja: checklists que vencem hoje, ainda sem execução
+// concluída, cujo horarioLimite está dentro da janela [limite - minutosAntes, limite]. Roda
+// pelo agendador (setInterval), FORA do tenantStore — igual ao dispararAlertaImediato, todo
+// empresaId é explícito (where E data) porque a extension do Prisma só injeta empresaId
+// dentro do AsyncLocalStorage de uma request; aqui não existe request nenhuma.
+async function dispararLembretesLoja(empresaId) {
+  try {
+    const cfg = await prisma.checklistNotificacaoConfig.findFirst({ where: { empresaId } });
+    if (!cfg?.lembreteAtivo) return;
+    // Só quem está marcado tipo:'ATRASO' recebe o lembrete (o imediato usa tipo:'IMEDIATO').
+    const destinatarios = await prisma.checklistDestinatario.findMany({ where: { empresaId, tipo: 'ATRASO', ativo: true } });
+    if (!destinatarios.length || !zapiConfigurado()) return;
+
+    // dataRef = início do dia de EXPEDIENTE (corte 05:00 BR) — mesma referência usada pela
+    // Área do Colaborador e pelo painel do gestor. dow (dia da semana) sai dos mesmos campos
+    // de parede BR, igual ao /api/checklist/painel (linha ~7878).
+    const dataRef = janelaExpedienteAtual().de;
+    const f = brFields(dataRef.getTime());
+    const dow = new Date(Date.UTC(f.y, f.mo, f.day)).getUTCDay();
+    const agoraMs = Date.now();
+
+    const checklists = await prisma.checklist.findMany({ where: { empresaId, ativo: true } });
+    for (const c of checklists) {
+      // Por-checklist: uma falha aqui (query, cálculo) não deve impedir os demais checklists
+      // da mesma loja de serem avaliados neste ciclo.
+      try {
+        if (!venceHoje({ recorrenciaTipo: c.recorrenciaTipo, recorrenciaConfig: c.recorrenciaConfig }, dow)) continue;
+        const horarioLimite = c.recorrenciaConfig?.horarioLimite;
+        if (!horarioLimite || typeof horarioLimite !== 'string') continue; // sem horário-limite, não há "atraso" a lembrar
+        const [hh, mm] = horarioLimite.split(':').map((x) => parseInt(x, 10));
+        if (!Number.isFinite(hh)) continue;
+        // ms do horário-limite de HOJE (dia de expediente) em BR→UTC — brToUtcMs (linha ~6378)
+        // já faz a conta BR_OFFSET_MIN certa; NUNCA usar `new Date(y,mo,day,h,m)` (fuso do VPS/UTC).
+        const limiteMs = brToUtcMs(f.y, f.mo, f.day, hh, mm || 0);
+        if (!estaNaJanelaDeLembrete(agoraMs, limiteMs, cfg.lembreteMinutosAntes)) continue;
+
+        const exec = await prisma.checklistExecucao.findFirst({ where: { empresaId, checklistId: c.id, dataRef } });
+        if (exec?.status === 'CONCLUIDA') continue;
+
+        // Dedup: cria o marcador ANTES de enviar. Se já existe (P2002, unique
+        // [empresaId,checklistId,dataRef]) é porque já lembramos hoje — pula.
+        try {
+          await prisma.checklistLembreteEnviado.create({ data: { empresaId, checklistId: c.id, dataRef } });
+        } catch (e) {
+          if (e?.code === 'P2002') continue;
+          throw e;
+        }
+
+        // Responsável: quem já iniciou (se em andamento) senão os atribuídos (FUNCAO/COLABORADOR).
+        let responsavel = '';
+        if (exec) {
+          const func = await prisma.funcionario.findFirst({ where: { id: exec.funcionarioId, empresaId }, select: { nome: true, apelido: true } });
+          responsavel = func ? (func.apelido || func.nome) : '';
+        } else if (c.atribuicaoTipo === 'COLABORADOR') {
+          const ids = Array.isArray(c.funcionarioIds) ? c.funcionarioIds : [];
+          if (ids.length) {
+            const funcs = await prisma.funcionario.findMany({ where: { id: { in: ids }, empresaId }, select: { nome: true, apelido: true } });
+            responsavel = funcs.map((fx) => fx.apelido || fx.nome).join(', ');
+          }
+        } else {
+          responsavel = Array.isArray(c.funcoes) ? c.funcoes.join(', ') : '';
+        }
+
+        const msg = montarMensagemLembrete(cfg.lembreteTemplate, { checklist: c.nome, horario: horarioLimite, responsavel });
+
+        for (const d of destinatarios) {
+          const destino = foneParaEnvio(foneCanonico(d.whatsapp));
+          let status = 'ENVIADO', erro = null;
+          try { await zapiEnviarTexto(destino, msg); } catch (e) { status = 'FALHOU'; erro = String(e?.message || e).slice(0, 300); }
+          await prisma.checklistNotificacaoLog.create({ data: { empresaId, regra: 'LEMBRETE_ATRASO', canal: 'WHATSAPP', destino, destinatarioNome: d.nome, conteudo: msg, status, erro } });
+        }
+      } catch (e) { console.error('[dispararLembretesLoja checklist]', empresaId, c?.id, e?.message || e); }
+    }
+  } catch (e) { console.error('[dispararLembretesLoja]', empresaId, e?.message || e); }
+}
+
+// Varre TODAS as lojas com lembrete ativo. Fora do tenantStore (sem injeção automática de
+// empresaId) — cada loja isolada em try/catch: uma loja quebrada nunca trava as demais.
+async function varrerLembretes() {
+  const configs = await prisma.checklistNotificacaoConfig.findMany({ where: { lembreteAtivo: true } });
+  for (const cfg of configs) {
+    try { await dispararLembretesLoja(cfg.empresaId); }
+    catch (e) { console.error('[varrerLembretes]', cfg.empresaId, e?.message || e); }
+  }
+}
+
+// Agendador do lembrete de atraso: 1 ciclo a cada 5min. Não roda no boot (o 1º ciclo só
+// chega em 5min) pra não atrasar o start do server.
+function iniciarAgendadorLembretes() {
+  setInterval(() => { varrerLembretes().catch((e) => console.error('[lembretes]', e)); }, 5 * 60 * 1000);
 }
 
 app.post('/api/public/colaborador/execucoes/:id/concluir', async (req, res) => {
@@ -8039,6 +8133,7 @@ app.get('/api/checklist/notificacoes/lembrete/previa', async (req, res) => {
 });
 
 app.listen(PORT, () => console.log(`Operação (PDV) API rodando em http://localhost:${PORT}`));
+iniciarAgendadorLembretes();
 
 // Servidor de ingest do coletor DIXI (WebSocket na porta própria 7788).
 if (process.env.COLETOR_ENABLED !== 'false') {
