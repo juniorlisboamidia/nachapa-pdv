@@ -35,6 +35,20 @@ const CHECKLIST_CATEGORIAS = ['Abertura', 'Fechamento', 'Controle de Pragas', 'D
 // execução só nasce quando o operador abre o checklist).
 const STATUS_EXEC_LABEL = { EM_ANDAMENTO: 'Em andamento', CONCLUIDA: 'Concluída' }
 
+// Status de UMA OCORRÊNCIA no Histórico geral do Painel (Task 4) — mais granular que o
+// StatusExecucao acima: cobre também o que ainda não virou execução (Pendente/Atrasado/
+// Não realizado), calculado pelo backend em checklistHistoricoGeral.js (STATUS).
+const STATUS_HG_ORDER = ['PENDENTE', 'EM_ANDAMENTO', 'CONCLUIDO', 'ATRASADO', 'NAO_REALIZADO']
+const STATUS_HG_LABEL = { PENDENTE: 'Pendente', EM_ANDAMENTO: 'Em andamento', CONCLUIDO: 'Concluído', ATRASADO: 'Atrasado', NAO_REALIZADO: 'Não realizado' }
+const STATUS_HG_BADGE = { PENDENTE: 'badge-yellow', EM_ANDAMENTO: 'badge-gray', CONCLUIDO: 'badge-green', ATRASADO: 'badge-red', NAO_REALIZADO: 'badge-slate' }
+// Cor da barra de conclusão por STATUS (não pelo número) — um Pendente com scorePct=0
+// não pode parecer uma falha de conformidade; só Atrasado/Não realizado é que são "ruins".
+function corBarraStatus(status) {
+  if (status === 'CONCLUIDO') return '#16a34a'
+  if (status === 'ATRASADO' || status === 'NAO_REALIZADO') return '#dc2626'
+  return '#9ca3af' // PENDENTE / EM_ANDAMENTO — neutro, ainda em curso
+}
+
 // Formata data+hora de execução (iniciadaEm/concluidaEm) — mesmo padrão de PontoFacial.jsx.
 function fmtDataHora(iso) {
   if (!iso) return '—'
@@ -159,13 +173,25 @@ function AbaPainel({ notify }) {
   const navigate = useNavigate()
   const [p, setP] = useState(null)
   const [erro, setErro] = useState(false)
-  // Execuções recentes (Task 8) — carga independente do restante do painel: se essa
-  // chamada falhar, não trava os KPIs/pendentes, só a própria seção fica com o aviso.
-  const [execucoes, setExecucoes] = useState([])
-  const [carregandoExec, setCarregandoExec] = useState(true)
-  const [erroExec, setErroExec] = useState(false)
+
+  // Seletor de período do Histórico geral (Task 4) — 'hoje'/'7'/'30'/'90' são presets
+  // que o backend resolve sozinho; 'custom' é só uma marca local pra "nenhum preset
+  // ativo" quando o gestor mexe direto nos inputs de data (de/ate mandam o período real).
+  const [periodo, setPeriodo] = useState('hoje')
+  const [de, setDe] = useState('')
+  const [ate, setAte] = useState('')
+  const [statusFiltro, setStatusFiltro] = useState('')
+  const [funcId, setFuncId] = useState('')
+  const [funcionarios, setFuncionarios] = useState([])
+  // Histórico geral de ocorrências (Task 4) — substitui as antigas "Execuções recentes":
+  // carga independente do restante do painel (se essa chamada falhar, não trava os
+  // agendamentos/pendentes, só a própria seção fica com o aviso), e também alimenta os
+  // 4 KPIs do topo (que agora respeitam o período escolhido, não só "hoje").
+  const [hg, setHg] = useState(null)
+  const [hgLoading, setHgLoading] = useState(true)
+  const [hgErro, setHgErro] = useState(false)
   const [verExecucaoId, setVerExecucaoId] = useState(null) // id da execução aberta no modal de detalhe, ou null
-  const execRef = useRef(null) // âncora da seção "Execuções recentes" (rolagem dos "Ver todos")
+  const execRef = useRef(null) // âncora da seção "Histórico de execuções" (rolagem dos "Ver todos")
 
   useEffect(() => {
     api.get('/checklist/painel')
@@ -180,34 +206,91 @@ function AbaPainel({ notify }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Colaboradores pro filtro do Histórico geral — carga única, mesmo padrão de
+  // ChecklistHistorico/ChecklistEstatisticas (GET /funcionarios?status=ATIVO).
   useEffect(() => {
-    api.get('/checklist/execucoes')
-      .then((r) => setExecucoes(r.data.execucoes || []))
-      .catch((e) => {
-        notify(e?.response?.data?.error ?? 'Não foi possível carregar as execuções recentes.', 'error')
-        setErroExec(true)
-      })
-      .finally(() => setCarregandoExec(false))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    api.get('/funcionarios', { params: { status: 'ATIVO' } })
+      .then((r) => setFuncionarios(Array.isArray(r.data) ? r.data : []))
+      .catch(() => {})
   }, [])
+
+  // Querystring só com os filtros preenchidos — período sempre vai (preset OU de/ate
+  // custom), status/colaborador são opcionais (Task 1 do endpoint).
+  function carregarHG() {
+    setHgLoading(true)
+    setHgErro(false)
+    const params = { periodo }
+    if (de) params.de = de
+    if (ate) params.ate = ate
+    if (statusFiltro) params.status = statusFiltro
+    if (funcId) params.funcionarioId = funcId
+    api.get('/checklist/historico-geral', { params })
+      .then((r) => setHg(r.data))
+      .catch((e) => {
+        notify(e?.response?.data?.error ?? 'Não foi possível carregar o histórico geral.', 'error')
+        setHgErro(true)
+      })
+      .finally(() => setHgLoading(false))
+  }
+
+  useEffect(() => {
+    carregarHG()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [periodo, de, ate, statusFiltro, funcId])
+
+  // Presets de período (chips) — clicar limpa de/ate pra voltar a deixar o backend
+  // resolver o intervalo a partir do preset; editar os inputs de data manualmente tira
+  // o destaque de qualquer preset (periodo='custom').
+  const PERIODO_PRESETS = [
+    { chave: 'hoje', label: 'Hoje' },
+    { chave: '7', label: '7 dias' },
+    { chave: '30', label: '30 dias' },
+    { chave: '90', label: '90 dias' },
+  ]
+  function aplicarPeriodoPreset(chave) {
+    setPeriodo(chave)
+    setDe('')
+    setAte('')
+  }
 
   if (erro) return <div className="empty-state">Não foi possível carregar o painel.</div>
   if (!p) return <div className="empty-state">Carregando…</div>
   const meusPreview = p.meus.slice(0, 8)
+  const kpiTxt = (v) => (hgLoading && !hg ? '…' : v)
   return (
     <div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {PERIODO_PRESETS.map((ps) => (
+            <button key={ps.chave} type="button" className={'chke-preset-btn' + (periodo === ps.chave ? ' is-on' : '')} onClick={() => aplicarPeriodoPreset(ps.chave)}>{ps.label}</button>
+          ))}
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">De</label>
+          <input type="date" className="form-input" value={de} onChange={(e) => { setDe(e.target.value); setPeriodo('custom') }} />
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Até</label>
+          <input type="date" className="form-input" value={ate} onChange={(e) => { setAte(e.target.value); setPeriodo('custom') }} />
+        </div>
+      </div>
+
       <div className="chkp-top">
         <div className="chkp-card chkp-kpi">
           <div className="chkp-kpi-ic is-gold"><ChkIcon name="lista" /></div>
-          <div><div className="chkp-kpi-n">{p.kpis.ativos}</div><div className="chkp-kpi-l">Checklists ativos</div></div>
+          <div><div className="chkp-kpi-n">{kpiTxt(hg?.kpis.ativos)}</div><div className="chkp-kpi-l">Checklists ativos</div></div>
         </div>
         <div className="chkp-card chkp-kpi">
           <div className="chkp-kpi-ic is-green"><ChkIcon name="check" /></div>
-          <div><div className="chkp-kpi-n">{p.kpis.concluidosHoje}</div><div className="chkp-kpi-l">Concluídos hoje</div></div>
+          <div><div className="chkp-kpi-n">{kpiTxt(hg?.kpis.concluidos)}</div><div className="chkp-kpi-l">{periodo === 'hoje' ? 'Concluídos hoje' : 'Concluídos'}</div></div>
         </div>
         <div className="chkp-card chkp-kpi">
           <div className="chkp-kpi-ic is-red"><ChkIcon name="alerta" /></div>
-          <div><div className="chkp-kpi-n">{p.kpis.emAlerta}</div><div className="chkp-kpi-l">Alertas pendentes</div></div>
+          <div><div className="chkp-kpi-n">{kpiTxt(hg?.kpis.atrasados)}</div><div className="chkp-kpi-l">Atrasados</div></div>
+        </div>
+        <div className="chkp-card chkp-kpi">
+          <div className="chkp-kpi-ic is-gold"><ChkIcon name="grafico" /></div>
+          <div><div className="chkp-kpi-n">{kpiTxt(hg?.kpis.taxaConclusaoPct == null ? '—' : `${hg.kpis.taxaConclusaoPct}%`)}</div><div className="chkp-kpi-l">Taxa de Conclusão</div></div>
         </div>
       </div>
 
@@ -275,32 +358,62 @@ function AbaPainel({ notify }) {
         )}
       </div>
 
-      <h3 ref={execRef} style={{ fontSize: 15, fontWeight: 700, margin: '22px 0 10px', scrollMarginTop: 12 }}>Execuções recentes</h3>
-      {carregandoExec ? (
+      <h3 ref={execRef} style={{ fontSize: 15, fontWeight: 700, margin: '22px 0 10px', scrollMarginTop: 12 }}>Histórico de execuções</h3>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          {/* Chip = toggle: clicar de novo no mesmo status limpa o filtro. A contagem vem
+              de hg.contagens, que já respeita período + colaborador (mas não o status). */}
+          {STATUS_HG_ORDER.map((s) => (
+            <button key={s} type="button" className={'chke-preset-btn' + (statusFiltro === s ? ' is-on' : '')}
+              onClick={() => setStatusFiltro(statusFiltro === s ? '' : s)}>
+              {STATUS_HG_LABEL[s]}: {hg ? hg.contagens[s] : '…'}
+            </button>
+          ))}
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Colaborador</label>
+          <select className="form-input" style={{ minWidth: 180 }} value={funcId} onChange={(e) => setFuncId(e.target.value)}>
+            <option value="">Todos</option>
+            {funcionarios.map((f) => <option key={f.id} value={f.id}>{f.apelido || f.nome}</option>)}
+          </select>
+        </div>
+        <div style={{ marginLeft: 'auto', fontSize: 12.5, color: 'var(--app-text-3)' }}>{hg ? `${hg.registros} registros` : ''}</div>
+      </div>
+
+      {hgLoading && !hg ? (
         <div className="loading-state">Carregando…</div>
-      ) : erroExec ? (
-        <div className="empty-state">Não foi possível carregar as execuções recentes.</div>
-      ) : execucoes.length === 0 ? (
-        <div className="empty-state">Nenhuma execução registrada ainda.</div>
+      ) : hgErro ? (
+        <div className="empty-state">Não foi possível carregar o histórico geral.</div>
+      ) : !hg || hg.ocorrencias.length === 0 ? (
+        <div className="empty-state">Nenhuma ocorrência no período/filtro.</div>
       ) : (
         <div className="table-card">
           <table className="hb-table">
             <thead>
-              <tr><th>Checklist</th><th>Categoria</th><th>Funcionário</th><th>Início</th><th>Conclusão</th><th>Status</th></tr>
+              <tr><th>Data</th><th>Checklist</th><th>Responsável</th><th>Horário</th><th>Conclusão</th><th>Status</th></tr>
             </thead>
             <tbody>
-              {/* Linha inteira clicável (pedido explícito da task) — o hover do hb-table já
-                  dá o feedback visual de "isso é clicável", sem precisar de um botão extra. */}
-              {execucoes.map((e) => (
-                <tr key={e.id} style={{ cursor: 'pointer' }} onClick={() => setVerExecucaoId(e.id)}>
-                  <td style={{ fontWeight: 600 }}>{e.checklistNome}</td>
-                  <td>{e.categoria}</td>
-                  <td>{e.funcionario}</td>
-                  <td>{fmtDataHora(e.iniciadaEm)}</td>
-                  <td>{fmtDataHora(e.concluidaEm)}</td>
+              {/* Linha com execução vira o detalhe (mesmo padrão de "Execuções recentes" que
+                  esta seção substitui); ocorrência virtual (sem execId — ainda não rodou)
+                  não tem o que abrir, então não é clicável. */}
+              {hg.ocorrencias.map((l, i) => (
+                <tr key={`${l.execId ?? 'v'}-${l.checklistId}-${l.dia}-${i}`}
+                  style={l.execId != null ? { cursor: 'pointer' } : undefined}
+                  onClick={l.execId != null ? () => setVerExecucaoId(l.execId) : undefined}>
+                  <td>{new Date(l.dia + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
+                  <td style={{ fontWeight: 600 }}>{l.checklistNome}</td>
+                  <td>{(l.responsavel && l.responsavel.length) ? l.responsavel.join(', ') : '—'}</td>
+                  <td>{l.horario || '—'}</td>
                   <td>
-                    <span className={'badge ' + (e.status === 'CONCLUIDA' ? 'badge-green' : 'badge-gray')}>{STATUS_EXEC_LABEL[e.status] || e.status}</span>
-                    {e.emAlerta && <span className="badge badge-red" style={{ marginLeft: 6 }}>Em alerta</span>}
+                    <div style={{ minWidth: 92 }}>
+                      <div className="chke-bar-track"><div className="chke-bar-fill" style={{ width: `${l.scorePct ?? 0}%`, background: corBarraStatus(l.status) }} /></div>
+                      <div style={{ fontSize: 11, color: 'var(--app-text-3)', marginTop: 2 }}>{l.scorePct == null ? '—' : `${l.scorePct}%`}</div>
+                    </div>
+                  </td>
+                  <td>
+                    <span className={'badge ' + (STATUS_HG_BADGE[l.status] || 'badge-gray')}>{STATUS_HG_LABEL[l.status] || l.status}</span>
+                    {l.status === 'CONCLUIDO' && l.emAlerta && <span className="badge badge-red" style={{ marginLeft: 6 }}>Em alerta</span>}
                   </td>
                 </tr>
               ))}
