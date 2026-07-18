@@ -8103,6 +8103,53 @@ app.get('/api/checklist/execucoes', async (req, res) => {
   } catch (err) { console.error('[checklist/execucoes]', err); res.status(500).json({ error: 'Erro ao carregar execuções.' }); }
 });
 
+// Histórico de execuções de UM checklist (Ação 2, Task 1): filtros por status/funcionário/data
+// (dataRef em horário BR, dia de expediente) + % de conformidade calculado das respostas.
+app.get('/api/checklist/checklists/:id/execucoes', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const checklistId = parseInt(req.params.id, 10);
+    if (!Number.isFinite(checklistId)) return res.status(400).json({ error: 'ID inválido.' });
+    const where = { checklistId };
+    const status = String(req.query.status || '').toUpperCase();
+    if (status === 'CONCLUIDA' || status === 'EM_ANDAMENTO') where.status = status;
+    else if (status === 'ALERTA') where.emAlerta = true;
+    const funcionarioId = parseInt(req.query.funcionarioId, 10);
+    if (Number.isFinite(funcionarioId)) where.funcionarioId = funcionarioId;
+    // Intervalo de datas em horário BR — brToUtcMs(y, mo0, day, h, mi) é posicional e o mês é
+    // 0-indexed (mesmo contrato de Date.UTC), por isso o "- 1" no mês vindo do "YYYY-MM-DD".
+    // NUNCA `new Date('YYYY-MM-DD')` cru (leria como UTC, deslocando o dia no fuso do VPS).
+    const de = String(req.query.de || '').trim();
+    const ate = String(req.query.ate || '').trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(de) || /^\d{4}-\d{2}-\d{2}$/.test(ate)) {
+      where.dataRef = {};
+      if (/^\d{4}-\d{2}-\d{2}$/.test(de)) {
+        const [y, m, d] = de.split('-').map(Number);
+        where.dataRef.gte = new Date(brToUtcMs(y, m - 1, d, 0, 0));
+      }
+      if (/^\d{4}-\d{2}-\d{2}$/.test(ate)) {
+        const [y, m, d] = ate.split('-').map(Number);
+        where.dataRef.lte = new Date(brToUtcMs(y, m - 1, d, 23, 59));
+      }
+    }
+    const execs = await prisma.checklistExecucao.findMany({
+      where, orderBy: { iniciadaEm: 'desc' }, take: 200,
+      include: { respostas: { select: { conforme: true } } },
+    });
+    // Nomes dos operadores (mesmo padrão do /api/checklist/execucoes) — select explícito, sem `pin`.
+    const ids = [...new Set(execs.map((e) => e.funcionarioId))];
+    const funcs = ids.length ? await prisma.funcionario.findMany({ where: { id: { in: ids } }, select: { id: true, nome: true, apelido: true } }) : [];
+    const fmap = new Map(funcs.map((f) => [f.id, f.apelido || f.nome]));
+    const linhas = execs.map((e) => {
+      const avaliaveis = e.respostas.filter((r) => r.conforme !== null).length;
+      const conformes = e.respostas.filter((r) => r.conforme === true).length;
+      const score = avaliaveis ? Math.round((conformes / avaliaveis) * 100) : null;
+      return { id: e.id, dataRef: e.dataRef, funcionario: fmap.get(e.funcionarioId) || '—', funcionarioId: e.funcionarioId, status: e.status, emAlerta: e.emAlerta, score, avaliaveis, conformes, iniciadaEm: e.iniciadaEm, concluidaEm: e.concluidaEm };
+    });
+    res.json({ execucoes: linhas });
+  } catch (e) { console.error('[checklist/historico]', e); res.status(500).json({ error: 'Erro ao carregar histórico.' }); }
+});
+
 // Detalhe de uma execução (respostas + fotos metadata; bytes por /fotos/:id).
 app.get('/api/checklist/execucoes/:id', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
