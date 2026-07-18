@@ -94,6 +94,7 @@ function ChkIcon({ name, size = 20 }) {
     case 'edit': return <svg {...p}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
     case 'trash': return <svg {...p}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" /></svg>
     case 'copy': return <svg {...p}><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+    case 'grafico': return <svg {...p}><rect x="4" y="13" width="4" height="7" rx="1" /><rect x="10" y="9" width="4" height="11" rx="1" /><rect x="16" y="4" width="4" height="16" rx="1" /></svg>
     default: return null
   }
 }
@@ -764,6 +765,7 @@ function AbaChecklists({ notify }) {
                     <div className="chk-row-acoes">
                       <ChkAcaoBtn icon="eye" title="Ver detalhes" onClick={() => navigate(`/checklist/detalhe/${c.id}`)} />
                       <ChkAcaoBtn icon="calendario" title="Ver histórico" onClick={() => navigate(`/checklist/historico/${c.id}`)} />
+                      <ChkAcaoBtn icon="grafico" title="Ver estatísticas" onClick={() => navigate(`/checklist/estatisticas/${c.id}`)} />
                       <ChkAcaoBtn icon="play" title="Executar" onClick={() => executar(c)} />
                       <ChkAcaoBtn icon="edit" title="Editar" onClick={() => editar(c)} />
                       <ChkAcaoBtn icon="trash" title="Excluir" danger onClick={() => setExcluir(c)} />
@@ -1268,6 +1270,9 @@ export function ChecklistDetalhe() {
           <button type="button" className="btn btn-secondary" onClick={() => navigate(`/checklist/historico/${c.id}`)}>
             <ChkIcon name="calendario" size={15} /> Ver histórico
           </button>
+          <button type="button" className="btn btn-secondary" onClick={() => navigate(`/checklist/estatisticas/${c.id}`)}>
+            <ChkIcon name="grafico" size={15} /> Estatísticas
+          </button>
           <button type="button" className="btn btn-secondary" onClick={() => navigate(`/checklist/checklists?editar=${c.id}`)}>
             <ChkIcon name="edit" size={15} /> Editar
           </button>
@@ -1442,6 +1447,311 @@ export function ChecklistHistorico() {
       )}
 
       {verExecucaoId != null && <DetalheExecucao id={verExecucaoId} onClose={() => setVerExecucaoId(null)} />}
+    </div>
+  )
+}
+
+// ===================== ESTATÍSTICAS (Ação 3, Task 3) =====================
+// Dashboard do checklist: KPIs do período + série diária de execuções + ranking de
+// colaboradores + ranking dos itens que mais reprovam + heatmap dow×faixa-horária de
+// atrasos. O PDV não tem lib de gráfico — a série é um SVG desenhado à mão (barras) e o
+// heatmap é uma grade de divs coloridos por token, mesma linguagem visual dos .chkp-*
+// (Painel) e .table-card/.badge-* usados no Histórico acima.
+
+// 'YYYY-MM-DD' -> 'DD/MM', sem passar por Date/fuso (mesmo cuidado dos helpers de data
+// deste arquivo: `new Date('YYYY-MM-DD')` cru lê como UTC e desloca o dia no fuso BR).
+function chkeFmtDiaCurto(dia) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dia || '')
+  return m ? `${m[3]}/${m[2]}` : (dia || '')
+}
+// 'YYYY-MM-DD' a partir dos campos LOCAIS do navegador (não toISOString — que é UTC e
+// pode deslocar o dia perto da meia-noite). Usado só pelos presets de período, calculados
+// no cliente.
+function chkeYmdLocal(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+// Cor por % de conformidade (quanto maior, melhor) — mesmos limiares do badge de score
+// em ChecklistHistorico (>=90 verde, >=70 âmbar, senão vermelho); cinza quando null (sem
+// resposta avaliável no período).
+function chkeCorConformidade(v) {
+  if (v == null) return '#9ca3af'
+  if (v >= 90) return '#16a34a'
+  if (v >= 70) return '#d97706'
+  return '#dc2626'
+}
+function chkePctBadge(v) {
+  if (v == null) return 'badge-gray'
+  if (v >= 90) return 'badge-green'
+  if (v >= 70) return 'badge-yellow'
+  return 'badge-red'
+}
+
+// Série diária de execuções — 1 barra por dia (altura ∝ execuções sobre o máximo do
+// período, cor pela conformidade do dia). Container com scroll horizontal: cada barra
+// tem largura fixa, então o gráfico cresce (e rola) com o tamanho do período — não
+// esmaga barras num período de 90 dias.
+function ChkSerieDiaria({ serie }) {
+  const total = serie.reduce((a, d) => a + d.execucoes, 0)
+  if (!serie.length || total === 0) {
+    return <div className="empty-state" style={{ padding: '26px 8px' }}>Sem execuções no período.</div>
+  }
+  const max = Math.max(1, ...serie.map((d) => d.execucoes))
+  const BARW = 20, GAP = 8, H = 118
+  const w = serie.length * (BARW + GAP) + GAP
+  return (
+    <div>
+      <div className="chke-serie-wrap">
+        <svg width={w} height={H + 24} viewBox={`0 0 ${w} ${H + 24}`} style={{ display: 'block' }}>
+          {serie.map((d, i) => {
+            const x = GAP + i * (BARW + GAP)
+            const bh = d.execucoes > 0 ? Math.max(3, Math.round((d.execucoes / max) * (H - 6))) : 0
+            const y = H - bh
+            return (
+              <g key={d.dia}>
+                <rect x={x} y={y} width={BARW} height={bh} rx={3} fill={chkeCorConformidade(d.execucoes > 0 ? d.conformidade : null)}>
+                  <title>{`${chkeFmtDiaCurto(d.dia)} · ${d.execucoes} exec · ${d.conformidade == null ? '—' : d.conformidade + '%'}`}</title>
+                </rect>
+                <text x={x + BARW / 2} y={H + 15} textAnchor="middle" fontSize="9.5" style={{ fill: 'var(--app-text-3)' }}>{chkeFmtDiaCurto(d.dia)}</text>
+              </g>
+            )
+          })}
+        </svg>
+      </div>
+      <div className="chke-legend">
+        <span><span className="chke-legend-dot" style={{ background: '#16a34a' }} /> ≥ 90% conformidade</span>
+        <span><span className="chke-legend-dot" style={{ background: '#d97706' }} /> 70–89%</span>
+        <span><span className="chke-legend-dot" style={{ background: '#dc2626' }} /> {'< 70%'}</span>
+        <span><span className="chke-legend-dot" style={{ background: '#9ca3af' }} /> Sem avaliação</span>
+      </div>
+    </div>
+  )
+}
+
+// Ranking de colaboradores — nome, execuções concluídas, barra+% de conformidade e % no
+// prazo. Ordenado pelo backend (conformidade desc, depois execuções desc).
+function ChkRankingOperadores({ lista }) {
+  if (!lista.length) return <ChkEmpty icon="lista" titulo="Sem dados de colaboradores" sub="Ainda não há execuções concluídas neste período." />
+  return lista.map((o) => (
+    <div key={o.funcionarioId} className="chkp-row">
+      <div className="chkp-row-top">
+        <span className="chkp-row-name">{o.nome}</span>
+        <span style={{ marginLeft: 'auto', flexShrink: 0 }} className={'badge ' + chkePctBadge(o.conformidade)}>{o.conformidade == null ? '—' : `${o.conformidade}%`}</span>
+      </div>
+      <div className="chkp-row-sub">
+        <span>{o.execucoes} exec</span>
+        <span>· no prazo {o.noPrazoPct == null ? '—' : `${o.noPrazoPct}%`}</span>
+      </div>
+      <div className="chke-bar-track"><div className="chke-bar-fill" style={{ width: `${Math.max(0, Math.min(100, o.conformidade ?? 0))}%`, background: chkeCorConformidade(o.conformidade) }} /></div>
+    </div>
+  ))
+}
+
+// Ranking dos itens que mais reprovam — só itens com reprovacoes>0 (o backend já filtra),
+// ordenado por reprovações desc. Barra vermelha ∝ taxa de reprovação.
+function ChkRankingItens({ lista }) {
+  if (!lista.length) return <ChkEmpty icon="checkSm" titulo="Nenhuma reprovação no período 🎉" sub="Todos os itens avaliados ficaram dentro do padrão." />
+  return lista.map((it) => (
+    <div key={it.itemChave} className="chkp-row">
+      <div className="chkp-row-top">
+        <span className="chkp-row-name">{it.titulo}</span>
+        <span style={{ marginLeft: 'auto', flexShrink: 0, fontWeight: 700, color: '#dc2626' }}>{it.taxaPct == null ? '—' : `${it.taxaPct}%`}</span>
+      </div>
+      <div className="chkp-row-sub"><span>reprovou {it.reprovacoes} de {it.avaliacoes}</span></div>
+      <div className="chke-bar-track"><div className="chke-bar-fill" style={{ width: `${it.taxaPct ?? 0}%`, background: '#dc2626' }} /></div>
+    </div>
+  ))
+}
+
+// Cor da célula do heatmap pela taxa de problema (não-feito ou concluído após o
+// horário-limite): quanto MAIOR a taxa, PIOR (inverso da conformidade acima).
+function chkeCorHeat(esperadas, taxaPct) {
+  if (!esperadas || taxaPct == null) return 'is-none'
+  if (taxaPct <= 10) return 'is-ok'
+  if (taxaPct <= 40) return 'is-warn'
+  return 'is-bad'
+}
+
+// Heatmap dow×faixa de atrasos. Checklist avulso (sem recorrência/horário-limite) não
+// tem "esperado" pra medir atraso — mostra aviso em vez do grid. Senão, só entram no
+// grid as faixas (colunas) com pelo menos 1 ocorrência esperada em algum dia da semana,
+// pra não sobrar 8 colunas quase todas vazias num checklist com um único horário fixo.
+function ChkHeatmap({ heatmap }) {
+  if (!heatmap) return null
+  if (heatmap.agendado === false) {
+    return (
+      <div className="alert alert-yellow">
+        <span className="clr-yellow" style={{ display: 'flex', flexShrink: 0 }}><ChkIcon name="alerta" size={18} /></span>
+        <div className="alert-msg clr-yellow">Checklist avulso (sem agendamento) — o mapa de atrasos precisa de recorrência com horário-limite.</div>
+      </div>
+    )
+  }
+  const faixas = heatmap.faixas || []
+  const celulas = heatmap.celulas || []
+  const idx = faixas.map((_, fi) => fi).filter((fi) => celulas.some((row) => row.porFaixa?.[fi]?.esperadas > 0))
+  if (idx.length === 0) {
+    return <ChkEmpty icon="calendario" titulo="Sem ocorrências esperadas" sub="Não há dados suficientes no período para montar o mapa de atrasos." />
+  }
+  return (
+    <div>
+      <div className="chke-heat" style={{ gridTemplateColumns: `88px repeat(${idx.length}, minmax(46px, 1fr))` }}>
+        <div className="chke-heat-head">
+          <div />
+          {idx.map((fi) => <div key={fi} className="chke-heat-hcell">{faixas[fi].label}</div>)}
+        </div>
+        {DOW.map((nomeDia, dow) => {
+          const linha = celulas.find((c) => c.dow === dow) || { porFaixa: [] }
+          return (
+            <div className="chke-heat-row" key={dow}>
+              <div className="chke-heat-label">{nomeDia}</div>
+              {idx.map((fi) => {
+                const cel = linha.porFaixa?.[fi] || { esperadas: 0, taxaPct: null }
+                return (
+                  <div key={fi} className={'chke-heat-cell ' + chkeCorHeat(cel.esperadas, cel.taxaPct)}
+                    title={`${nomeDia} · ${faixas[fi].label} · ${cel.esperadas} esperada(s)`}>
+                    {cel.esperadas ? (cel.taxaPct == null ? '—' : `${cel.taxaPct}%`) : ''}
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })}
+      </div>
+      <div className="chke-legend" style={{ marginTop: 10 }}>
+        <span><span className="chke-legend-dot" style={{ background: '#16a34a' }} /> Até 10% de atraso</span>
+        <span><span className="chke-legend-dot" style={{ background: '#d97706' }} /> 11–40%</span>
+        <span><span className="chke-legend-dot" style={{ background: '#dc2626' }} /> Acima de 40%</span>
+        <span><span className="chke-legend-dot" style={{ background: 'var(--app-text-3)' }} /> Sem ocorrência esperada</span>
+      </div>
+    </div>
+  )
+}
+
+export function ChecklistEstatisticas() {
+  const { id } = useParams()
+  const navigate = useNavigate()
+  const [dados, setDados] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [erro, setErro] = useState(false)
+  const [de, setDe] = useState('')
+  const [ate, setAte] = useState('')
+  const [presetAtivo, setPresetAtivo] = useState(null)
+
+  useEffect(() => {
+    setLoading(true)
+    setErro(false)
+    const params = {}
+    if (de) params.de = de
+    if (ate) params.ate = ate
+    api.get(`/checklist/checklists/${id}/estatisticas`, { params })
+      .then((r) => setDados(r.data))
+      .catch(() => setErro(true))
+      .finally(() => setLoading(false))
+  }, [id, de, ate])
+
+  // Sem filtro nos inputs, o backend assume os últimos 30 dias — reflete de volta nos
+  // inputs de data o período que ele efetivamente usou (só na carga inicial, antes do
+  // gestor mexer em algum filtro; depois disso de/ate deixam de estar os dois vazios).
+  useEffect(() => {
+    if (dados?.periodo && !de && !ate) {
+      if (dados.periodo.de) setDe(dados.periodo.de)
+      if (dados.periodo.ate) setAte(dados.periodo.ate)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dados])
+
+  function aplicarPreset(dias) {
+    const hoje = new Date()
+    const inicio = new Date(hoje)
+    inicio.setDate(inicio.getDate() - (dias - 1))
+    setAte(chkeYmdLocal(hoje))
+    setDe(chkeYmdLocal(inicio))
+    setPresetAtivo(dias)
+  }
+
+  const k = dados?.kpis
+  const semExecucoes = !!k && (k.execucoes ?? 0) === 0
+
+  return (
+    <div>
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+        <div>
+          <button type="button" className="chkp-link" style={{ display: 'block', marginBottom: 8 }} onClick={() => navigate(`/checklist/detalhe/${id}`)}>‹ Voltar</button>
+          <h1>Estatísticas — {dados?.checklist?.nome || '…'}</h1>
+          <div className="page-header-sub">KPIs, série diária, rankings e mapa de atrasos deste checklist.</div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {[7, 30, 90].map((n) => (
+            <button key={n} type="button" className={'chke-preset-btn' + (presetAtivo === n ? ' is-on' : '')} onClick={() => aplicarPreset(n)}>{n} dias</button>
+          ))}
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Data de</label>
+          <input type="date" className="form-input" value={de} onChange={(e) => { setDe(e.target.value); setPresetAtivo(null) }} />
+        </div>
+        <div className="form-group" style={{ margin: 0 }}>
+          <label className="form-label">Data até</label>
+          <input type="date" className="form-input" value={ate} onChange={(e) => { setAte(e.target.value); setPresetAtivo(null) }} />
+        </div>
+      </div>
+
+      {loading && !dados ? (
+        <div className="loading-state">Carregando…</div>
+      ) : erro ? (
+        <div className="empty-state">Não foi possível carregar as estatísticas deste checklist.</div>
+      ) : !dados ? null : (
+        <>
+          <div className="chkp-top" style={{ marginBottom: 16 }}>
+            <div className="chkp-card chkp-kpi">
+              <div className="chkp-kpi-ic is-gold"><ChkIcon name="lista" /></div>
+              <div><div className="chkp-kpi-n">{k.execucoes}</div><div className="chkp-kpi-l">Execuções · {k.concluidas} concluídas</div></div>
+            </div>
+            <div className="chkp-card chkp-kpi">
+              <div className="chkp-kpi-ic is-green"><ChkIcon name="check" /></div>
+              <div><div className="chkp-kpi-n">{k.conformidadeMedia == null ? '—' : `${k.conformidadeMedia}%`}</div><div className="chkp-kpi-l">Conformidade média</div></div>
+            </div>
+            <div className="chkp-card chkp-kpi">
+              <div className="chkp-kpi-ic is-gold"><ChkIcon name="relogio" /></div>
+              <div>
+                <div className="chkp-kpi-n">{k.tempoMedioMin == null ? '—' : `${k.tempoMedioMin} min`}</div>
+                <div className="chkp-kpi-l">Tempo médio{k.tempoEstimadoMin ? ` · est. ${k.tempoEstimadoMin} min` : ''}</div>
+              </div>
+            </div>
+            <div className="chkp-card chkp-kpi">
+              <div className="chkp-kpi-ic is-green"><ChkIcon name="checkSm" /></div>
+              <div><div className="chkp-kpi-n">{k.noPrazoPct == null ? '—' : `${k.noPrazoPct}%`}</div><div className="chkp-kpi-l">No prazo</div></div>
+            </div>
+            <div className="chkp-card chkp-kpi">
+              <div className="chkp-kpi-ic is-gold"><ChkIcon name="grafico" /></div>
+              <div><div className="chkp-kpi-n">{k.taxaConclusaoPct == null ? '—' : `${k.taxaConclusaoPct}%`}</div><div className="chkp-kpi-l">Adesão</div></div>
+            </div>
+          </div>
+
+          {semExecucoes && <div className="empty-state" style={{ marginBottom: 16 }}>Sem execuções no período.</div>}
+
+          <div className="table-card" style={{ padding: 16, marginBottom: 14 }}>
+            <div style={{ fontWeight: 700, marginBottom: 10 }}>Execuções por dia</div>
+            <ChkSerieDiaria serie={dados.serie || []} />
+          </div>
+
+          <div className="chkp-cols" style={{ marginBottom: 14 }}>
+            <ChkColuna titulo="Ranking de colaboradores">
+              <ChkRankingOperadores lista={dados.rankingOperadores || []} />
+            </ChkColuna>
+            <ChkColuna titulo="Itens que mais reprovam">
+              <ChkRankingItens lista={dados.rankingItens || []} />
+            </ChkColuna>
+          </div>
+
+          <div className="table-card" style={{ padding: 16 }}>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>Mapa de atrasos</div>
+            <div style={{ fontSize: 12, color: 'var(--app-text-3)', marginBottom: 10 }}>% de ocorrências esperadas que não foram concluídas dentro do horário-limite, por dia da semana e faixa.</div>
+            <ChkHeatmap heatmap={dados.heatmap} />
+          </div>
+        </>
+      )}
     </div>
   )
 }

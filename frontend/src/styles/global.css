@@ -2484,6 +2484,36 @@ a.ind-act { text-decoration: none; }
 body.theme-dark .chk-ic-btn { background: var(--d-surface-2); color: var(--d-text-2); border-color: var(--d-border); }
 body.theme-dark .chk-ic-btn.is-danger:hover { background: rgba(220, 38, 38, 0.16); border-color: #5a2b2b; color: #f87171; }
 
+/* ===== Checklist — Estatísticas (Ação 3, Task 3): presets de período, barra de %
+   sob as linhas dos rankings, legenda do gráfico/heatmap e a grade do heatmap.
+   Tudo por token --app-* / --brand-* (segue o body.theme-dark automaticamente, sem
+   precisar de overrides), exceto as cores de status (ok/atenção/crítico), que reusam
+   os MESMOS hex já usados pelos .badge-* / .chkp-kpi-ic — chips de cor fixa que já
+   funcionam nos dois temas neste app (sem override dark próprio). */
+.chke-preset-btn { background: var(--app-surface); border: 1px solid var(--app-border); color: var(--app-text-2); border-radius: 999px; padding: 7px 14px; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: background .12s ease, border-color .12s ease, color .12s ease; }
+.chke-preset-btn:hover { background: var(--app-surface-2); }
+.chke-preset-btn.is-on { background: var(--brand-gold); border-color: var(--brand-gold); color: var(--brand-gold-ink); }
+
+.chke-bar-track { height: 6px; border-radius: 999px; background: var(--app-surface-2); overflow: hidden; margin-top: 6px; }
+.chke-bar-fill { height: 100%; border-radius: 999px; transition: width .3s ease; }
+
+.chke-serie-wrap { overflow-x: auto; padding-bottom: 2px; }
+.chke-legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; font-size: 11.5px; color: var(--app-text-3); }
+.chke-legend-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+
+/* Heatmap dow×faixa — grid com nº de colunas dinâmico (definido inline via
+   grid-template-columns, só as faixas com dados). Head/row usam display:contents pra
+   suas células entrarem direto no grid do pai, sem precisar recalcular colunas por linha. */
+.chke-heat { display: grid; gap: 4px; margin-top: 4px; }
+.chke-heat-head, .chke-heat-row { display: contents; }
+.chke-heat-hcell { font-size: 11px; font-weight: 700; color: var(--app-text-3); text-align: center; padding: 4px 2px; align-self: center; }
+.chke-heat-label { font-size: 12px; font-weight: 600; color: var(--app-text-2); display: flex; align-items: center; }
+.chke-heat-cell { border-radius: 8px; min-height: 36px; display: flex; align-items: center; justify-content: center; font-size: 11.5px; font-weight: 700; border: 1px solid var(--app-border); }
+.chke-heat-cell.is-none { background: var(--app-surface-2); color: var(--app-text-3); font-weight: 500; }
+.chke-heat-cell.is-ok   { background: #ecfdf3; color: #16a34a; }
+.chke-heat-cell.is-warn { background: #fffbeb; color: #d97706; }
+.chke-heat-cell.is-bad  { background: #fef2f2; color: #dc2626; }
+
 /* ===================== ETIQUETAS — Configuração (Fatia A) =====================
    Mesma linguagem visual dos cartões .chkp-* acima (cores da marca — dourado sobre
    creme, tudo por token para acompanhar o tema escuro), aplicada ao layout 2 colunas:
