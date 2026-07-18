@@ -2469,6 +2469,21 @@ a.ind-act { text-decoration: none; }
 .chkp-meus-h h3 { font-size: 15px; font-weight: 700; color: var(--app-text); margin-right: auto; }
 .chkp-meus .hb-table thead th { background: var(--app-highlight); }
 
+/* Coluna Ações da tabela de Checklists (Task 3) — botões-ícone (Ver detalhes/Executar/
+   Editar/Excluir), mesmo tom neutro do .btn-secondary, hover vermelho só no Excluir. */
+.chk-row-acoes { display: inline-flex; gap: 5px; }
+.chk-ic-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; padding: 0; border-radius: 7px;
+  background: var(--app-surface); color: var(--app-text-2); border: 1px solid var(--app-border);
+  cursor: pointer; transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.chk-ic-btn:hover { background: var(--app-surface-2); color: var(--app-text); }
+.chk-ic-btn.is-danger:hover { background: #fef2f2; color: #dc2626; border-color: #fecaca; }
+.chk-ic-btn:disabled { opacity: 0.5; cursor: default; }
+body.theme-dark .chk-ic-btn { background: var(--d-surface-2); color: var(--d-text-2); border-color: var(--d-border); }
+body.theme-dark .chk-ic-btn.is-danger:hover { background: rgba(220, 38, 38, 0.16); border-color: #5a2b2b; color: #f87171; }
+
 /* ===================== ETIQUETAS — Configuração (Fatia A) =====================
    Mesma linguagem visual dos cartões .chkp-* acima (cores da marca — dourado sobre
    creme, tudo por token para acompanhar o tema escuro), aplicada ao layout 2 colunas:

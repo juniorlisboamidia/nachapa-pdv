@@ -8,6 +8,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import api from '../services/api'
 import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
+import { matrizQr } from '../lib/qr'
 
 const TABS = [
   { id: 'painel', label: 'Painel', sub: 'Visão geral do dia' },
@@ -87,8 +88,24 @@ function ChkIcon({ name, size = 20 }) {
     case 'relogio': return <svg {...p}><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
     case 'chevron': return <svg {...p}><polyline points="9 18 15 12 9 6" /></svg>
     case 'checkSm': return <svg {...p} strokeWidth="3"><polyline points="20 6 9 17 4 12" /></svg>
+    case 'eye': return <svg {...p}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+    case 'play': return <svg {...p} fill="currentColor" stroke="none"><polygon points="6 3 20 12 6 21 6 3" /></svg>
+    case 'edit': return <svg {...p}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+    case 'trash': return <svg {...p}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" /></svg>
+    case 'copy': return <svg {...p}><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
     default: return null
   }
+}
+
+// Botão-ícone das ações de linha da tabela de checklists (Ver detalhes/Executar/Editar/
+// Excluir) — mesmo tom neutro do btn-secondary, hover vermelho quando `danger` (Excluir),
+// tudo por token pra acompanhar o tema escuro (ver .chk-ic-btn no global.css).
+function ChkAcaoBtn({ icon, title, onClick, danger, disabled }) {
+  return (
+    <button type="button" className={'chk-ic-btn' + (danger ? ' is-danger' : '')} title={title} aria-label={title} onClick={onClick} disabled={disabled}>
+      <ChkIcon name={icon} size={15} />
+    </button>
+  )
 }
 
 // Tags visuais das funções que executam um checklist.
@@ -625,11 +642,14 @@ function AbaTemplates({ notify }) {
 // template ("Usar como base" na aba Templates). Nome, categoria, prioridade, funções que
 // executam, recorrência (todo dia / dias da semana / avulso) e a lista de itens.
 function AbaChecklists({ notify }) {
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const [lista, setLista] = useState([])
   const [busca, setBusca] = useState('')
   const [loading, setLoading] = useState(true)
   const [edit, setEdit] = useState(null) // checklist completo em edição, ou {novo:true,...} pra criação
+  const [excluir, setExcluir] = useState(null) // checklist em confirmação de exclusão
+  const [excluindo, setExcluindo] = useState(false)
 
   function carregar() {
     api.get('/checklist/checklists', { params: busca ? { busca } : {} })
@@ -681,6 +701,41 @@ function AbaChecklists({ notify }) {
       .catch((e) => notify(e?.response?.data?.error ?? 'Não foi possível carregar o checklist.', 'error'))
   }
 
+  // Abre o link público de execução (PIN, sem OTP — Task 4) numa aba nova. Quando o
+  // token já veio na lista (checklist já foi aberto antes), abre direto; senão busca no
+  // GET /:id, que gera o publicoToken on-demand. A aba é aberta ANTES do fetch (em branco)
+  // pra preservar o gesto do clique — só redireciona quando a resposta chega — assim o
+  // navegador não bloqueia o popup por ele ter sido aberto "fora" do clique síncrono.
+  function executar(c) {
+    if (c.publicoToken) {
+      window.open(`${window.location.origin}/checklist/publico/${c.publicoToken}`, '_blank', 'noopener')
+      return
+    }
+    const aba = window.open('', '_blank')
+    api.get(`/checklist/checklists/${c.id}`)
+      .then((r) => {
+        const token = r.data.checklist?.publicoToken
+        if (token && aba) { aba.location.href = `${window.location.origin}/checklist/publico/${token}` }
+        else { aba?.close(); notify('Não foi possível gerar o link público.', 'error') }
+      })
+      .catch((e) => { aba?.close(); notify(e?.response?.data?.error ?? 'Não foi possível abrir a execução.', 'error') })
+  }
+
+  async function confirmarExcluir() {
+    if (!excluir) return
+    setExcluindo(true)
+    try {
+      await api.delete(`/checklist/checklists/${excluir.id}`)
+      notify('Checklist excluído.')
+      setExcluir(null)
+      carregar()
+    } catch (err) {
+      notify(err?.response?.data?.error ?? 'Não foi possível excluir o checklist.', 'error')
+    } finally {
+      setExcluindo(false)
+    }
+  }
+
   return (
     <div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
@@ -695,7 +750,7 @@ function AbaChecklists({ notify }) {
       ) : (
         <div className="table-card">
           <table className="hb-table">
-            <thead><tr><th>Nome</th><th>Categoria</th><th>Prioridade</th><th>Recorrência</th><th>Itens</th><th></th></tr></thead>
+            <thead><tr><th>Nome</th><th>Categoria</th><th>Prioridade</th><th>Recorrência</th><th>Itens</th><th style={{ textAlign: 'right' }}>Ações</th></tr></thead>
             <tbody>
               {lista.map((c) => (
                 <tr key={c.id}>
@@ -704,7 +759,14 @@ function AbaChecklists({ notify }) {
                   <td>{PRIORIDADE_LABEL[c.prioridade] || c.prioridade}</td>
                   <td>{REC_LABEL[c.recorrenciaTipo] || c.recorrenciaTipo}</td>
                   <td>{c._count?.itens ?? '—'}</td>
-                  <td style={{ textAlign: 'right' }}><button type="button" className="btn btn-secondary btn-sm" onClick={() => editar(c)}>Editar</button></td>
+                  <td style={{ textAlign: 'right' }}>
+                    <div className="chk-row-acoes">
+                      <ChkAcaoBtn icon="eye" title="Ver detalhes" onClick={() => navigate(`/checklist/detalhe/${c.id}`)} />
+                      <ChkAcaoBtn icon="play" title="Executar" onClick={() => executar(c)} />
+                      <ChkAcaoBtn icon="edit" title="Editar" onClick={() => editar(c)} />
+                      <ChkAcaoBtn icon="trash" title="Excluir" danger onClick={() => setExcluir(c)} />
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -713,6 +775,19 @@ function AbaChecklists({ notify }) {
       )}
 
       {edit && <ChecklistEditor inicial={edit} notify={notify} onClose={() => setEdit(null)} onSalvou={() => { setEdit(null); carregar() }} />}
+
+      <ConfirmDialog
+        open={!!excluir}
+        title="Excluir checklist"
+        message={excluir ? `Excluir "${excluir.nome}"?` : ''}
+        description="Esta ação não pode ser desfeita."
+        confirmLabel="Excluir"
+        cancelLabel="Cancelar"
+        variant="danger"
+        loading={excluindo}
+        onConfirm={confirmarExcluir}
+        onCancel={() => setExcluir(null)}
+      />
     </div>
   )
 }
@@ -1060,6 +1135,174 @@ function ChecklistEditor({ inicial, notify, onClose, onSalvou }) {
             ) : (
               <button type="button" className="btn btn-primary" disabled={salvando} onClick={salvar}>{salvando ? 'Salvando…' : 'Salvar checklist'}</button>
             )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ===================== DETALHE DO CHECKLIST (Task 3) =====================
+// Copiar fora de contexto seguro (http por IP na rede local não tem navigator.clipboard) —
+// mesmo fallback de Etiquetas.jsx (CardDispositivos/copiarFallback): textarea invisível +
+// execCommand('copy'), o que resta pra copiar sem a Clipboard API.
+function chkCopiarFallback(texto) {
+  const ta = document.createElement('textarea')
+  ta.value = texto
+  ta.setAttribute('readonly', '')
+  ta.style.position = 'fixed'
+  ta.style.top = '-1000px'
+  ta.style.opacity = '0'
+  document.body.appendChild(ta)
+  ta.select()
+  let ok = false
+  try { ok = document.execCommand('copy') } catch { ok = false }
+  document.body.removeChild(ta)
+  return ok
+}
+
+// Página de detalhe de um checklist (rota /checklist/detalhe/:id, fora das abas — link
+// vem do 👁 "Ver detalhes" na tabela de Checklists). Cabeçalho com as informações do
+// checklist + Editar/Executar, a lista de itens, e o card do link público (PIN, Task 4)
+// com QR pra abrir direto do celular. Página própria (não uma aba) — tem seu próprio
+// Toast, igual às outras páginas fora do wizard/abas (ex.: FichaTecnica.jsx).
+export function ChecklistDetalhe() {
+  const { id } = useParams()
+  const navigate = useNavigate()
+  const [c, setC] = useState(null)
+  const [erro, setErro] = useState(false)
+  const [equipe, setEquipe] = useState([]) // só carregada se atribuicaoTipo === COLABORADOR, pra trocar id por nome
+  const [copiado, setCopiado] = useState(false)
+  const [toast, setToast] = useState(null)
+  const canvasRef = useRef(null)
+  const notify = (message, type = 'success') => setToast({ message, type })
+
+  useEffect(() => {
+    setC(null)
+    setErro(false)
+    api.get(`/checklist/checklists/${id}`)
+      .then((r) => setC(r.data.checklist))
+      .catch(() => setErro(true))
+  }, [id])
+
+  useEffect(() => {
+    if (c?.atribuicaoTipo === 'COLABORADOR' && equipe.length === 0) {
+      api.get('/funcionarios', { params: { status: 'ATIVO' } }).then((r) => setEquipe(Array.isArray(r.data) ? r.data : [])).catch(() => {})
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [c?.atribuicaoTipo])
+
+  const linkPublico = c?.publicoToken ? `${window.location.origin}/checklist/publico/${c.publicoToken}` : ''
+
+  // Desenha a matriz do QR (Task 1, lib/qr.js) num canvas 180x180 — mesmo loop de
+  // preenchimento do modelo LATERAL_QR em etiquetaCanvas.js (fillRect por módulo,
+  // Math.ceil no lado da célula pra não deixar frestas brancas entre quadrados
+  // vizinhos por arredondamento). Quiet zone de 12px nas 4 bordas — sem ela alguns
+  // leitores de câmera não reconhecem onde o QR começa.
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas || !linkPublico) return
+    const TAM = 180
+    const QUIET = 12
+    canvas.width = TAM
+    canvas.height = TAM
+    const ctx = canvas.getContext('2d')
+    ctx.fillStyle = '#fff'
+    ctx.fillRect(0, 0, TAM, TAM)
+    const m = matrizQr(linkPublico)
+    const n = m.length
+    const area = TAM - QUIET * 2
+    const cel = area / n
+    ctx.fillStyle = '#000'
+    for (let r = 0; r < n; r++) {
+      for (let cc = 0; cc < n; cc++) {
+        if (m[r][cc]) ctx.fillRect(QUIET + cc * cel, QUIET + r * cel, Math.ceil(cel), Math.ceil(cel))
+      }
+    }
+  }, [linkPublico])
+
+  async function copiarLink() {
+    if (!linkPublico) return
+    let ok = false
+    try {
+      if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(linkPublico); ok = true }
+    } catch { ok = false }
+    if (!ok) ok = chkCopiarFallback(linkPublico)
+    if (ok) { setCopiado(true); setTimeout(() => setCopiado(false), 2000) }
+    else notify('Não foi possível copiar o link neste navegador.', 'error')
+  }
+
+  // O token já vem sempre preenchido no GET /:id (o backend gera on-demand se faltar) —
+  // aqui não precisa do artifício de abrir a aba em branco antes do fetch (AbaChecklists),
+  // porque o clique já tem o link público pronto no estado.
+  function executarAgora() {
+    if (linkPublico) window.open(linkPublico, '_blank', 'noopener')
+  }
+
+  if (erro) return <div className="empty-state">Não foi possível carregar este checklist.</div>
+  if (!c) return <div className="loading-state">Carregando…</div>
+
+  const responsaveis = c.atribuicaoTipo === 'COLABORADOR'
+    ? c.funcionarioIds.map((fid) => equipe.find((fn) => fn.id === fid)).filter(Boolean).map((fn) => fn.apelido || fn.nome)
+    : (c.funcoes || [])
+
+  return (
+    <div>
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+        <div>
+          <button type="button" className="chkp-link" style={{ display: 'block', marginBottom: 8 }} onClick={() => navigate('/checklist/checklists')}>‹ Voltar para Checklists</button>
+          <h1>{c.nome}</h1>
+          <div className="page-header-sub">
+            {c.categoria} · Prioridade {PRIORIDADE_LABEL[c.prioridade] || c.prioridade} · {REC_LABEL[c.recorrenciaTipo] || c.recorrenciaTipo}
+            {c.recorrenciaTipo !== 'AVULSO' && c.recorrenciaConfig?.horarioLimite ? ` às ${c.recorrenciaConfig.horarioLimite}` : ''}
+            {c.tempoEstimadoMin ? ` · ${c.tempoEstimadoMin} min estimados` : ''}
+          </div>
+          <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--app-text-3)' }}>Responsáveis:</span>
+            <ChkTags funcoes={responsaveis} />
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-secondary" onClick={() => navigate(`/checklist/checklists?editar=${c.id}`)}>
+            <ChkIcon name="edit" size={15} /> Editar
+          </button>
+          <button type="button" className="btn btn-primary" onClick={executarAgora}>
+            <ChkIcon name="play" size={15} /> Executar
+          </button>
+        </div>
+      </div>
+
+      <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />
+
+      <div className="table-card" style={{ padding: 16 }}>
+        <div style={{ fontWeight: 700, marginBottom: 10 }}>Itens ({c.itens.length})</div>
+        {c.itens.length === 0 ? (
+          <div className="empty-state" style={{ padding: 16 }}>Nenhum item neste checklist.</div>
+        ) : (
+          c.itens.map((it) => (
+            <div key={it.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '9px 0', borderTop: '1px solid var(--app-border, #eee)' }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 13 }}>
+                  {it.titulo}{it.critico && <span style={{ color: '#dc2626' }} title="Item crítico"> *</span>}
+                </div>
+                {it.config?.dica && <div style={{ fontSize: 11.5, color: 'var(--app-text-soft, #888)', marginTop: 3 }}>{it.config.dica}</div>}
+              </div>
+              <span style={{ fontSize: 11, color: 'var(--app-text-soft, #888)', flexShrink: 0 }}>{TIPO_LABEL[it.tipo] || it.tipo}</span>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="table-card" style={{ padding: 16, marginTop: 14, display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'center' }}>
+        <canvas ref={canvasRef} width={180} height={180} style={{ borderRadius: 10, border: '1px solid var(--app-border, #eee)', flexShrink: 0 }} />
+        <div style={{ flex: 1, minWidth: 240 }}>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>Link público de execução</div>
+          <div style={{ fontSize: 12, color: 'var(--app-text-soft, #888)', marginBottom: 10 }}>
+            Quem escanear o QR ou abrir este link executa o checklist direto pelo celular, sem precisar entrar na Área do Colaborador — a entrada pede o PIN de quem for executar.
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input className="form-input" readOnly value={linkPublico} onFocus={(e) => e.target.select()} style={{ flex: 1, minWidth: 0, fontSize: 12.5 }} />
+            <button type="button" className="btn btn-secondary btn-sm" onClick={copiarLink}>{copiado ? '✓ Copiado' : 'Copiar'}</button>
           </div>
         </div>
       </div>

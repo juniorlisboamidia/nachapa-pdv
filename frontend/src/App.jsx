@@ -22,7 +22,7 @@ import Faturamento from './pages/Faturamento'
 import MinhaEmpresa from './pages/MinhaEmpresa'
 import Etiquetas from './pages/Etiquetas'
 import EtiquetasQuiosque from './pages/EtiquetasQuiosque'
-import Checklist from './pages/Checklist'
+import Checklist, { ChecklistDetalhe } from './pages/Checklist'
 
 function TelaCarregando() {
   return (
@@ -98,6 +98,7 @@ export default function App() {
             {/* Checklist Inteligente — tela do gestor (Painel/Checklists/Templates/Notificações) */}
             <Route path="checklist" element={<Checklist />} />
             <Route path="checklist/:tab" element={<Checklist />} />
+            <Route path="checklist/detalhe/:id" element={<ChecklistDetalhe />} />
             {/* Em construção */}
             <Route path="etiquetas" element={<Etiquetas />} />
             <Route path="etiquetas/:tab" element={<Etiquetas />} />
