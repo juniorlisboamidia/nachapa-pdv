@@ -8177,9 +8177,9 @@ app.get('/api/checklist/checklists/:id/estatisticas', async (req, res) => {
     if (ateMs < deMs) ateMs = deMs;
     if ((ateMs - deMs) / 86400000 > 180) return res.status(400).json({ error: 'Período máximo de 180 dias.' });
 
-    // execuções no intervalo (dataRef entre os inícios de expediente de de..ate)
+    // execuções no intervalo (dataRef é sempre 05:00 BR do dia, então lte:ateMs cobre o dia `ate` sem vazar pro seguinte)
     const execs = await prisma.checklistExecucao.findMany({
-      where: { checklistId, dataRef: { gte: new Date(deMs), lte: new Date(ateMs + 86400000) } },
+      where: { checklistId, dataRef: { gte: new Date(deMs), lte: new Date(ateMs) } },
       include: { respostas: { select: { itemChave: true, conforme: true } } },
       orderBy: { dataRef: 'asc' }, take: 2000,
     });
