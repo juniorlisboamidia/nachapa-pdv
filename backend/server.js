@@ -344,6 +344,14 @@ function dadosFuncionario(body) {
     const arr = Array.isArray(body.folgaSemana) ? body.folgaSemana : [];
     campos.folgaSemana = [...new Set(arr.map((n) => parseInt(n, 10)).filter((n) => n >= 0 && n <= 6))].sort((a, b) => a - b);
   }
+  // PIN de 4 dígitos p/ execução pública do Checklist. Só mexe se o campo veio no body
+  // (undefined preserva o PIN atual — importante no PUT, cujo form não devolve o pin salvo).
+  if (body?.pin !== undefined) {
+    const pin = String(body.pin).replace(/\D/g, '');
+    if (pin === '') campos.pin = null;
+    else if (pin.length !== 4) return { error: 'O PIN deve ter 4 dígitos.' };
+    else campos.pin = pin;
+  }
   return { campos };
 }
 

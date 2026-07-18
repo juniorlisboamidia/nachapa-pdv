@@ -489,7 +489,7 @@ function Painel() {
 }
 
 // ===================== COLABORADORES =====================
-const FORM_VAZIO = { nome: '', apelido: '', funcao: '', cpf: '', whatsapp: '', status: 'ATIVO', folgaSemana: [] }
+const FORM_VAZIO = { nome: '', apelido: '', funcao: '', cpf: '', whatsapp: '', status: 'ATIVO', folgaSemana: [], pinChecklist: '' }
 // Resumo curto das folgas ([1,4] -> "Seg, Qui")
 function resumoFolga(dias) {
   if (!Array.isArray(dias) || !dias.length) return null
@@ -559,7 +559,7 @@ function Colaboradores({ notify }) {
   })
 
   const abrirNovo = () => setModal({ id: null, form: { ...FORM_VAZIO } })
-  const abrirEditar = (f) => setModal({ id: f.id, form: { nome: f.nome ?? '', apelido: f.apelido ?? '', funcao: f.funcao ?? '', cpf: mascararCPF(f.cpf ?? ''), whatsapp: f.whatsapp ?? '', status: f.status ?? 'ATIVO', folgaSemana: Array.isArray(f.folgaSemana) ? f.folgaSemana : [] } })
+  const abrirEditar = (f) => setModal({ id: f.id, form: { nome: f.nome ?? '', apelido: f.apelido ?? '', funcao: f.funcao ?? '', cpf: mascararCPF(f.cpf ?? ''), whatsapp: f.whatsapp ?? '', status: f.status ?? 'ATIVO', folgaSemana: Array.isArray(f.folgaSemana) ? f.folgaSemana : [], pinChecklist: '' } })
   const upd = (campo, valor) => setModal((m) => ({ ...m, form: { ...m.form, [campo]: valor } }))
 
   async function salvar() {
@@ -567,10 +567,13 @@ function Colaboradores({ notify }) {
     if (!f.nome.trim()) return notify('Informe o nome.', 'error')
     if (String(f.cpf).replace(/\D/g, '').length !== 11) return notify('Informe o CPF completo (11 dígitos).', 'error')
     if (String(f.whatsapp).replace(/\D/g, '').length < 10) return notify('Informe o WhatsApp com DDD.', 'error')
+    if (f.pinChecklist && f.pinChecklist.length !== 4) return notify('O PIN deve ter 4 dígitos.', 'error')
     setSalvando(true)
     try {
-      if (modal.id) await api.put(`/funcionarios/${modal.id}`, f)
-      else await api.post('/funcionarios', f)
+      const { pinChecklist, ...corpo } = f
+      if (pinChecklist) corpo.pin = pinChecklist // só manda se o usuário digitou algo — vazio preserva o PIN atual
+      if (modal.id) await api.put(`/funcionarios/${modal.id}`, corpo)
+      else await api.post('/funcionarios', corpo)
       notify(modal.id ? 'Colaborador atualizado.' : 'Colaborador cadastrado.')
       setModal(null)
       carregar()
@@ -750,6 +753,19 @@ function Colaboradores({ notify }) {
                 })}
               </div>
               <div className="page-header-sub" style={{ marginTop: 6 }}>Dias em que folga toda semana. Sobrepõe a jornada — nesses dias não conta falta. Deixe vazio para seguir só a jornada.</div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">PIN (4 dígitos)</label>
+              <input
+                className="form-input"
+                style={{ maxWidth: 140 }}
+                value={modal.form.pinChecklist}
+                onChange={(e) => upd('pinChecklist', e.target.value.replace(/\D/g, '').slice(0, 4))}
+                placeholder={modal.id ? '•••• (deixe em branco p/ manter)' : 'Ex.: 1234'}
+                inputMode="numeric"
+                maxLength={4}
+              />
+              <div className="page-header-sub" style={{ marginTop: 6 }}>Usado para executar checklists pelo link público/QR.</div>
             </div>
             <div className="modal-actions">
               <button type="button" className="btn btn-secondary" onClick={() => setModal(null)} disabled={salvando}>Cancelar</button>
