@@ -717,16 +717,55 @@ function AbaChecklists({ notify }) {
   )
 }
 
+// As 4 etapas do wizard do editor de checklist (Task B1): Informações → Itens →
+// Agendamento → Revisão. WZ_PRIORIDADES dá cor semântica aos 3 botões segmentados
+// de prioridade (verde/dourado/vermelho — mesma leitura de "farol" do resto do app).
+const WZ_ETAPAS = [
+  { n: 1, label: 'Informações' },
+  { n: 2, label: 'Itens do Checklist' },
+  { n: 3, label: 'Agendamento' },
+  { n: 4, label: 'Revisão' },
+]
+const WZ_PRIORIDADES = [
+  { v: 'BAIXA', l: 'Baixa', cor: '#16a34a' },
+  { v: 'MEDIA', l: 'Média', cor: '#eab802' },
+  { v: 'ALTA', l: 'Alta', cor: '#dc2626' },
+]
+
+// Stepper do topo do wizard — passo atual em destaque (roxo), concluídos em verde,
+// os demais neutros (tokens --app-*, tema-aware). Só visual: a navegação real
+// (Voltar/Próximo/validação) vive nos botões no rodapé do editor.
+function WzStepper({ etapa }) {
+  return (
+    <div className="wz-steps">
+      {WZ_ETAPAS.map((e, i) => {
+        const estado = e.n < etapa ? 'done' : e.n === etapa ? 'active' : 'todo'
+        return (
+          <div key={e.n} className={'wz-step wz-step-' + estado}>
+            <div className="wz-step-row">
+              <span className="wz-step-circle">{estado === 'done' ? '✓' : e.n}</span>
+              <span className="wz-step-label">{e.label}</span>
+            </div>
+            {i < WZ_ETAPAS.length - 1 && <span className="wz-step-line" />}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function ChecklistEditor({ inicial, notify, onClose, onSalvou }) {
   const [f, setF] = useState(() => ({
     ...inicial,
     descricao: inicial.descricao || '',
+    tempoEstimadoMin: inicial.tempoEstimadoMin ?? null,
     atribuicaoTipo: inicial.atribuicaoTipo || 'FUNCAO',
     funcoes: inicial.funcoes || [],
     funcionarioIds: inicial.funcionarioIds || [],
-    recorrenciaConfig: inicial.recorrenciaConfig || { diasSemana: [], horarioLimite: '' },
+    recorrenciaConfig: { diasSemana: [], horarioLimite: '', toleranciaMin: 0, ...(inicial.recorrenciaConfig || {}) },
     itens: inicial.itens || [],
   }))
+  const [etapa, setEtapa] = useState(1) // 1..4 — Informações / Itens / Agendamento / Revisão
   const [funcoesDisp, setFuncoesDisp] = useState([]) // funções cadastradas (reusa /funcoes)
   const [equipe, setEquipe] = useState([]) // funcionários ativos (modo COLABORADOR)
   const [salvando, setSalvando] = useState(false)
@@ -751,12 +790,21 @@ function ChecklistEditor({ inicial, notify, onClose, onSalvou }) {
   const addItem = () => setF((s) => ({ ...s, itens: [...s.itens, { tipo: 'CHECK', titulo: '', descricao: '', critico: false, config: {} }] }))
   const rmItem = (i) => setF((s) => ({ ...s, itens: s.itens.filter((_, j) => j !== i) }))
 
+  // Navegação do wizard — o estado `f` é único (não recria por etapa), só troca o
+  // que renderiza. Única validação ao avançar é o nome (etapa 1); item sem título
+  // já é barrado no `salvar` (e volta o operador pra etapa 2, onde estão os itens).
+  function proximaEtapa() {
+    if (etapa === 1 && !f.nome?.trim()) { notify('Informe o nome do checklist.', 'error'); return }
+    setEtapa((e) => Math.min(4, e + 1))
+  }
+  function etapaAnterior() { setEtapa((e) => Math.max(1, e - 1)) }
+
   async function salvar() {
-    if (!f.nome?.trim()) { notify('Informe o nome do checklist.', 'error'); return }
+    if (!f.nome?.trim()) { notify('Informe o nome do checklist.', 'error'); setEtapa(1); return }
     // Valida no cliente antes de mandar pro backend — o 400 "Todo item precisa de um
-    // título." de lá não diz qual, então aponta a posição aqui.
+    // título." de lá não diz qual, então aponta a posição aqui (e leva pra etapa dos itens).
     const itemSemTitulo = f.itens.findIndex((it) => !it.titulo?.trim())
-    if (itemSemTitulo !== -1) { notify(`O item ${itemSemTitulo + 1} está sem título.`, 'error'); return }
+    if (itemSemTitulo !== -1) { notify(`O item ${itemSemTitulo + 1} está sem título.`, 'error'); setEtapa(2); return }
     const criando = f.novo || !f.id
     setSalvando(true)
     try {
@@ -767,6 +815,7 @@ function ChecklistEditor({ inicial, notify, onClose, onSalvou }) {
         categoria: f.categoria,
         descricao: f.descricao,
         prioridade: f.prioridade,
+        tempoEstimadoMin: f.tempoEstimadoMin,
         atribuicaoTipo: f.atribuicaoTipo,
         funcoes: f.funcoes,
         funcionarioIds: f.funcionarioIds,
@@ -790,136 +839,228 @@ function ChecklistEditor({ inicial, notify, onClose, onSalvou }) {
     // Fecha só pelo botão Cancelar — overlay sem onClick, stopPropagation no .modal
     // (mesma trava defensiva do modal "Ver template" acima e de PontoFacial.jsx).
     <div className="modal-overlay">
-      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 640, maxHeight: '90vh', overflow: 'auto' }}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 680, maxHeight: '90vh', overflow: 'auto' }}>
         <div className="modal-title">{f.novo ? 'Novo checklist' : 'Editar checklist'}</div>
 
-        <div className="form-grid-2">
-          <div className="form-group"><label className="form-label">Nome</label><input className="form-input" value={f.nome} onChange={(e) => upd('nome', e.target.value)} /></div>
-          <div className="form-group">
-            <label className="form-label">Categoria</label>
-            <select className="form-input" value={f.categoria} onChange={(e) => upd('categoria', e.target.value)}>
-              {CHECKLIST_CATEGORIAS.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-        </div>
-        <div className="form-grid-2">
-          <div className="form-group">
-            <label className="form-label">Prioridade</label>
-            <select className="form-input" value={f.prioridade} onChange={(e) => upd('prioridade', e.target.value)}>
-              <option value="BAIXA">Baixa</option><option value="MEDIA">Média</option><option value="ALTA">Alta</option>
-            </select>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Recorrência</label>
-            <select className="form-input" value={f.recorrenciaTipo} onChange={(e) => upd('recorrenciaTipo', e.target.value)}>
-              <option value="DIARIA">Todo dia</option><option value="DIAS_SEMANA">Dias da semana</option><option value="AVULSO">Sem agendamento</option>
-            </select>
-          </div>
-        </div>
+        <WzStepper etapa={etapa} />
 
-        {f.recorrenciaTipo === 'DIAS_SEMANA' && (
-          <div className="form-group">
-            <label className="form-label">Dias</label>
-            <div className="chip-row">
-              {DOW.map((d, i) => (
-                <button key={i} type="button" className={'chip' + (f.recorrenciaConfig.diasSemana.includes(i) ? ' chip-on' : '')} onClick={() => toggleDow(i)}>{d}</button>
-              ))}
-            </div>
-          </div>
-        )}
-        {f.recorrenciaTipo !== 'AVULSO' && (
-          <div className="form-group">
-            <label className="form-label">Horário limite (opcional)</label>
-            <input className="form-input" style={{ maxWidth: 120 }} placeholder="HH:mm" value={f.recorrenciaConfig.horarioLimite || ''} onChange={(e) => updRc('horarioLimite', e.target.value)} />
-          </div>
-        )}
-
-        <div className="form-group">
-          <label className="form-label">Atribuir a</label>
-          {/* Modo: por FUNÇÃO (qualquer um do cargo) ou por COLABORADOR (pessoas específicas —
-              responsabilidade clara, sem "jogar a culpa pra outra"). */}
-          <div className="chip-row" style={{ marginBottom: 8 }}>
-            <button type="button" className={'chip' + (f.atribuicaoTipo !== 'COLABORADOR' ? ' chip-on' : '')} onClick={() => upd('atribuicaoTipo', 'FUNCAO')}>Função</button>
-            <button type="button" className={'chip' + (f.atribuicaoTipo === 'COLABORADOR' ? ' chip-on' : '')} onClick={() => upd('atribuicaoTipo', 'COLABORADOR')}>Colaborador</button>
-          </div>
-
-          {f.atribuicaoTipo === 'COLABORADOR' ? (
-            equipe.length === 0 ? (
-              <span style={{ fontSize: 12, color: '#999' }}>Nenhum colaborador ativo — cadastre em Ponto Facial › Colaboradores.</span>
-            ) : (
-              <>
-                <div className="chip-row">
-                  {equipe.map((fn) => (
-                    <button key={fn.id} type="button" className={'chip' + (f.funcionarioIds.includes(fn.id) ? ' chip-on' : '')} onClick={() => toggleFuncionario(fn.id)} title={fn.funcao || ''}>
-                      {fn.apelido || fn.nome}
-                    </button>
-                  ))}
-                </div>
-                <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>Só essas pessoas veem o checklist na Área do Colaborador — e são cobradas no lembrete de atraso.</div>
-              </>
-            )
-          ) : (
-            <>
-              {funcoesOpcoes.length === 0 ? (
-                <span style={{ fontSize: 12, color: '#999' }}>Nenhuma função cadastrada — cadastre em Bonificação › Configuração › Funções da equipe.</span>
-              ) : (
-                <div className="chip-row">
-                  {funcoesOpcoes.map((nome) => (
-                    <button key={nome} type="button" className={'chip' + (f.funcoes.includes(nome) ? ' chip-on' : '')} onClick={() => toggleFuncao(nome)}>{nome}</button>
-                  ))}
-                </div>
-              )}
-              <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>Quem tem essa função no cadastro (Ponto Facial › Colaboradores) vê o checklist na Área do Colaborador.</div>
-            </>
-          )}
-        </div>
-
-        <label className="form-label" style={{ display: 'block', marginBottom: 6 }}>Itens</label>
-        {f.itens.length === 0 && <div className="empty-state" style={{ padding: 20 }}>Nenhum item ainda.</div>}
-        {f.itens.map((it, i) => (
-          <div key={i} className="table-card" style={{ padding: 10, marginBottom: 8 }}>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-              <select className="form-input" style={{ width: 130, flexShrink: 0 }} value={it.tipo} onChange={(e) => setItem(i, { tipo: e.target.value, config: {} })}>
-                {TIPOS.map((t) => <option key={t} value={t}>{TIPO_LABEL[t]}</option>)}
-              </select>
-              <input className="form-input" style={{ flex: 1, minWidth: 0 }} placeholder="Título do item" value={it.titulo} onChange={(e) => setItem(i, { titulo: e.target.value })} />
-              <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-                <input type="checkbox" checked={!!it.critico} onChange={(e) => setItem(i, { critico: e.target.checked })} /> crítico
-              </label>
-              <button type="button" className="btn btn-danger btn-sm" onClick={() => rmItem(i)}>Remover</button>
-            </div>
-
-            {it.tipo === 'NUMERICO' && (
-              <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                <input className="form-input" style={{ width: 100 }} placeholder="unidade" value={it.config?.unidade || ''} onChange={(e) => setItem(i, { config: { ...it.config, unidade: e.target.value } })} />
-                <input className="form-input" type="number" style={{ width: 90 }} placeholder="mín." value={it.config?.min ?? ''} onChange={(e) => setItem(i, { config: { ...it.config, min: e.target.value === '' ? undefined : Number(e.target.value) } })} />
-                <input className="form-input" type="number" style={{ width: 90 }} placeholder="máx." value={it.config?.max ?? ''} onChange={(e) => setItem(i, { config: { ...it.config, max: e.target.value === '' ? undefined : Number(e.target.value) } })} />
+        {etapa === 1 && (
+          <div>
+            <div className="form-grid-2">
+              <div className="form-group"><label className="form-label">Nome</label><input className="form-input" value={f.nome} onChange={(e) => upd('nome', e.target.value)} /></div>
+              <div className="form-group">
+                <label className="form-label">Categoria</label>
+                <select className="form-input" value={f.categoria} onChange={(e) => upd('categoria', e.target.value)}>
+                  {CHECKLIST_CATEGORIAS.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
               </div>
-            )}
-            {it.tipo === 'AVALIACAO' && (
-              <input className="form-input" type="number" min={1} max={5} style={{ width: 160, marginTop: 6 }} placeholder="nota mínima (1-5)" value={it.config?.notaMinima ?? ''} onChange={(e) => setItem(i, { config: { ...it.config, notaMinima: e.target.value === '' ? undefined : Number(e.target.value) } })} />
-            )}
-            {it.tipo === 'SELECAO' && (
-              <div style={{ marginTop: 6 }}>
-                {(it.config?.opcoes || []).map((o, oi) => (
-                  <div key={oi} style={{ display: 'flex', gap: 6, marginBottom: 4, alignItems: 'center' }}>
-                    <input className="form-input" style={{ flex: 1 }} placeholder="opção" value={o.rotulo} onChange={(e) => setItem(i, { config: { ...it.config, opcoes: it.config.opcoes.map((x, j) => (j === oi ? { ...x, rotulo: e.target.value } : x)) } })} />
-                    <label style={{ fontSize: 12, display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
-                      <input type="checkbox" checked={o.conforme !== false} onChange={(e) => setItem(i, { config: { ...it.config, opcoes: it.config.opcoes.map((x, j) => (j === oi ? { ...x, conforme: e.target.checked } : x)) } })} /> conforme
-                    </label>
-                    <button type="button" className="btn btn-danger btn-sm" onClick={() => setItem(i, { config: { ...it.config, opcoes: it.config.opcoes.filter((_, j) => j !== oi) } })}>Remover</button>
-                  </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Tempo estimado (min) — opcional</label>
+              <input className="form-input" type="number" min={0} style={{ maxWidth: 140 }} placeholder="Ex.: 15"
+                value={f.tempoEstimadoMin ?? ''} onChange={(e) => upd('tempoEstimadoMin', e.target.value === '' ? null : Number(e.target.value))} />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Descrição (opcional)</label>
+              <textarea className="form-input" style={{ width: '100%', minHeight: 64, resize: 'vertical', fontFamily: 'inherit' }} maxLength={300}
+                placeholder="O que este checklist cobre" value={f.descricao} onChange={(e) => upd('descricao', e.target.value)} />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Prioridade</label>
+              <div className="wz-seg">
+                {WZ_PRIORIDADES.map((o) => (
+                  <button key={o.v} type="button" className={'wz-seg-btn' + (f.prioridade === o.v ? ' on' : '')}
+                    style={f.prioridade === o.v ? { background: o.cor, color: o.v === 'MEDIA' ? '#3a2c00' : '#fff', borderColor: o.cor } : undefined}
+                    onClick={() => upd('prioridade', o.v)}>{o.l}</button>
                 ))}
-                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setItem(i, { config: { ...it.config, opcoes: [...(it.config?.opcoes || []), { rotulo: '', conforme: true }] } })}>+ opção</button>
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Atribuir a</label>
+              {/* Modo: por FUNÇÃO (qualquer um do cargo) ou por COLABORADOR (pessoas específicas —
+                  responsabilidade clara, sem "jogar a culpa pra outra"). */}
+              <div className="chip-row" style={{ marginBottom: 8 }}>
+                <button type="button" className={'chip' + (f.atribuicaoTipo !== 'COLABORADOR' ? ' chip-on' : '')} onClick={() => upd('atribuicaoTipo', 'FUNCAO')}>Função</button>
+                <button type="button" className={'chip' + (f.atribuicaoTipo === 'COLABORADOR' ? ' chip-on' : '')} onClick={() => upd('atribuicaoTipo', 'COLABORADOR')}>Colaborador</button>
+              </div>
+
+              {f.atribuicaoTipo === 'COLABORADOR' ? (
+                equipe.length === 0 ? (
+                  <span style={{ fontSize: 12, color: '#999' }}>Nenhum colaborador ativo — cadastre em Ponto Facial › Colaboradores.</span>
+                ) : (
+                  <>
+                    <div className="chip-row">
+                      {equipe.map((fn) => (
+                        <button key={fn.id} type="button" className={'chip' + (f.funcionarioIds.includes(fn.id) ? ' chip-on' : '')} onClick={() => toggleFuncionario(fn.id)} title={fn.funcao || ''}>
+                          {fn.apelido || fn.nome}
+                        </button>
+                      ))}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>Só essas pessoas veem o checklist na Área do Colaborador — e são cobradas no lembrete de atraso.</div>
+                  </>
+                )
+              ) : (
+                <>
+                  {funcoesOpcoes.length === 0 ? (
+                    <span style={{ fontSize: 12, color: '#999' }}>Nenhuma função cadastrada — cadastre em Bonificação › Configuração › Funções da equipe.</span>
+                  ) : (
+                    <div className="chip-row">
+                      {funcoesOpcoes.map((nome) => (
+                        <button key={nome} type="button" className={'chip' + (f.funcoes.includes(nome) ? ' chip-on' : '')} onClick={() => toggleFuncao(nome)}>{nome}</button>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>Quem tem essa função no cadastro (Ponto Facial › Colaboradores) vê o checklist na Área do Colaborador.</div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {etapa === 2 && (
+          <div>
+            <label className="form-label" style={{ display: 'block', marginBottom: 6 }}>Itens</label>
+            {f.itens.length === 0 && <div className="empty-state" style={{ padding: 20 }}>Nenhum item ainda.</div>}
+            {f.itens.map((it, i) => (
+              <div key={i} className="table-card" style={{ padding: 10, marginBottom: 8 }}>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  {/* Troca de tipo zera só os campos por-tipo (min/max, opções, nota mínima) —
+                      dica/instrução são genéricas a qualquer tipo, então sobrevivem à troca. */}
+                  <select className="form-input" style={{ width: 130, flexShrink: 0 }} value={it.tipo}
+                    onChange={(e) => setItem(i, { tipo: e.target.value, config: { dica: it.config?.dica, instrucaoAlerta: it.config?.instrucaoAlerta } })}>
+                    {TIPOS.map((t) => <option key={t} value={t}>{TIPO_LABEL[t]}</option>)}
+                  </select>
+                  <input className="form-input" style={{ flex: 1, minWidth: 0 }} placeholder="Título do item" value={it.titulo} onChange={(e) => setItem(i, { titulo: e.target.value })} />
+                  <label style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                    <input type="checkbox" checked={!!it.critico} onChange={(e) => setItem(i, { critico: e.target.checked })} /> crítico
+                  </label>
+                  <button type="button" className="btn btn-danger btn-sm" onClick={() => rmItem(i)}>Remover</button>
+                </div>
+
+                {it.tipo === 'NUMERICO' && (
+                  <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                    <input className="form-input" style={{ width: 100 }} placeholder="unidade" value={it.config?.unidade || ''} onChange={(e) => setItem(i, { config: { ...it.config, unidade: e.target.value } })} />
+                    <input className="form-input" type="number" style={{ width: 90 }} placeholder="mín." value={it.config?.min ?? ''} onChange={(e) => setItem(i, { config: { ...it.config, min: e.target.value === '' ? undefined : Number(e.target.value) } })} />
+                    <input className="form-input" type="number" style={{ width: 90 }} placeholder="máx." value={it.config?.max ?? ''} onChange={(e) => setItem(i, { config: { ...it.config, max: e.target.value === '' ? undefined : Number(e.target.value) } })} />
+                  </div>
+                )}
+                {it.tipo === 'AVALIACAO' && (
+                  <input className="form-input" type="number" min={1} max={5} style={{ width: 160, marginTop: 6 }} placeholder="nota mínima (1-5)" value={it.config?.notaMinima ?? ''} onChange={(e) => setItem(i, { config: { ...it.config, notaMinima: e.target.value === '' ? undefined : Number(e.target.value) } })} />
+                )}
+                {it.tipo === 'SELECAO' && (
+                  <div style={{ marginTop: 6 }}>
+                    {(it.config?.opcoes || []).map((o, oi) => (
+                      <div key={oi} style={{ display: 'flex', gap: 6, marginBottom: 4, alignItems: 'center' }}>
+                        <input className="form-input" style={{ flex: 1 }} placeholder="opção" value={o.rotulo} onChange={(e) => setItem(i, { config: { ...it.config, opcoes: it.config.opcoes.map((x, j) => (j === oi ? { ...x, rotulo: e.target.value } : x)) } })} />
+                        <label style={{ fontSize: 12, display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
+                          <input type="checkbox" checked={o.conforme !== false} onChange={(e) => setItem(i, { config: { ...it.config, opcoes: it.config.opcoes.map((x, j) => (j === oi ? { ...x, conforme: e.target.checked } : x)) } })} /> conforme
+                        </label>
+                        <button type="button" className="btn btn-danger btn-sm" onClick={() => setItem(i, { config: { ...it.config, opcoes: it.config.opcoes.filter((_, j) => j !== oi) } })}>Remover</button>
+                      </div>
+                    ))}
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => setItem(i, { config: { ...it.config, opcoes: [...(it.config?.opcoes || []), { rotulo: '', conforme: true }] } })}>+ opção</button>
+                  </div>
+                )}
+
+                <div style={{ marginTop: 8 }}>
+                  <label className="form-label" style={{ fontSize: 11 }}>Dicas para execução (opcional)</label>
+                  <textarea className="form-input" style={{ width: '100%', minHeight: 46, resize: 'vertical', fontFamily: 'inherit', marginTop: 3 }} maxLength={300}
+                    placeholder="O que ajuda o colaborador a fazer certo"
+                    value={it.config?.dica || ''} onChange={(e) => setItem(i, { config: { ...it.config, dica: e.target.value } })} />
+                </div>
+                <div style={{ marginTop: 6 }}>
+                  <label className="form-label" style={{ fontSize: 11 }}>Instruções da gestão para alertas (opcional)</label>
+                  <textarea className="form-input" style={{ width: '100%', minHeight: 46, resize: 'vertical', fontFamily: 'inherit', marginTop: 3 }} maxLength={300}
+                    placeholder="O que fazer se este item ficar fora do padrão"
+                    value={it.config?.instrucaoAlerta || ''} onChange={(e) => setItem(i, { config: { ...it.config, instrucaoAlerta: e.target.value } })} />
+                </div>
+              </div>
+            ))}
+            <button type="button" className="btn btn-secondary btn-sm" onClick={addItem}>+ Adicionar item</button>
+          </div>
+        )}
+
+        {etapa === 3 && (
+          <div>
+            <div className="form-group">
+              <label className="form-label">Recorrência</label>
+              <select className="form-input" value={f.recorrenciaTipo} onChange={(e) => upd('recorrenciaTipo', e.target.value)}>
+                <option value="DIARIA">Todo dia</option><option value="DIAS_SEMANA">Dias da semana</option><option value="AVULSO">Sem agendamento</option>
+              </select>
+            </div>
+
+            {f.recorrenciaTipo === 'DIAS_SEMANA' && (
+              <div className="form-group">
+                <label className="form-label">Dias</label>
+                <div className="chip-row">
+                  {DOW.map((d, i) => (
+                    <button key={i} type="button" className={'chip' + (f.recorrenciaConfig.diasSemana.includes(i) ? ' chip-on' : '')} onClick={() => toggleDow(i)}>{d}</button>
+                  ))}
+                </div>
               </div>
             )}
-          </div>
-        ))}
-        <button type="button" className="btn btn-secondary btn-sm" onClick={addItem}>+ Adicionar item</button>
 
-        <div className="modal-actions">
-          <button type="button" className="btn btn-secondary" onClick={onClose} disabled={salvando}>Cancelar</button>
-          <button type="button" className="btn btn-primary" disabled={salvando} onClick={salvar}>{salvando ? 'Salvando…' : 'Salvar'}</button>
+            {f.recorrenciaTipo !== 'AVULSO' && (
+              <>
+                <div className="form-grid-2">
+                  <div className="form-group">
+                    <label className="form-label">Horário de execução (opcional)</label>
+                    <input className="form-input" style={{ maxWidth: 120 }} placeholder="HH:mm" value={f.recorrenciaConfig.horarioLimite || ''} onChange={(e) => updRc('horarioLimite', e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Tolerância (min)</label>
+                    <input className="form-input" type="number" min={0} max={240} style={{ maxWidth: 120 }} placeholder="0"
+                      value={f.recorrenciaConfig.toleranciaMin ?? 0} onChange={(e) => updRc('toleranciaMin', e.target.value === '' ? 0 : Number(e.target.value))} />
+                  </div>
+                </div>
+                <div style={{ fontSize: 11, color: '#999', marginTop: -6, marginBottom: 14 }}>O lembrete de atraso dispara esses minutos depois do horário de execução.</div>
+              </>
+            )}
+          </div>
+        )}
+
+        {etapa === 4 && (
+          <div>
+            <div className="table-card" style={{ padding: 14, marginBottom: 12 }}>
+              <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>{f.nome || <span style={{ color: '#999' }}>(sem nome)</span>}</div>
+              <div style={{ fontSize: 12, color: 'var(--app-text-soft, #888)' }}>
+                {f.categoria} · {f.itens.length} {f.itens.length === 1 ? 'item' : 'itens'} · {REC_LABEL[f.recorrenciaTipo] || f.recorrenciaTipo}
+                {f.recorrenciaTipo !== 'AVULSO' && f.recorrenciaConfig.horarioLimite ? ` às ${f.recorrenciaConfig.horarioLimite}` : ''}
+              </div>
+            </div>
+
+            <label className="form-label" style={{ display: 'block', marginBottom: 6 }}>Itens</label>
+            {f.itens.length === 0 ? (
+              <div className="empty-state" style={{ padding: 20 }}>Nenhum item ainda.</div>
+            ) : (
+              f.itens.map((it, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '7px 0', borderTop: '1px solid var(--app-border, #eee)' }}>
+                  <span style={{ fontSize: 13 }}>
+                    {it.titulo || `Item ${i + 1}`}{it.critico && <span style={{ color: '#dc2626' }} title="Item crítico"> *</span>}
+                  </span>
+                  <span style={{ fontSize: 11, color: 'var(--app-text-soft, #888)', flexShrink: 0 }}>{TIPO_LABEL[it.tipo] || it.tipo}</span>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        <div className="wz-actions">
+          <div className="wz-actions-left">
+            <button type="button" className="btn btn-secondary" onClick={onClose} disabled={salvando}>Cancelar</button>
+            {etapa > 1 && <button type="button" className="btn btn-secondary" onClick={etapaAnterior} disabled={salvando}>Voltar</button>}
+          </div>
+          <div className="wz-actions-right">
+            {etapa < 4 ? (
+              <button type="button" className="btn btn-primary" onClick={proximaEtapa}>Próximo</button>
+            ) : (
+              <button type="button" className="btn btn-primary" disabled={salvando} onClick={salvar}>{salvando ? 'Salvando…' : 'Salvar checklist'}</button>
+            )}
+          </div>
         </div>
       </div>
     </div>
