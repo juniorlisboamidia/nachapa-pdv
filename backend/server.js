@@ -15,7 +15,7 @@ import { validadeDe, gerarLote, colisaoDeLote, CONSERVACOES } from './etiquetas.
 import { avaliarResposta, execucaoEmAlerta, fotosCriticasFaltando } from './checklistConformidade.js';
 import { venceHoje } from './checklistRecorrencia.js';
 import { itensCriticosNaoConformes, montarMensagemAlerta } from './checklistAlerta.js';
-import { montarMensagemLembrete, estaNaJanelaDeLembrete, TEMPLATE_PADRAO } from './checklistLembrete.js';
+import { montarMensagemLembrete, estaNaJanelaDeLembrete } from './checklistLembrete.js';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 

@@ -945,7 +945,8 @@ function AbaNotificacoes({ notify }) {
 
   function carregar() {
     api.get('/checklist/notificacoes')
-      .then((r) => { setConfig(r.data.config); setDests(r.data.destinatarios || []) })
+      // Só os destinatários do alerta IMEDIATO — os de atraso vivem na aba Configurações.
+      .then((r) => { setConfig(r.data.config); setDests((r.data.destinatarios || []).filter((d) => d.tipo === 'IMEDIATO')) })
       .catch((e) => notify(e?.response?.data?.error ?? 'Não foi possível carregar as notificações.', 'error'))
   }
   function carregarHist() {
@@ -1292,7 +1293,7 @@ function AbaConfiguracoes({ notify }) {
             value={minutos}
             onChange={(e) => setMinutos(e.target.value)}
           />
-          <span style={{ fontSize: 12, color: 'var(--app-text-soft, #888)' }}>minutos depois do horário-limite (5 a 240)</span>
+          <span style={{ fontSize: 12, color: 'var(--app-text-soft, #888)' }}>minutos antes do horário-limite (5 a 240)</span>
         </div>
 
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
