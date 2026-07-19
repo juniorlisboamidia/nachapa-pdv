@@ -446,20 +446,23 @@ function GuiaConexao({ semBt, erro, impressora, conectando, onConectar, onFechar
 
         <PassoGuia n={3} titulo='Toque em "Conectar impressora" abaixo'>
           Vai abrir a lista de aparelhos Bluetooth. Escolha o que começa com <strong>“B1”</strong> e aguarde a confirmação.
-          {semBt ? (
-            <div style={{ ...S.aviso, marginTop: 10, marginBottom: 0 }}>
-              Este navegador não imprime por Bluetooth. Use o <strong>Chrome no Android</strong> — iPhone não tem suporte.
-            </div>
-          ) : (
-            <>
-              <button type="button" onClick={onConectar} disabled={conectando}
-                style={{ ...S.botao(true), width: '100%', marginTop: 10, padding: 14, fontSize: 15, opacity: conectando ? 0.6 : 1 }}>
-                {conectando ? 'Conectando…' : impressora ? `🖨 ${impressora}` : 'Conectar impressora'}
-              </button>
-              {erro && <div style={{ ...S.aviso, marginTop: 10, marginBottom: 0 }}>{erro}</div>}
-            </>
-          )}
         </PassoGuia>
+
+        {/* Botão de ação em LARGURA CHEIA, fora da indentação do passo (senão fica "fora de
+            esquadro", recuado só à esquerda pela bolinha do número). Alinha com o "Fechar". */}
+        {semBt ? (
+          <div style={{ ...S.aviso, marginTop: -6, marginBottom: 16 }}>
+            Este navegador não imprime por Bluetooth. Use o <strong>Chrome no Android</strong> — iPhone não tem suporte.
+          </div>
+        ) : (
+          <>
+            <button type="button" onClick={onConectar} disabled={conectando}
+              style={{ ...S.botao(true), width: '100%', marginTop: -6, marginBottom: erro ? 8 : 16, padding: 14, fontSize: 15, opacity: conectando ? 0.6 : 1 }}>
+              {conectando ? 'Conectando…' : impressora ? `🖨 ${impressora}` : 'Conectar impressora'}
+            </button>
+            {erro && <div style={{ ...S.aviso, marginBottom: 16 }}>{erro}</div>}
+          </>
+        )}
 
         <PassoGuia n={4} titulo="Pronto!" cor="#16a34a">
           Agora é só escolher o <strong>produto</strong>, o <strong>armazenamento</strong>, o <strong>responsável</strong>{' '}
