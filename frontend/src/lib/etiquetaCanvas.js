@@ -462,8 +462,8 @@ function desenharCompacto(ctx, dados, config, dims, k) {
   if (campos.cnpj && config?.cnpj) rodapePartes.push(`CNPJ ${formatarCnpj(config.cnpj)}`)
   if (campos.responsavel) rodapePartes.push(dados.responsavelNome)
   const rodape = rodapePartes.filter(Boolean).join(' · ')
-  const rodapeY = altura - M - Math.round(13 * k)
-  setFonte(ctx, 11, k)
+  const rodapeY = altura - M - Math.round(15 * k)
+  setFonte(ctx, 13, k)
   ctx.fillText(ajustar(ctx, rodape, largura - M * 2), M, rodapeY)
 }
 
