@@ -7528,14 +7528,14 @@ app.get('/api/public/etiquetas/:token/bootstrap', async (req, res) => {
       prisma.empresa.findUnique({ where: { id: empresaId }, select: { nome: true, logoDataUrl: true } }),
       prisma.etiquetaConfig.findFirst({ where: { empresaId } }),
       prisma.etiquetaRegra.findMany({ where: { empresaId, ativo: true }, orderBy: { ordem: 'asc' } }),
-      prisma.insumo.findMany({ where: { empresaId, ativo: true, tipo: { in: ETIQUETA_TIPOS_INSUMO } }, orderBy: { nome: 'asc' }, select: { id: true, nome: true } }),
+      prisma.insumo.findMany({ where: { empresaId, ativo: true, tipo: { in: ETIQUETA_TIPOS_INSUMO } }, orderBy: { nome: 'asc' }, select: { id: true, nome: true, tipo: true } }),
       // TODOS os configs, inclusive os desligados: o desligado não some daqui, ele
       // TIRA o insumo da lista (ver a semântica do `ativo`, abaixo). Filtrar por
       // `ativo: true` na query era o bug — o config sumia, o item continuava
       // aparecendo (a lista sai de `insumos`, o config só enriquece) e o /registrar
       // achava o mesmo config e aplicava o override que o admin tinha desativado.
       prisma.etiquetaItemConfig.findMany({ where: { empresaId } }),
-      prisma.funcionario.findMany({ where: { empresaId, status: 'ATIVO' }, orderBy: { nome: 'asc' }, select: { id: true, nome: true, apelido: true } }),
+      prisma.funcionario.findMany({ where: { empresaId, status: 'ATIVO' }, orderBy: { nome: 'asc' }, select: { id: true, nome: true, apelido: true, funcao: true } }),
     ]);
 
     // Quem está NO TURNO agora aparece primeiro: é quem está na cozinha, e a lista inteira
@@ -7573,8 +7573,13 @@ app.get('/api/public/etiquetas/:token/bootstrap', async (req, res) => {
       .filter((i) => cMap.get(i.id)?.ativo !== false) // sem config (undefined) fica; desligado sai
       .map((i) => {
         const c = cMap.get(i.id) || null;
-        return { insumoId: i.id, nome: i.nome, conservacaoPadrao: c?.conservacaoPadrao || null, validadeDias: c?.validadeDias ?? null };
+        return { insumoId: i.id, nome: i.nome, tipo: i.tipo, conservacaoPadrao: c?.conservacaoPadrao || null, validadeDias: c?.validadeDias ?? null };
       });
+
+    // Entregador/motoboy não manipula alimento na cozinha — não faz sentido aparecer
+    // como responsável por uma etiqueta. `funcao` é texto livre (sem enum), então o
+    // filtro é por regex em vez de igualdade exata.
+    const ehEntregador = (f) => /entregador|motoboy/i.test(String(f.funcao || ''));
 
     res.json({
       loja: { nome: loja?.nome || 'Loja', logoDataUrl: loja?.logoDataUrl || null },
@@ -7583,6 +7588,7 @@ app.get('/api/public/etiquetas/:token/bootstrap', async (req, res) => {
       regras,
       itens,
       funcionarios: funcionarios
+        .filter((f) => !ehEntregador(f))
         .map((f) => ({ id: f.id, nome: f.apelido || f.nome, presente: presentes.has(f.id) }))
         .sort((a, b) => (b.presente - a.presente) || a.nome.localeCompare(b.nome)),
     });
