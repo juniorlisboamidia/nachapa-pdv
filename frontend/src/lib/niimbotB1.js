@@ -28,19 +28,17 @@ const DPI_B1 = 203
 // Espelha os campos de IMPRESSORA da entrada "models.b1" do registry.json da lib. Não
 // importamos o registry.json porque `density` é escolha nossa (depende do rolo/etiqueta
 // que a loja usa), e não um parâmetro para herdar cegamente da lib.
-//   name_prefixes: VAZIO de propósito. Com prefixo, a lib filtra o seletor por NOME
-//     (`namePrefix`), que no Web Bluetooth do Android é frágil — depende de o nome vir no
-//     pacote de anúncio, e alguns Chrome/Android NÃO captam (o celular achava a B1, o
-//     tablet não). Vazio, a lib cai no filtro por SERVIÇO (`{ services: [SVC_UUID] }`), e o
-//     UUID da Niimbot vem sempre no anúncio → acha a B1 em qualquer aparelho. A distinção
-//     B1 × B1 Pro deixa de ser pelo nome e passa a ser a checagem de task/dpi pós-conexão
-//     (abaixo, em conectar()), que já existia e é o filtro que de fato importa.
+//   name_prefixes: filtra o seletor do navegador pelo nome anunciado no BLE ("B1…").
+//     IMPORTANTE: pra a B1 aparecer no seletor ela precisa estar LIVRE (anunciando) — se o
+//     app da Niimbot ou o Bluetooth do sistema estiver conectado nela, ela para de anunciar
+//     e o seletor fica vazio (a B1 aceita 1 conexão por vez). É o que o Passo 2 do guia do
+//     quiosque orienta a resolver.
 //   task "b1":     sequência de comandos da linha B1 (protocolo 3), != "v4" do B1 Pro
 //   density 1-5:   3 é o padrão validado pela lib
 // A GEOMETRIA da etiqueta NÃO mora aqui: no registry ela é uma entrada separada
 // ("sizes.T50x30_b1"), e o que precisamos dela está em OFFSET_Y_PX, abaixo.
 const MODELO_B1 = {
-  name_prefixes: [], // vazio → filtra por SERVIÇO (SVC_UUID), robusto no Android — ver comentário acima
+  name_prefixes: ['B1'],
   task: 'b1',
   density: 3,
   label_type: 1,
@@ -130,25 +128,6 @@ export async function conectar() {
   if (!bluetoothDisponivel()) {
     throw new Error('Este navegador não tem Bluetooth. Use o Chrome no Android.')
   }
-  // Alguns Chrome/Android NÃO captam o nome NEM o serviço da B1 no anúncio BLE — ela
-  // aparece no seletor só pelo endereço (MAC), como "Dispositivo desconhecido". A lib
-  // filtra o seletor por nome/serviço, então nesses aparelhos o seletor fica VAZIO e trava
-  // (confirmado no tablet do cliente; no celular, que capta o nome, o filtro funcionava).
-  // Solução: SÓ durante o identify, forçamos o requestDevice a listar TODOS os aparelhos
-  // (acceptAllDevices) — a B1 aparece, o usuário escolhe, e a checagem de task/dpi abaixo
-  // rejeita se não for uma B1 de verdade. requestDevice PRECISA rodar dentro do gesto do
-  // usuário, então a troca é síncrona (sem await antes); restauramos no finally.
-  const bt = navigator.bluetooth
-  const requestDeviceOrig = bt.requestDevice
-  let trocou = false
-  try {
-    bt.requestDevice = function (opts) {
-      return requestDeviceOrig.call(bt, { acceptAllDevices: true, optionalServices: (opts && opts.optionalServices) || [] })
-    }
-    trocou = true
-  } catch {
-    /* requestDevice não-gravável neste navegador: segue com o filtro padrão da lib */
-  }
   // identify() conecta e pergunta o modelo à impressora SEM imprimir nada.
   let info
   try {
@@ -158,8 +137,6 @@ export async function conectar() {
       e,
       'Não foi possível conectar na etiquetadora. Confira se ela está ligada e perto do celular, e tente de novo.',
     )
-  } finally {
-    if (trocou) { try { bt.requestDevice = requestDeviceOrig } catch { /* ok */ } }
   }
 
   // A B1 e a B1 Pro anunciam o MESMO nome no BLE ("B1…"), então o usuário consegue
@@ -205,22 +182,6 @@ export function desconectar() {
   } catch {
     /* já caiu */
   }
-}
-
-// DIAGNÓSTICO: abre o seletor SEM filtro nenhum (`acceptAllDevices`), pra descobrir por que
-// a B1 não aparece num aparelho específico. Devolve o que o usuário escolher (nome + id) —
-// NÃO conecta, é só pra ver o que o Chrome daquele aparelho enxerga de Bluetooth. Se a B1
-// aparecer aqui mas não no fluxo normal, o problema é o filtro; se nem aqui aparecer, o
-// Chrome do aparelho não está enxergando ela (permissão/anúncio/ocupada).
-export async function escanearDiagnostico() {
-  if (!bluetoothDisponivel()) {
-    throw new Error('Este navegador não tem Bluetooth. Use o Chrome no Android.')
-  }
-  const d = await navigator.bluetooth.requestDevice({
-    acceptAllDevices: true,
-    optionalServices: ['e7810a71-73ae-499d-8c15-faa9aef0c3f2'], // serviço da Niimbot (se der pra ler depois)
-  })
-  return { nome: d?.name || '(sem nome)', id: d?.id || '(sem id)' }
 }
 
 // Canvas → 1-bit, MSB-first, uma linha por entrada. Threshold fixo em 128 e sem

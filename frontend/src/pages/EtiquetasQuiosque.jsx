@@ -9,7 +9,7 @@ import { useRef, useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import api from '../services/api'
 import { desenharEtiqueta } from '../lib/etiquetaCanvas'
-import { bluetoothDisponivel, conectar, conectado, imprimir, escanearDiagnostico } from '../lib/niimbotB1'
+import { bluetoothDisponivel, conectar, conectado, imprimir } from '../lib/niimbotB1'
 
 const CONS_LABEL = {
   CONGELADO: 'Congelado', RESFRIADO_0_4: 'Resfriado', RESFRIADO_4_6: 'Resfriado',
@@ -65,7 +65,6 @@ export default function EtiquetasQuiosque() {
   // spinner do botão do Passo 3, separado de `imprimindo` (são gestos diferentes).
   const [verGuia, setVerGuia] = useState(false)
   const [conectandoGuia, setConectandoGuia] = useState(false)
-  const [diag, setDiag] = useState('') // resultado do diagnóstico (lista todos os BT)
   // Relógio que ancora a PRÉVIA da validade. Fica em estado e só avança dentro de um
   // efeito porque render tem que ser puro: lendo Date.now() no corpo do componente a
   // data mudava a cada re-render (react-hooks/purity reprova, e com razão). O tablet
@@ -185,23 +184,6 @@ export default function EtiquetasQuiosque() {
     const ok = await conectarImpressora()
     setConectandoGuia(false)
     if (ok) setVerGuia(false)
-  }
-
-  // Diagnóstico (temporário): abre o seletor SEM filtro (todos os Bluetooth próximos), pra
-  // descobrir por que a B1 não aparece neste aparelho. É gesto de usuário (botão), então
-  // chama escanearDiagnostico direto, sem await antes.
-  async function rodarDiagnostico() {
-    setDiag('Abrindo o seletor… veja se a impressora aparece na lista e escolha-a.')
-    try {
-      const r = await escanearDiagnostico()
-      setDiag(`Escolhido → nome: "${r.nome}" · id: ${r.id}. Me mande este texto.`)
-    } catch (e) {
-      setDiag(
-        e?.name === 'NotFoundError'
-          ? 'Nenhum aparelho escolhido. Se a lista veio VAZIA, este tablet não está enxergando NENHUM Bluetooth pelo navegador — me avise.'
-          : `Erro: ${e?.message || e}`,
-      )
-    }
   }
 
   // Desenha no canvas SEMPRE a partir do que o servidor devolveu (datas, lote e
@@ -395,8 +377,6 @@ export default function EtiquetasQuiosque() {
           impressora={impressora}
           conectando={conectandoGuia}
           onConectar={tentarConectarNoGuia}
-          onDiagnostico={rodarDiagnostico}
-          diag={diag}
           onFechar={() => setVerGuia(false)}
         />
       )}
@@ -446,7 +426,7 @@ function PassoGuia({ n, titulo, cor, icone, children }) {
 // Modal "Conectar a impressora": passo a passo do quiosque. Fecha SÓ pelo X ou pelo
 // botão "Fechar" — o overlay não tem onClick de fechar (regra do projeto: modal nunca
 // fecha clicando fora), e o card para a propagação do clique por segurança.
-function GuiaConexao({ semBt, erro, impressora, conectando, onConectar, onDiagnostico, diag, onFechar }) {
+function GuiaConexao({ semBt, erro, impressora, conectando, onConectar, onFechar }) {
   return (
     <div style={S.overlay}>
       <div style={S.modal} onClick={(e) => e.stopPropagation()}>
@@ -475,9 +455,7 @@ function GuiaConexao({ semBt, erro, impressora, conectando, onConectar, onDiagno
         </PassoGuia>
 
         <PassoGuia n={3} titulo='Toque em "Conectar impressora" abaixo'>
-          Vai abrir a lista de <strong>todos</strong> os aparelhos Bluetooth por perto. Procure a impressora —
-          pode aparecer como <strong>“B1-…”</strong> ou, em alguns tablets, só como um <strong>endereço</strong>{' '}
-          (ex.: E0:D6:…). Escolha-a e aguarde. Se conectar em outra coisa por engano, dá erro — é só tentar de novo.
+          Vai abrir a lista de aparelhos Bluetooth. Escolha o que começa com <strong>“B1”</strong> e aguarde a confirmação.
           {semBt ? (
             <div style={{ ...S.aviso, marginTop: 10, marginBottom: 0 }}>
               Este navegador não imprime por Bluetooth. Use o <strong>Chrome no Android</strong> — iPhone não tem suporte.
@@ -498,25 +476,7 @@ function GuiaConexao({ semBt, erro, impressora, conectando, onConectar, onDiagno
           e quantas <strong>cópias</strong> quer imprimir.
         </PassoGuia>
 
-        {/* Diagnóstico: lista TODOS os Bluetooth próximos (sem filtro). Só aparece se houver
-            Bluetooth no navegador. Use quando a impressora não aparece no Passo 3. */}
-        {!semBt && (
-          <div style={{ borderTop: '1px solid #e7dcc2', marginTop: 4, paddingTop: 12 }}>
-            <div style={{ fontSize: 12, color: '#6b6f75', marginBottom: 8 }}>
-              A impressora não aparece na lista? Toque abaixo para ver <strong>todos</strong> os aparelhos Bluetooth
-              próximos e conferir se a B1 aparece (e com que nome).
-            </div>
-            <button type="button" onClick={onDiagnostico}
-              style={{ ...S.botao(false), width: '100%', fontSize: 13 }}>
-              🔍 Diagnóstico: ver todos os Bluetooth
-            </button>
-            {diag && (
-              <div style={{ ...S.aviso, marginTop: 8, marginBottom: 0, fontSize: 12.5, wordBreak: 'break-word' }}>{diag}</div>
-            )}
-          </div>
-        )}
-
-        <button type="button" onClick={onFechar} style={{ ...S.botao(false), width: '100%', marginTop: 10 }}>Fechar</button>
+        <button type="button" onClick={onFechar} style={{ ...S.botao(false), width: '100%', marginTop: 6 }}>Fechar</button>
       </div>
     </div>
   )
