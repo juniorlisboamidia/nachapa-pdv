@@ -687,6 +687,9 @@ function AbaItens({ notify }) {
   // aba Configuração) — busca uma vez no mount, sem depender da busca do catálogo.
   const [config, setConfig] = useState(null)
   const [regras, setRegras] = useState([])
+  // Equipe interna (para o select de "Responsável (quem manipulou)") — entregadores
+  // ficam de fora: quem manipula/etiqueta alimento é a equipe de cozinha/salão.
+  const [funcionarios, setFuncionarios] = useState([])
 
   // Impressora — mesmo estado/padrão da AbaConfig (sessão Bluetooth do navegador, não
   // uma preferência salva). Reusa o card CardImpressora já definido acima neste arquivo.
@@ -724,6 +727,20 @@ function AbaItens({ notify }) {
     api.get('/etiquetas/config')
       .then((r) => { setConfig(r.data.config); setRegras(r.data.regras || []) })
       .catch((e) => notify(e?.response?.data?.error ?? 'Não foi possível carregar a configuração da etiqueta.', 'error'))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Equipe ativa para o select de responsável — filtra entregadores/motoboys no
+  // cliente (a função é texto livre, não um enum, então não dá pra filtrar no backend).
+  useEffect(() => {
+    api.get('/funcionarios', { params: { status: 'ATIVO' } })
+      .then((r) => {
+        const lista = (Array.isArray(r.data) ? r.data : [])
+          .filter((f) => !/entregador|motoboy/i.test(String(f.funcao || '')))
+          .sort((a, b) => (a.apelido || a.nome).localeCompare(b.apelido || b.nome, 'pt-BR'))
+        setFuncionarios(lista)
+      })
+      .catch((e) => notify(e?.response?.data?.error ?? 'Não foi possível carregar a equipe.', 'error'))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -1122,19 +1139,21 @@ function AbaItens({ notify }) {
 
               <div className="form-group">
                 <label className="form-label">Responsável (quem manipulou)</label>
-                <input
+                <select
                   className="form-input"
-                  placeholder="Nome de quem manipulou"
                   value={sel.responsavelNome}
                   onChange={(e) => updSel({ responsavelNome: e.target.value })}
-                />
+                >
+                  <option value="">Selecione…</option>
+                  {funcionarios.map((f) => {
+                    const nome = f.apelido || f.nome
+                    return <option key={f.id} value={nome}>{nome}</option>
+                  })}
+                </select>
               </div>
 
               <div className="etq-previa etqi-previa">
                 {config ? <canvas ref={previaRef} /> : <div className="loading-state">Carregando prévia…</div>}
-              </div>
-              <div className="page-header-sub" style={{ marginTop: 8, textAlign: 'center' }}>
-                Lote de exemplo (—) — o código real sai ao imprimir.
               </div>
 
               <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
