@@ -392,7 +392,7 @@ export default function EtiquetasQuiosque() {
 // de ligar, ilustra o Passo 1 do guia.
 function IconePower() {
   return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#eab802" strokeWidth="2.3"
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#eab802" strokeWidth="2.3"
       strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
       <path d="M12 2v8" />
       <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
@@ -436,12 +436,12 @@ function GuiaConexao({ semBt, erro, impressora, conectando, onConectar, onFechar
         </div>
 
         <PassoGuia n={1} titulo="Ligue a impressora Niimbot" icone={<IconePower />}>
-          Segure o botão de ligar por <strong>3 segundos</strong> e solte. A luz deve acender e ficar <strong>azul</strong>.
+          Segure o botão de ligar por <strong>3 segundos</strong> e solte. A luz deve acender na cor <strong>azul</strong>.
+          Se acender e ficar <strong>verde</strong>, ela já está conectada a algo.
         </PassoGuia>
 
-        <PassoGuia n={2} titulo="Ligue o Bluetooth e a Localização do tablet">
-          No Android, o navegador só encontra a impressora por Bluetooth se a <strong>Localização</strong> também
-          estiver <strong>ligada</strong>. Não conecta? Veja a <strong>Central de Ajuda › Etiquetas › Solução de problemas</strong>.
+        <PassoGuia n={2} titulo="Com o Bluetooth ligado, abra o link das etiquetas">
+          Agora clique no botão <strong>“Conectar impressora”</strong> no canto superior direito.
         </PassoGuia>
 
         <PassoGuia n={3} titulo='Toque em "Conectar impressora" abaixo'>
@@ -462,7 +462,7 @@ function GuiaConexao({ semBt, erro, impressora, conectando, onConectar, onFechar
         </PassoGuia>
 
         <PassoGuia n={4} titulo="Pronto!" cor="#16a34a">
-          Agora é só escolher o <strong>produto</strong>, a <strong>conservação</strong>, o <strong>responsável</strong>{' '}
+          Agora é só escolher o <strong>produto</strong>, o <strong>armazenamento</strong>, o <strong>responsável</strong>{' '}
           e quantas <strong>cópias</strong> quer imprimir.
         </PassoGuia>
 
