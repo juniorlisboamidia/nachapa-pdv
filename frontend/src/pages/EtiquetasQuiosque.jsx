@@ -14,14 +14,43 @@ import { CONS_LABEL, TIPO_LABEL, TIPO_BADGE, tipoOrdem } from '../lib/etiquetaLa
 
 const erroDa = (e, fallback) => e?.response?.data?.error || e?.message || fallback
 
+// Fonte do sistema (tablet da parede: nada de webfont, evita FOIT/dependência de rede).
+const FONT = '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif'
+
+// Paleta da marca — neutros escolhidos (não o cinza genérico): a borda e o texto
+// apagado puxam pro creme da página, não pro cinza-frio. Dourado é o único acento.
+const C = {
+  ground: '#f4f1ea',  // creme (fundo)
+  ink: '#0e1319',     // tinta (texto/primário)
+  gold: '#eab802',    // acento da marca
+  surface: '#ffffff', // cartão
+  border: '#e6e0d2',  // borda quente
+  muted: '#7a7268',   // texto secundário (quente, não cinza-frio)
+}
+
+// Estados interativos (hover/active/focus) + transições: inline style não faz
+// pseudo-classe, então injetamos UMA vez um <style> escopado por `.etq-`. Respeita
+// prefers-reduced-motion. cursor-pointer e foco visível saem daqui (checklist de UX).
+const KIOSK_CSS = `
+.etq-btn{cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .12s ease,box-shadow .18s ease,background .18s ease,border-color .18s ease}
+.etq-btn:active{transform:scale(.98)}
+.etq-conectar:hover{box-shadow:0 6px 18px rgba(234,184,2,.55)}
+.etq-item{cursor:pointer;transition:transform .1s ease,box-shadow .18s ease,border-color .18s ease}
+.etq-item:hover{border-color:#d8ca9a;box-shadow:0 4px 12px rgba(14,19,25,.08)}
+.etq-item:active{transform:scale(.995)}
+.etq-btn:focus-visible,.etq-item:focus-visible{outline:2px solid #eab802;outline-offset:2px}
+.etq-busca:focus{outline:none;border-color:#eab802;box-shadow:0 0 0 3px rgba(234,184,2,.18)}
+@media(prefers-reduced-motion:reduce){.etq-btn,.etq-item{transition:none}.etq-btn:active,.etq-item:active{transform:none}}
+`
+
 const S = {
   aviso: { background: '#fee', border: '1px solid #fcc', borderRadius: 8, padding: 12, marginBottom: 12, fontSize: 13 },
   // Amarelo, não vermelho: nada quebrou, é a tela contando o que fez com a pendência.
   nota: { background: '#fffbe6', border: '1px solid #f0dd8a', borderRadius: 8, padding: 12, marginBottom: 12, fontSize: 13 },
   rotulo: { fontSize: 12, fontWeight: 700, letterSpacing: '.04em' },
   opcao: (on) => ({
-    padding: 12, borderRadius: 8, border: on ? '2px solid #eab802' : '1px solid #ddd',
-    background: '#fff', textAlign: 'left', fontSize: 15, width: '100%',
+    padding: 13, borderRadius: 10, border: on ? '2px solid #eab802' : '1px solid #e6e0d2',
+    background: on ? '#fffdf3' : '#fff', textAlign: 'left', fontSize: 15, width: '100%',
   }),
   botao: (forte) => ({
     padding: '10px 14px', borderRadius: 8, fontSize: 13, fontWeight: 700,
@@ -29,7 +58,7 @@ const S = {
     color: forte ? '#eab802' : '#0e1319',
   }),
   campoNumero: {
-    padding: 12, borderRadius: 8, border: '1px solid #ddd', fontSize: 16, width: 90,
+    padding: 12, borderRadius: 10, border: '1px solid #e6e0d2', fontSize: 16, width: 90,
   },
   // Card "Fila de impressão": borda simples pra se destacar do resto da 2ª tela sem
   // competir com o botão principal ("Imprimir agora"), que continua sendo a ação óbvia.
@@ -339,8 +368,8 @@ export default function EtiquetasQuiosque() {
     }
   }
 
-  if (erroBoot) return <div style={{ padding: 24, textAlign: 'center' }}>{erroBoot}</div>
-  if (!dados) return <div style={{ padding: 24, textAlign: 'center' }}>Carregando…</div>
+  if (erroBoot) return <TelaSimples>{erroBoot}</TelaSimples>
+  if (!dados) return <TelaSimples><span style={{ color: C.muted }}>Carregando…</span></TelaSimples>
 
   // Ordem por tipo (produção própria primeiro — é o que mais usa etiqueta) e, dentro
   // do tipo, por nome. `.slice()` antes do `.sort()` porque `dados.itens` é o mesmo
@@ -352,18 +381,65 @@ export default function EtiquetasQuiosque() {
   const podeImprimir = conservacao && responsavelId && !imprimindo
   const podeAdicionarFila = item && conservacao && responsavelId
 
+  const inicialLoja = (dados.loja.nome || '?').trim().charAt(0).toUpperCase()
+
   return (
-    <div style={{ minHeight: '100dvh', background: '#f4f1ea', padding: 16, fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif', color: '#0e1319' }}>
-      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
-        <div>
-          <strong style={{ fontSize: 15 }}>{dados.loja.nome}</strong>
-          <div style={{ fontSize: 11, color: '#6b6f75' }}>{dados.dispositivo.nome}</div>
-        </div>
-        <button type="button" onClick={() => setVerGuia(true)} disabled={semBt}
-          style={{ fontSize: 12, padding: '8px 12px', borderRadius: 8, border: '1px solid #ddd', background: '#fff', opacity: semBt ? 0.5 : 1 }}>
-          {impressora ? `🖨 ${impressora}` : 'Conectar impressora'}
-        </button>
-      </header>
+    <div style={{ minHeight: '100dvh', background: C.ground, color: C.ink, fontFamily: FONT, padding: '16px 14px 40px' }}>
+      <style>{KIOSK_CSS}</style>
+      <div style={{ maxWidth: 560, margin: '0 auto' }}>
+        {/* Header em cartão: identidade da loja (logo + nome) à esquerda, e o CTA de
+            conectar em destaque à direita. Enrola (flexWrap) em telas estreitas. */}
+        <header style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+          flexWrap: 'wrap', background: C.surface, border: `1px solid ${C.border}`,
+          borderRadius: 16, padding: '12px 14px', marginBottom: 14,
+          boxShadow: '0 1px 2px rgba(14,19,25,.04)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+            {dados.loja.logoDataUrl ? (
+              <img src={dados.loja.logoDataUrl} alt={dados.loja.nome}
+                style={{ width: 46, height: 46, borderRadius: 12, objectFit: 'cover', border: `1px solid ${C.border}`, flexShrink: 0 }} />
+            ) : (
+              // Sem logo: monograma dourado sobre tinta — mantém a marca sem imagem.
+              <div style={{ width: 46, height: 46, borderRadius: 12, flexShrink: 0, background: C.ink, color: C.gold, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 800 }}>
+                {inicialLoja}
+              </div>
+            )}
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 17, fontWeight: 800, lineHeight: 1.15, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {dados.loja.nome}
+              </div>
+              <div style={{ fontSize: 12, color: C.muted, marginTop: 3, display: 'flex', alignItems: 'center', gap: 5 }}>
+                <IconeAparelho /> {dados.dispositivo.nome}
+              </div>
+            </div>
+          </div>
+
+          {/* Conectar impressora: pílula DOURADA quando desconectado (é a 1ª ação, tem que
+              saltar); quando conectado vira um chip calmo verde (a ação já foi feita, para
+              de competir com a escolha do item). Abre o guia nos dois casos (permite
+              reconectar). O toque no guia é o gesto que o Web Bluetooth exige. */}
+          <button type="button" onClick={() => setVerGuia(true)} disabled={semBt}
+            className={impressora ? 'etq-btn' : 'etq-btn etq-conectar'}
+            style={impressora ? {
+              display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 999,
+              border: '1px solid #bfe3c6', background: '#f2faf3', color: C.ink, fontSize: 13, fontWeight: 700,
+              opacity: semBt ? 0.5 : 1, maxWidth: '100%',
+            } : {
+              display: 'flex', alignItems: 'center', gap: 8, padding: '13px 20px', borderRadius: 999,
+              border: 'none', background: C.gold, color: C.ink, fontSize: 14.5, fontWeight: 800,
+              boxShadow: '0 3px 12px rgba(234,184,2,.45)', opacity: semBt ? 0.5 : 1,
+            }}>
+            {impressora ? (
+              <>
+                <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#16a34a', flexShrink: 0 }} />
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>{impressora}</span>
+              </>
+            ) : (
+              <><IconePrinter size={17} /> Conectar impressora</>
+            )}
+          </button>
+        </header>
 
       {semBt && (
         <div style={S.aviso}>
@@ -395,34 +471,44 @@ export default function EtiquetasQuiosque() {
 
       {!item ? (
         <>
-          <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar item…"
-            style={{ width: '100%', padding: 12, borderRadius: 10, border: '1px solid #ddd', marginBottom: 12, fontSize: 16 }} />
+          <div style={{ position: 'relative', marginBottom: 12 }}>
+            <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', display: 'flex', pointerEvents: 'none' }}>
+              <IconeBusca />
+            </span>
+            <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar item…" className="etq-busca"
+              style={{ width: '100%', padding: '14px 14px 14px 42px', borderRadius: 12, border: `1px solid ${C.border}`, fontSize: 16, background: C.surface, boxSizing: 'border-box' }} />
+          </div>
           <div style={{ display: 'grid', gap: 8 }}>
             {itens.map((i) => (
-              <button key={i.insumoId} type="button" onClick={() => escolher(i)}
+              <button key={i.insumoId} type="button" onClick={() => escolher(i)} className="etq-item"
                 style={{
-                  padding: 14, borderRadius: 10, border: '1px solid #ddd', background: '#fff',
-                  textAlign: 'left', fontSize: 15, fontWeight: 600,
+                  padding: 16, borderRadius: 12, border: `1px solid ${C.border}`, background: C.surface,
+                  textAlign: 'left', fontSize: 16, fontWeight: 600, boxShadow: '0 1px 2px rgba(14,19,25,.04)',
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
                 }}>
-                <span>{i.nome}</span>
+                <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.nome}</span>
                 <span className={'badge ' + (TIPO_BADGE[i.tipo] || 'badge-gray')} style={{ flexShrink: 0 }}>
                   {TIPO_LABEL[i.tipo] || i.tipo}
                 </span>
               </button>
             ))}
             {busca && (
-              <button type="button" onClick={() => escolher({ nome: busca, avulso: true, conservacaoPadrao: null, validadeDias: null })}
-                style={{ padding: 14, borderRadius: 10, border: '1px dashed #bbb', background: 'transparent', textAlign: 'left', fontSize: 14 }}>
-                Etiquetar “{busca}” como item avulso
+              <button type="button" onClick={() => escolher({ nome: busca, avulso: true, conservacaoPadrao: null, validadeDias: null })} className="etq-item"
+                style={{ padding: 16, borderRadius: 12, border: '1px dashed #c9bea6', background: 'transparent', textAlign: 'left', fontSize: 15, fontWeight: 600, color: C.muted }}>
+                Etiquetar “<span style={{ color: C.ink }}>{busca}</span>” como item avulso
               </button>
+            )}
+            {itens.length === 0 && !busca && (
+              <div style={{ textAlign: 'center', color: C.muted, padding: '32px 16px', fontSize: 14 }}>
+                Nenhum item cadastrado para etiquetar.
+              </div>
             )}
           </div>
         </>
       ) : (
-        <div style={{ background: '#fff', borderRadius: 12, padding: 16 }}>
-          <button type="button" onClick={voltar} style={{ fontSize: 13, marginBottom: 10, border: 'none', background: 'none', padding: 0 }}>← trocar item</button>
-          <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 12 }}>{item.nome}</h2>
+        <div style={{ background: C.surface, borderRadius: 14, padding: 18, border: `1px solid ${C.border}`, boxShadow: '0 1px 2px rgba(14,19,25,.04)' }}>
+          <button type="button" onClick={voltar} className="etq-btn" style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, border: 'none', background: 'none', padding: 0, color: C.muted }}>← trocar item</button>
+          <h2 style={{ fontSize: 22, fontWeight: 800, marginBottom: 14 }}>{item.nome}</h2>
 
           {/* Confirmação na própria tela, sem modal: o quiosque é standalone e não
               carrega os componentes do admin. */}
@@ -479,12 +565,13 @@ export default function EtiquetasQuiosque() {
           </div>
 
           <div style={{ display: 'flex', gap: 8 }}>
-            <button type="button" disabled={!podeImprimir} onClick={imprimirEtiqueta}
-              style={{ flex: 1, padding: 16, borderRadius: 10, border: 'none', background: '#0e1319', color: '#eab802', fontSize: 16, fontWeight: 800, opacity: podeImprimir ? 1 : 0.5 }}>
+            <button type="button" disabled={!podeImprimir} onClick={imprimirEtiqueta} className="etq-btn"
+              style={{ flex: 1, padding: 16, borderRadius: 12, border: 'none', background: C.ink, color: C.gold, fontSize: 16, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: podeImprimir ? 1 : 0.5 }}>
+              <IconePrinter size={18} color={C.gold} />
               {imprimindo ? 'Imprimindo…' : pendente ? 'Imprimir novamente' : 'Imprimir agora'}
             </button>
-            <button type="button" disabled={!podeAdicionarFila} onClick={adicionarFila}
-              style={{ flex: 1, padding: 16, borderRadius: 10, border: '1px solid #ddd', background: '#fff', color: '#0e1319', fontSize: 16, fontWeight: 800, opacity: podeAdicionarFila ? 1 : 0.5 }}>
+            <button type="button" disabled={!podeAdicionarFila} onClick={adicionarFila} className="etq-btn"
+              style={{ flex: 1, padding: 16, borderRadius: 12, border: `1px solid ${C.border}`, background: C.surface, color: C.ink, fontSize: 16, fontWeight: 800, opacity: podeAdicionarFila ? 1 : 0.5 }}>
               Adicionar à fila
             </button>
           </div>
@@ -525,12 +612,14 @@ export default function EtiquetasQuiosque() {
             ))}
           </div>
 
-          <button type="button" disabled={imprimindoFila} onClick={imprimirSequencia}
+          <button type="button" disabled={imprimindoFila} onClick={imprimirSequencia} className="etq-btn"
             style={{
-              width: '100%', marginTop: 12, padding: 14, borderRadius: 10, border: 'none',
-              background: '#0e1319', color: '#eab802', fontSize: 14, fontWeight: 800,
+              width: '100%', marginTop: 12, padding: 14, borderRadius: 12, border: 'none',
+              background: C.ink, color: C.gold, fontSize: 14, fontWeight: 800,
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
               opacity: imprimindoFila ? 0.5 : 1,
             }}>
+            <IconePrinter size={16} color={C.gold} />
             {imprimindoFila ? 'Imprimindo fila…' : 'Imprimir sequência'}
           </button>
         </div>
@@ -546,11 +635,60 @@ export default function EtiquetasQuiosque() {
           onFechar={() => setVerGuia(false)}
         />
       )}
+      </div>{/* /container centralizado */}
 
       {/* Fora da tela, não `display:none`: é do MESMO canvas que sai o bitmap
           (canvas.toBlob dentro do imprimir), então ele precisa existir de verdade. */}
       <canvas ref={canvasRef} style={{ position: 'absolute', left: -9999, top: -9999 }} />
     </div>
+  )
+}
+
+// Tela cheia centralizada para boot/erro/carregando — mantém a moldura da marca
+// (creme + cartão) em vez de texto solto no canto.
+function TelaSimples({ children }) {
+  return (
+    <div style={{ minHeight: '100dvh', display: 'grid', placeItems: 'center', background: C.ground, color: C.ink, padding: 24, fontFamily: FONT }}>
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: '28px 24px', maxWidth: 360, textAlign: 'center', fontSize: 15, lineHeight: 1.5, boxShadow: '0 1px 2px rgba(14,19,25,.04)' }}>
+        {children}
+      </div>
+    </div>
+  )
+}
+
+// Ícone de impressora (linear, mesma linguagem do IconePower). Cor herda por prop
+// porque aparece sobre fundos diferentes (dourado no header, dourado sobre tinta nos
+// botões primários). Sem emoji (regra do checklist de UX).
+function IconePrinter({ size = 18, color = '#0e1319' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <path d="M6 9V3h12v6" />
+      <path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2" />
+      <rect x="6" y="14" width="12" height="8" rx="1" />
+    </svg>
+  )
+}
+
+// Lupa da busca.
+function IconeBusca() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#9a9082" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="7" />
+      <path d="m21 21-4.35-4.35" />
+    </svg>
+  )
+}
+
+// Tabletzinho ao lado do nome do aparelho no header (herda a cor apagada por currentColor).
+function IconeAparelho() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, opacity: 0.85 }}>
+      <rect x="5" y="2" width="14" height="20" rx="2" />
+      <path d="M12 18h.01" />
+    </svg>
   )
 }
 
@@ -622,9 +760,13 @@ function GuiaConexao({ semBt, erro, impressora, conectando, onConectar, onFechar
           </div>
         ) : (
           <>
-            <button type="button" onClick={onConectar} disabled={conectando}
-              style={{ ...S.botao(true), width: '100%', marginTop: -6, marginBottom: erro ? 8 : 16, padding: 14, fontSize: 15, opacity: conectando ? 0.6 : 1 }}>
-              {conectando ? 'Conectando…' : impressora ? `🖨 ${impressora}` : 'Conectar impressora'}
+            <button type="button" onClick={onConectar} disabled={conectando} className="etq-btn"
+              style={{ ...S.botao(true), width: '100%', marginTop: -6, marginBottom: erro ? 8 : 16, padding: 14, fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: conectando ? 0.6 : 1 }}>
+              {conectando
+                ? 'Conectando…'
+                : impressora
+                  ? <><span style={{ width: 8, height: 8, borderRadius: '50%', background: '#16a34a', flexShrink: 0 }} /> {impressora}</>
+                  : <><IconePrinter size={17} color="#eab802" /> Conectar impressora</>}
             </button>
             {erro && <div style={{ ...S.aviso, marginBottom: 16 }}>{erro}</div>}
           </>
