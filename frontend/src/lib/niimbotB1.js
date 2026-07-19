@@ -186,6 +186,22 @@ export function desconectar() {
   }
 }
 
+// DIAGNÓSTICO: abre o seletor SEM filtro nenhum (`acceptAllDevices`), pra descobrir por que
+// a B1 não aparece num aparelho específico. Devolve o que o usuário escolher (nome + id) —
+// NÃO conecta, é só pra ver o que o Chrome daquele aparelho enxerga de Bluetooth. Se a B1
+// aparecer aqui mas não no fluxo normal, o problema é o filtro; se nem aqui aparecer, o
+// Chrome do aparelho não está enxergando ela (permissão/anúncio/ocupada).
+export async function escanearDiagnostico() {
+  if (!bluetoothDisponivel()) {
+    throw new Error('Este navegador não tem Bluetooth. Use o Chrome no Android.')
+  }
+  const d = await navigator.bluetooth.requestDevice({
+    acceptAllDevices: true,
+    optionalServices: ['e7810a71-73ae-499d-8c15-faa9aef0c3f2'], // serviço da Niimbot (se der pra ler depois)
+  })
+  return { nome: d?.name || '(sem nome)', id: d?.id || '(sem id)' }
+}
+
 // Canvas → 1-bit, MSB-first, uma linha por entrada. Threshold fixo em 128 e sem
 // dithering: é o que o protocolo espera, e dithering em etiqueta de 203dpi vira
 // borrão ilegível.
