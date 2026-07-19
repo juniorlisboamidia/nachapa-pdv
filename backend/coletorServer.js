@@ -23,14 +23,18 @@ function parseBrDateTime(s) {
   const [, y, mo, d, h, mi, se] = m.map(Number);
   return new Date(Date.UTC(y, mo - 1, d, h, mi, se) - BR_OFFSET_MIN * 60000);
 }
-// Início/fim (Date UTC) do dia BR de uma dataHora — p/ a sequência de tipos do dia.
-function brDiaRange(dataHora) {
+// Janela do DIA DE EXPEDIENTE (corte 05:00 BR) de uma dataHora — junta o turno que cruza a
+// meia-noite. Espelha janelaExpedienteAtual/inicioDoExpedienteMs do server.js. Sem isso, a
+// batida da madrugada caía num dia civil novo, abria uma sequência do zero e a chegada
+// seguinte virava saída — bug corrigido no fluxo do tablet (commit a68d005) que não tinha
+// chegado ao coletor. Antes das 05:00 BR = expediente do dia ANTERIOR.
+function expedienteRange(dataHora) {
   const d = new Date(new Date(dataHora).getTime() + BR_OFFSET_MIN * 60000);
-  const y = d.getUTCFullYear(), mo = d.getUTCMonth(), day = d.getUTCDate();
-  return {
-    ini: new Date(Date.UTC(y, mo, day, 0, 0) - BR_OFFSET_MIN * 60000),
-    fim: new Date(Date.UTC(y, mo, day + 1, 0, 0) - BR_OFFSET_MIN * 60000),
-  };
+  const y = d.getUTCFullYear(), mo = d.getUTCMonth();
+  const min = d.getUTCHours() * 60 + d.getUTCMinutes();
+  const day = min < 5 * 60 ? d.getUTCDate() - 1 : d.getUTCDate(); // Date.UTC normaliza dia 0/negativo
+  const ini = new Date(Date.UTC(y, mo, day, 5, 0) - BR_OFFSET_MIN * 60000);
+  return { ini, fim: new Date(ini.getTime() + 24 * 3600 * 1000) };
 }
 const normalizarNome = (s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 
@@ -67,8 +71,8 @@ async function lerPontoConfigColetor(prisma, empresaId) {
   return { dedupeMin: c ? Math.max(0, c.dedupeMin) : 15, usaIntervalo: !!(c && c.usaIntervalo) };
 }
 
-async function proximoTipoPontoNaData(prisma, empresaId, funcionarioId, dataHora, usaIntervalo) {
-  const { ini, fim } = brDiaRange(dataHora);
+export async function proximoTipoPontoNaData(prisma, empresaId, funcionarioId, dataHora, usaIntervalo) {
+  const { ini, fim } = expedienteRange(dataHora);
   const regs = await prisma.pontoRegistro.findMany({
     where: { empresaId, funcionarioId, invalidada: false, dataHora: { gte: ini, lt: fim } },
     orderBy: { dataHora: 'asc' }, select: { tipo: true },
