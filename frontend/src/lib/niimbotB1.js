@@ -130,6 +130,25 @@ export async function conectar() {
   if (!bluetoothDisponivel()) {
     throw new Error('Este navegador não tem Bluetooth. Use o Chrome no Android.')
   }
+  // Alguns Chrome/Android NÃO captam o nome NEM o serviço da B1 no anúncio BLE — ela
+  // aparece no seletor só pelo endereço (MAC), como "Dispositivo desconhecido". A lib
+  // filtra o seletor por nome/serviço, então nesses aparelhos o seletor fica VAZIO e trava
+  // (confirmado no tablet do cliente; no celular, que capta o nome, o filtro funcionava).
+  // Solução: SÓ durante o identify, forçamos o requestDevice a listar TODOS os aparelhos
+  // (acceptAllDevices) — a B1 aparece, o usuário escolhe, e a checagem de task/dpi abaixo
+  // rejeita se não for uma B1 de verdade. requestDevice PRECISA rodar dentro do gesto do
+  // usuário, então a troca é síncrona (sem await antes); restauramos no finally.
+  const bt = navigator.bluetooth
+  const requestDeviceOrig = bt.requestDevice
+  let trocou = false
+  try {
+    bt.requestDevice = function (opts) {
+      return requestDeviceOrig.call(bt, { acceptAllDevices: true, optionalServices: (opts && opts.optionalServices) || [] })
+    }
+    trocou = true
+  } catch {
+    /* requestDevice não-gravável neste navegador: segue com o filtro padrão da lib */
+  }
   // identify() conecta e pergunta o modelo à impressora SEM imprimir nada.
   let info
   try {
@@ -139,6 +158,8 @@ export async function conectar() {
       e,
       'Não foi possível conectar na etiquetadora. Confira se ela está ligada e perto do celular, e tente de novo.',
     )
+  } finally {
+    if (trocou) { try { bt.requestDevice = requestDeviceOrig } catch { /* ok */ } }
   }
 
   // A B1 e a B1 Pro anunciam o MESMO nome no BLE ("B1…"), então o usuário consegue

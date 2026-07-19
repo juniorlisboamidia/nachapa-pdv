@@ -466,7 +466,9 @@ function GuiaConexao({ semBt, erro, impressora, conectando, onConectar, onDiagno
         </PassoGuia>
 
         <PassoGuia n={3} titulo='Toque em "Conectar impressora" abaixo'>
-          Vai abrir a lista de aparelhos Bluetooth. Escolha o que começa com <strong>“B1”</strong> e aguarde a confirmação.
+          Vai abrir a lista de <strong>todos</strong> os aparelhos Bluetooth por perto. Procure a impressora —
+          pode aparecer como <strong>“B1-…”</strong> ou, em alguns tablets, só como um <strong>endereço</strong>{' '}
+          (ex.: E0:D6:…). Escolha-a e aguarde. Se conectar em outra coisa por engano, dá erro — é só tentar de novo.
           {semBt ? (
             <div style={{ ...S.aviso, marginTop: 10, marginBottom: 0 }}>
               Este navegador não imprime por Bluetooth. Use o <strong>Chrome no Android</strong> — iPhone não tem suporte.
