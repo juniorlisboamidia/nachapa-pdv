@@ -29,6 +29,31 @@ const GUIA_PASSOS = [
     chips: ['Área do Colaborador', 'Login por WhatsApp'] },
 ]
 
+// Etiquetas — solução de problemas (impressão Bluetooth Niimbot B1). O 1º item é o que mais
+// pega na prática (o app da Niimbot disputando a única conexão da impressora).
+const PROBLEMAS_ETIQUETA = [
+  {
+    q: 'A impressora não aparece no seletor / não conecta',
+    a: [
+      'A B1 aceita UMA conexão Bluetooth por vez. Se ela estiver conectada ou pareada no app da Niimbot (ou no Bluetooth do próprio aparelho), ela fica ocupada e para de anunciar o nome — aí o navegador não a encontra. É a causa nº 1.',
+      'Como resolver:',
+      '1. Feche o app da Niimbot (se preciso, Ajustes › Apps › Niimbot › Forçar parada).',
+      '2. Em Ajustes › Bluetooth, se a "B1-…" estiver pareada, toque nela e Desemparelhar / Esquecer.',
+      '3. Desligue e ligue a B1 (ela volta livre, anunciando o nome).',
+      '4. Mantenha o Bluetooth e a Localização ligados; abra o link e toque em "Conectar impressora".',
+      'Regra de ouro: use a B1 só pelo nosso link, nunca pelo app da Niimbot ao mesmo tempo.',
+    ],
+  },
+  {
+    q: 'A impressão sai apagada / falhada',
+    a: ['Aumente a Densidade em Etiquetas › Configuração (o padrão é 4; suba para 5). Textos pequenos já saem em negrito automaticamente para não falhar na impressão térmica.'],
+  },
+  {
+    q: 'Não conecta no iPhone',
+    a: ['O iPhone não tem Bluetooth no navegador (limitação da Apple — vale para todos os navegadores do iOS). Use o Chrome no Android, ou um computador com Bluetooth.'],
+  },
+]
+
 // Ícone de foguete (mesmo desenho do antigo ChkIcon('rocket') do Checklist) — cabeçalho do guia.
 function IconeFoguete({ size = 20 }) {
   const p = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round' }
@@ -67,7 +92,7 @@ export default function CentralAjuda() {
       <div className="page-header">
         <div>
           <h1>Central de Ajuda</h1>
-          <div className="page-header-sub">Guia inicial do Checklist Inteligente — os primeiros passos pra colocar a operação pra rodar.</div>
+          <div className="page-header-sub">Guia do Checklist Inteligente e solução de problemas das Etiquetas.</div>
         </div>
       </div>
 
@@ -104,6 +129,24 @@ export default function CentralAjuda() {
             </div>
           )
         })}
+      </div>
+
+      {/* Etiquetas — Solução de problemas (accordion nativo <details>, sem estado). */}
+      <div className="page-header" style={{ marginTop: 28 }}>
+        <div>
+          <h1 style={{ fontSize: 20 }}>Etiquetas — Solução de problemas</h1>
+          <div className="page-header-sub">Impressão por Bluetooth (Niimbot B1).</div>
+        </div>
+      </div>
+      <div style={{ display: 'grid', gap: 10 }}>
+        {PROBLEMAS_ETIQUETA.map((p) => (
+          <details key={p.q} className="table-card" style={{ padding: '12px 16px' }}>
+            <summary style={{ fontWeight: 700, fontSize: 14, cursor: 'pointer' }}>{p.q}</summary>
+            <div style={{ marginTop: 8, fontSize: 13.5, lineHeight: 1.6, color: 'var(--app-text-2, #555)' }}>
+              {p.a.map((linha, i) => <p key={i} style={{ margin: '5px 0' }}>{linha}</p>)}
+            </div>
+          </details>
+        ))}
       </div>
     </div>
   )
