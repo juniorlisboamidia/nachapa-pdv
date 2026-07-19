@@ -488,50 +488,51 @@ export default function EtiquetasQuiosque() {
               Adicionar à fila
             </button>
           </div>
+        </div>
+      )}
 
-          {/* Fila de impressão: independente do item aberto agora — permite montar
-              vários itens (trocando de "escolher" a cada um) e mandar a impressora
-              rodar sozinha, sem parar em cada etiqueta pra confirmar a próxima. */}
-          <div style={S.filaCard}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: fila.length ? 4 : 0 }}>
-              <strong style={{ fontSize: 13 }}>
-                Fila de impressão · {fila.length} {fila.length === 1 ? 'item' : 'itens'}
-              </strong>
-              <button type="button" disabled={imprimindoFila || fila.length === 0} onClick={limparFila}
-                style={{ ...S.botao(false), padding: '6px 10px', fontSize: 12, opacity: (imprimindoFila || fila.length === 0) ? 0.5 : 1 }}>
-                Limpar
-              </button>
-            </div>
-
-            {fila.length === 0 ? (
-              <p style={{ fontSize: 13, color: '#6b6f75', margin: '8px 0 0' }}>Nenhum item na fila ainda.</p>
-            ) : (
-              <div>
-                {fila.map((f) => (
-                  <div key={f.id} style={S.filaLinha}>
-                    <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {f.nome}
-                    </span>
-                    <span style={{ color: '#6b6f75', flexShrink: 0 }}>{CONS_LABEL[f.conservacao] || f.conservacao}</span>
-                    <span style={{ fontWeight: 700, flexShrink: 0 }}>{f.copias}×</span>
-                    <button type="button" disabled={imprimindoFila} onClick={() => removerDaFila(f.id)}
-                      style={{ border: 'none', background: 'none', color: '#c33', fontSize: 12, fontWeight: 700, flexShrink: 0, opacity: imprimindoFila ? 0.5 : 1 }}>
-                      Remover
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <button type="button" disabled={imprimindoFila || fila.length === 0} onClick={imprimirSequencia}
-              style={{
-                width: '100%', marginTop: 12, padding: 14, borderRadius: 10, border: 'none',
-                background: '#0e1319', color: '#eab802', fontSize: 14, fontWeight: 800,
-                opacity: (imprimindoFila || fila.length === 0) ? 0.5 : 1,
-              }}>
-              {imprimindoFila ? 'Imprimindo fila…' : 'Imprimir sequência'}
+      {/* Fila de impressão: FORA do `item ? (...) : (...)` de propósito (espelha
+          "Sequência de impressão" em AbaItens, Etiquetas.jsx) — independente do item
+          aberto agora, permite montar vários itens (trocando de "escolher" a cada um)
+          e mandar a impressora rodar sozinha, sem parar em cada etiqueta pra confirmar
+          a próxima. Também precisa continuar visível/limpável ao voltar pra lista.
+          Só condicionado a ter itens: na lista vazia não há nada pra mostrar aqui. */}
+      {fila.length > 0 && (
+        <div style={S.filaCard}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
+            <strong style={{ fontSize: 13 }}>
+              Fila de impressão · {fila.length} {fila.length === 1 ? 'item' : 'itens'}
+            </strong>
+            <button type="button" disabled={imprimindoFila} onClick={limparFila}
+              style={{ ...S.botao(false), padding: '6px 10px', fontSize: 12, opacity: imprimindoFila ? 0.5 : 1 }}>
+              Limpar
             </button>
           </div>
+
+          <div>
+            {fila.map((f) => (
+              <div key={f.id} style={S.filaLinha}>
+                <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {f.nome}
+                </span>
+                <span style={{ color: '#6b6f75', flexShrink: 0 }}>{CONS_LABEL[f.conservacao] || f.conservacao}</span>
+                <span style={{ fontWeight: 700, flexShrink: 0 }}>{f.copias}×</span>
+                <button type="button" disabled={imprimindoFila} onClick={() => removerDaFila(f.id)}
+                  style={{ border: 'none', background: 'none', color: '#c33', fontSize: 12, fontWeight: 700, flexShrink: 0, opacity: imprimindoFila ? 0.5 : 1 }}>
+                  Remover
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <button type="button" disabled={imprimindoFila} onClick={imprimirSequencia}
+            style={{
+              width: '100%', marginTop: 12, padding: 14, borderRadius: 10, border: 'none',
+              background: '#0e1319', color: '#eab802', fontSize: 14, fontWeight: 800,
+              opacity: imprimindoFila ? 0.5 : 1,
+            }}>
+            {imprimindoFila ? 'Imprimindo fila…' : 'Imprimir sequência'}
+          </button>
         </div>
       )}
 
