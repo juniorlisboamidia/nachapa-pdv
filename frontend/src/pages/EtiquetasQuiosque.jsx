@@ -38,16 +38,19 @@ const KIOSK_CSS = `
 .etq-item{cursor:pointer;transition:transform .1s ease,box-shadow .18s ease,border-color .18s ease}
 .etq-item:hover{border-color:#d8ca9a;box-shadow:0 4px 12px rgba(14,19,25,.08)}
 .etq-item:active{transform:scale(.995)}
-.etq-btn:focus-visible,.etq-item:focus-visible{outline:2px solid #eab802;outline-offset:2px}
+.etq-opcao{cursor:pointer;transition:transform .1s ease,border-color .18s ease,box-shadow .18s ease}
+.etq-opcao:hover{border-color:#d8ca9a}
+.etq-opcao:active{transform:scale(.995)}
+.etq-btn:focus-visible,.etq-item:focus-visible,.etq-opcao:focus-visible{outline:2px solid #eab802;outline-offset:2px}
 .etq-busca:focus{outline:none;border-color:#eab802;box-shadow:0 0 0 3px rgba(234,184,2,.18)}
-@media(prefers-reduced-motion:reduce){.etq-btn,.etq-item{transition:none}.etq-btn:active,.etq-item:active{transform:none}}
+@media(prefers-reduced-motion:reduce){.etq-btn,.etq-item,.etq-opcao{transition:none}.etq-btn:active,.etq-item:active,.etq-opcao:active{transform:none}}
 `
 
 const S = {
   aviso: { background: '#fee', border: '1px solid #fcc', borderRadius: 8, padding: 12, marginBottom: 12, fontSize: 13 },
   // Amarelo, não vermelho: nada quebrou, é a tela contando o que fez com a pendência.
   nota: { background: '#fffbe6', border: '1px solid #f0dd8a', borderRadius: 8, padding: 12, marginBottom: 12, fontSize: 13 },
-  rotulo: { fontSize: 12, fontWeight: 700, letterSpacing: '.04em' },
+  rotulo: { fontSize: 11, fontWeight: 800, letterSpacing: '.06em', color: '#7a7268' },
   opcao: (on) => ({
     padding: 13, borderRadius: 10, border: on ? '2px solid #eab802' : '1px solid #e6e0d2',
     background: on ? '#fffdf3' : '#fff', textAlign: 'left', fontSize: 15, width: '100%',
@@ -59,6 +62,11 @@ const S = {
   }),
   campoNumero: {
     padding: 12, borderRadius: 10, border: '1px solid #e6e0d2', fontSize: 16, width: 90,
+  },
+  // Botão −/+ do stepper de cópias: quadrado grande (alvo de toque ≥ 44).
+  passo: {
+    width: 50, height: 50, borderRadius: 12, border: '1px solid #e6e0d2', background: '#fff',
+    color: '#0e1319', fontSize: 24, fontWeight: 700, lineHeight: 1, flexShrink: 0,
   },
   // Card "Fila de impressão": borda simples pra se destacar do resto da 2ª tela sem
   // competir com o botão principal ("Imprimir agora"), que continua sendo a ação óbvia.
@@ -531,37 +539,54 @@ export default function EtiquetasQuiosque() {
           )}
 
           <label style={S.rotulo}>CONSERVAÇÃO</label>
-          <div style={{ display: 'grid', gap: 6, margin: '6px 0 14px' }}>
+          <div style={{ display: 'grid', gap: 6, margin: '7px 0 16px' }}>
             {dados.regras.map((r) => (
-              <button key={r.conservacao} type="button" onClick={() => mudarConservacao(r.conservacao)}
+              <button key={r.conservacao} type="button" onClick={() => mudarConservacao(r.conservacao)} className="etq-opcao"
                 style={S.opcao(conservacao === r.conservacao)}>
                 {CONS_LABEL[r.conservacao] || r.conservacao} · {r.tempLabel}
               </button>
             ))}
           </div>
 
+          {/* Validade em destaque: é o resultado que importa (e o motivo da etiqueta
+              existir). Callout dourado com o ícone de calendário puxa o olho pra data. */}
           {validoAte && (
-            <p style={{ fontSize: 14, marginBottom: 14 }}>
-              Vence em <strong>{validoAte.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}</strong>{' '}
-              ({dias} dia{dias > 1 ? 's' : ''})
-            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#fffdf3', border: '1px solid #f0e4b0', borderRadius: 12, padding: '11px 14px', marginBottom: 16 }}>
+              <IconeCalendario />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.06em', color: '#9a7d00' }}>VALIDADE (PRÉVIA)</div>
+                <div style={{ fontSize: 15.5, fontWeight: 700, marginTop: 1 }}>
+                  {validoAte.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                  <span style={{ color: C.muted, fontWeight: 600 }}> · {dias} dia{dias > 1 ? 's' : ''}</span>
+                </div>
+              </div>
+            </div>
           )}
 
           <label style={S.rotulo}>QUEM MANIPULOU</label>
-          <div style={{ display: 'grid', gap: 6, margin: '6px 0 16px' }}>
+          <div style={{ display: 'grid', gap: 6, margin: '7px 0 16px' }}>
             {dados.funcionarios.map((f) => (
-              <button key={f.id} type="button" onClick={() => mudarResponsavel(f.id)}
-                style={S.opcao(responsavelId === f.id)}>
-                {f.nome} {f.presente && <span style={{ fontSize: 11, color: '#0a0' }}>· no turno</span>}
+              <button key={f.id} type="button" onClick={() => mudarResponsavel(f.id)} className="etq-opcao"
+                style={{ ...S.opcao(responsavelId === f.id), display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.nome}</span>
+                {f.presente && (
+                  <span style={{ flexShrink: 0, fontSize: 10.5, fontWeight: 700, color: '#15803d', background: '#eafaef', border: '1px solid #bfe3c6', borderRadius: 999, padding: '2px 8px' }}>
+                    no turno
+                  </span>
+                )}
               </button>
             ))}
           </div>
 
           <label style={S.rotulo}>CÓPIAS</label>
-          <div style={{ margin: '6px 0 16px' }}>
+          {/* Stepper −/+: alvos grandes de tocar com a mão ocupada, sem depender do
+              teclado do tablet. O campo continua editável no meio (clamp 1–50). */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '7px 0 18px' }}>
+            <button type="button" onClick={() => setCopias((c) => Math.max(1, c - 1))} className="etq-btn" aria-label="Menos uma cópia" style={S.passo}>−</button>
             <input type="number" min={1} max={50} value={copias}
               onChange={(e) => setCopias(Math.min(50, Math.max(1, parseInt(e.target.value, 10) || 1)))}
-              style={S.campoNumero} />
+              style={{ ...S.campoNumero, width: 76, textAlign: 'center', fontWeight: 700 }} />
+            <button type="button" onClick={() => setCopias((c) => Math.min(50, c + 1))} className="etq-btn" aria-label="Mais uma cópia" style={S.passo}>+</button>
           </div>
 
           <div style={{ display: 'flex', gap: 8 }}>
@@ -635,6 +660,10 @@ export default function EtiquetasQuiosque() {
           onFechar={() => setVerGuia(false)}
         />
       )}
+
+      <footer style={{ textAlign: 'center', marginTop: 28, paddingTop: 16, borderTop: `1px solid ${C.border}`, fontSize: 12.5, color: C.muted }}>
+        Feito caprichosamente por <strong style={{ color: C.ink, fontWeight: 700 }}>Na Chapa Food Marketing</strong> 🔥
+      </footer>
       </div>{/* /container centralizado */}
 
       {/* Fora da tela, não `display:none`: é do MESMO canvas que sai o bitmap
@@ -677,6 +706,17 @@ function IconeBusca() {
       strokeLinecap="round" strokeLinejoin="round">
       <circle cx="11" cy="11" r="7" />
       <path d="m21 21-4.35-4.35" />
+    </svg>
+  )
+}
+
+// Calendário do callout de validade (dourado escurecido pra ler no fundo creme claro).
+function IconeCalendario({ size = 20, color = '#9a7d00' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <path d="M16 2v4M8 2v4M3 10h18" />
     </svg>
   )
 }
