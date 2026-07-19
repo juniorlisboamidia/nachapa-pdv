@@ -10,6 +10,7 @@ import Toast from '../components/Toast'
 import { desenharEtiqueta, dadosExemplo, MODELOS, camposDe } from '../lib/etiquetaCanvas'
 import { bluetoothDisponivel, conectar, conectado, imprimir, LARGURA_PX, calibracao, setCalibracao } from '../lib/niimbotB1'
 import { formatarCnpj } from '../lib/cnpj'
+import { CONS_LABEL } from '../lib/etiquetaLabels'
 
 // Presets de altura do rolo (mm) oferecidos no select — "Personalizar" abre um input livre.
 const ALTURA_PRESETS = [30, 40, 50]
@@ -24,16 +25,6 @@ const TABS = [
 ]
 const TAB_IDS = TABS.map((t) => t.id)
 
-// A API só devolve o código da conservação (enum ConservacaoTipo) — os rótulos
-// de exibição ficam no front.
-const CONS_LABEL = {
-  CONGELADO: 'Congelado',
-  RESFRIADO_0_4: 'Refrigerado',
-  RESFRIADO_4_6: 'Resfriado',
-  AMBIENTE: 'Ambiente Seco',
-  DESCONGELADO: 'Descongelado',
-  ABERTO: 'Produto aberto',
-}
 // Ordem fixa de exibição (a temperatura sai da coluna própria `tempLabel`, não do nome).
 const CONS_ORDER = ['CONGELADO', 'RESFRIADO_0_4', 'RESFRIADO_4_6', 'AMBIENTE', 'DESCONGELADO', 'ABERTO']
 const ordenarCons = (rs) => [...rs].sort((a, b) => CONS_ORDER.indexOf(a.conservacao) - CONS_ORDER.indexOf(b.conservacao))

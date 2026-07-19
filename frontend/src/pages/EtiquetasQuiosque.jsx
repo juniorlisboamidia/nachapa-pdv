@@ -10,11 +10,7 @@ import { useParams } from 'react-router-dom'
 import api from '../services/api'
 import { desenharEtiqueta } from '../lib/etiquetaCanvas'
 import { bluetoothDisponivel, conectar, conectado, imprimir } from '../lib/niimbotB1'
-
-const CONS_LABEL = {
-  CONGELADO: 'Congelado', RESFRIADO_0_4: 'Resfriado', RESFRIADO_4_6: 'Resfriado',
-  AMBIENTE: 'Ambiente', DESCONGELADO: 'Descongelado', ABERTO: 'Aberto',
-}
+import { CONS_LABEL } from '../lib/etiquetaLabels'
 
 const erroDa = (e, fallback) => e?.response?.data?.error || e?.message || fallback
 
