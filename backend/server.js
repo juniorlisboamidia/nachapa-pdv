@@ -6719,10 +6719,14 @@ app.put('/api/ponto/colaboradores/:id/jornada', async (req, res) => {
 });
 
 // ===== Dispositivos (tablets) (ADMIN) =====
+// Escopados por `tipo` (PONTO aqui, ETIQUETA no bloco irmão perto de Etiquetas):
+// cada tela só lista/cria/apaga os aparelhos do seu papel — um aparelho de etiqueta
+// não pode ser apagado pela tela de ponto e vice-versa (ver DELETE, deleteMany
+// com o filtro no where; 0 linhas afetadas = 404, não silencioso).
 app.get('/api/ponto/dispositivos', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
   try {
-    const ds = await prisma.dispositivo.findMany({ orderBy: { criadoEm: 'asc' } });
+    const ds = await prisma.dispositivo.findMany({ where: { tipo: 'PONTO' }, orderBy: { criadoEm: 'asc' } });
     res.json(ds.map((d) => ({ id: d.id, nome: d.nome, token: d.token, ativo: d.ativo, ultimaSync: d.ultimaSync, ehColetor: !!d.serialColetor })));
   } catch (err) { console.error('[ponto/dispositivos GET]', err); res.status(500).json({ error: 'Erro ao carregar dispositivos.' }); }
 });
@@ -6731,14 +6735,46 @@ app.post('/api/ponto/dispositivos', async (req, res) => {
   try {
     const nome = typeof req.body?.nome === 'string' ? req.body.nome.trim().slice(0, 60) : '';
     if (!nome) return res.status(400).json({ error: 'Informe o nome do dispositivo.' });
-    const d = await prisma.dispositivo.create({ data: { nome, token: randomBytes(12).toString('base64url') } });
+    const d = await prisma.dispositivo.create({ data: { nome, token: randomBytes(12).toString('base64url'), tipo: 'PONTO' } });
     res.status(201).json({ id: d.id, nome: d.nome, token: d.token, ativo: d.ativo });
   } catch (err) { console.error('[ponto/dispositivos POST]', err); res.status(500).json({ error: 'Erro ao criar o dispositivo.' }); }
 });
 app.delete('/api/ponto/dispositivos/:id', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
-  try { await prisma.dispositivo.delete({ where: { id: parseInt(req.params.id, 10) } }); res.json({ ok: true }); }
-  catch (err) { console.error('[ponto/dispositivos DELETE]', err); res.status(500).json({ error: 'Erro ao excluir.' }); }
+  try {
+    const { count } = await prisma.dispositivo.deleteMany({ where: { id: parseInt(req.params.id, 10), tipo: 'PONTO' } });
+    if (!count) return res.status(404).json({ error: 'Dispositivo não encontrado.' });
+    res.json({ ok: true });
+  } catch (err) { console.error('[ponto/dispositivos DELETE]', err); res.status(500).json({ error: 'Erro ao excluir.' }); }
+});
+
+// ===== Dispositivos de Etiquetas (tablets da cozinha) (ADMIN) =====
+// Espelha o bloco de cima (mesma auth, mesma geração de token), escopado a ETIQUETA.
+// empresaId NÃO é passado à mão em nenhum dos três: a extension do Prisma injeta
+// sozinha porque Dispositivo é model de tenant (mesmo padrão do bloco de ponto).
+app.get('/api/etiquetas/dispositivos', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const ds = await prisma.dispositivo.findMany({ where: { tipo: 'ETIQUETA' }, orderBy: { criadoEm: 'asc' } });
+    res.json(ds.map((d) => ({ id: d.id, nome: d.nome, token: d.token, ativo: d.ativo, ultimaSync: d.ultimaSync })));
+  } catch (err) { console.error('[etiquetas/dispositivos GET]', err); res.status(500).json({ error: 'Erro ao carregar dispositivos.' }); }
+});
+app.post('/api/etiquetas/dispositivos', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const nome = typeof req.body?.nome === 'string' ? req.body.nome.trim().slice(0, 60) : '';
+    if (!nome) return res.status(400).json({ error: 'Informe o nome do dispositivo.' });
+    const d = await prisma.dispositivo.create({ data: { nome, token: randomBytes(12).toString('base64url'), tipo: 'ETIQUETA' } });
+    res.status(201).json({ id: d.id, nome: d.nome, token: d.token, ativo: d.ativo });
+  } catch (err) { console.error('[etiquetas/dispositivos POST]', err); res.status(500).json({ error: 'Erro ao criar o dispositivo.' }); }
+});
+app.delete('/api/etiquetas/dispositivos/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const { count } = await prisma.dispositivo.deleteMany({ where: { id: parseInt(req.params.id, 10), tipo: 'ETIQUETA' } });
+    if (!count) return res.status(404).json({ error: 'Dispositivo não encontrado.' });
+    res.json({ ok: true });
+  } catch (err) { console.error('[etiquetas/dispositivos DELETE]', err); res.status(500).json({ error: 'Erro ao excluir.' }); }
 });
 
 // ===== Marcações + Painel (ADMIN) =====
@@ -7012,12 +7048,17 @@ app.post('/api/ponto/fechamento/sincronizar', async (req, res) => {
 });
 
 // ===== PÚBLICO — tela quiosque do tablet (aberta por token do dispositivo) =====
-async function resolverDispositivo(token) {
-  return prisma.dispositivo.findFirst({ where: { token: String(token), ativo: true } });
+// `tipo` (opcional) escopa por papel: se informado e o dispositivo achado for de
+// outro papel (ex.: token de ETIQUETA batendo em /public/ponto), devolve null —
+// mesmo comportamento de token inválido, pra não vazar "existe mas é de outra área".
+async function resolverDispositivo(token, tipo) {
+  const d = await prisma.dispositivo.findFirst({ where: { token: String(token), ativo: true } });
+  if (d && tipo && d.tipo !== tipo) return null;
+  return d;
 }
 app.get('/api/public/ponto/:token', async (req, res) => {
   try {
-    const disp = await resolverDispositivo(req.params.token);
+    const disp = await resolverDispositivo(req.params.token, 'PONTO');
     if (!disp) return res.status(404).json({ error: 'Dispositivo não autorizado.' });
     const loja = await prisma.empresa.findUnique({ where: { id: disp.empresaId }, select: { nome: true, logoDataUrl: true } });
     res.json({ dispositivo: { nome: disp.nome }, loja: { nome: loja?.nome || 'Loja', logoDataUrl: loja?.logoDataUrl || null }, limiar: PONTO_LIMIAR });
@@ -7027,7 +7068,7 @@ app.get('/api/public/ponto/:token', async (req, res) => {
 // Identifica pelo vetor (matching no servidor).
 app.post('/api/public/ponto/:token/identificar', async (req, res) => {
   try {
-    const disp = await resolverDispositivo(req.params.token);
+    const disp = await resolverDispositivo(req.params.token, 'PONTO');
     if (!disp) return res.status(404).json({ error: 'Dispositivo não autorizado.' });
     const match = await melhorMatchFacial(req.body?.descritor, disp.empresaId);
     if (!match || match.distancia > PONTO_LIMIAR) return res.json({ reconhecido: false });
@@ -7041,7 +7082,7 @@ app.post('/api/public/ponto/:token/identificar', async (req, res) => {
 // Identifica pelo PIN de reserva.
 app.post('/api/public/ponto/:token/identificar-pin', async (req, res) => {
   try {
-    const disp = await resolverDispositivo(req.params.token);
+    const disp = await resolverDispositivo(req.params.token, 'PONTO');
     if (!disp) return res.status(404).json({ error: 'Dispositivo não autorizado.' });
     const pin = String(req.body?.pin ?? '').replace(/\D/g, '');
     if (!pin) return res.status(400).json({ error: 'Informe o PIN.' });
@@ -7055,7 +7096,7 @@ app.post('/api/public/ponto/:token/identificar-pin', async (req, res) => {
 // Registra a marcação (auto-sequência; aceita tipo explícito opcional).
 app.post('/api/public/ponto/:token/registrar', async (req, res) => {
   try {
-    const disp = await resolverDispositivo(req.params.token);
+    const disp = await resolverDispositivo(req.params.token, 'PONTO');
     if (!disp) return res.status(404).json({ error: 'Dispositivo não autorizado.' });
     const funcionarioId = parseInt(req.body?.funcionarioId, 10);
     const func = await prisma.funcionario.findFirst({ where: { id: funcionarioId, empresaId: disp.empresaId, status: 'ATIVO' } });
@@ -7479,7 +7520,7 @@ app.get('/api/etiquetas/historico', async (req, res) => {
 
 app.get('/api/public/etiquetas/:token/bootstrap', async (req, res) => {
   try {
-    const disp = await resolverDispositivo(req.params.token);
+    const disp = await resolverDispositivo(req.params.token, 'ETIQUETA');
     if (!disp) return res.status(404).json({ error: 'Dispositivo não autorizado.' });
     const empresaId = disp.empresaId;
 
@@ -7571,7 +7612,7 @@ async function criarEtiquetaComLote(dados) {
 
 app.post('/api/public/etiquetas/:token/registrar', async (req, res) => {
   try {
-    const disp = await resolverDispositivo(req.params.token);
+    const disp = await resolverDispositivo(req.params.token, 'ETIQUETA');
     if (!disp) return res.status(404).json({ error: 'Dispositivo não autorizado.' });
     const empresaId = disp.empresaId;
     const b = req.body || {};

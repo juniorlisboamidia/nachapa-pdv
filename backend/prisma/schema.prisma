@@ -677,13 +677,16 @@ model PontoRegistro {
   @@index([empresaId, funcionarioId, dataHora])
 }
 
-// Dispositivo (tablet/totem) autorizado a abrir a tela de bater ponto (por token).
+// Dispositivo (tablet/totem) autorizado a abrir a tela de bater ponto OU a de
+// imprimir etiquetas (por token). `tipo` desacopla o papel: um token de PONTO
+// não abre etiquetas, um token de ETIQUETA não abre ponto (ver resolverDispositivo).
 model Dispositivo {
   id            Int      @id @default(autoincrement())
   empresaId     Int
   nome          String
-  token         String   @unique // abre a tela quiosque /ponto/:token (sem login)
+  token         String   @unique // abre a tela quiosque /ponto/:token ou /etiquetas/:token (sem login)
   ativo         Boolean  @default(true)
+  tipo          String   @default("PONTO") // PONTO | ETIQUETA — string simples, não enum
   serialColetor String?  @unique // sn do coletor DIXI (push). NULL nos tablets-quiosque.
   ultimaSync    DateTime?
   criadoEm      DateTime @default(now())

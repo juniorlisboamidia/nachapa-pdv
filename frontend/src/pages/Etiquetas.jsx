@@ -511,10 +511,10 @@ function copiarFallback(texto) {
 // Mostrar o token solto o trataria como um id inofensivo e convidaria a mandá-lo no
 // grupo do WhatsApp.
 //
-// Os aparelhos são os MESMOS do Ponto Facial: um único model Dispositivo, um único
-// token, servindo /ponto/:token e /etiquetas/:token/imprimir. Revogar aqui derruba os
-// dois — daí o aviso explícito na confirmação (o dono não pode descobrir isso
-// quebrando o relógio de ponto da equipe no meio do expediente).
+// Os aparelhos compartilham o model Dispositivo com o Ponto Facial, mas cada token
+// nasce com um `tipo` (PONTO | ETIQUETA) e só serve o seu papel: um aparelho criado
+// aqui não abre a tela de bater ponto, e revogá-lo não mexe no relógio de ponto da
+// equipe (resolverDispositivo recusa o token no papel errado).
 function CardDispositivos({ notify }) {
   const [lista, setLista] = useState([])
   const [loading, setLoading] = useState(true)
@@ -524,12 +524,11 @@ function CardDispositivos({ notify }) {
   const [revogando, setRevogando] = useState(false)
 
   function carregar() {
-    // Endpoints do Ponto Facial (ADMIN) — dispositivo é model de tenant, a extension do
-    // Prisma injeta o empresaId sozinha. Nada de filtrar por loja aqui.
-    api.get('/ponto/dispositivos')
-      // Só tablets de etiqueta (serialColetor NULL). O coletor facial (DIXI) é do Ponto
-      // Facial, não imprime etiqueta — então fica de fora desta lista.
-      .then((r) => setLista(Array.isArray(r.data) ? r.data.filter((d) => !d.ehColetor) : []))
+    // Endpoint próprio de Etiquetas (ADMIN) — já devolve só os dispositivos tipo
+    // ETIQUETA; dispositivo é model de tenant, a extension do Prisma injeta o
+    // empresaId sozinha. Nada de filtrar por loja aqui.
+    api.get('/etiquetas/dispositivos')
+      .then((r) => setLista(Array.isArray(r.data) ? r.data : []))
       .catch((e) => notify(e?.response?.data?.error ?? 'Não foi possível carregar os aparelhos.', 'error'))
       .finally(() => setLoading(false))
   }
@@ -557,7 +556,7 @@ function CardDispositivos({ notify }) {
       // O POST devolve o token do aparelho novo, mas não copiamos automaticamente:
       // escrever na área de transferência sem clique explícito é bloqueado por alguns
       // navegadores e o erro apareceria como se o cadastro tivesse falhado.
-      await api.post('/ponto/dispositivos', { nome: n })
+      await api.post('/etiquetas/dispositivos', { nome: n })
       setNome('')
       notify('Aparelho criado. Use "Copiar link" para levá-lo até o tablet.')
       carregar()
@@ -571,7 +570,7 @@ function CardDispositivos({ notify }) {
   async function revogar(d) {
     setRevogando(true)
     try {
-      await api.delete(`/ponto/dispositivos/${d.id}`)
+      await api.delete(`/etiquetas/dispositivos/${d.id}`)
       setConfirmando(null)
       notify(`"${d.nome}" revogado. O link antigo parou de funcionar.`)
       carregar()
@@ -645,9 +644,7 @@ function CardDispositivos({ notify }) {
                     <td colSpan={3} style={{ background: 'var(--app-bg-soft, #fbf7f7)' }}>
                       <div style={{ fontSize: 13, marginBottom: 8 }}>
                         Revogar <strong>{d.nome}</strong>? O link para de funcionar na hora e o tablet que estiver com ele
-                        aberto para de imprimir.{' '}
-                        <strong>Este mesmo aparelho é usado no Ponto Facial</strong> — se a equipe bate ponto nele, o ponto
-                        para junto e você precisará criar um aparelho novo e reconfigurar o tablet.
+                        aberto para de imprimir. Isto não afeta o Ponto Facial — é um aparelho só de etiquetas.
                       </div>
                       <button type="button" className="btn btn-danger btn-sm" disabled={revogando} onClick={() => revogar(d)}>
                         {revogando ? 'Revogando…' : 'Revogar mesmo assim'}
