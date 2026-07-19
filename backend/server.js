@@ -7538,12 +7538,20 @@ app.get('/api/public/etiquetas/:token/bootstrap', async (req, res) => {
       prisma.funcionario.findMany({ where: { empresaId, status: 'ATIVO' }, orderBy: { nome: 'asc' }, select: { id: true, nome: true, apelido: true } }),
     ]);
 
-    // Quem bateu ponto no expediente corrente aparece primeiro: é quem está na
-    // cozinha agora, e a lista inteira num tablet é lenta de percorrer.
+    // Quem está NO TURNO agora aparece primeiro: é quem está na cozinha, e a lista inteira
+    // num tablet é lenta de percorrer. "No turno" = a ÚLTIMA marcação do expediente é ENTRADA
+    // ou RETORNO_INTERVALO (turno aberto) — não basta ter batido ponto hoje (quem já bateu
+    // SAIDA encerrou). Mesma regra do painel do ponto (/api/ponto/painel).
     const { de, ate } = janelaExpedienteAtual();
-    const presentes = new Set((await prisma.pontoRegistro.findMany({
-      where: { empresaId, invalidada: false, dataHora: { gte: de, lt: ate } }, select: { funcionarioId: true },
-    })).map((r) => r.funcionarioId));
+    const regsPonto = await prisma.pontoRegistro.findMany({
+      where: { empresaId, invalidada: false, dataHora: { gte: de, lt: ate } },
+      orderBy: { dataHora: 'asc' }, select: { funcionarioId: true, tipo: true },
+    });
+    const ultimoTipoPonto = new Map();
+    for (const r of regsPonto) ultimoTipoPonto.set(r.funcionarioId, r.tipo); // asc → a última marcação vence
+    const presentes = new Set(
+      [...ultimoTipoPonto].filter(([, t]) => t === 'ENTRADA' || t === 'RETORNO_INTERVALO').map(([id]) => id),
+    );
 
     const cMap = new Map(cfgs.map((c) => [c.insumoId, c]));
 
