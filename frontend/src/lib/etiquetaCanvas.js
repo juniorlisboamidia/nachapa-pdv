@@ -29,6 +29,17 @@ function ajustar(ctx, texto, max) {
   return t + '…'
 }
 
+// Fonte térmica: a B1 a 203dpi não puxa traço fino pequeno (o texto miúdo não-negrito sai
+// falhado). Então TODA fonte passa por aqui: garante um piso de tamanho e força NEGRITO em
+// tudo que for pequeno (< ~16px), que é onde o traço fino falha. Texto grande (título/data)
+// já sai bem e mantém o peso pedido no `bold` explícito.
+const FONTE_MIN = 10
+function setFonte(ctx, px, k, { bold = false } = {}) {
+  const tam = Math.max(FONTE_MIN, Math.round(px * k))
+  const peso = bold || tam < 16 ? 'bold ' : ''
+  ctx.font = `${peso}${tam}px monospace`
+}
+
 // Traça o caminho de um retângulo de cantos arredondados (selo "MANIPULADO", faixa de
 // conservação). Só monta o path — quem chama decide fill() ou stroke(). arcTo é suportado
 // em todo navegador (mais que ctx.roundRect, que é recente).
@@ -129,11 +140,11 @@ function desenharClassico(ctx, dados, config, dims, k) {
 
   // --- Cabeçalho: razão social + CNPJ (esq) · selo "MANIPULADO" (dir) ---
   ctx.textAlign = 'left'
-  ctx.font = `bold ${Math.round(12 * k)}px monospace`
+  setFonte(ctx, 12, k, { bold: true })
   ctx.fillText(ajustar(ctx, (config?.razaoSocial || '').toUpperCase(), largura * 0.6), M, y + Math.round(2 * k))
   // selo arredondado (contorno), no topo direito, alinhado com a razão social
   const selo = 'MANIPULADO'
-  ctx.font = `bold ${Math.round(8 * k)}px monospace`
+  setFonte(ctx, 8, k, { bold: true })
   const selH = Math.round(15 * k)
   const selW = ctx.measureText(selo).width + Math.round(16 * k)
   caminhoRR(ctx, dir - selW, y, selW, selH, selH / 2)
@@ -149,7 +160,7 @@ function desenharClassico(ctx, dados, config, dims, k) {
   if (campos.cnpj) {
     const idLinha = [config?.cnpj ? `CNPJ ${config.cnpj}` : null, config?.sif ? `SIF ${config.sif}` : null,
       config?.sie ? `SIE ${config.sie}` : null].filter(Boolean).join(' · ')
-    if (idLinha) { ctx.font = `${Math.round(9 * k)}px monospace`; ctx.fillText(ajustar(ctx, idLinha, largura - M * 2), M, y); y += Math.round(14 * k) }
+    if (idLinha) { setFonte(ctx, 9, k); ctx.fillText(ajustar(ctx, idLinha, largura - M * 2), M, y); y += Math.round(14 * k) }
   }
 
   // --- régua separadora ---
@@ -158,17 +169,17 @@ function desenharClassico(ctx, dados, config, dims, k) {
   y += Math.round(11 * k)
 
   // --- Nome do produto — o que a cozinha lê de longe ---
-  ctx.font = `bold ${Math.round(20 * k)}px monospace`
+  setFonte(ctx, 20, k, { bold: true })
   ctx.fillText(ajustar(ctx, (dados.nomeItem || '').toUpperCase(), largura - M * 2), M, y)
   y += Math.round(30 * k)
 
   // --- Campos: rótulo à esquerda, valor alinhado à direita ---
   const linha = (rotulo, valor) => {
     ctx.textAlign = 'left'
-    ctx.font = `${Math.round(9 * k)}px monospace`
+    setFonte(ctx, 9, k)
     ctx.fillText(rotulo, M, y + Math.round(2 * k))
     ctx.textAlign = 'right'
-    ctx.font = `bold ${Math.round(11 * k)}px monospace`
+    setFonte(ctx, 11, k, { bold: true })
     ctx.fillText(ajustar(ctx, valor, largura * 0.5), dir, y + Math.round(1 * k))
     ctx.textAlign = 'left'
     y += Math.round(19 * k)
@@ -188,7 +199,7 @@ function desenharClassico(ctx, dados, config, dims, k) {
     ctx.fillStyle = '#000'; ctx.fill()
     ctx.fillStyle = '#fff'
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-    ctx.font = `bold ${Math.round(12 * k)}px monospace`
+    setFonte(ctx, 12, k, { bold: true })
     ctx.fillText(ajustar(ctx, `${(dados.conservacaoLabel || '').toUpperCase()} · ${(dados.tempLabel || '').toUpperCase()}`, largura - M * 2 - 14), largura / 2, y + bandaH / 2)
     ctx.fillStyle = '#000'; ctx.textAlign = 'left'; ctx.textBaseline = 'top'
     y += bandaH + Math.round(9 * k)
@@ -197,7 +208,7 @@ function desenharClassico(ctx, dados, config, dims, k) {
   }
 
   // --- Rodapé RDC, centralizado ---
-  ctx.font = `${Math.round(8 * k)}px monospace`
+  setFonte(ctx, 8, k)
   ctx.textAlign = 'center'
   ctx.fillText('Conforme RDC 216/2004 (ANVISA)', largura / 2, y)
   ctx.textAlign = 'left'
@@ -207,7 +218,7 @@ function desenharClassico(ctx, dados, config, dims, k) {
   // avançando `y`, sem risco de sobrepor o que já foi desenhado.
   if (campos.instrucoes && campos.instrucoesTexto) {
     y += Math.round(12 * k)
-    ctx.font = `${Math.round(8 * k)}px monospace`
+    setFonte(ctx, 8, k)
     ctx.textAlign = 'center'
     ctx.fillText(ajustar(ctx, campos.instrucoesTexto, largura - M * 2), largura / 2, y)
     ctx.textAlign = 'left'
@@ -224,11 +235,11 @@ function desenharValidade(ctx, dados, config, dims, k) {
   let y = M
 
   // topo: razão social (miúda, à esquerda) + selo de conservação (à direita, opcional)
-  ctx.font = `${Math.round(10 * k)}px monospace`
+  setFonte(ctx, 10, k)
   ctx.textAlign = 'left'
   ctx.fillText(ajustar(ctx, config?.razaoSocial || '', largura * 0.6), M, y)
   if (campos.conservacao) {
-    ctx.font = `bold ${Math.round(10 * k)}px monospace`
+    setFonte(ctx, 10, k, { bold: true })
     ctx.textAlign = 'right'
     ctx.fillText(String(dados.conservacaoLabel || '').toUpperCase(), largura - M, y)
     ctx.textAlign = 'left'
@@ -237,17 +248,17 @@ function desenharValidade(ctx, dados, config, dims, k) {
 
   // centro: "VÁLIDO ATÉ" + data/hora em destaque
   ctx.textAlign = 'center'
-  ctx.font = `${Math.round(11 * k)}px monospace`
+  setFonte(ctx, 11, k)
   ctx.fillStyle = '#555'
   ctx.fillText('VÁLIDO ATÉ', largura / 2, y)
   ctx.fillStyle = '#000'
   y += Math.round(15 * k)
-  ctx.font = `bold ${Math.round(28 * k)}px monospace`
+  setFonte(ctx, 28, k, { bold: true })
   ctx.fillText(fmt(dados.validoAte), largura / 2, y)
   y += Math.round(36 * k)
 
   // nome do item, abaixo da validade
-  ctx.font = `bold ${Math.round(16 * k)}px monospace`
+  setFonte(ctx, 16, k, { bold: true })
   ctx.fillText(ajustar(ctx, dados.nomeItem, largura - M * 2), largura / 2, y)
   ctx.textAlign = 'left'
 
@@ -258,12 +269,12 @@ function desenharValidade(ctx, dados, config, dims, k) {
   if (campos.responsavel) rodapePartes.push(dados.responsavelNome)
   const rodape = rodapePartes.join(' · ')
   const rodapeY = altura - M - Math.round(11 * k)
-  ctx.font = `${Math.round(10 * k)}px monospace`
+  setFonte(ctx, 10, k)
   ctx.fillText(ajustar(ctx, rodape, largura - M * 2), M, rodapeY)
 
   // Instruções de conservação (opcional): uma linha acima do rodapé de base.
   if (campos.instrucoes && campos.instrucoesTexto) {
-    ctx.font = `${Math.round(8 * k)}px monospace`
+    setFonte(ctx, 8, k)
     ctx.fillText(ajustar(ctx, campos.instrucoesTexto, largura - M * 2), M, rodapeY - Math.round(12 * k))
   }
 }
@@ -290,7 +301,7 @@ function desenharLateralQr(ctx, dados, config, dims, k) {
     ctx.fillRect(0, 0, FAIXA, altura)
     ctx.save()
     ctx.fillStyle = '#fff'
-    ctx.font = `bold ${Math.round(13 * k)}px monospace`
+    setFonte(ctx, 13, k, { bold: true })
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.translate(Math.round(FAIXA / 2), Math.round(altura / 2))
@@ -306,12 +317,12 @@ function desenharLateralQr(ctx, dados, config, dims, k) {
   let y = M + Math.round(2 * k)
 
   // cabeçalho: razão social · CNPJ (CNPJ opcional, `campos.cnpj`)
-  ctx.font = `${Math.round(9 * k)}px monospace`
+  setFonte(ctx, 9, k)
   ctx.fillText(ajustar(ctx, [config?.razaoSocial, (campos.cnpj && config?.cnpj) ? `CNPJ ${config.cnpj}` : null].filter(Boolean).join(' · '), larguraConteudo), xConteudo, y)
   y += Math.round(17 * k)
 
   // nome do item
-  ctx.font = `bold ${Math.round(17 * k)}px monospace`
+  setFonte(ctx, 17, k, { bold: true })
   ctx.fillText(ajustar(ctx, dados.nomeItem, larguraConteudo), xConteudo, y)
   y += Math.round(23 * k)
 
@@ -325,9 +336,9 @@ function desenharLateralQr(ctx, dados, config, dims, k) {
   const larguraColEsq = Math.round(larguraConteudo * 0.52) - 10
   const larguraColDir = larguraConteudo - Math.round(larguraConteudo * 0.52) - 4
   const campo = (x, yy, rotulo, valor, wmax) => {
-    ctx.font = `bold ${Math.round(9 * k)}px monospace`
+    setFonte(ctx, 9, k, { bold: true })
     ctx.fillText(rotulo, x, yy)
-    ctx.font = `${Math.round(12 * k)}px monospace`
+    setFonte(ctx, 12, k)
     ctx.fillText(ajustar(ctx, valor, wmax), x, yy + Math.round(13 * k))
   }
   const rowGap = Math.round(33 * k)
@@ -380,7 +391,7 @@ function desenharLateralQr(ctx, dados, config, dims, k) {
     const larguraDisp = qrX - xConteudo - 6
     const yInstr = altura - M - Math.round(10 * k)
     if (larguraDisp > 40 && yInstr > y + Math.round(20 * k)) {
-      ctx.font = `${Math.round(8 * k)}px monospace`
+      setFonte(ctx, 8, k)
       ctx.fillText(ajustar(ctx, campos.instrucoesTexto, larguraDisp), xConteudo, yInstr)
     }
   }
@@ -413,7 +424,7 @@ function desenharCompacto(ctx, dados, config, dims, k) {
 
   // nome, centralizado
   ctx.textAlign = 'center'
-  ctx.font = `bold ${Math.round(14 * k)}px monospace`
+  setFonte(ctx, 14, k, { bold: true })
   ctx.fillText(ajustar(ctx, dados.nomeItem, largura - M * 2), largura / 2, y)
   ctx.textAlign = 'left'
   y += Math.round(20 * k)
@@ -425,11 +436,11 @@ function desenharCompacto(ctx, dados, config, dims, k) {
   // 2 colunas: MANIP | VALIDADE
   const colDirX = largura / 2 + 4
   const larguraCol = largura / 2 - M - 4
-  ctx.font = `bold ${Math.round(9 * k)}px monospace`
+  setFonte(ctx, 9, k, { bold: true })
   ctx.fillText('MANIP', M, y)
   ctx.fillText('VALIDADE', colDirX, y)
   y += Math.round(11 * k)
-  ctx.font = `${Math.round(12 * k)}px monospace`
+  setFonte(ctx, 12, k)
   ctx.fillText(ajustar(ctx, fmt(dados.manipuladoEm), larguraCol), M, y)
   ctx.fillText(ajustar(ctx, fmt(dados.validoAte), larguraCol), colDirX, y)
   y += Math.round(18 * k)
@@ -443,7 +454,7 @@ function desenharCompacto(ctx, dados, config, dims, k) {
     ctx.fillRect(0, y, largura, alturaFaixa)
     ctx.fillStyle = '#fff'
     ctx.textAlign = 'center'
-    ctx.font = `bold ${Math.round(11 * k)}px monospace`
+    setFonte(ctx, 11, k, { bold: true })
     ctx.fillText(ajustar(ctx, `${dados.conservacaoLabel} · ${dados.tempLabel}`, largura - M * 2), largura / 2, y + Math.round(3 * k))
     ctx.textAlign = 'left'
     ctx.fillStyle = '#000'
@@ -461,7 +472,7 @@ function desenharCompacto(ctx, dados, config, dims, k) {
   const rodape = rodapePartes.filter(Boolean).join(' · ')
   const temInstrucoes = campos.instrucoes && campos.instrucoesTexto
   const rodapeY = altura - M - Math.round(9 * k) - (temInstrucoes ? Math.round(10 * k) : 0)
-  ctx.font = `${Math.round(8 * k)}px monospace`
+  setFonte(ctx, 8, k)
   ctx.fillText(ajustar(ctx, rodape, largura - M * 2), M, rodapeY)
   if (temInstrucoes) {
     ctx.textAlign = 'center'
