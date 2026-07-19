@@ -277,10 +277,13 @@ function desenharValidade(ctx, dados, config, dims, k) {
     item(M + padX, largura - M * 2 - padX * 2, 'MANIPULAÇÃO', fmt(dados.manipuladoEm))
   }
 
-  // --- Rodapé: CNPJ formatado (opcional), ancorado na base — sem lote. ---
+  // --- Rodapé: CNPJ formatado (opcional) — sem lote. Fica na base em rolo grande, mas
+  // nunca ANTES do fim do bloco de destaque: em rolo custom pequeno (15–25mm) a base subiria
+  // por cima do bloco, então usamos o mais baixo entre "logo após o bloco" e "a base". ---
   if (campos.cnpj && config?.cnpj) {
+    const rodapeY = Math.max(blocoY + blocoH + Math.round(8 * k), altura - M - Math.round(12 * k))
     setFonte(ctx, 10, k)
-    ctx.fillText(ajustar(ctx, `CNPJ ${formatarCnpj(config.cnpj)}`, largura - M * 2), M, altura - M - Math.round(12 * k))
+    ctx.fillText(ajustar(ctx, `CNPJ ${formatarCnpj(config.cnpj)}`, largura - M * 2), M, rodapeY)
   }
 }
 
