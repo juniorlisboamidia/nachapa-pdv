@@ -11,10 +11,8 @@ const t = (nome, real, esperado) => {
 // Regras como vêm do banco (dias por conservação)
 const regras = [
   { conservacao: 'CONGELADO',     tempLabel: '<= -18 °C',          dias: 90 },
-  { conservacao: 'RESFRIADO_0_4', tempLabel: '0 a 4 °C',           dias: 5  },
-  { conservacao: 'RESFRIADO_4_6', tempLabel: '4 a 6 °C',           dias: 3  },
+  { conservacao: 'RESFRIADO_0_4', tempLabel: '0 a 8 °C',           dias: 5  },
   { conservacao: 'AMBIENTE',      tempLabel: '<= 25 °C',           dias: 30 },
-  { conservacao: 'DESCONGELADO',  tempLabel: '0 a 4 °C',           dias: 1  },
   { conservacao: 'ABERTO',        tempLabel: 'conforme fabricante', dias: 3  },
 ];
 
@@ -27,7 +25,7 @@ const r1 = validadeDe({ manipuladoEmMs: manip, conservacao: 'RESFRIADO_0_4', reg
 t('resfriado 0-4 = +5 dias', iso(r1.validoAte), iso(Date.UTC(2026, 6, 20, 19, 20)));
 t('origem = REGRA', r1.origem, 'REGRA');
 t('dias = 5', r1.dias, 5);
-t('tempLabel vem da regra', r1.tempLabel, '0 a 4 °C');
+t('tempLabel vem da regra', r1.tempLabel, '0 a 8 °C');
 
 console.log('\n== override do item vence a regra ==');
 const r2 = validadeDe({ manipuladoEmMs: manip, conservacao: 'RESFRIADO_0_4', regras, itemConfig: { validadeDias: 3 } });
@@ -44,9 +42,11 @@ const dez = Date.UTC(2026, 11, 30, 19, 20); // 30/12/2026 16:20 BR
 const r4 = validadeDe({ manipuladoEmMs: dez, conservacao: 'RESFRIADO_0_4', regras, itemConfig: null });
 t('30/12 +5d = 04/01/2027', iso(r4.validoAte), iso(Date.UTC(2027, 0, 4, 19, 20)));
 
-console.log('\n== descongelado = 1 dia ==');
-const r5 = validadeDe({ manipuladoEmMs: manip, conservacao: 'DESCONGELADO', regras, itemConfig: null });
-t('+1 dia', iso(r5.validoAte), iso(Date.UTC(2026, 6, 16, 19, 20)));
+console.log('\n== conservações removidas (Descongelado / Resfriado 4-6) são rejeitadas ==');
+for (const c of ['DESCONGELADO', 'RESFRIADO_4_6']) {
+  try { validadeDe({ manipuladoEmMs: manip, conservacao: c, regras, itemConfig: null }); t(`${c} rejeitada`, 'nao lancou', 'lanca'); }
+  catch (e) { t(`${c} rejeitada`, e.http, 400); }
+}
 
 console.log('\n== erros ==');
 try { validadeDe({ manipuladoEmMs: manip, conservacao: 'INEXISTENTE', regras, itemConfig: null }); t('conservacao invalida lanca', 'nao lancou', 'lanca'); }
@@ -68,7 +68,9 @@ for (let i = 0; i < 5000; i++) lotes.add(gerarLote());
 t('6 chars', gerarLote().length, 6);
 t('sem ambiguos (I/O/0/1)', /[IO01]/.test([...lotes].join('')), false);
 t('5000 lotes sem colisao relevante', lotes.size > 4900, true);
-t('6 conservacoes', CONSERVACOES.length, 6);
+t('4 conservacoes ofertadas', CONSERVACOES.length, 4);
+t('Resfriado 4-6 fora das opcoes', CONSERVACOES.includes('RESFRIADO_4_6'), false);
+t('Descongelado fora das opcoes', CONSERVACOES.includes('DESCONGELADO'), false);
 
 console.log('\n== colisaoDeLote (retry do lote) ==');
 // Molde do P2002 REAL deste stack (Prisma 7.8 + adapter-pg): `meta.target` NÃO vem

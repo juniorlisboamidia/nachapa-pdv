@@ -469,7 +469,7 @@ body.sidebar-collapsed .main-area { margin-left: 76px; }
 .badge-orange { background: #fdf6da; color: #a17c00; }
 .badge-red    { background: #fef2f2; color: #dc2626; }
 .badge-gray   { background: #f5f5f5; color: #888; }
-.badge-blue   { background: #fdf6da; color: #a17c00; }
+.badge-blue   { background: #eff6ff; color: #2563eb; }
 .badge-purple { background: #f5f3ff; color: #7c3aed; }
 /* Cinza-escuro (mais forte que .badge-gray) — status "Não realizado" do Histórico geral
    do Painel (Task 4), pra não se confundir com "Em andamento" (.badge-gray). */

@@ -2,7 +2,10 @@
 // Módulo puro: sem Prisma, sem Express — é o que decide a data que vai colada
 // no alimento, então é o que tem teste.
 
-export const CONSERVACOES = ['CONGELADO', 'RESFRIADO_0_4', 'RESFRIADO_4_6', 'AMBIENTE', 'DESCONGELADO', 'ABERTO'];
+// Opções de conservação OFERECIDAS (e válidas para registrar). RESFRIADO_4_6 ('Resfriado')
+// e DESCONGELADO saíram das opções — mas continuam no enum ConservacaoTipo e no CONS_LABEL
+// do front, porque etiquetas ANTIGAS no histórico ainda têm esses valores e precisam exibir.
+export const CONSERVACOES = ['CONGELADO', 'RESFRIADO_0_4', 'AMBIENTE', 'ABERTO'];
 
 const DIA_MS = 24 * 60 * 60 * 1000;
 

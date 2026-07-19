@@ -7271,11 +7271,9 @@ const ETIQUETA_TIPOS_INSUMO = ['INGREDIENTE', 'PRODUCAO_PROPRIA', 'HORTIFRUTI', 
 // precisa que o backend semeie na primeira vez que ela mexer em Etiquetas.
 const ETIQUETA_REGRAS_PADRAO = [
   { conservacao: 'CONGELADO', tempLabel: '<= -18 °C', dias: 90, ordem: 0 },
-  { conservacao: 'RESFRIADO_0_4', tempLabel: '0 a 4 °C', dias: 5, ordem: 1 },
-  { conservacao: 'RESFRIADO_4_6', tempLabel: '4 a 6 °C', dias: 3, ordem: 2 },
-  { conservacao: 'AMBIENTE', tempLabel: '<= 25 °C', dias: 30, ordem: 3 },
-  { conservacao: 'DESCONGELADO', tempLabel: '0 a 4 °C', dias: 1, ordem: 4 },
-  { conservacao: 'ABERTO', tempLabel: 'Conforme fabricante', dias: 3, ordem: 5 },
+  { conservacao: 'RESFRIADO_0_4', tempLabel: '0 a 8 °C', dias: 5, ordem: 1 },
+  { conservacao: 'AMBIENTE', tempLabel: '<= 25 °C', dias: 30, ordem: 2 },
+  { conservacao: 'ABERTO', tempLabel: 'Conforme fabricante', dias: 3, ordem: 3 },
 ];
 
 // Garante config (1 por loja) E as 6 regras de validade na primeira vez que a
