@@ -32,6 +32,22 @@ const S = {
     border: forte ? 'none' : '1px solid #ddd', background: forte ? '#0e1319' : '#fff',
     color: forte ? '#eab802' : '#0e1319',
   }),
+  // Overlay do guia: SEM onClick de fechar aqui — regra do projeto é fechar só por
+  // botão. O card para de propagar o clique (stopPropagation) por segurança, mas o
+  // overlay em si nunca fecha o modal.
+  overlay: {
+    position: 'fixed', inset: 0, background: 'rgba(14,19,25,.65)', zIndex: 50,
+    display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+    padding: 16, overflowY: 'auto',
+  },
+  modal: {
+    background: '#fff', borderRadius: 14, padding: 20, width: '100%', maxWidth: 440,
+    margin: 'auto 0', boxShadow: '0 10px 30px rgba(0,0,0,.25)',
+  },
+  fechar: {
+    border: 'none', background: 'transparent', fontSize: 20, lineHeight: 1,
+    padding: 4, color: '#6b6f75',
+  },
 }
 
 export default function EtiquetasQuiosque() {
@@ -45,6 +61,10 @@ export default function EtiquetasQuiosque() {
   const [busca, setBusca] = useState('')
   const [impressora, setImpressora] = useState('')
   const [imprimindo, setImprimindo] = useState(false)
+  // Guia "Conectar a impressora": modal de passo a passo. `conectandoGuia` é só o
+  // spinner do botão do Passo 3, separado de `imprimindo` (são gestos diferentes).
+  const [verGuia, setVerGuia] = useState(false)
+  const [conectandoGuia, setConectandoGuia] = useState(false)
   // Relógio que ancora a PRÉVIA da validade. Fica em estado e só avança dentro de um
   // efeito porque render tem que ser puro: lendo Date.now() no corpo do componente a
   // data mudava a cada re-render (react-hooks/purity reprova, e com razão). O tablet
@@ -140,15 +160,30 @@ export default function EtiquetasQuiosque() {
     setResponsavelId(id)
   }
 
+  // Retorna true/false além de setar impressora/erro: o guia (Passo 3) precisa saber
+  // se deu certo para se fechar sozinho, sem duplicar a leitura de estado.
   async function conectarImpressora() {
     setErro('')
     try {
       const { nome } = await conectar()
       setImpressora(nome)
+      return true
     } catch (e) {
       setImpressora('')
       setErro(erroDa(e, 'Não foi possível conectar na impressora.'))
+      return false
     }
+  }
+
+  // Chamado pelo botão do Passo 3 do guia — é ELE o gesto do usuário que o Web
+  // Bluetooth exige, então não pode haver nenhum await antes de conectar() dentro de
+  // conectarImpressora(). Sucesso fecha o guia; falha deixa o erro visível nele mesmo
+  // (reusa `erro`/erroDa, que conectarImpressora já preenche).
+  async function tentarConectarNoGuia() {
+    setConectandoGuia(true)
+    const ok = await conectarImpressora()
+    setConectandoGuia(false)
+    if (ok) setVerGuia(false)
   }
 
   // Desenha no canvas SEMPRE a partir do que o servidor devolveu (datas, lote e
@@ -223,7 +258,7 @@ export default function EtiquetasQuiosque() {
           <strong style={{ fontSize: 15 }}>{dados.loja.nome}</strong>
           <div style={{ fontSize: 11, color: '#6b6f75' }}>{dados.dispositivo.nome}</div>
         </div>
-        <button type="button" onClick={conectarImpressora} disabled={semBt}
+        <button type="button" onClick={() => setVerGuia(true)} disabled={semBt}
           style={{ fontSize: 12, padding: '8px 12px', borderRadius: 8, border: '1px solid #ddd', background: '#fff', opacity: semBt ? 0.5 : 1 }}>
           {impressora ? `🖨 ${impressora}` : 'Conectar impressora'}
         </button>
@@ -241,7 +276,7 @@ export default function EtiquetasQuiosque() {
           {/* Reconectar é SEMPRE manual: o toque é o gesto do usuário que o Chrome
               exige para reabrir o seletor de dispositivos. */}
           {!semBt && (
-            <button type="button" onClick={conectarImpressora}
+            <button type="button" onClick={() => setVerGuia(true)}
               style={{ marginTop: 8, fontSize: 13, fontWeight: 700, padding: '8px 12px', borderRadius: 8, border: '1px solid #c66', background: '#fff' }}>
               Reconectar impressora
             </button>
@@ -335,9 +370,105 @@ export default function EtiquetasQuiosque() {
         </div>
       )}
 
+      {verGuia && (
+        <GuiaConexao
+          semBt={semBt}
+          erro={erro}
+          impressora={impressora}
+          conectando={conectandoGuia}
+          onConectar={tentarConectarNoGuia}
+          onFechar={() => setVerGuia(false)}
+        />
+      )}
+
       {/* Fora da tela, não `display:none`: é do MESMO canvas que sai o bitmap
           (canvas.toBlob dentro do imprimir), então ele precisa existir de verdade. */}
       <canvas ref={canvasRef} style={{ position: 'absolute', left: -9999, top: -9999 }} />
+    </div>
+  )
+}
+
+// Ícone de "power" (círculo aberto + traço vertical no centro) — símbolo universal
+// de ligar, ilustra o Passo 1 do guia.
+function IconePower() {
+  return (
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#eab802" strokeWidth="2.3"
+      strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <path d="M12 2v8" />
+      <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
+    </svg>
+  )
+}
+
+// Passo numerado do guia: círculo com o número + título em negrito + descrição menor.
+// Puramente visual, reusa a paleta creme/dourado da própria página do quiosque.
+function PassoGuia({ n, titulo, cor, icone, children }) {
+  return (
+    <div style={{ display: 'flex', gap: 10, marginBottom: 16, alignItems: 'flex-start' }}>
+      <div style={{
+        width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+        background: cor || '#0e1319', color: cor ? '#fff' : '#eab802',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13,
+      }}>
+        {n}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+          <strong style={{ fontSize: 14 }}>{titulo}</strong>
+          {icone}
+        </div>
+        <div style={{ fontSize: 13, color: '#6b6f75', lineHeight: 1.5 }}>{children}</div>
+      </div>
+    </div>
+  )
+}
+
+// Modal "Conectar a impressora": passo a passo do quiosque. Fecha SÓ pelo X ou pelo
+// botão "Fechar" — o overlay não tem onClick de fechar (regra do projeto: modal nunca
+// fecha clicando fora), e o card para a propagação do clique por segurança.
+function GuiaConexao({ semBt, erro, impressora, conectando, onConectar, onFechar }) {
+  return (
+    <div style={S.overlay}>
+      <div style={S.modal} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <h2 style={{ fontSize: 17, fontWeight: 800 }}>Conectar a impressora</h2>
+          <button type="button" onClick={onFechar} aria-label="Fechar" style={S.fechar}>✕</button>
+        </div>
+
+        <PassoGuia n={1} titulo="Ligue a impressora Niimbot" icone={<IconePower />}>
+          Segure o botão de ligar por <strong>3 segundos</strong> e solte. A luz deve acender e ficar <strong>azul</strong>.
+        </PassoGuia>
+
+        <PassoGuia n={2} titulo="Ligue o Bluetooth e a Localização do tablet">
+          No Android, o navegador só encontra a impressora por Bluetooth se a <strong>Localização</strong> também
+          estiver <strong>ligada</strong>. Verifique também que a impressora não está conectada em outro app — se
+          você abriu o app da Niimbot, <strong>feche-o</strong>: a impressora aceita <strong>uma conexão por vez</strong>.
+        </PassoGuia>
+
+        <PassoGuia n={3} titulo='Toque em "Conectar impressora" abaixo'>
+          Vai abrir a lista de aparelhos Bluetooth. Escolha o que começa com <strong>“B1”</strong> e aguarde a confirmação.
+          {semBt ? (
+            <div style={{ ...S.aviso, marginTop: 10, marginBottom: 0 }}>
+              Este navegador não imprime por Bluetooth. Use o <strong>Chrome no Android</strong> — iPhone não tem suporte.
+            </div>
+          ) : (
+            <>
+              <button type="button" onClick={onConectar} disabled={conectando}
+                style={{ ...S.botao(true), width: '100%', marginTop: 10, padding: 14, fontSize: 15, opacity: conectando ? 0.6 : 1 }}>
+                {conectando ? 'Conectando…' : impressora ? `🖨 ${impressora}` : 'Conectar impressora'}
+              </button>
+              {erro && <div style={{ ...S.aviso, marginTop: 10, marginBottom: 0 }}>{erro}</div>}
+            </>
+          )}
+        </PassoGuia>
+
+        <PassoGuia n={4} titulo="Pronto!" cor="#16a34a">
+          Agora é só escolher o <strong>produto</strong>, a <strong>conservação</strong>, o <strong>responsável</strong>{' '}
+          e quantas <strong>cópias</strong> quer imprimir.
+        </PassoGuia>
+
+        <button type="button" onClick={onFechar} style={{ ...S.botao(false), width: '100%', marginTop: 6 }}>Fechar</button>
+      </div>
     </div>
   )
 }
