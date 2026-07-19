@@ -7300,19 +7300,16 @@ app.put('/api/etiquetas/config', async (req, res) => {
     const MODELOS_OK = new Set(['CLASSICO', 'VALIDADE', 'LATERAL_QR', 'COMPACTO']);
     const FONTES_OK = new Set(['NORMAL', 'GRANDE']);
     // Sanitiza os campos impressos na etiqueta (toggles da Config): grava sempre as MESMAS
-    // 6 chaves com o default do contrato — conservacao/responsavel/lote/cnpj default TRUE
-    // (retrocompat: loja sem `campos` já mostrava tudo, então "ausente"≠"desligado" pra
-    // esses 4), instrucoes default FALSE. Sem isso, lixo do body (chaves extras, valores não
-    // booleanos) seria gravado direto no Json e o desenho (etiquetaCanvas.js, que espera
-    // exatamente este contrato) teria que adivinhar tipos na hora de imprimir.
+    // 3 chaves com o default do contrato — conservacao/responsavel/cnpj default TRUE
+    // (retrocompat: loja sem `campos` já mostrava tudo, então "ausente"≠"desligado"). Sem
+    // isso, lixo do body (chaves extras, valores não booleanos) seria gravado direto no
+    // Json e o desenho (etiquetaCanvas.js, que espera exatamente este contrato) teria que
+    // adivinhar tipos na hora de imprimir.
     const c = b.campos && typeof b.campos === 'object' ? b.campos : {};
     const camposSaneados = {
       conservacao: c.conservacao !== false,
       responsavel: c.responsavel !== false,
-      lote: c.lote !== false,
       cnpj: c.cnpj !== false,
-      instrucoes: c.instrucoes === true,
-      instrucoesTexto: typeof c.instrucoesTexto === 'string' ? c.instrucoesTexto.trim().slice(0, 200) : '',
     };
     const { config: atual } = await garantirEtiquetaSetup();
     const config = await prisma.etiquetaConfig.update({

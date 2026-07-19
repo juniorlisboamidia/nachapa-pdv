@@ -9,6 +9,7 @@ import api from '../services/api'
 import Toast from '../components/Toast'
 import { desenharEtiqueta, dadosExemplo, MODELOS, camposDe } from '../lib/etiquetaCanvas'
 import { bluetoothDisponivel, conectar, conectado, imprimir, LARGURA_PX, calibracao, setCalibracao } from '../lib/niimbotB1'
+import { formatarCnpj } from '../lib/cnpj'
 
 // Presets de altura do rolo (mm) oferecidos no select — "Personalizar" abre um input livre.
 const ALTURA_PRESETS = [30, 40, 50]
@@ -48,9 +49,7 @@ const CAMPOS_LISTA = [
   { chave: null, titulo: 'Data e hora de validade *', sub: 'Calculada pela regra de conservação', obrigatorio: true },
   { chave: 'conservacao', titulo: 'Conservação e temperatura', sub: 'Congelado / Refrigerado / Resfriado / Ambiente' },
   { chave: 'responsavel', titulo: 'Responsável pela manipulação', sub: 'Colaborador que preparou' },
-  { chave: 'lote', titulo: 'Lote', sub: 'Gerado automaticamente' },
   { chave: 'cnpj', titulo: 'CNPJ do estabelecimento', sub: 'Identificação no rodapé' },
-  { chave: 'instrucoes', titulo: 'Instruções de conservação', sub: 'Texto livre no rodapé' },
 ]
 
 // Toggle switch simples (pill dourada quando ligada) — não achei um componente de switch
@@ -136,7 +135,7 @@ function AbaConfig({ notify }) {
   // Redesenha a prévia sempre que a config muda — mesmo `desenharEtiqueta` que o quiosque
   // usa para imprimir de verdade (ver comentário no topo de etiquetaCanvas.js): o que
   // aparece aqui é literalmente o que sai no papel. `config` inteiro como dependência
-  // (em vez de listar modelo/fonte/alturaMm/razaoSocial/cnpj/sif/sie um a um) porque `upd`
+  // (em vez de listar modelo/fonte/alturaMm/razaoSocial/cnpj um a um) porque `upd`
   // sempre cria um objeto novo — cobre exatamente esses campos sem risco de esquecer um.
   useEffect(() => {
     if (!config || !previaRef.current) return
@@ -224,9 +223,9 @@ function AbaConfig({ notify }) {
           <div className="table-card" style={{ padding: 16 }}>
             <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Identificação do estabelecimento</h2>
             {/* Só pedimos o que o rodapé da etiqueta imprime de fato (ver etiquetaCanvas.js):
-                razão social, CNPJ, SIF e SIE. O responsável técnico NÃO é impresso hoje, então
-                não é pedido aqui — um campo que a tela coleta e o papel ignora é promessa
-                falsa. A coluna `responsavelTecnico` continua no banco e o PUT /config continua
+                razão social e CNPJ. O responsável técnico NÃO é impresso hoje, então não é
+                pedido aqui — um campo que a tela coleta e o papel ignora é promessa falsa. A
+                coluna `responsavelTecnico` continua no banco e o PUT /config continua
                 aceitando: quando o RT entrar no rótulo, o campo volta sem migration. */}
             <div className="form-group">
               <label className="form-label">Razão social / nome fantasia</label>
@@ -235,17 +234,10 @@ function AbaConfig({ notify }) {
             <div className="form-grid-2">
               <div className="form-group">
                 <label className="form-label">CNPJ</label>
-                <input className="form-input" value={config.cnpj || ''} onChange={(e) => upd('cnpj', e.target.value)} />
-              </div>
-            </div>
-            <div className="form-grid-2">
-              <div className="form-group">
-                <label className="form-label">SIF (inspeção federal)</label>
-                <input className="form-input" value={config.sif || ''} onChange={(e) => upd('sif', e.target.value)} placeholder="Ex.: 4231" />
-              </div>
-              <div className="form-group">
-                <label className="form-label">SIE (inspeção estadual)</label>
-                <input className="form-input" value={config.sie || ''} onChange={(e) => upd('sie', e.target.value)} placeholder="Ex.: 0987" />
+                {/* Máscara ao digitar (formatarCnpj é progressiva, funciona a qualquer
+                    estágio) — o que fica salvo já sai formatado, então o desenho da etiqueta
+                    não depende de reformatar um valor cru vindo do banco. */}
+                <input className="form-input" value={config.cnpj || ''} onChange={(e) => upd('cnpj', formatarCnpj(e.target.value))} />
               </div>
             </div>
           </div>
@@ -328,28 +320,17 @@ function AbaConfig({ notify }) {
               * sempre impressos. Os demais você liga ou desliga — a prévia ao lado atualiza na hora.
             </div>
             {CAMPOS_LISTA.map((item) => (
-              <Fragment key={item.titulo}>
-                <div className="etq-campos-row">
-                  <div className="etq-campos-info">
-                    <div className="etq-campos-titulo">{item.titulo}</div>
-                    <div className="etq-campos-sub">{item.sub}</div>
-                  </div>
-                  <ToggleSwitch
-                    ligado={item.obrigatorio ? true : !!campos[item.chave]}
-                    disabled={item.obrigatorio}
-                    onChange={(v) => updCampo(item.chave, v)}
-                  />
+              <div className="etq-campos-row" key={item.titulo}>
+                <div className="etq-campos-info">
+                  <div className="etq-campos-titulo">{item.titulo}</div>
+                  <div className="etq-campos-sub">{item.sub}</div>
                 </div>
-                {item.chave === 'instrucoes' && campos.instrucoes && (
-                  <input
-                    className="form-input etq-campos-instr"
-                    maxLength={200}
-                    placeholder="Ex.: Manter tampado e ao abrigo da luz."
-                    value={campos.instrucoesTexto}
-                    onChange={(e) => updCampo('instrucoesTexto', e.target.value)}
-                  />
-                )}
-              </Fragment>
+                <ToggleSwitch
+                  ligado={item.obrigatorio ? true : !!campos[item.chave]}
+                  disabled={item.obrigatorio}
+                  onChange={(v) => updCampo(item.chave, v)}
+                />
+              </div>
             ))}
           </div>
         </div>

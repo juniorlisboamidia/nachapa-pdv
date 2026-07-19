@@ -5,6 +5,7 @@
 // desenho — não uma reimplementação paralela que pode divergir.
 import { LARGURA_PX } from './niimbotB1.js'
 import { matrizQr } from './qr.js'
+import { formatarCnpj } from './cnpj.js'
 
 // A B1 imprime a 203 dpi, que arredonda para 8 dots por mm (203/25.4 ≈ 7.99 — a lib usa 8
 // redondo, ver niimbotB1.js). A largura é sempre LARGURA_PX (fixa na cabeça de impressão);
@@ -63,22 +64,19 @@ export function dimensoes(config) {
 
 // Normaliza `config.campos` (Json? — pode vir null/undefined/objeto incompleto de um
 // registro salvo antes desta feature) com os MESMOS defaults do contrato sanitizado no
-// backend (server.js, PUT /etiquetas/config): conservacao/responsavel/lote/cnpj default
-// TRUE — retrocompat, uma loja sem `campos` continua mostrando tudo, como sempre mostrou —
-// e instrucoes default FALSE. Chamada no início de cada `desenhar*` abaixo, para os 4
-// modelos lerem o mesmo objeto normalizado em vez de cada um reimplementar os defaults.
-// Exportada porque a tela de Config (Etiquetas.jsx, card "Campos impressos") também
-// precisa ler `config.campos` com os mesmos defaults, pros toggles refletirem o que já
-// está de fato desenhado — reusar em vez de duplicar a lógica dos defaults nos dois lados.
+// backend (server.js, PUT /etiquetas/config): conservacao/responsavel/cnpj default TRUE —
+// retrocompat, uma loja sem `campos` continua mostrando tudo, como sempre mostrou. Chamada
+// no início de cada `desenhar*` abaixo, para os 4 modelos lerem o mesmo objeto normalizado
+// em vez de cada um reimplementar os defaults. Exportada porque a tela de Config
+// (Etiquetas.jsx, card "Campos impressos") também precisa ler `config.campos` com os
+// mesmos defaults, pros toggles refletirem o que já está de fato desenhado — reusar em vez
+// de duplicar a lógica dos defaults nos dois lados.
 export function camposDe(config) {
   const c = config?.campos && typeof config.campos === 'object' ? config.campos : {}
   return {
     conservacao: c.conservacao !== false,
     responsavel: c.responsavel !== false,
-    lote: c.lote !== false,
     cnpj: c.cnpj !== false,
-    instrucoes: c.instrucoes === true,
-    instrucoesTexto: typeof c.instrucoesTexto === 'string' ? c.instrucoesTexto : '',
   }
 }
 
@@ -93,7 +91,10 @@ export const MODELOS = [
 
 // dados: { nomeItem, tempLabel, conservacaoLabel, manipuladoEm: Date, validoAte: Date,
 //          responsavelNome, lote, qr? }
-// config: { alturaMm, razaoSocial, cnpj, sif, sie, modelo, fonte }
+// config: { alturaMm, razaoSocial, cnpj, modelo, fonte }
+//
+// `lote` não é mais um campo IMPRESSO (ver `camposDe`) — continua em `dados` só porque o
+// QR (LATERAL_QR) usa como dado de rastreio, ver `textoPadraoQr` abaixo.
 //
 // `qr` é OPCIONAL e é um texto (não uma imagem): só o modelo LATERAL_QR usa, gerando a
 // matriz de módulos na hora via `matrizQr` (Task 1, lib/qr.js) — sem imagem pré-carregada,
@@ -155,12 +156,10 @@ function desenharClassico(ctx, dados, config, dims, k) {
   ctx.fillText(selo, dir - selW / 2, y + selH / 2)
   ctx.textAlign = 'left'; ctx.textBaseline = 'top'
   y += Math.round(17 * k)
-  // CNPJ (+ SIF/SIE se houver) numa linha miúda — a linha inteira é togláve por `campos.cnpj`
-  // (SIF/SIE andam junto do CNPJ no contrato, não têm toggle próprio).
-  if (campos.cnpj) {
-    const idLinha = [config?.cnpj ? `CNPJ ${config.cnpj}` : null, config?.sif ? `SIF ${config.sif}` : null,
-      config?.sie ? `SIE ${config.sie}` : null].filter(Boolean).join(' · ')
-    if (idLinha) { setFonte(ctx, 9, k); ctx.fillText(ajustar(ctx, idLinha, largura - M * 2), M, y); y += Math.round(14 * k) }
+  // CNPJ numa linha miúda — toglável por `campos.cnpj`.
+  if (campos.cnpj && config?.cnpj) {
+    const idLinha = `CNPJ ${formatarCnpj(config.cnpj)}`
+    setFonte(ctx, 9, k); ctx.fillText(ajustar(ctx, idLinha, largura - M * 2), M, y); y += Math.round(14 * k)
   }
 
   // --- régua separadora ---
@@ -186,9 +185,8 @@ function desenharClassico(ctx, dados, config, dims, k) {
   }
   linha('MANIPULAÇÃO', fmt(dados.manipuladoEm))
   linha('VALIDADE', fmt(dados.validoAte))
-  // LOTE/RESPONSÁVEL são opcionais: como `linha()` só avança `y` quando é chamada, pular a
-  // chamada já faz o reflow sozinho — sem buraco no layout sequencial.
-  if (campos.lote) linha('LOTE', dados.lote)
+  // RESPONSÁVEL é opcional: como `linha()` só avança `y` quando é chamada, pular a chamada
+  // já faz o reflow sozinho — sem buraco no layout sequencial.
   if (campos.responsavel) linha('RESPONSÁVEL', dados.responsavelNome)
 
   // --- Faixa preta arredondada: conservação · temperatura (branco, centralizado) ---
@@ -212,17 +210,6 @@ function desenharClassico(ctx, dados, config, dims, k) {
   ctx.textAlign = 'center'
   ctx.fillText('Conforme RDC 216/2004 (ANVISA)', largura / 2, y)
   ctx.textAlign = 'left'
-
-  // --- Instruções de conservação (opcional): uma linha centralizada logo abaixo do
-  // rodapé RDC — como o layout aqui é sequencial (y sempre cresce), basta continuar
-  // avançando `y`, sem risco de sobrepor o que já foi desenhado.
-  if (campos.instrucoes && campos.instrucoesTexto) {
-    y += Math.round(12 * k)
-    setFonte(ctx, 8, k)
-    ctx.textAlign = 'center'
-    ctx.fillText(ajustar(ctx, campos.instrucoesTexto, largura - M * 2), largura / 2, y)
-    ctx.textAlign = 'left'
-  }
 }
 
 // VALIDADE — a data de validade é o dado mais importante desta etiqueta (é a pergunta que
@@ -234,48 +221,66 @@ function desenharValidade(ctx, dados, config, dims, k) {
   const M = 8
   let y = M
 
-  // topo: razão social (miúda, à esquerda) + selo de conservação (à direita, opcional)
-  setFonte(ctx, 10, k)
+  // topo: razão social (esq) + conservação (dir, opcional)
   ctx.textAlign = 'left'
+  setFonte(ctx, 12, k)
   ctx.fillText(ajustar(ctx, config?.razaoSocial || '', largura * 0.6), M, y)
   if (campos.conservacao) {
-    setFonte(ctx, 10, k, { bold: true })
+    setFonte(ctx, 12, k, { bold: true })
     ctx.textAlign = 'right'
     ctx.fillText(String(dados.conservacaoLabel || '').toUpperCase(), largura - M, y)
     ctx.textAlign = 'left'
   }
-  y += Math.round(16 * k)
+  y += Math.round(20 * k)
 
-  // centro: "VÁLIDO ATÉ" + data/hora em destaque
+  // centro: "VÁLIDO ATÉ" + data/hora (a maior fonte de todo o desenho) + nome do item,
+  // todos centralizados.
   ctx.textAlign = 'center'
-  setFonte(ctx, 11, k)
+  setFonte(ctx, 12, k)
   ctx.fillStyle = '#555'
   ctx.fillText('VÁLIDO ATÉ', largura / 2, y)
   ctx.fillStyle = '#000'
-  y += Math.round(15 * k)
-  setFonte(ctx, 28, k, { bold: true })
+  y += Math.round(17 * k)
+  setFonte(ctx, 30, k, { bold: true })
   ctx.fillText(fmt(dados.validoAte), largura / 2, y)
-  y += Math.round(36 * k)
-
-  // nome do item, abaixo da validade
-  setFonte(ctx, 16, k, { bold: true })
+  y += Math.round(42 * k)
+  setFonte(ctx, 18, k, { bold: true })
   ctx.fillText(ajustar(ctx, dados.nomeItem, largura - M * 2), largura / 2, y)
   ctx.textAlign = 'left'
+  y += Math.round(30 * k)
 
-  // rodapé: manipulação (sempre) + lote/responsável (opcionais), numa linha só, ancorado
-  // na base
-  const rodapePartes = [`Manip ${fmt(dados.manipuladoEm)}`]
-  if (campos.lote) rodapePartes.push(`Lote ${dados.lote}`)
-  if (campos.responsavel) rodapePartes.push(dados.responsavelNome)
-  const rodape = rodapePartes.join(' · ')
-  const rodapeY = altura - M - Math.round(11 * k)
-  setFonte(ctx, 10, k)
-  ctx.fillText(ajustar(ctx, rodape, largura - M * 2), M, rodapeY)
+  // --- Bloco de destaque: MANIPULAÇÃO + RESPONSÁVEL (opcional) numa moldura fina ---
+  // Antes os dois viviam espremidos numa linha de rodapé; este modelo tem espaço de
+  // sobra (a validade em fonte 30 não usa nem metade da largura da etiqueta), então os
+  // 2 dados que a cozinha mais confunde ("quando foi feito" e "quem fez") ganham fonte
+  // grande e um contorno próprio em vez de ficarem miúdos.
+  const blocoY = y
+  const blocoH = Math.round(50 * k)
+  caminhoRR(ctx, M, blocoY, largura - M * 2, blocoH, Math.round(6 * k))
+  ctx.lineWidth = Math.max(1, Math.round(1 * k))
+  ctx.strokeStyle = '#000'
+  ctx.stroke()
+  const padX = Math.round(10 * k)
+  const item = (x, w, rotulo, valor) => {
+    setFonte(ctx, 11, k)
+    ctx.fillText(rotulo, x, blocoY + Math.round(9 * k))
+    setFonte(ctx, 16, k, { bold: true })
+    ctx.fillText(ajustar(ctx, valor, w), x, blocoY + Math.round(23 * k))
+  }
+  if (campos.responsavel) {
+    // 2 colunas: MANIPULAÇÃO (esq) / RESPONSÁVEL (dir) — cabem lado a lado com sobra.
+    const colW = Math.round((largura - M * 2 - padX * 2 - 8) / 2)
+    item(M + padX, colW, 'MANIPULAÇÃO', fmt(dados.manipuladoEm))
+    item(M + padX + colW + 8, colW, 'RESPONSÁVEL', dados.responsavelNome)
+  } else {
+    // sem responsável, MANIPULAÇÃO sozinha usa a largura toda do bloco.
+    item(M + padX, largura - M * 2 - padX * 2, 'MANIPULAÇÃO', fmt(dados.manipuladoEm))
+  }
 
-  // Instruções de conservação (opcional): uma linha acima do rodapé de base.
-  if (campos.instrucoes && campos.instrucoesTexto) {
-    setFonte(ctx, 8, k)
-    ctx.fillText(ajustar(ctx, campos.instrucoesTexto, largura - M * 2), M, rodapeY - Math.round(12 * k))
+  // --- Rodapé: CNPJ formatado (opcional), ancorado na base — sem lote. ---
+  if (campos.cnpj && config?.cnpj) {
+    setFonte(ctx, 10, k)
+    ctx.fillText(ajustar(ctx, `CNPJ ${formatarCnpj(config.cnpj)}`, largura - M * 2), M, altura - M - Math.round(12 * k))
   }
 }
 
@@ -301,7 +306,7 @@ function desenharLateralQr(ctx, dados, config, dims, k) {
     ctx.fillRect(0, 0, FAIXA, altura)
     ctx.save()
     ctx.fillStyle = '#fff'
-    setFonte(ctx, 13, k, { bold: true })
+    setFonte(ctx, 17, k, { bold: true })
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.translate(Math.round(FAIXA / 2), Math.round(altura / 2))
@@ -317,12 +322,12 @@ function desenharLateralQr(ctx, dados, config, dims, k) {
   let y = M + Math.round(2 * k)
 
   // cabeçalho: razão social · CNPJ (CNPJ opcional, `campos.cnpj`)
-  setFonte(ctx, 9, k)
-  ctx.fillText(ajustar(ctx, [config?.razaoSocial, (campos.cnpj && config?.cnpj) ? `CNPJ ${config.cnpj}` : null].filter(Boolean).join(' · '), larguraConteudo), xConteudo, y)
+  setFonte(ctx, 11, k)
+  ctx.fillText(ajustar(ctx, [config?.razaoSocial, (campos.cnpj && config?.cnpj) ? `CNPJ ${formatarCnpj(config.cnpj)}` : null].filter(Boolean).join(' · '), larguraConteudo), xConteudo, y)
   y += Math.round(17 * k)
 
   // nome do item
-  setFonte(ctx, 17, k, { bold: true })
+  setFonte(ctx, 18, k, { bold: true })
   ctx.fillText(ajustar(ctx, dados.nomeItem, larguraConteudo), xConteudo, y)
   y += Math.round(23 * k)
 
@@ -330,26 +335,25 @@ function desenharLateralQr(ctx, dados, config, dims, k) {
   ctx.fillRect(xConteudo, y, larguraConteudo, 1)
   y += Math.round(13 * k)
 
-  // campos em 2 colunas, bem espaçados: VALIDADE/MANIPULAÇÃO à esquerda, RESPONSÁVEL/LOTE à direita
+  // campos em 2 colunas: linha 1 = VALIDADE (esquerda) | MANIPULAÇÃO (direita); linha 2 =
+  // RESPONSÁVEL (esquerda, opcional). Sem o LOTE (removido), a coluna direita da 2ª linha
+  // fica livre em vez de espremida.
   const colEsqX = xConteudo
   const colDirX = xConteudo + Math.round(larguraConteudo * 0.52)
   const larguraColEsq = Math.round(larguraConteudo * 0.52) - 10
   const larguraColDir = larguraConteudo - Math.round(larguraConteudo * 0.52) - 4
   const campo = (x, yy, rotulo, valor, wmax) => {
-    setFonte(ctx, 9, k, { bold: true })
+    setFonte(ctx, 10, k, { bold: true })
     ctx.fillText(rotulo, x, yy)
-    setFonte(ctx, 12, k)
-    ctx.fillText(ajustar(ctx, valor, wmax), x, yy + Math.round(13 * k))
+    setFonte(ctx, 13, k)
+    ctx.fillText(ajustar(ctx, valor, wmax), x, yy + Math.round(14 * k))
   }
-  const rowGap = Math.round(33 * k)
-  // VALIDADE/MANIPULAÇÃO (esquerda) são sempre desenhadas; RESPONSÁVEL/LOTE (direita) são
-  // opcionais — como as 2 colunas são independentes (não é lista sequencial), desligar um
-  // campo só deixa a célula da direita vazia, sem precisar reflow.
+  const rowGap = Math.round(35 * k)
   campo(colEsqX, y, 'VALIDADE', fmt(dados.validoAte), larguraColEsq)
-  if (campos.responsavel) campo(colDirX, y, 'RESPONSÁVEL', dados.responsavelNome, larguraColDir)
+  campo(colDirX, y, 'MANIPULAÇÃO', fmt(dados.manipuladoEm), larguraColDir)
   y += rowGap
-  campo(colEsqX, y, 'MANIPULAÇÃO', fmt(dados.manipuladoEm), larguraColEsq)
-  if (campos.lote) campo(colDirX, y, 'LOTE', dados.lote, larguraColDir)
+  // RESPONSÁVEL é opcional — só a coluna esquerda da 2ª linha, a direita fica livre.
+  if (campos.responsavel) campo(colEsqX, y, 'RESPONSÁVEL', dados.responsavelNome, larguraColEsq)
 
   // QR no canto inferior direito — payload explícito (`dados.qr`) ou o padrão montado a
   // partir dos próprios dados. Na impressão térmica 203dpi o calor ESPALHA o ponto: se a
@@ -378,21 +382,6 @@ function desenharLateralQr(ctx, dados, config, dims, k) {
   for (let r = 0; r < n; r++) {
     for (let c = 0; c < n; c++) {
       if (m[r][c]) ctx.fillRect(qrX + c * cel, qrY + r * cel, cel, cel)
-    }
-  }
-
-  // Instruções de conservação (opcional): uma linha à esquerda do QR, embaixo, truncada
-  // na largura disponível até o QR (`qrX - xConteudo`). Este é o modelo mais apertado dos
-  // 4 — a faixa lateral já come largura à esquerda (quando ligada) e o QR já ocupa o canto
-  // inferior direito — então, se não sobrar espaço horizontal utilizável (< ~40px) ou
-  // vertical (a linha cairia por cima da última linha de campos, em `y`), OMITIMOS a
-  // instrução em vez de desenhar algo ilegível/sobreposto.
-  if (campos.instrucoes && campos.instrucoesTexto) {
-    const larguraDisp = qrX - xConteudo - 6
-    const yInstr = altura - M - Math.round(10 * k)
-    if (larguraDisp > 40 && yInstr > y + Math.round(20 * k)) {
-      setFonte(ctx, 8, k)
-      ctx.fillText(ajustar(ctx, campos.instrucoesTexto, larguraDisp), xConteudo, yInstr)
     }
   }
 }
@@ -424,61 +413,55 @@ function desenharCompacto(ctx, dados, config, dims, k) {
 
   // nome, centralizado
   ctx.textAlign = 'center'
-  setFonte(ctx, 14, k, { bold: true })
+  setFonte(ctx, 16, k, { bold: true })
   ctx.fillText(ajustar(ctx, dados.nomeItem, largura - M * 2), largura / 2, y)
   ctx.textAlign = 'left'
-  y += Math.round(20 * k)
+  y += Math.round(23 * k)
 
   // régua
   ctx.fillRect(M, y, largura - M * 2, 1)
-  y += Math.round(6 * k)
+  y += Math.round(10 * k)
 
   // 2 colunas: MANIP | VALIDADE
   const colDirX = largura / 2 + 4
   const larguraCol = largura / 2 - M - 4
-  setFonte(ctx, 9, k, { bold: true })
+  setFonte(ctx, 10, k, { bold: true })
   ctx.fillText('MANIP', M, y)
   ctx.fillText('VALIDADE', colDirX, y)
-  y += Math.round(11 * k)
-  setFonte(ctx, 12, k)
+  y += Math.round(13 * k)
+  setFonte(ctx, 13, k)
   ctx.fillText(ajustar(ctx, fmt(dados.manipuladoEm), larguraCol), M, y)
   ctx.fillText(ajustar(ctx, fmt(dados.validoAte), larguraCol), colDirX, y)
-  y += Math.round(18 * k)
+  y += Math.round(14 * k)
 
-  // faixa preta: conservação · temperatura (opcional). O rodapé abaixo é ANCORADO na base
-  // (independente de `y`), então pular a faixa aqui não deixa buraco em cima dele — só
-  // sobra o mesmo espaço em branco que já haveria com o campo ligado numa etiqueta alta.
+  // faixa preta: conservação · temperatura (opcional) — desce mais pro meio da etiqueta
+  // (respiro maior acima dela, em vez de colada nos campos) e é mais alta que antes. O
+  // rodapé abaixo é ANCORADO na base (independente de `y`), então pular a faixa aqui não
+  // deixa buraco em cima dele — só sobra o mesmo espaço em branco que já haveria com o
+  // campo ligado numa etiqueta alta.
+  const yFaixa = Math.max(y, Math.round(altura * 0.42))
   if (campos.conservacao) {
-    const alturaFaixa = Math.round(16 * k)
+    const alturaFaixa = Math.round(22 * k)
     ctx.fillStyle = '#000'
-    ctx.fillRect(0, y, largura, alturaFaixa)
+    ctx.fillRect(0, yFaixa, largura, alturaFaixa)
     ctx.fillStyle = '#fff'
     ctx.textAlign = 'center'
-    setFonte(ctx, 11, k, { bold: true })
-    ctx.fillText(ajustar(ctx, `${dados.conservacaoLabel} · ${dados.tempLabel}`, largura - M * 2), largura / 2, y + Math.round(3 * k))
+    setFonte(ctx, 12, k)
+    ctx.fillText(ajustar(ctx, `${dados.conservacaoLabel} · ${dados.tempLabel}`, largura - M * 2), largura / 2, yFaixa + Math.round(5 * k))
     ctx.textAlign = 'left'
     ctx.fillStyle = '#000'
   }
 
-  // rodapé: loja · CNPJ (opcional) · lote (opcional) · responsável (opcional), numa linha
-  // só, ancorado na base. Instruções (opcional) são uma 2ª linha abaixo dele — como o
-  // rodapé é ancorado na base (não sequencial a partir de `y`), pra abrir espaço pra essa
-  // 2ª linha SEM sobrepor a margem inferior a gente sobe o próprio rodapé (rodapeY) em vez
-  // de tentar empurrar algo para "além" da margem, que sairia do canvas.
+  // rodapé: loja · CNPJ (opcional) · responsável (opcional), numa linha só, ancorado na
+  // base — sem lote, e numa fonte bem maior que antes (era o ponto mais apertado do
+  // modelo).
   const rodapePartes = [config?.razaoSocial || '']
-  if (campos.cnpj && config?.cnpj) rodapePartes.push(`CNPJ ${config.cnpj}`)
-  if (campos.lote) rodapePartes.push(`Lote ${dados.lote}`)
+  if (campos.cnpj && config?.cnpj) rodapePartes.push(`CNPJ ${formatarCnpj(config.cnpj)}`)
   if (campos.responsavel) rodapePartes.push(dados.responsavelNome)
   const rodape = rodapePartes.filter(Boolean).join(' · ')
-  const temInstrucoes = campos.instrucoes && campos.instrucoesTexto
-  const rodapeY = altura - M - Math.round(9 * k) - (temInstrucoes ? Math.round(10 * k) : 0)
-  setFonte(ctx, 8, k)
+  const rodapeY = altura - M - Math.round(13 * k)
+  setFonte(ctx, 11, k)
   ctx.fillText(ajustar(ctx, rodape, largura - M * 2), M, rodapeY)
-  if (temInstrucoes) {
-    ctx.textAlign = 'center'
-    ctx.fillText(ajustar(ctx, campos.instrucoesTexto, largura - M * 2), largura / 2, rodapeY + Math.round(10 * k))
-    ctx.textAlign = 'left'
-  }
 }
 
 // Amostra fictícia para a prévia da Config e o teste de impressão: nenhuma das duas tem
