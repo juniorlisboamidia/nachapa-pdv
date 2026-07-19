@@ -459,10 +459,19 @@ function GuiaConexao({ semBt, erro, impressora, conectando, onConectar, onDiagno
           Segure o botão de ligar por <strong>3 segundos</strong> e solte. A luz deve acender e ficar <strong>azul</strong>.
         </PassoGuia>
 
-        <PassoGuia n={2} titulo="Ligue o Bluetooth e a Localização do tablet">
-          No Android, o navegador só encontra a impressora por Bluetooth se a <strong>Localização</strong> também
-          estiver <strong>ligada</strong>. Verifique também que a impressora não está conectada em outro app — se
-          você abriu o app da Niimbot, <strong>feche-o</strong>: a impressora aceita <strong>uma conexão por vez</strong>.
+        <PassoGuia n={2} titulo="Deixe a impressora LIVRE (fora do app Niimbot)" cor="#dc2626">
+          A B1 aceita <strong>uma conexão por vez</strong>. Se ela estiver conectada/pareada no <strong>app da
+          Niimbot</strong> ou no Bluetooth do aparelho, ela fica <strong>ocupada</strong> e o navegador não
+          consegue usá-la (é o motivo nº 1 de não conectar). Então:
+          <div style={{ marginTop: 6 }}>
+            • <strong>Feche o app da Niimbot.</strong><br />
+            • Em <strong>Ajustes › Bluetooth</strong>, se a “B1-…” estiver pareada, toque nela e <strong>Desemparelhar/Esquecer</strong>.<br />
+            • <strong>Desligue e ligue a B1</strong> (ela volta livre e anunciando o nome).<br />
+            • Mantenha o <strong>Bluetooth</strong> e a <strong>Localização</strong> ligados.
+          </div>
+          <div style={{ marginTop: 6, fontStyle: 'italic' }}>
+            Regra de ouro: use a B1 <strong>só pelo nosso link</strong>, nunca pelo app da Niimbot ao mesmo tempo.
+          </div>
         </PassoGuia>
 
         <PassoGuia n={3} titulo='Toque em "Conectar impressora" abaixo'>
