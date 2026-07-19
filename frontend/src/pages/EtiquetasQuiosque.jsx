@@ -10,7 +10,7 @@ import { useParams } from 'react-router-dom'
 import api from '../services/api'
 import { desenharEtiqueta } from '../lib/etiquetaCanvas'
 import { bluetoothDisponivel, conectar, conectado, imprimir } from '../lib/niimbotB1'
-import { CONS_LABEL } from '../lib/etiquetaLabels'
+import { CONS_LABEL, TIPO_LABEL, TIPO_BADGE, tipoOrdem } from '../lib/etiquetaLabels'
 
 const erroDa = (e, fallback) => e?.response?.data?.error || e?.message || fallback
 
@@ -28,6 +28,18 @@ const S = {
     border: forte ? 'none' : '1px solid #ddd', background: forte ? '#0e1319' : '#fff',
     color: forte ? '#eab802' : '#0e1319',
   }),
+  campoNumero: {
+    padding: 12, borderRadius: 8, border: '1px solid #ddd', fontSize: 16, width: 90,
+  },
+  // Card "Fila de impressão": borda simples pra se destacar do resto da 2ª tela sem
+  // competir com o botão principal ("Imprimir agora"), que continua sendo a ação óbvia.
+  filaCard: {
+    border: '1px solid #e5e0d4', borderRadius: 10, padding: 12, marginTop: 16,
+  },
+  filaLinha: {
+    display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0',
+    borderTop: '1px solid #f0ede3', fontSize: 13,
+  },
   // Overlay do guia: SEM onClick de fechar aqui — regra do projeto é fechar só por
   // botão. O card para de propagar o clique (stopPropagation) por segurança, mas o
   // overlay em si nunca fecha o modal.
@@ -54,6 +66,10 @@ export default function EtiquetasQuiosque() {
   const [item, setItem] = useState(null)
   const [conservacao, setConservacao] = useState('')
   const [responsavelId, setResponsavelId] = useState(null)
+  // Quantas etiquetas idênticas saem no mesmo toque — do item avulso ao "Imprimir
+  // agora"/"Adicionar à fila". Reseta pra 1 ao trocar de item (é específico da
+  // etiqueta, não do operador nem do item).
+  const [copias, setCopias] = useState(1)
   const [busca, setBusca] = useState('')
   const [impressora, setImpressora] = useState('')
   const [imprimindo, setImprimindo] = useState(false)
@@ -77,6 +93,14 @@ export default function EtiquetasQuiosque() {
   const [confirmandoVoltar, setConfirmandoVoltar] = useState(false)
   // Aviso neutro (não é erro): a tela contando que a pendência deixou de valer.
   const [aviso, setAviso] = useState('')
+  // Fila de impressão (espelha `AbaItens` em Etiquetas.jsx, Task 3 do admin): junta
+  // vários itens (de trocas sucessivas de "escolher") pra registrar+imprimir em
+  // sequência, sem ter que esperar cada etiqueta sair da impressora antes de montar
+  // a próxima. `id` local vem de um contador incremental — a fila é só desta sessão
+  // de tela, então não precisa de Date.now()/Math.random() (colisão no mesmo ms).
+  const [fila, setFila] = useState([])
+  const filaSeqRef = useRef(0)
+  const [imprimindoFila, setImprimindoFila] = useState(false)
   const canvasRef = useRef(null)
 
   useEffect(() => {
@@ -103,6 +127,7 @@ export default function EtiquetasQuiosque() {
   function escolher(it) {
     setItem(it)
     setConservacao(it.conservacaoPadrao || '')
+    setCopias(1)
     setPendente(null)
     setConfirmandoVoltar(false)
     setAviso('')
@@ -194,6 +219,23 @@ export default function EtiquetasQuiosque() {
     }, dados.config)
   }
 
+  // Registra a etiqueta de verdade no servidor (que sorteia o lote e recalcula a
+  // validade) e desenha o canvas de impressão a partir do que ele devolveu. Reusada
+  // por "Imprimir agora" (o `item`/conservacao/responsavelId/copias da tela) e por
+  // "Imprimir sequência" (um snapshot da fila por vez) — as duas passam pelo MESMO
+  // registrar→desenhar; só o chamador decide quando de fato chamar `imprimir()`,
+  // porque a fila precisa aguardar cada envio Bluetooth terminar antes do próximo.
+  async function registrarEDesenhar(spec) {
+    const r = await api.post(`/public/etiquetas/${token}/registrar`, {
+      insumoId: spec.avulso ? null : spec.insumoId,
+      nomeAvulso: spec.avulso ? spec.nome : null,
+      conservacao: spec.conservacao, responsavelId: spec.responsavelId, quantidade: spec.copias,
+    })
+    const etiqueta = r.data.etiqueta
+    desenhar(etiqueta)
+    return etiqueta
+  }
+
   async function imprimirEtiqueta() {
     if (!item || !conservacao || !responsavelId) return
     // Checado ANTES de registrar: sem impressora, registrar criaria um rastro de uma
@@ -206,19 +248,14 @@ export default function EtiquetasQuiosque() {
     setErro('')
     setAviso('')
     try {
-      // `pendente` = já registrada e só falta sair no papel: reimprime o mesmo lote.
+      // `pendente` = já registrada e só falta sair no papel: reimprime o mesmo lote
+      // (redesenha porque o canvas fora da tela pode ter sido reaproveitado por uma
+      // impressão de fila desde então). Sem pendência, registra uma nova.
       let etiqueta = pendente
-      if (!etiqueta) {
-        const r = await api.post(`/public/etiquetas/${token}/registrar`, {
-          insumoId: item.avulso ? null : item.insumoId,
-          nomeAvulso: item.avulso ? item.nome : null,
-          conservacao, responsavelId, quantidade: 1,
-        })
-        etiqueta = r.data.etiqueta
-      }
-      desenhar(etiqueta)
+      if (etiqueta) desenhar(etiqueta)
+      else etiqueta = await registrarEDesenhar({ insumoId: item.insumoId, avulso: item.avulso, nome: item.nome, conservacao, responsavelId, copias })
       try {
-        await imprimir(canvasRef.current, { copias: 1 })
+        await imprimir(canvasRef.current, { copias })
       } catch (e) {
         // NÃO tentamos imprimir de novo sozinhos. Depois de uma queda do link,
         // conectado() continua dizendo "true" (a lib só zera no disconnect explícito),
@@ -241,11 +278,79 @@ export default function EtiquetasQuiosque() {
     }
   }
 
+  // "Adicionar à fila": empurra um SNAPSHOT do item/conservação/responsável/cópias
+  // atuais — trocar de item depois não deve alterar o que já está na fila.
+  function adicionarFila() {
+    if (!item || !conservacao || !responsavelId) return
+    filaSeqRef.current += 1
+    setFila((fs) => [...fs, {
+      id: filaSeqRef.current,
+      insumoId: item.insumoId, avulso: !!item.avulso, nome: item.nome,
+      conservacao, responsavelId, copias,
+    }])
+    setAviso('')
+    setErro('')
+  }
+
+  function removerDaFila(id) {
+    setFila((fs) => fs.filter((f) => f.id !== id))
+  }
+
+  function limparFila() {
+    setFila([])
+  }
+
+  // "Imprimir sequência": registra e imprime item por item, EM ORDEM, aguardando
+  // cada `imprimir()` terminar antes do próximo (a impressora Bluetooth não aceita
+  // dois envios ao mesmo tempo). Se um item falhar, PARA — não pula escondendo o
+  // erro. Os que já saíram no papel somem da fila a cada sucesso (não reimprimem se
+  // a pessoa tentar de novo depois de reconectar); os que faltaram continuam lá.
+  // `alvo` é um snapshot da fila no início: itens adicionados durante a corrida
+  // entram só na próxima rodada.
+  async function imprimirSequencia() {
+    if (imprimindoFila || fila.length === 0) return
+    if (!conectado()) {
+      setErro('Conecte a impressora antes de imprimir.')
+      return
+    }
+    setImprimindoFila(true)
+    setErro('')
+    setAviso('')
+    const alvo = fila
+    let feitos = 0
+    try {
+      for (const f of alvo) {
+        try {
+          await registrarEDesenhar(f)
+          await imprimir(canvasRef.current, { copias: f.copias })
+          feitos += 1
+          setFila((fs) => fs.filter((x) => x.id !== f.id))
+        } catch (e) {
+          const msg = erroDa(e, 'Falha ao imprimir.')
+          setErro(feitos > 0
+            ? `${feitos} de ${alvo.length} etiqueta(s) impressa(s) da fila. Parou em "${f.nome}": ${msg}`
+            : `Não foi possível imprimir "${f.nome}" — a fila parou aqui: ${msg}`)
+          return
+        }
+      }
+      setAviso(`${feitos} etiqueta(s) da fila impressa(s) com sucesso.`)
+    } finally {
+      setImprimindoFila(false)
+    }
+  }
+
   if (erroBoot) return <div style={{ padding: 24, textAlign: 'center' }}>{erroBoot}</div>
   if (!dados) return <div style={{ padding: 24, textAlign: 'center' }}>Carregando…</div>
 
-  const itens = dados.itens.filter((i) => !busca || i.nome.toLowerCase().includes(busca.toLowerCase()))
+  // Ordem por tipo (produção própria primeiro — é o que mais usa etiqueta) e, dentro
+  // do tipo, por nome. `.slice()` antes do `.sort()` porque `dados.itens` é o mesmo
+  // array a cada render — ordenar in-place mutaria o estado do bootstrap.
+  const itens = dados.itens
+    .filter((i) => !busca || i.nome.toLowerCase().includes(busca.toLowerCase()))
+    .slice()
+    .sort((a, b) => tipoOrdem(a.tipo) - tipoOrdem(b.tipo) || a.nome.localeCompare(b.nome, 'pt-BR'))
   const podeImprimir = conservacao && responsavelId && !imprimindo
+  const podeAdicionarFila = item && conservacao && responsavelId
 
   return (
     <div style={{ minHeight: '100dvh', background: '#f4f1ea', padding: 16, fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif', color: '#0e1319' }}>
@@ -295,8 +400,15 @@ export default function EtiquetasQuiosque() {
           <div style={{ display: 'grid', gap: 8 }}>
             {itens.map((i) => (
               <button key={i.insumoId} type="button" onClick={() => escolher(i)}
-                style={{ padding: 14, borderRadius: 10, border: '1px solid #ddd', background: '#fff', textAlign: 'left', fontSize: 15, fontWeight: 600 }}>
-                {i.nome}
+                style={{
+                  padding: 14, borderRadius: 10, border: '1px solid #ddd', background: '#fff',
+                  textAlign: 'left', fontSize: 15, fontWeight: 600,
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+                }}>
+                <span>{i.nome}</span>
+                <span className={'badge ' + (TIPO_BADGE[i.tipo] || 'badge-gray')} style={{ flexShrink: 0 }}>
+                  {TIPO_LABEL[i.tipo] || i.tipo}
+                </span>
               </button>
             ))}
             {busca && (
@@ -359,10 +471,67 @@ export default function EtiquetasQuiosque() {
             ))}
           </div>
 
-          <button type="button" disabled={!podeImprimir} onClick={imprimirEtiqueta}
-            style={{ width: '100%', padding: 16, borderRadius: 10, border: 'none', background: '#0e1319', color: '#eab802', fontSize: 16, fontWeight: 800, opacity: podeImprimir ? 1 : 0.5 }}>
-            {imprimindo ? 'Imprimindo…' : pendente ? 'Imprimir novamente' : 'Imprimir etiqueta'}
-          </button>
+          <label style={S.rotulo}>CÓPIAS</label>
+          <div style={{ margin: '6px 0 16px' }}>
+            <input type="number" min={1} max={50} value={copias}
+              onChange={(e) => setCopias(Math.min(50, Math.max(1, parseInt(e.target.value, 10) || 1)))}
+              style={S.campoNumero} />
+          </div>
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" disabled={!podeImprimir} onClick={imprimirEtiqueta}
+              style={{ flex: 1, padding: 16, borderRadius: 10, border: 'none', background: '#0e1319', color: '#eab802', fontSize: 16, fontWeight: 800, opacity: podeImprimir ? 1 : 0.5 }}>
+              {imprimindo ? 'Imprimindo…' : pendente ? 'Imprimir novamente' : 'Imprimir agora'}
+            </button>
+            <button type="button" disabled={!podeAdicionarFila} onClick={adicionarFila}
+              style={{ flex: 1, padding: 16, borderRadius: 10, border: '1px solid #ddd', background: '#fff', color: '#0e1319', fontSize: 16, fontWeight: 800, opacity: podeAdicionarFila ? 1 : 0.5 }}>
+              Adicionar à fila
+            </button>
+          </div>
+
+          {/* Fila de impressão: independente do item aberto agora — permite montar
+              vários itens (trocando de "escolher" a cada um) e mandar a impressora
+              rodar sozinha, sem parar em cada etiqueta pra confirmar a próxima. */}
+          <div style={S.filaCard}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: fila.length ? 4 : 0 }}>
+              <strong style={{ fontSize: 13 }}>
+                Fila de impressão · {fila.length} {fila.length === 1 ? 'item' : 'itens'}
+              </strong>
+              <button type="button" disabled={imprimindoFila || fila.length === 0} onClick={limparFila}
+                style={{ ...S.botao(false), padding: '6px 10px', fontSize: 12, opacity: (imprimindoFila || fila.length === 0) ? 0.5 : 1 }}>
+                Limpar
+              </button>
+            </div>
+
+            {fila.length === 0 ? (
+              <p style={{ fontSize: 13, color: '#6b6f75', margin: '8px 0 0' }}>Nenhum item na fila ainda.</p>
+            ) : (
+              <div>
+                {fila.map((f) => (
+                  <div key={f.id} style={S.filaLinha}>
+                    <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {f.nome}
+                    </span>
+                    <span style={{ color: '#6b6f75', flexShrink: 0 }}>{CONS_LABEL[f.conservacao] || f.conservacao}</span>
+                    <span style={{ fontWeight: 700, flexShrink: 0 }}>{f.copias}×</span>
+                    <button type="button" disabled={imprimindoFila} onClick={() => removerDaFila(f.id)}
+                      style={{ border: 'none', background: 'none', color: '#c33', fontSize: 12, fontWeight: 700, flexShrink: 0, opacity: imprimindoFila ? 0.5 : 1 }}>
+                      Remover
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button type="button" disabled={imprimindoFila || fila.length === 0} onClick={imprimirSequencia}
+              style={{
+                width: '100%', marginTop: 12, padding: 14, borderRadius: 10, border: 'none',
+                background: '#0e1319', color: '#eab802', fontSize: 14, fontWeight: 800,
+                opacity: (imprimindoFila || fila.length === 0) ? 0.5 : 1,
+              }}>
+              {imprimindoFila ? 'Imprimindo fila…' : 'Imprimir sequência'}
+            </button>
+          </div>
         </div>
       )}
 
