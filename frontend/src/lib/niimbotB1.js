@@ -28,13 +28,19 @@ const DPI_B1 = 203
 // Espelha os campos de IMPRESSORA da entrada "models.b1" do registry.json da lib. Não
 // importamos o registry.json porque `density` é escolha nossa (depende do rolo/etiqueta
 // que a loja usa), e não um parâmetro para herdar cegamente da lib.
-//   name_prefixes: filtra o seletor do navegador pelo nome anunciado no BLE
+//   name_prefixes: VAZIO de propósito. Com prefixo, a lib filtra o seletor por NOME
+//     (`namePrefix`), que no Web Bluetooth do Android é frágil — depende de o nome vir no
+//     pacote de anúncio, e alguns Chrome/Android NÃO captam (o celular achava a B1, o
+//     tablet não). Vazio, a lib cai no filtro por SERVIÇO (`{ services: [SVC_UUID] }`), e o
+//     UUID da Niimbot vem sempre no anúncio → acha a B1 em qualquer aparelho. A distinção
+//     B1 × B1 Pro deixa de ser pelo nome e passa a ser a checagem de task/dpi pós-conexão
+//     (abaixo, em conectar()), que já existia e é o filtro que de fato importa.
 //   task "b1":     sequência de comandos da linha B1 (protocolo 3), != "v4" do B1 Pro
 //   density 1-5:   3 é o padrão validado pela lib
 // A GEOMETRIA da etiqueta NÃO mora aqui: no registry ela é uma entrada separada
 // ("sizes.T50x30_b1"), e o que precisamos dela está em OFFSET_Y_PX, abaixo.
 const MODELO_B1 = {
-  name_prefixes: ['B1'],
+  name_prefixes: [], // vazio → filtra por SERVIÇO (SVC_UUID), robusto no Android — ver comentário acima
   task: 'b1',
   density: 3,
   label_type: 1,
