@@ -24,6 +24,12 @@ const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 // ── Multi-tenancy (mesmo padrão do H360) ──────────────────
 // tenantStore guarda a LOJA (empresaId) da request; a extension injeta empresaId
 // automaticamente nas queries dos models de negócio. "Empresa" (a Loja) fica fora.
+//
+// ⚠️ ARMADILHA: `tenantStore.run(store, () => prisma.X.op())` (arrow que RETORNA
+// a operacao direto) NAO isola! A PrismaPromise e lazy: so executa no `await`
+// externo, ja FORA do run — a extension ve empresaId=null e NAO filtra (leaks
+// entre lojas; creates falham). Use `run(async () => { await prisma.X.op() })`,
+// `run(() => prisma.$transaction(...))` ou `where/data: { empresaId }` explicito.
 const tenantStore = new AsyncLocalStorage();
 function getEmpresaIdAtual() { return tenantStore.getStore()?.empresaId ?? null; }
 
@@ -3314,7 +3320,7 @@ app.get('/api/public/talentos/:slug', async (req, res) => {
     const cfg = await prisma.recrutamentoConfig.findUnique({ where: { slug: String(req.params.slug) } });
     if (!cfg || !cfg.publicoAtivo) return res.status(404).json({ error: 'Formulário indisponível' });
     const empr = await prisma.empresa.findUnique({ where: { id: cfg.empresaId }, select: { nome: true, logoDataUrl: true } }).catch(() => null);
-    const vagas = await tenantStore.run({ empresaId: cfg.empresaId }, () => prisma.vaga.findMany({ where: { status: 'ABERTA' }, select: { id: true, titulo: true }, orderBy: { criadoEm: 'desc' } }));
+    const vagas = await prisma.vaga.findMany({ where: { status: 'ABERTA', empresaId: cfg.empresaId }, select: { id: true, titulo: true }, orderBy: { criadoEm: 'desc' } });
     res.json({ empresa: { nome: (empr?.nome ?? '').trim() || 'Hamburgueria', logo: empr?.logoDataUrl ?? null }, formulario: cfg.formulario || formPadrao(false), vagas, termoVersao: cfg.termoVersao });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
 });
@@ -3324,7 +3330,7 @@ app.get('/api/public/talentos/:slug/vagas/:vagaId', async (req, res) => {
     const cfg = await prisma.recrutamentoConfig.findUnique({ where: { slug: String(req.params.slug) } });
     if (!cfg || !cfg.publicoAtivo) return res.status(404).json({ error: 'Formulário indisponível' });
     const empr = await prisma.empresa.findUnique({ where: { id: cfg.empresaId }, select: { nome: true, logoDataUrl: true } }).catch(() => null);
-    const vaga = await tenantStore.run({ empresaId: cfg.empresaId }, () => prisma.vaga.findUnique({ where: { id: Number(req.params.vagaId) }, select: { id: true, titulo: true, descricao: true, status: true, jornada: true, formulario: true } }));
+    const vaga = await prisma.vaga.findFirst({ where: { id: Number(req.params.vagaId), empresaId: cfg.empresaId }, select: { id: true, titulo: true, descricao: true, status: true, jornada: true, formulario: true } });
     if (!vaga || vaga.status !== 'ABERTA') return res.status(404).json({ error: 'Vaga indisponível' });
     res.json({ empresa: { nome: (empr?.nome ?? '').trim() || 'Hamburgueria', logo: empr?.logoDataUrl ?? null }, vaga: { id: vaga.id, titulo: vaga.titulo, descricao: vaga.descricao, jornada: vaga.jornada }, formulario: vaga.formulario || formPadrao(true), termoVersao: cfg.termoVersao });
   } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
