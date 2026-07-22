@@ -6,6 +6,7 @@
 // por coletorRef (sn:enrollid:time). WebSocket em net puro (sem lib externa).
 import net from 'node:net';
 import crypto from 'node:crypto';
+import { decidirTipoPonto, jornadaDiaPrevisto } from './pontoTipo.js';
 
 const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 const BR_OFFSET_MIN = -180; // BR fixo UTC-3 (independe do TZ do servidor/VPS em UTC)
@@ -63,7 +64,7 @@ function encodeFrame(opcode, buf) {
 }
 
 // ── Regras de negócio ───────────────────────────────────────────
-const SEQ_INTERVALO = { ENTRADA: 'SAIDA_INTERVALO', SAIDA_INTERVALO: 'RETORNO_INTERVALO', RETORNO_INTERVALO: 'SAIDA', SAIDA: null };
+// A decisão do tipo (ENTRADA/SAIDA/…) vive em pontoTipo.js (puro/testável).
 
 // Config de marcação da loja (com defaults se ainda não foi salva).
 async function lerPontoConfigColetor(prisma, empresaId) {
@@ -73,14 +74,27 @@ async function lerPontoConfigColetor(prisma, empresaId) {
 
 export async function proximoTipoPontoNaData(prisma, empresaId, funcionarioId, dataHora, usaIntervalo) {
   const { ini, fim } = expedienteRange(dataHora);
-  const regs = await prisma.pontoRegistro.findMany({
-    where: { empresaId, funcionarioId, invalidada: false, dataHora: { gte: ini, lt: fim } },
-    orderBy: { dataHora: 'asc' }, select: { tipo: true },
+  const [regs, func] = await Promise.all([
+    prisma.pontoRegistro.findMany({
+      where: { empresaId, funcionarioId, invalidada: false, dataHora: { gte: ini, lt: fim } },
+      orderBy: { dataHora: 'asc' }, select: { tipo: true },
+    }),
+    prisma.funcionario.findFirst({ where: { id: funcionarioId }, select: { jornadaId: true, folgaSemana: true } }),
+  ]);
+  // Fim previsto do turno pela jornada do colaborador (null se não tiver): a partir dele
+  // uma batida solta não abre entrada (Guarda 2 do decidirTipoPonto). A janela do
+  // expediente já começa em `ini` (05:00 BR do dia de início), que é o dia da jornada.
+  let saidaPrevMs = null;
+  if (func?.jornadaId) {
+    const j = await prisma.jornada.findFirst({ where: { id: func.jornadaId }, select: { diasJson: true, ativo: true } });
+    if (j?.ativo) saidaPrevMs = jornadaDiaPrevisto(j.diasJson, func.folgaSemana, ini.getTime())?.saidaMs ?? null;
+  }
+  return decidirTipoPonto({
+    tiposExistentes: regs.map((r) => r.tipo),
+    usaIntervalo,
+    dataHoraMs: new Date(dataHora).getTime(),
+    saidaPrevMs,
   });
-  const ultimo = regs.length ? regs[regs.length - 1].tipo : null;
-  if (!ultimo) return 'ENTRADA';
-  if (!usaIntervalo) return (ultimo === 'ENTRADA' || ultimo === 'RETORNO_INTERVALO') ? 'SAIDA' : 'ENTRADA'; // alterna E↔S
-  return SEQ_INTERVALO[ultimo] || 'SAIDA'; // além da 4ª batida, mantém como SAIDA (Espelho usa a última)
 }
 
 // Grava uma batida do coletor como PontoRegistro (tipo pela sequência do dia).

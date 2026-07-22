@@ -18,8 +18,10 @@ const t = (n, real, esp) => {
 const BR = (y, mo, d, h, mi) => new Date(Date.UTC(y, mo - 1, d, h, mi) - -180 * 60000)
 
 // prisma de mentira: findMany aplica o where.dataHora (gte/lt) ao dataset — assim o teste
-// exercita de fato a JANELA, que é o ponto do bug.
-function fakePrisma(batidas) {
+// exercita de fato a JANELA, que é o ponto do bug. `funcionario` sem jornada (jornadaId
+// null) mantém estes casos no puro entrada/saída; a regra da jornada é testada à parte
+// em pontoTipo.test.js.
+function fakePrisma(batidas, funcionario = { jornadaId: null, folgaSemana: [] }) {
   return {
     pontoRegistro: {
       findMany: async ({ where }) => {
@@ -30,6 +32,8 @@ function fakePrisma(batidas) {
           .map((b) => ({ tipo: b.tipo }))
       },
     },
+    funcionario: { findFirst: async () => funcionario },
+    jornada: { findFirst: async () => null },
   }
 }
 
