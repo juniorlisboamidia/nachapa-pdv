@@ -6789,21 +6789,27 @@ app.get('/api/ponto/marcacoes', async (req, res) => {
   try {
     const where = {};
     if (req.query.funcionarioId) where.funcionarioId = parseInt(req.query.funcionarioId, 10);
-    // Filtro por intervalo (de/ate = YYYY-MM-DD, inclusivo), no fuso BR fixo. `data` (dia único) mantido por compat.
+    // Filtro por intervalo (de/ate = YYYY-MM-DD, inclusivo) por DIA DE EXPEDIENTE, não dia
+    // civil: cada dia vai de 05:00 às 05:00 do dia seguinte, então o turno que cruza a
+    // meia-noite fica junto (a batida da madrugada conta no dia em que o turno começou —
+    // mesma janela do espelho/painel). `data` (dia único) mantido por compat.
     const ymd = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || '')); return m ? { y: +m[1], mo: +m[2] - 1, d: +m[3] } : null; };
+    const EH = Math.floor(EXP_CUTOFF_MIN / 60), EM = EXP_CUTOFF_MIN % 60; // 05:00 — corte do dia de expediente
     const de = ymd(req.query.de), ate = ymd(req.query.ate);
     if (de || ate) {
       const cond = {};
-      if (de) cond.gte = new Date(brToUtcMs(de.y, de.mo, de.d, 0, 0));
-      if (ate) cond.lt = new Date(brToUtcMs(ate.y, ate.mo, ate.d + 1, 0, 0)); // dia seguinte (exclusivo)
+      if (de) cond.gte = new Date(brToUtcMs(de.y, de.mo, de.d, EH, EM));        // expediente começa 05:00
+      if (ate) cond.lt = new Date(brToUtcMs(ate.y, ate.mo, ate.d + 1, EH, EM)); // até 05:00 do dia seguinte (exclusivo)
       where.dataHora = cond;
     } else if (req.query.data) {
       const d0 = ymd(req.query.data);
-      if (d0) where.dataHora = { gte: new Date(brToUtcMs(d0.y, d0.mo, d0.d, 0, 0)), lt: new Date(brToUtcMs(d0.y, d0.mo, d0.d + 1, 0, 0)) };
+      if (d0) where.dataHora = { gte: new Date(brToUtcMs(d0.y, d0.mo, d0.d, EH, EM)), lt: new Date(brToUtcMs(d0.y, d0.mo, d0.d + 1, EH, EM)) };
     }
     const regs = await prisma.pontoRegistro.findMany({ where, orderBy: { dataHora: 'desc' }, take: 1000 });
     const fs = new Map((await prisma.funcionario.findMany()).map((f) => [f.id, f.nome]));
-    res.json(regs.map((r) => ({ id: r.id, funcionarioId: r.funcionarioId, funcionarioNome: fs.get(r.funcionarioId) || '—', tipo: r.tipo, tipoLabel: PONTO_LABEL[r.tipo] || r.tipo, dataHora: r.dataHora, origem: r.origem, distancia: r.distancia, invalidada: r.invalidada, observacao: r.observacao || null })));
+    // diaExpedienteMs = início (05:00) do expediente a que a batida pertence — o front
+    // agrupa por ele (madrugada cai no dia do turno, não no dia civil seguinte).
+    res.json(regs.map((r) => ({ id: r.id, funcionarioId: r.funcionarioId, funcionarioNome: fs.get(r.funcionarioId) || '—', tipo: r.tipo, tipoLabel: PONTO_LABEL[r.tipo] || r.tipo, dataHora: r.dataHora, diaExpedienteMs: inicioDoExpedienteMs(r.dataHora), origem: r.origem, distancia: r.distancia, invalidada: r.invalidada, observacao: r.observacao || null })));
   } catch (err) { console.error('[ponto/marcacoes]', err); res.status(500).json({ error: 'Erro ao carregar marcações.' }); }
 });
 

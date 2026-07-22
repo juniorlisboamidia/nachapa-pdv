@@ -34,6 +34,26 @@ function fmtHora(iso) {
   if (isNaN(d.getTime())) return '—'
   return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 }
+// Rótulo do dia de EXPEDIENTE (05h→05h). O ms vem do backend (início às 05:00 BR),
+// que fica longe da meia-noite → formatar no fuso local não vira o dia.
+function fmtDiaExpediente(ms) {
+  if (!ms) return '—'
+  const d = new Date(ms)
+  if (isNaN(d.getTime())) return '—'
+  const s = d.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' })
+  return s.charAt(0).toUpperCase() + s.slice(1)
+}
+// Agrupa a lista de marcações (já ordenada desc pelo backend) por dia de expediente,
+// preservando a ordem — os grupos saem em ordem porque as linhas já vêm ordenadas.
+function gruparPorExpediente(lista) {
+  const grupos = []
+  for (const r of lista) {
+    const ult = grupos[grupos.length - 1]
+    if (ult && ult.key === r.diaExpedienteMs) ult.rows.push(r)
+    else grupos.push({ key: r.diaExpedienteMs, rows: [r] })
+  }
+  return grupos
+}
 // datetime-local prefill = agora, no fuso local
 function agoraLocal() {
   const d = new Date()
@@ -893,39 +913,51 @@ function Marcacoes({ notify }) {
       ) : lista.length === 0 ? (
         <div className="empty-state" style={{ padding: '32px 16px' }}>Nenhuma marcação no período.</div>
       ) : (
-        <div className="table-card">
-          <table className="hb-table">
-            <thead>
-              <tr>
-                <th>Colaborador</th>
-                <th>Marcação</th>
-                <th>Data / Hora</th>
-                <th aria-hidden="true"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {lista.map((r) => (
-                <tr key={r.id} style={r.invalidada ? { opacity: 0.55 } : undefined}>
-                  <td><strong style={r.invalidada ? { textDecoration: 'line-through' } : undefined}>{r.funcionarioNome}</strong></td>
-                  <td>
-                    {r.tipoLabel}
-                    {r.invalidada && <span className="badge badge-gray" style={{ marginLeft: 8 }}>Desconsiderada</span>}
-                    {r.observacao && <div style={{ fontSize: 11.5, color: 'var(--app-text-soft, #999)', marginTop: 2 }}>Obs.: {r.observacao}</div>}
-                  </td>
-                  <td>{fmtDataHora(r.dataHora)}</td>
-                  <td style={{ textAlign: 'right' }}>
-                    <MenuAcoes>
-                      <ItemMenu onClick={() => invalidar(r)}>{r.invalidada ? 'Reativar' : 'Desconsiderar'}</ItemMenu>
-                      <ItemMenu onClick={() => setEditar(r)}>Editar</ItemMenu>
-                      <ItemMenu onClick={() => setOcorrencia(r)}>Ocorrência</ItemMenu>
-                      <ItemMenu onClick={() => setObservar(r)}>Observação</ItemMenu>
-                    </MenuAcoes>
-                  </td>
+        <>
+          <div style={{ fontSize: 12, color: 'var(--app-text-soft, #6b6f75)', marginBottom: 8 }}>
+            Agrupado por <strong>dia de expediente</strong> (05h às 05h): o turno da noite fica junto, mesmo virando a meia-noite.
+          </div>
+          <div className="table-card">
+            <table className="hb-table">
+              <thead>
+                <tr>
+                  <th>Colaborador</th>
+                  <th>Marcação</th>
+                  <th>Data / Hora</th>
+                  <th aria-hidden="true"></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {gruparPorExpediente(lista).map((g) => [
+                  <tr key={`dia-${g.key}`}>
+                    <td colSpan={4} style={{ background: 'var(--app-bg-soft, #f6f4ef)', fontWeight: 700, fontSize: 12.5, color: 'var(--app-text-soft, #6b6f75)', letterSpacing: '.02em', padding: '8px 12px' }}>
+                      {fmtDiaExpediente(g.key)}<span style={{ fontWeight: 500 }}> · {g.rows.length} {g.rows.length === 1 ? 'batida' : 'batidas'}</span>
+                    </td>
+                  </tr>,
+                  ...g.rows.map((r) => (
+                    <tr key={r.id} style={r.invalidada ? { opacity: 0.55 } : undefined}>
+                      <td><strong style={r.invalidada ? { textDecoration: 'line-through' } : undefined}>{r.funcionarioNome}</strong></td>
+                      <td>
+                        {r.tipoLabel}
+                        {r.invalidada && <span className="badge badge-gray" style={{ marginLeft: 8 }}>Desconsiderada</span>}
+                        {r.observacao && <div style={{ fontSize: 11.5, color: 'var(--app-text-soft, #999)', marginTop: 2 }}>Obs.: {r.observacao}</div>}
+                      </td>
+                      <td>{fmtDataHora(r.dataHora)}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        <MenuAcoes>
+                          <ItemMenu onClick={() => invalidar(r)}>{r.invalidada ? 'Reativar' : 'Desconsiderar'}</ItemMenu>
+                          <ItemMenu onClick={() => setEditar(r)}>Editar</ItemMenu>
+                          <ItemMenu onClick={() => setOcorrencia(r)}>Ocorrência</ItemMenu>
+                          <ItemMenu onClick={() => setObservar(r)}>Observação</ItemMenu>
+                        </MenuAcoes>
+                      </td>
+                    </tr>
+                  )),
+                ])}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       {/* Modal lançamento manual */}
