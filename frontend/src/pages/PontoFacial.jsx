@@ -200,7 +200,10 @@ function Pill({ meta }) {
 
 const TABS = [
   { id: 'painel', label: 'Painel', sub: 'Situação do dia' },
-  { id: 'colaboradores', label: 'Colaboradores', sub: 'Cadastro da equipe' },
+  // Colaboradores saiu daqui: virou item próprio na sidebar (abaixo de Relatórios), porque
+  // o cadastro de pessoas é global (Ponto/Bonificação/Checklist/Área do Colaborador), não uma
+  // aba do ponto. O componente <Colaboradores> continua neste arquivo (compartilha
+  // useEnvioColetor/ModalProgressoEnvio com a aba Coletor) e é renderizado por pages/Colaboradores.jsx.
   { id: 'jornadas', label: 'Jornadas e Escalas', sub: 'Horários e folgas' },
   { id: 'marcacoes', label: 'Marcações', sub: 'Batidas de ponto' },
   { id: 'espelho', label: 'Espelho', sub: 'Previsto × realizado do mês' },
@@ -229,7 +232,6 @@ export default function PontoFacial() {
       <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />
 
       {tab === 'painel' && <Painel />}
-      {tab === 'colaboradores' && <Colaboradores notify={notify} />}
       {tab === 'jornadas' && <Jornadas notify={notify} />}
       {tab === 'marcacoes' && <Marcacoes notify={notify} />}
       {tab === 'espelho' && <Espelho notify={notify} />}
@@ -515,7 +517,10 @@ function resumoFolga(dias) {
   if (!Array.isArray(dias) || !dias.length) return null
   return [...dias].sort((a, b) => a - b).map((i) => DIAS_ABREV[i]).join(', ')
 }
-function Colaboradores({ notify }) {
+// Exportado (não é mais uma aba do Ponto Facial): renderizado por pages/Colaboradores.jsx,
+// que é o novo lar na sidebar. Segue aqui por compartilhar useEnvioColetor/ModalProgressoEnvio
+// com a aba Coletor — mover o código arrastaria essas dependências (só mudamos de LUGAR).
+export function Colaboradores({ notify }) {
   const [lista, setLista] = useState([])
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState(null)

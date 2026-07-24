@@ -277,7 +277,7 @@ function AbaAcessos() {
 
       <div className="me-card" style={{ marginBottom: 16 }}>
         <div className="me-section-title">Equipe · Área do Colaborador</div>
-        <div style={{ fontSize: 13, color: 'var(--app-text-soft, #777)', marginBottom: 12, lineHeight: 1.55 }}>Um link único para a equipe entrar na Área do Colaborador (login por WhatsApp). O número precisa estar cadastrado no colaborador (Ponto Facial › Colaboradores).</div>
+        <div style={{ fontSize: 13, color: 'var(--app-text-soft, #777)', marginBottom: 12, lineHeight: 1.55 }}>Um link único para a equipe entrar na Área do Colaborador (login por WhatsApp). O número precisa estar cadastrado no colaborador (menu Colaboradores).</div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <input className="form-input" style={{ flex: 1, minWidth: 220 }} value={colabLink || 'Defina o endereço do link em Bonificação › Configuração › Link público.'} readOnly />
           <button type="button" className="btn btn-secondary btn-sm" onClick={() => colabLink && copiar(colabLink)} disabled={!colabLink}>Copiar</button>

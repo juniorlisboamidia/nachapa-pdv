@@ -19,7 +19,7 @@ const GUIA_PASSOS = [
     desc: 'Em Checklist › Checklists, clique em "+ Novo checklist". Monte as informações, os itens e a recorrência (todo dia / dias da semana / avulso) — ou parta de um Template pronto.',
     chips: ['Check', 'Avaliação', 'Texto', 'Numérico', 'Seleção', 'Foto'] },
   { k: 'funcao', n: 2, cor: '#e8850c', corTxt: '#ffffff', titulo: 'Defina quem executa',
-    desc: 'No editor do checklist, marque as Funções que executam. Quem tem essa função no cadastro (Ponto Facial › Colaboradores) vê o checklist na Área do Colaborador.',
+    desc: 'No editor do checklist, marque as Funções que executam. Quem tem essa função no cadastro (Colaboradores) vê o checklist na Área do Colaborador.',
     chips: ['Por função', 'Gestor acompanha', 'Operador executa'] },
   { k: 'alerta', n: 3, cor: '#16a34a', corTxt: '#ffffff', titulo: 'Ative o alerta no WhatsApp',
     desc: 'Em Checklist › Notificações, ligue o alerta imediato e cadastre quem recebe. Quando um item crítico sair do padrão ao concluir, o WhatsApp dispara na hora.',

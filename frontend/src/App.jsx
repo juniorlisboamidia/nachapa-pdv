@@ -6,6 +6,7 @@ import Inicio from './pages/Inicio'
 import EmConstrucao from './pages/EmConstrucao'
 import Equipe from './pages/Equipe'
 import PontoFacial from './pages/PontoFacial'
+import Colaboradores from './pages/Colaboradores'
 import Bonificacao from './pages/Bonificacao'
 import BonificacaoPublica from './pages/BonificacaoPublica'
 import BonificacaoEu from './pages/BonificacaoEu'
@@ -90,6 +91,7 @@ export default function App() {
             <Route path="financeiro" element={<EmConstrucao titulo="Financeiro" descricao="Fluxo de caixa, contas a pagar e a receber." />} />
             <Route path="relatorios" element={<EmConstrucao titulo="Relatórios" descricao="Relatórios e análises da operação." />} />
             {/* Dep. Pessoal — abas viram subitens da sidebar (a página lê a aba da URL) */}
+            <Route path="rh/colaboradores" element={<Colaboradores />} />
             <Route path="rh/ponto-facial" element={<PontoFacial />} />
             <Route path="rh/ponto-facial/:tab" element={<PontoFacial />} />
             <Route path="rh/equipe" element={<Equipe />} />

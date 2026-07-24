@@ -985,7 +985,7 @@ function ChecklistEditor({ inicial, notify, onClose, onSalvou }) {
 
               {f.atribuicaoTipo === 'COLABORADOR' ? (
                 equipe.length === 0 ? (
-                  <span style={{ fontSize: 12, color: '#999' }}>Nenhum colaborador ativo — cadastre em Ponto Facial › Colaboradores.</span>
+                  <span style={{ fontSize: 12, color: '#999' }}>Nenhum colaborador ativo — cadastre em Colaboradores.</span>
                 ) : (
                   <>
                     <div className="chip-row">
@@ -1009,7 +1009,7 @@ function ChecklistEditor({ inicial, notify, onClose, onSalvou }) {
                       ))}
                     </div>
                   )}
-                  <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>Quem tem essa função no cadastro (Ponto Facial › Colaboradores) vê o checklist na Área do Colaborador.</div>
+                  <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>Quem tem essa função no cadastro (Colaboradores) vê o checklist na Área do Colaborador.</div>
                 </>
               )}
             </div>
@@ -1340,7 +1340,7 @@ export function ChecklistDetalhe() {
             <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, background: 'var(--app-warn-bg, #fffbe6)', border: '1px solid var(--app-warn-border, #f0dd8a)', fontSize: 12.5 }}>
               <strong>{semPin.length === 1 ? 'Este colaborador ainda não tem PIN' : `${semPin.length} colaboradores ainda não têm PIN`}</strong> e não vão conseguir entrar por este link: {semPin.map((e) => e.nome).join(', ')}.
               <div style={{ marginTop: 6 }}>
-                <button type="button" className="chkp-link" onClick={() => navigate('/rh/ponto-facial/colaboradores')}>Cadastrar o PIN em Ponto Facial › Colaboradores ›</button>
+                <button type="button" className="chkp-link" onClick={() => navigate('/rh/colaboradores')}>Cadastrar o PIN em Colaboradores ›</button>
               </div>
             </div>
           )}

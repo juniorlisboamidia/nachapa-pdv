@@ -193,11 +193,12 @@ const grupos = [
   },
   { label: 'Financeiro', icon: 'financeiro', to: '/financeiro', area: 'financeiro' },
   { label: 'Relatórios', icon: 'relatorios', to: '/relatorios', area: 'relatorios' },
+  // Cadastro de pessoas da loja (global): saiu de dentro de Ponto Facial pra cá.
+  { label: 'Colaboradores', icon: 'clientes', to: '/rh/colaboradores', area: 'ponto' },
   {
     label: 'Ponto Facial', icon: 'ponto', area: 'ponto',
     itens: [
       { to: '/rh/ponto-facial/painel', label: 'Painel', icon: 'ponto' },
-      { to: '/rh/ponto-facial/colaboradores', label: 'Colaboradores', icon: 'clientes' },
       { to: '/rh/ponto-facial/jornadas', label: 'Jornadas e Escalas', icon: 'calendario' },
       { to: '/rh/ponto-facial/marcacoes', label: 'Marcações', icon: 'ponto' },
       { to: '/rh/ponto-facial/espelho', label: 'Espelho', icon: 'ficha' },
