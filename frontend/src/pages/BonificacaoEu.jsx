@@ -566,6 +566,18 @@ function SecaoHistorico({ historico }) {
 
 /* ══════════ LOGIN por WhatsApp (OTP) ══════════ */
 const soFoneDig = (s) => String(s || '').replace(/\D/g, '')
+// Ícones do login (SVG, sem emoji — regra de UI). Herdam a cor por currentColor.
+const IconeEscudo = ({ size = 14 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+  </svg>
+)
+const IconeCadeado = ({ size = 12 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+    <rect x="4" y="11" width="16" height="10" rx="2" /><path d="M8 11V7a4 4 0 0 1 8 0v4" />
+  </svg>
+)
+
 function LoginColaborador({ slug, onEntrar }) {
   const [loja, setLoja] = useState(null)
   const [etapa, setEtapa] = useState('fone') // 'fone' | 'codigo'
@@ -602,25 +614,26 @@ function LoginColaborador({ slug, onEntrar }) {
         <div className="be-login-card">
           <div className="be-login-logo">{loja?.logoDataUrl ? <img src={loja.logoDataUrl} alt="" /> : (loja?.nome || 'L').charAt(0).toUpperCase()}</div>
           <div className="be-login-oi">Área do colaborador</div>
-          <h1 className="be-login-loja">{loja?.nome || '…'}</h1>
           {etapa === 'fone' ? (
             <>
-              <p className="be-login-sub">Digite o WhatsApp que a liderança cadastrou. Você vai receber um código de acesso por lá.</p>
-              <input className="be-input" inputMode="numeric" placeholder="(00) 00000-0000" value={fone} onChange={(e) => setFone(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && pedir()} />
+              <p className="be-login-sub">Digite o seu número de WhatsApp para receber o código de login.</p>
+              <div className="be-login-note"><IconeEscudo /> Não compartilhe seu código com ninguém.</div>
+              <input className="be-input" inputMode="numeric" autoComplete="tel" aria-label="Seu número de WhatsApp" placeholder="(00) 00000-0000" value={fone} onChange={(e) => setFone(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && pedir()} />
               {erro && <div className="be-login-erro">{erro}</div>}
               <button type="button" className="be-btn" onClick={pedir} disabled={busy}>{busy ? 'Enviando…' : 'Receber código no WhatsApp'}</button>
             </>
           ) : (
             <>
               <p className="be-login-sub">Enviamos um código {mascara && <>para o WhatsApp <b>{mascara}</b></>}. Digite abaixo.</p>
-              <input className="be-input be-cod" inputMode="numeric" maxLength={6} placeholder="000000" value={codigo} onChange={(e) => setCodigo(e.target.value.replace(/\D/g, '').slice(0, 6))} onKeyDown={(e) => e.key === 'Enter' && entrar()} autoFocus />
+              <div className="be-login-note"><IconeEscudo /> Não compartilhe seu código com ninguém.</div>
+              <input className="be-input be-cod" inputMode="numeric" autoComplete="one-time-code" aria-label="Código de acesso" maxLength={6} placeholder="000000" value={codigo} onChange={(e) => setCodigo(e.target.value.replace(/\D/g, '').slice(0, 6))} onKeyDown={(e) => e.key === 'Enter' && entrar()} autoFocus />
               {erro && <div className="be-login-erro">{erro}</div>}
               <button type="button" className="be-btn" onClick={entrar} disabled={busy}>{busy ? 'Entrando…' : 'Entrar'}</button>
               <button type="button" className="be-login-voltar" onClick={() => { setEtapa('fone'); setCodigo(''); setErro(null) }}>‹ Trocar número / reenviar código</button>
             </>
           )}
         </div>
-        <div className="be-login-foot">🔒 Acesso seguro · Na Chapa</div>
+        <div className="be-login-foot"><IconeCadeado /> Acesso restrito à equipe {loja?.nome || ''}</div>
       </div>
     </div>
   )
