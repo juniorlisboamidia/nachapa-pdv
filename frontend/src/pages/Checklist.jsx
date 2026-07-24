@@ -1192,6 +1192,7 @@ export function ChecklistDetalhe() {
   const [c, setC] = useState(null)
   const [erro, setErro] = useState(false)
   const [equipe, setEquipe] = useState([]) // só carregada se atribuicaoTipo === COLABORADOR, pra trocar id por nome
+  const [elegiveis, setElegiveis] = useState([]) // atribuídos + se já têm PIN (vem do backend, mesma regra de posse)
   const [copiado, setCopiado] = useState(false)
   const [toast, setToast] = useState(null)
   const canvasRef = useRef(null)
@@ -1201,7 +1202,7 @@ export function ChecklistDetalhe() {
     setC(null)
     setErro(false)
     api.get(`/checklist/checklists/${id}`)
-      .then((r) => setC(r.data.checklist))
+      .then((r) => { setC(r.data.checklist); setElegiveis(Array.isArray(r.data.elegiveis) ? r.data.elegiveis : []) })
       .catch(() => setErro(true))
   }, [id])
 
@@ -1265,6 +1266,8 @@ export function ChecklistDetalhe() {
   const responsaveis = c.atribuicaoTipo === 'COLABORADOR'
     ? c.funcionarioIds.map((fid) => equipe.find((fn) => fn.id === fid)).filter(Boolean).map((fn) => fn.apelido || fn.nome)
     : (c.funcoes || [])
+  // Atribuídos que ainda não têm PIN — apareceriam na lista do link público e não entrariam.
+  const semPin = elegiveis.filter((e) => !e.temPin)
 
   return (
     <div>
@@ -1330,6 +1333,17 @@ export function ChecklistDetalhe() {
             <input className="form-input" readOnly value={linkPublico} onFocus={(e) => e.target.select()} style={{ flex: 1, minWidth: 0, fontSize: 12.5 }} />
             <button type="button" className="btn btn-secondary btn-sm" onClick={copiarLink}>{copiado ? '✓ Copiado' : 'Copiar'}</button>
           </div>
+          {/* A tela pública é genérica de propósito (não diz quem tem PIN, pra não virar lista
+              de quem dá pra tentar adivinhar). Então o aviso de quem ficaria travado tem que
+              aparecer AQUI, pro gestor, antes de ele distribuir o link/QR. */}
+          {semPin.length > 0 && (
+            <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, background: 'var(--app-warn-bg, #fffbe6)', border: '1px solid var(--app-warn-border, #f0dd8a)', fontSize: 12.5 }}>
+              <strong>{semPin.length === 1 ? 'Este colaborador ainda não tem PIN' : `${semPin.length} colaboradores ainda não têm PIN`}</strong> e não vão conseguir entrar por este link: {semPin.map((e) => e.nome).join(', ')}.
+              <div style={{ marginTop: 6 }}>
+                <button type="button" className="chkp-link" onClick={() => navigate('/rh/ponto-facial/colaboradores')}>Cadastrar o PIN em Ponto Facial › Colaboradores ›</button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -2045,7 +2059,9 @@ function AbaConfiguracoes({ notify }) {
   async function verPrevia() {
     setCarregandoPrevia(true)
     try {
-      const r = await api.get('/checklist/notificacoes/lembrete/previa')
+      // Manda o RASCUNHO do textarea: antes a prévia vinha do template já salvo, então
+      // editar o texto e clicar aqui mostrava a versão antiga — o oposto do que se quer.
+      const r = await api.get('/checklist/notificacoes/lembrete/previa', { params: { template } })
       setPrevia(r.data.previa)
     } catch (err) {
       notify(err?.response?.data?.error ?? 'Não foi possível carregar a prévia.', 'error')

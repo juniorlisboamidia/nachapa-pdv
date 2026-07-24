@@ -13,7 +13,7 @@ import { iniciarColetorServer, gravarPontoColetor } from './coletorServer.js';
 import { zapiConfigurado, zapiStatus, zapiQrCode, zapiCriarInstancia, zapiEnviarTexto } from './zapi.mjs';
 import { validadeDe, gerarLote, colisaoDeLote, CONSERVACOES } from './etiquetas.js';
 import { avaliarResposta, execucaoEmAlerta, fotosCriticasFaltando } from './checklistConformidade.js';
-import { venceHoje } from './checklistRecorrencia.js';
+import { venceHoje, offsetDiaDoHorario } from './checklistRecorrencia.js';
 import { itensCriticosNaoConformes, montarMensagemAlerta } from './checklistAlerta.js';
 import { montarMensagemLembrete, atrasado } from './checklistLembrete.js';
 import { calcularEstatisticas } from './checklistEstatisticas.js';
@@ -363,6 +363,12 @@ function dadosFuncionario(body) {
   return { campos };
 }
 
+// Serializa o Funcionario pro ADMIN: o `pin` (execução pública do checklist) NUNCA sai no
+// JSON — só o booleano `temPin`. Com ele a tela sabe quem já tem PIN (pra oferecer "remover")
+// e o Detalhe do checklist consegue avisar quem está atribuído e não vai conseguir entrar
+// pelo link. Só a EXISTÊNCIA, nunca o valor, e só em rota de admin.
+const funcAdmin = ({ pin, ...f }) => ({ ...f, temPin: !!pin });
+
 app.get('/api/funcionarios', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
   try {
@@ -379,7 +385,7 @@ app.get('/api/funcionarios', async (req, res) => {
       ];
     }
     const lista = await prisma.funcionario.findMany({ where, orderBy: [{ status: 'asc' }, { nome: 'asc' }] });
-    res.json(lista.map(({ pin, ...f }) => f));
+    res.json(lista.map(funcAdmin));
   } catch (err) { console.error('[funcionarios GET]', err); res.status(500).json({ error: 'Erro ao listar a equipe.' }); }
 });
 
@@ -388,8 +394,7 @@ app.post('/api/funcionarios', async (req, res) => {
   try {
     const d = dadosFuncionario(req.body);
     if (d.error) return res.status(400).json({ error: d.error });
-    const { pin, ...f } = await prisma.funcionario.create({ data: d.campos });
-    res.status(201).json(f);
+    res.status(201).json(funcAdmin(await prisma.funcionario.create({ data: d.campos })));
   } catch (err) { console.error('[funcionarios POST]', err); res.status(500).json({ error: 'Erro ao criar o funcionário.' }); }
 });
 
@@ -402,8 +407,7 @@ app.put('/api/funcionarios/:id', async (req, res) => {
     if (!existe) return res.status(404).json({ error: 'Funcionário não encontrado.' });
     const d = dadosFuncionario(req.body);
     if (d.error) return res.status(400).json({ error: d.error });
-    const { pin, ...f } = await prisma.funcionario.update({ where: { id }, data: d.campos });
-    res.json(f);
+    res.json(funcAdmin(await prisma.funcionario.update({ where: { id }, data: d.campos })));
   } catch (err) { console.error('[funcionarios PUT]', err); res.status(500).json({ error: 'Erro ao salvar o funcionário.' }); }
 });
 
@@ -2446,6 +2450,28 @@ app.get('/api/public/colaborador/fotos/:id', async (req, res) => {
   } catch (e) { if (e.http) return res.status(e.http).json({ error: e.msg }); console.error('[colab/fotos GET]', e); res.status(500).json({ error: 'Erro ao carregar a foto.' }); }
 });
 
+// Texto legível de um erro pra gravar no histórico de notificações e no console.
+// O zapi lança um OBJETO (`{http, msg, causa, data}`), não um Error: `e.message` é undefined
+// e o `String(e)` de antes gravava literalmente "[object Object]" no log, escondendo o motivo
+// real da falha (WhatsApp não configurado? número inválido? 401 da UAZAPI?).
+function textoErro(e) {
+  if (!e) return 'Erro desconhecido';
+  if (typeof e === 'string') return e;
+  const base = e.msg || e.message || '';
+  const extra = e.causa || (e.data && typeof e.data !== 'object' ? String(e.data) : '');
+  const txt = [base, extra].filter(Boolean).join(' — ');
+  if (txt) return txt;
+  try { return JSON.stringify(e); } catch { return String(e); }
+}
+
+// Instante (ms) do horário-limite "HH:MM" no dia de EXPEDIENTE [y,mo,day]. Horário antes do
+// corte (05:00) pertence à madrugada do dia seguinte — ver offsetDiaDoHorario. Null se inválido.
+function chkDeadlineMs(y, mo, day, horarioLimite) {
+  const [h, m] = String(horarioLimite || '').split(':').map((x) => parseInt(x, 10));
+  if (!Number.isFinite(h)) return null;
+  return brToUtcMs(y, mo, day + offsetDiaDoHorario(horarioLimite), h, m || 0);
+}
+
 // Dispara o alerta imediato de um checklist concluído com item crítico fora do padrão.
 // Best-effort: chamado sem await no concluir, com try/catch total — uma falha (zapi off,
 // número ruim, DB) NUNCA toca a resposta do concluir. empresaId explícito (fora do tenantStore).
@@ -2471,10 +2497,10 @@ async function dispararAlertaImediato(empresaId, execucaoId) {
       const destino = foneParaEnvio(foneCanonico(d.whatsapp));
       let status = 'ENVIADO', erro = null;
       if (!podeEnviar) { status = 'FALHOU'; erro = 'WhatsApp não configurado'; }
-      else { try { await zapiEnviarTexto(destino, msg); } catch (e) { status = 'FALHOU'; erro = String(e?.message || e).slice(0, 300); } }
+      else { try { await zapiEnviarTexto(destino, msg); } catch (e) { status = 'FALHOU'; erro = textoErro(e).slice(0, 300); } }
       await prisma.checklistNotificacaoLog.create({ data: { empresaId, regra: 'ALERTA_IMEDIATO', canal: 'WHATSAPP', destino, destinatarioNome: d.nome, execucaoId: exec.id, conteudo: msg, status, erro } });
     }
-  } catch (e) { console.error('[dispararAlertaImediato]', e?.message || e); }
+  } catch (e) { console.error('[dispararAlertaImediato]', textoErro(e)); }
 }
 
 // Dispara o LEMBRETE de atraso de uma loja: checklists que vencem hoje, ainda sem execução
@@ -2506,11 +2532,12 @@ async function dispararLembretesLoja(empresaId) {
         if (!venceHoje({ recorrenciaTipo: c.recorrenciaTipo, recorrenciaConfig: c.recorrenciaConfig }, dow)) continue;
         const horarioLimite = c.recorrenciaConfig?.horarioLimite;
         if (!horarioLimite || typeof horarioLimite !== 'string') continue; // sem horário-limite, não há "atraso" a lembrar
-        const [hh, mm] = horarioLimite.split(':').map((x) => parseInt(x, 10));
-        if (!Number.isFinite(hh)) continue;
-        // ms do horário-limite de HOJE (dia de expediente) em BR→UTC — brToUtcMs (linha ~6378)
-        // já faz a conta BR_OFFSET_MIN certa; NUNCA usar `new Date(y,mo,day,h,m)` (fuso do VPS/UTC).
-        const limiteMs = brToUtcMs(f.y, f.mo, f.day, hh, mm || 0);
+        // ms do horário-limite de HOJE (dia de expediente) em BR→UTC — chkDeadlineMs usa
+        // brToUtcMs (conta BR_OFFSET_MIN certa; NUNCA `new Date(y,mo,day,h,m)`, que pega o fuso
+        // do VPS/UTC) e joga o horário ANTES das 05:00 pra madrugada seguinte — senão o limite
+        // caía antes do expediente começar e o lembrete disparava logo no início do dia.
+        const limiteMs = chkDeadlineMs(f.y, f.mo, f.day, horarioLimite);
+        if (limiteMs === null) continue;
         if (!atrasado(agoraMs, limiteMs, c.recorrenciaConfig?.toleranciaMin)) continue;
 
         const exec = await prisma.checklistExecucao.findFirst({ where: { empresaId, checklistId: c.id, dataRef } });
@@ -2545,12 +2572,12 @@ async function dispararLembretesLoja(empresaId) {
         for (const d of destinatarios) {
           const destino = foneParaEnvio(foneCanonico(d.whatsapp));
           let status = 'ENVIADO', erro = null;
-          try { await zapiEnviarTexto(destino, msg); } catch (e) { status = 'FALHOU'; erro = String(e?.message || e).slice(0, 300); }
+          try { await zapiEnviarTexto(destino, msg); } catch (e) { status = 'FALHOU'; erro = textoErro(e).slice(0, 300); }
           await prisma.checklistNotificacaoLog.create({ data: { empresaId, regra: 'LEMBRETE_ATRASO', canal: 'WHATSAPP', destino, destinatarioNome: d.nome, conteudo: msg, status, erro } });
         }
-      } catch (e) { console.error('[dispararLembretesLoja checklist]', empresaId, c?.id, e?.message || e); }
+      } catch (e) { console.error('[dispararLembretesLoja checklist]', empresaId, c?.id, textoErro(e)); }
     }
-  } catch (e) { console.error('[dispararLembretesLoja]', empresaId, e?.message || e); }
+  } catch (e) { console.error('[dispararLembretesLoja]', empresaId, textoErro(e)); }
 }
 
 // Varre TODAS as lojas com lembrete ativo. Fora do tenantStore (sem injeção automática de
@@ -8053,7 +8080,13 @@ app.get('/api/checklist/checklists/:id', async (req, res) => {
     if (!c.publicoToken) {
       c = await prisma.checklist.update({ where: { id: c.id }, data: { publicoToken: randomBytes(12).toString('base64url') }, include: { itens: { orderBy: { ordem: 'asc' } } } });
     }
-    res.json({ checklist: c });
+    // Quem está atribuído a este checklist, com a marca de quem AINDA NÃO TEM PIN — sem isso
+    // o gestor gera o link/QR, o colaborador aparece na lista pública e não consegue entrar
+    // (a tela pública é genérica de propósito, pra não vazar quem tem PIN). Aqui é rota de
+    // admin, então dá pra avisar. Usa o MESMO chkColabAtende da posse — regra num lugar só.
+    const ativos = await prisma.funcionario.findMany({ where: { status: 'ATIVO' }, orderBy: { nome: 'asc' } });
+    const elegiveis = ativos.filter((f) => chkColabAtende(c, f)).map((f) => ({ id: f.id, nome: f.apelido || f.nome, temPin: !!f.pin }));
+    res.json({ checklist: c, elegiveis });
   } catch (err) { console.error('[checklist/checklists/:id GET]', err); res.status(500).json({ error: 'Erro ao carregar checklist.' }); }
 });
 app.post('/api/checklist/checklists', async (req, res) => {
@@ -8274,7 +8307,10 @@ app.get('/api/checklist/checklists/:id/estatisticas', async (req, res) => {
     const tol = Math.max(0, Number(c.recorrenciaConfig?.toleranciaMin) || 0);
     const mHL = /^(\d{1,2}):(\d{2})$/.exec(hl);
     const agendado = (c.recorrenciaTipo === 'DIARIA' || c.recorrenciaTipo === 'DIAS_SEMANA') && !!mHL;
-    const deadlineDoDia = (y, m0, d) => (mHL ? brToUtcMs(y, m0, d, parseInt(mHL[1], 10), parseInt(mHL[2], 10)) + tol * 60000 : null);
+    // chkDeadlineMs joga horário antes das 05:00 pra madrugada do dia seguinte (o expediente
+    // do dia D vai das 05:00 de D às 05:00 de D+1) — sem isso um limite "02:00" caía antes do
+    // expediente começar e TODA ocorrência nascia fora do prazo.
+    const deadlineDoDia = (y, m0, d) => { const ms = mHL ? chkDeadlineMs(y, m0, d, hl) : null; return ms === null ? null : ms + tol * 60000; };
 
     // normalizar execuções
     const execucoes = execs.map((e) => {
@@ -8368,7 +8404,9 @@ app.get('/api/checklist/historico-geral', async (req, res) => {
         const key = `${c.id}|${dia}`;
         const exec = execByKey.get(key) || null;
         if (exec) usados.add(key);
-        const deadlineMs = mHL ? brToUtcMs(f.y, f.mo, f.day, parseInt(mHL[1], 10), parseInt(mHL[2], 10)) + tol * 60000 : null;
+        // Mesmo tratamento de madrugada das estatísticas/lembrete (ver chkDeadlineMs).
+        const dlBase = mHL ? chkDeadlineMs(f.y, f.mo, f.day, hl) : null;
+        const deadlineMs = dlBase === null ? null : dlBase + tol * 60000;
         const ehPassado = dia < hojeStr;
         const status = classificarOcorrencia({ execucao: exec, ehPassado, agoraMs, deadlineMs });
         linhas.push({
@@ -8514,8 +8552,14 @@ app.get('/api/checklist/notificacoes/previa', async (req, res) => {
 app.get('/api/checklist/notificacoes/lembrete/previa', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
   try {
-    const config = await garantirNotifConfig();
-    const previa = montarMensagemLembrete(config.lembreteTemplate, { checklist: 'Abertura Cozinha', horario: '09:00', responsavel: 'Diego Alves' });
+    // `template` (opcional) = o RASCUNHO que o gestor está digitando na tela. Sem ele a prévia
+    // mostrava só o template já SALVO, então editar o texto e clicar em "Ver prévia" exibia a
+    // versão antiga — inútil justamente na hora de conferir a mudança. String vazia é rascunho
+    // legítimo (montarMensagemLembrete cai no padrão), por isso testa por `undefined`.
+    const rascunho = req.query.template;
+    const config = rascunho === undefined ? await garantirNotifConfig() : null;
+    const template = rascunho === undefined ? config.lembreteTemplate : String(rascunho).slice(0, 2000);
+    const previa = montarMensagemLembrete(template, { checklist: 'Abertura Cozinha', horario: '09:00', responsavel: 'Diego Alves' });
     res.json({ previa });
   } catch (err) { console.error('[checklist/notificacoes lembrete previa]', err); res.status(500).json({ error: 'Erro ao gerar prévia.' }); }
 });

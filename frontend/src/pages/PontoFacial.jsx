@@ -509,7 +509,7 @@ function Painel() {
 }
 
 // ===================== COLABORADORES =====================
-const FORM_VAZIO = { nome: '', apelido: '', funcao: '', cpf: '', whatsapp: '', status: 'ATIVO', folgaSemana: [], pinChecklist: '' }
+const FORM_VAZIO = { nome: '', apelido: '', funcao: '', cpf: '', whatsapp: '', status: 'ATIVO', folgaSemana: [], pinChecklist: '', temPin: false, removerPin: false }
 // Resumo curto das folgas ([1,4] -> "Seg, Qui")
 function resumoFolga(dias) {
   if (!Array.isArray(dias) || !dias.length) return null
@@ -579,7 +579,7 @@ function Colaboradores({ notify }) {
   })
 
   const abrirNovo = () => setModal({ id: null, form: { ...FORM_VAZIO } })
-  const abrirEditar = (f) => setModal({ id: f.id, form: { nome: f.nome ?? '', apelido: f.apelido ?? '', funcao: f.funcao ?? '', cpf: mascararCPF(f.cpf ?? ''), whatsapp: f.whatsapp ?? '', status: f.status ?? 'ATIVO', folgaSemana: Array.isArray(f.folgaSemana) ? f.folgaSemana : [], pinChecklist: '' } })
+  const abrirEditar = (f) => setModal({ id: f.id, form: { nome: f.nome ?? '', apelido: f.apelido ?? '', funcao: f.funcao ?? '', cpf: mascararCPF(f.cpf ?? ''), whatsapp: f.whatsapp ?? '', status: f.status ?? 'ATIVO', folgaSemana: Array.isArray(f.folgaSemana) ? f.folgaSemana : [], pinChecklist: '', temPin: !!f.temPin, removerPin: false } })
   const upd = (campo, valor) => setModal((m) => ({ ...m, form: { ...m.form, [campo]: valor } }))
 
   async function salvar() {
@@ -590,8 +590,11 @@ function Colaboradores({ notify }) {
     if (f.pinChecklist && f.pinChecklist.length !== 4) return notify('O PIN deve ter 4 dígitos.', 'error')
     setSalvando(true)
     try {
-      const { pinChecklist, ...corpo } = f
-      if (pinChecklist) corpo.pin = pinChecklist // só manda se o usuário digitou algo — vazio preserva o PIN atual
+      // `temPin` é só de exibição (não vai pro backend). `pin` só é enviado quando há algo a
+      // mudar: vazio preserva o PIN atual, e string vazia REMOVE (o backend mapeia '' → null).
+      const { pinChecklist, temPin, removerPin, ...corpo } = f
+      if (removerPin) corpo.pin = ''
+      else if (pinChecklist) corpo.pin = pinChecklist
       if (modal.id) await api.put(`/funcionarios/${modal.id}`, corpo)
       else await api.post('/funcionarios', corpo)
       notify(modal.id ? 'Colaborador atualizado.' : 'Colaborador cadastrado.')
@@ -776,16 +779,33 @@ function Colaboradores({ notify }) {
             </div>
             <div className="form-group">
               <label className="form-label">PIN (4 dígitos)</label>
-              <input
-                className="form-input"
-                style={{ maxWidth: 140 }}
-                value={modal.form.pinChecklist}
-                onChange={(e) => upd('pinChecklist', e.target.value.replace(/\D/g, '').slice(0, 4))}
-                placeholder={modal.id ? '•••• (deixe em branco p/ manter)' : 'Ex.: 1234'}
-                inputMode="numeric"
-                maxLength={4}
-              />
-              <div className="page-header-sub" style={{ marginTop: 6 }}>Usado para executar checklists pelo link público/QR.</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <input
+                  className="form-input"
+                  style={{ maxWidth: 140 }}
+                  value={modal.form.removerPin ? '' : modal.form.pinChecklist}
+                  disabled={modal.form.removerPin}
+                  onChange={(e) => upd('pinChecklist', e.target.value.replace(/\D/g, '').slice(0, 4))}
+                  placeholder={modal.form.temPin ? '•••• (em branco p/ manter)' : 'Ex.: 1234'}
+                  inputMode="numeric"
+                  maxLength={4}
+                />
+                {/* Remover o PIN só faz sentido pra quem tem um. Manda '' no salvar (o backend
+                    mapeia pra null); antes a tela só trocava, nunca limpava. */}
+                {modal.form.temPin && !modal.form.removerPin && (
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => upd('removerPin', true)}>Remover PIN</button>
+                )}
+                {modal.form.removerPin && (
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={() => upd('removerPin', false)}>Desfazer</button>
+                )}
+              </div>
+              <div className="page-header-sub" style={{ marginTop: 6 }}>
+                {modal.form.removerPin
+                  ? 'O PIN será removido ao salvar — este colaborador deixa de entrar pelo link público.'
+                  : modal.form.temPin
+                    ? 'PIN cadastrado. Usado para executar checklists pelo link público/QR.'
+                    : 'Sem PIN: não consegue entrar pelo link público/QR do checklist.'}
+              </div>
             </div>
             <div className="modal-actions">
               <button type="button" className="btn btn-secondary" onClick={() => setModal(null)} disabled={salvando}>Cancelar</button>
