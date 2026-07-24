@@ -97,16 +97,18 @@ export default function BonificacaoEu() {
     <div className="be-root">
       <style>{CSS}</style>
       <div className="be-app">
-        <header className="be-hero">
-          <div className="be-hero-bar">
-            {/* Barra fina persistente: logo (fundo branco) + saudação. As "atividades do
-                dia" (checklists/ponto/chips) moram na aba Início — ver SecaoSeuDia. */}
-            <span className="be-hero-loja"><span className="lg">{loja?.logoDataUrl ? <img src={loja.logoDataUrl} alt="" /> : inicial}</span>Olá, {primeiro} 👋</span>
-            <button type="button" className="be-sair" onClick={sair}>Sair</button>
-          </div>
-        </header>
+        {/* Header (logo + "Olá, <nome>" + Sair) só na Início — as outras abas têm o próprio
+            título de tela. */}
+        {tab === 'inicio' && (
+          <header className="be-hero">
+            <div className="be-hero-bar">
+              <span className="be-hero-loja"><span className="lg">{loja?.logoDataUrl ? <img src={loja.logoDataUrl} alt="" /> : inicial}</span>Olá, {primeiro} 👋</span>
+              <button type="button" className="be-sair" onClick={sair}>Sair</button>
+            </div>
+          </header>
+        )}
 
-        <main className="be-body">
+        <main className={'be-body' + (tab === 'inicio' ? '' : ' be-body-solo')}>
           {tab === 'inicio' && <TabInicio meu={meu} saldoCoins={saldoCoins} pontoHoje={d.pontoHoje} totalEquipe={totalEquipe} historico={historico} contribuicoes={contribuicoes} mes={mes} ano={ano} setTab={setTab} />}
           {tab === 'ponto' && <TabPonto ponto={ponto} ano={ano} mes={mes} />}
           {tab === 'checklists' && <TabChecklists setAviso={setAviso} />}
@@ -336,23 +338,35 @@ function TabChecklists({ setAviso }) {
   if (exec) return <ExecutarChecklist exec={exec} setAviso={setAviso} onSair={() => { setExec(null); carregar() }} cliente={colabApi} />
   if (!dados) return <div className="be-empty">Carregando…</div>
 
+  const total = dados.hoje.length
+  const feitos = dados.hoje.filter((c) => c.status === 'CONCLUIDA').length
+  const ds = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })
+  const dataHoje = ds.charAt(0).toUpperCase() + ds.slice(1)
+
   return (
     <>
-      <section>
-        <h2 className="be-sec-title">✅ Para hoje</h2>
-        {dados.hoje.length === 0 ? (
-          <div className="be-empty">Nenhum checklist pra hoje. 🎉</div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {dados.hoje.map((c) => <CardChecklist key={c.id} c={c} onAbrir={abrir} />)}
-          </div>
-        )}
-      </section>
+      <h1 className="be-screen-title">Meus checklists</h1>
+
+      <div className="be-clh">
+        <span className="be-clh-ic">🗓️</span>
+        <div className="be-clh-tx">
+          <div className="t">Hoje · {dataHoje}</div>
+          <div className="s">{total === 0 ? 'Nada agendado pra hoje' : `✓ ${feitos} de ${total} concluído${total > 1 ? 's' : ''}`}</div>
+        </div>
+      </div>
+
+      {dados.hoje.length === 0 ? (
+        <div className="be-empty">Nenhum checklist pra hoje. 🎉</div>
+      ) : (
+        <div className="be-cl-list">
+          {dados.hoje.map((c) => <CardChecklist key={c.id} c={c} onAbrir={abrir} />)}
+        </div>
+      )}
 
       {dados.disponiveis.length > 0 && (
-        <section>
+        <section style={{ marginTop: 18 }}>
           <h2 className="be-sec-title">🗂️ Disponíveis</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div className="be-cl-list">
             {dados.disponiveis.map((c) => <CardChecklist key={c.id} c={c} onAbrir={abrir} />)}
           </div>
         </section>
@@ -363,20 +377,31 @@ function TabChecklists({ setAviso }) {
   )
 }
 
+// Card no padrão da referência: hora + nome, barra de progresso com %, e a linha de
+// baixo com categoria + ação (Iniciar/Continuar) ou selo Finalizado. "Ver" reabre o
+// concluído pra revisão. Sem "responsável" (na área do colaborador é a própria pessoa).
 function CardChecklist({ c, onAbrir }) {
-  const st = CL_STATUS[c.status]
-  const icone = c.status === 'CONCLUIDA' ? '✅' : c.status === 'EM_ANDAMENTO' ? '📝' : '📋'
+  const concluida = c.status === 'CONCLUIDA'
+  const emAnd = c.status === 'EM_ANDAMENTO'
+  const pct = c.progresso?.pct ?? (concluida ? 100 : 0)
+  const acao = concluida ? 'Ver' : emAnd ? 'Continuar' : 'Iniciar'
   return (
-    <button type="button" className="be-cl-row" onClick={() => onAbrir(c)}>
-      <span className="be-cl-ic">{icone}</span>
-      <span className="be-cl-info">
-        <span className="be-cl-nm">{c.nome}</span>
-        <span className="be-cl-meta">{c.categoria} · {c.itens} {c.itens === 1 ? 'item' : 'itens'}{c.tempoEstimadoMin > 0 ? ` · ~${c.tempoEstimadoMin} min` : ''}</span>
-      </span>
-      {c.emAlerta && <span className="be-st" style={{ color: '#dc2626', background: '#dc262622' }}>⚠️ Alerta</span>}
-      {st && <span className="be-st" style={{ color: st.cor, background: st.cor + '22' }}>{st.label}</span>}
-      <span className="be-cl-arrow">›</span>
-    </button>
+    <div className={'be-clc' + (concluida ? ' done' : '')}>
+      <div className="be-clc-top">
+        {c.horarioLimite && <><span className="be-clc-time be-tnum">{c.horarioLimite}</span><span className="be-clc-vdiv" /></>}
+        <span className="be-clc-nm">{c.nome}</span>
+      </div>
+      <div className="be-clc-bar">
+        <i style={{ width: pct + '%' }} />
+        <span className="be-clc-pct be-tnum" style={{ color: pct >= 50 ? '#fff' : 'var(--ink-soft)' }}>{pct}%</span>
+      </div>
+      <div className="be-clc-foot">
+        <span className="be-clc-cat">📁 {c.categoria}{c.emAlerta && <span className="be-clc-alert"> · ⚠️ Alerta</span>}</span>
+        {concluida
+          ? <button type="button" className="be-clc-done" onClick={() => onAbrir(c)}>✓ Finalizado</button>
+          : <button type="button" className="be-clc-btn" onClick={() => onAbrir(c)}>{acao}</button>}
+      </div>
+    </div>
   )
 }
 

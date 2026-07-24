@@ -2302,10 +2302,17 @@ app.get('/api/public/colaborador/checklists', async (req, res) => {
     const checklists = todos.filter((c) => chkColabAtende(c, func));
     const dataRef = chkDataRefAtual();
     const dow = chkDiaSemanaExpediente();
-    // Execuções do dia (para saber o que já foi concluído).
-    const execs = await prisma.checklistExecucao.findMany({ where: { empresaId: sess.empresaId, dataRef }, select: { checklistId: true, status: true, emAlerta: true } });
+    // Execuções do dia (status + quantas respostas já foram dadas, p/ a barra de progresso).
+    const execs = await prisma.checklistExecucao.findMany({ where: { empresaId: sess.empresaId, dataRef }, select: { checklistId: true, status: true, emAlerta: true, _count: { select: { respostas: true } } } });
     const execMap = new Map(execs.map((e) => [e.checklistId, e]));
-    const mapear = (c) => ({ id: c.id, nome: c.nome, categoria: c.categoria, prioridade: c.prioridade, itens: c._count.itens, recorrenciaTipo: c.recorrenciaTipo, tempoEstimadoMin: c.tempoEstimadoMin ?? null, status: execMap.get(c.id)?.status || null, emAlerta: execMap.get(c.id)?.emAlerta || false });
+    const mapear = (c) => {
+      const ex = execMap.get(c.id);
+      const total = c._count.itens;
+      const feitos = Math.min(ex?._count?.respostas || 0, total);
+      const pct = ex?.status === 'CONCLUIDA' ? 100 : (total ? Math.round((feitos / total) * 100) : 0);
+      const hl = (c.recorrenciaConfig && typeof c.recorrenciaConfig.horarioLimite === 'string') ? c.recorrenciaConfig.horarioLimite : null;
+      return { id: c.id, nome: c.nome, categoria: c.categoria, prioridade: c.prioridade, itens: total, recorrenciaTipo: c.recorrenciaTipo, tempoEstimadoMin: c.tempoEstimadoMin ?? null, horarioLimite: hl, status: ex?.status || null, emAlerta: ex?.emAlerta || false, progresso: { feitos, total, pct } };
+    };
     const hoje = [], disponiveis = [];
     for (const c of checklists) {
       if (venceHoje({ recorrenciaTipo: c.recorrenciaTipo, recorrenciaConfig: c.recorrenciaConfig }, dow)) hoje.push(mapear(c));
