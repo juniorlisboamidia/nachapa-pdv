@@ -7,6 +7,7 @@ import { useParams } from 'react-router-dom'
 import { colabApi, COLAB_TOKEN_KEY } from '../services/api'
 import { AREA_COLABORADOR_CSS } from '../styles/areaColaboradorCss'
 import { ExecutarChecklist } from '../components/checklist/ExecutarChecklist'
+import { mascararTelefone } from '../utils/telefone'
 
 const brl = (n) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(n) || 0)
 const num = (n) => new Intl.NumberFormat('pt-BR').format(Math.round(Number(n) || 0))
@@ -618,7 +619,7 @@ function LoginColaborador({ slug, onEntrar }) {
             <>
               <p className="be-login-sub">Digite o seu número de WhatsApp para receber o código de login.</p>
               <div className="be-login-note"><IconeEscudo /> Não compartilhe seu código com ninguém.</div>
-              <input className="be-input" inputMode="numeric" autoComplete="tel" aria-label="Seu número de WhatsApp" placeholder="(00) 00000-0000" value={fone} onChange={(e) => setFone(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && pedir()} />
+              <input className="be-input" inputMode="numeric" autoComplete="tel" aria-label="Seu número de WhatsApp" placeholder="(00) 00000-0000" value={fone} onChange={(e) => setFone(mascararTelefone(e.target.value))} onKeyDown={(e) => e.key === 'Enter' && pedir()} />
               {erro && <div className="be-login-erro">{erro}</div>}
               <button type="button" className="be-btn" onClick={pedir} disabled={busy}>{busy ? 'Enviando…' : 'Receber código no WhatsApp'}</button>
             </>
