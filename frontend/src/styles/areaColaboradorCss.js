@@ -186,11 +186,13 @@ export const AREA_COLABORADOR_CSS = `
 .be-sair{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);color:#fff;font-family:inherit;font-size:11.5px;font-weight:750;padding:5px 12px;border-radius:999px;cursor:pointer}
 .be-state button{cursor:pointer}
 /* Login */
-.be-login{min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px 18px;background:radial-gradient(120% 50% at 50% -8%,rgba(234,184,2,.18),transparent 62%),radial-gradient(90% 42% at 50% 110%,rgba(234,184,2,.10),transparent 60%),var(--bg)}
-.be-login-card{width:100%;max-width:384px;background:var(--surface);border:1px solid var(--line);border-radius:24px;padding:30px 24px 26px;box-shadow:var(--sh-md);text-align:center;animation:be-rise .45s cubic-bezier(.2,.7,.3,1) both}
-.be-login-logo{width:66px;height:66px;border-radius:19px;margin:0 auto 16px;background:linear-gradient(145deg,#F5CE3A,#E0A800);display:grid;place-items:center;font-size:28px;font-weight:850;color:#0E1319;overflow:hidden;box-shadow:0 6px 18px rgba(234,184,2,.35),inset 0 1px 0 rgba(255,255,255,.55)}
+.be-login{min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px 18px;background:radial-gradient(120% 50% at 50% -8%,rgba(234,184,2,.16),transparent 62%),radial-gradient(90% 42% at 50% 112%,rgba(234,184,2,.08),transparent 60%),#13172b}
+/* Cartão travado no visual claro (fundo da tela é escuro): força os tokens de tema
+   pra não escurecer/sumir no modo escuro do celular. */
+.be-login-card{--surface:#FFFFFF;--surface-2:#EFEADF;--ink:#0E1319;--ink-soft:#474D55;--muted:#8A8E94;--line:#E5DFD2;--brand:#EAB802;--brand-tint:#FBF2CC;--gold-text:#8A6A00;width:100%;max-width:384px;background:var(--surface);border:1px solid var(--line);border-radius:24px;padding:30px 24px 26px;box-shadow:0 10px 40px rgba(0,0,0,.28);text-align:center;animation:be-rise .45s cubic-bezier(.2,.7,.3,1) both}
+.be-login-logo{width:66px;height:66px;border-radius:19px;margin:0 auto 16px;background:#FFFFFF;display:grid;place-items:center;font-size:28px;font-weight:850;color:#0E1319;overflow:hidden;box-shadow:0 4px 14px rgba(14,19,25,.10);border:1px solid rgba(14,19,25,.06)}
 .be-login-logo img{width:100%;height:100%;object-fit:cover}
-.be-login-oi{font-size:11px;font-weight:800;letter-spacing:.18em;text-transform:uppercase;color:var(--gold-text)}
+.be-login-oi{font-size:13px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--gold-text)}
 .be-login-sub{font-size:14px;color:var(--ink-soft);line-height:1.55;margin:10px 0 14px;text-wrap:balance}
 .be-login-sub b{color:var(--ink);font-weight:700}
 .be-login-note{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--gold-text);background:var(--brand-tint);border-radius:999px;padding:7px 13px;margin-bottom:18px;line-height:1.2}
@@ -201,7 +203,7 @@ export const AREA_COLABORADOR_CSS = `
 .be-login .be-btn:not(:disabled):active{transform:scale(.985)}
 .be-login-erro{font-size:12.5px;color:#dc2626;font-weight:600;margin-bottom:12px}
 .be-login-voltar{background:none;border:none;color:var(--muted);font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;margin-top:12px;text-decoration:underline}
-.be-login-foot{display:inline-flex;align-items:center;gap:6px;margin-top:20px;font-size:11.5px;color:var(--muted)}
+.be-login-foot{display:inline-flex;align-items:center;gap:6px;margin-top:20px;font-size:12px;color:rgba(255,255,255,.6)}
 @keyframes be-rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.be-login-card{animation:none}.be-login .be-btn,.be-login .be-input{transition:none}.be-login .be-btn:not(:disabled):active{transform:none}}
 `
