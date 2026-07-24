@@ -8083,7 +8083,29 @@ app.get('/api/checklist/checklists', async (req, res) => {
     const where = { ativo: true };
     if (busca) where.nome = { contains: busca, mode: 'insensitive' };
     const checklists = await prisma.checklist.findMany({ where, orderBy: { nome: 'asc' }, include: { _count: { select: { itens: true } } } });
-    res.json({ checklists });
+
+    // Enriquecimento p/ o card do gestor (rota admin → empresaId injetado pela extension):
+    // responsável resolvido (nomes), horário-limite, e o progresso de HOJE (barra) quando o
+    // checklist vence hoje. Colaborador → nomes dos funcionários; Função → os próprios nomes.
+    const funcs = await prisma.funcionario.findMany({ where: { status: 'ATIVO' }, select: { id: true, nome: true, apelido: true } });
+    const fmap = new Map(funcs.map((f) => [f.id, f.apelido || f.nome]));
+    const dataRef = chkDataRefAtual();
+    const dow = chkDiaSemanaExpediente();
+    const execs = await prisma.checklistExecucao.findMany({ where: { dataRef }, select: { checklistId: true, status: true, emAlerta: true, _count: { select: { respostas: true } } } });
+    const emap = new Map(execs.map((e) => [e.checklistId, e]));
+    const enriquecidos = checklists.map((c) => {
+      const resp = c.atribuicaoTipo === 'COLABORADOR'
+        ? (Array.isArray(c.funcionarioIds) ? c.funcionarioIds.map((id) => fmap.get(id)).filter(Boolean).join(', ') : '')
+        : (Array.isArray(c.funcoes) ? c.funcoes.join(', ') : '');
+      const vence = venceHoje({ recorrenciaTipo: c.recorrenciaTipo, recorrenciaConfig: c.recorrenciaConfig }, dow);
+      const ex = emap.get(c.id);
+      const total = c._count.itens;
+      const feitos = Math.min(ex?._count?.respostas || 0, total);
+      const pct = ex?.status === 'CONCLUIDA' ? 100 : (total ? Math.round((feitos / total) * 100) : 0);
+      const hl = (c.recorrenciaConfig && typeof c.recorrenciaConfig.horarioLimite === 'string') ? c.recorrenciaConfig.horarioLimite : null;
+      return { ...c, responsavel: resp || null, horarioLimite: hl, venceHoje: vence, hojeStatus: ex?.status || null, hojeEmAlerta: ex?.emAlerta || false, hojePct: (vence || ex) ? pct : null };
+    });
+    res.json({ checklists: enriquecidos });
   } catch (err) { console.error('[checklist/checklists GET]', err); res.status(500).json({ error: 'Erro ao carregar checklists.' }); }
 });
 app.get('/api/checklist/checklists/:id', async (req, res) => {

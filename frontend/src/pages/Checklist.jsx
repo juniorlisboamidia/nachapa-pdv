@@ -766,31 +766,43 @@ function AbaChecklists({ notify }) {
       ) : lista.length === 0 ? (
         <div className="empty-state">Nenhum checklist ainda. Crie um do zero ou use um template pronto na aba Templates.</div>
       ) : (
-        <div className="table-card">
-          <table className="hb-table">
-            <thead><tr><th>Nome</th><th>Categoria</th><th>Prioridade</th><th>Recorrência</th><th>Itens</th><th style={{ textAlign: 'right' }}>Ações</th></tr></thead>
-            <tbody>
-              {lista.map((c) => (
-                <tr key={c.id}>
-                  <td style={{ fontWeight: 600 }}>{c.nome}</td>
-                  <td>{c.categoria}</td>
-                  <td>{PRIORIDADE_LABEL[c.prioridade] || c.prioridade}</td>
-                  <td>{REC_LABEL[c.recorrenciaTipo] || c.recorrenciaTipo}</td>
-                  <td>{c._count?.itens ?? '—'}</td>
-                  <td style={{ textAlign: 'right' }}>
-                    <div className="chk-row-acoes">
-                      <ChkAcaoBtn icon="eye" title="Ver detalhes" onClick={() => navigate(`/checklist/detalhe/${c.id}`)} />
-                      <ChkAcaoBtn icon="calendario" title="Ver histórico" onClick={() => navigate(`/checklist/historico/${c.id}`)} />
-                      <ChkAcaoBtn icon="grafico" title="Ver estatísticas" onClick={() => navigate(`/checklist/estatisticas/${c.id}`)} />
-                      <ChkAcaoBtn icon="play" title="Executar" onClick={() => executar(c)} />
-                      <ChkAcaoBtn icon="edit" title="Editar" onClick={() => editar(c)} />
-                      <ChkAcaoBtn icon="trash" title="Excluir" danger onClick={() => setExcluir(c)} />
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="chk-cards">
+          {lista.map((c) => (
+            <div key={c.id} className={'chk-card' + (c.hojeEmAlerta ? ' alerta' : '')}>
+              <div className="chk-card-top">
+                {c.horarioLimite && <><span className="chk-card-time">{c.horarioLimite}</span><span className="chk-card-vdiv" /></>}
+                <span className="chk-card-nm">{c.nome}</span>
+                <span className={'chk-card-prio p-' + c.prioridade}>{PRIORIDADE_LABEL[c.prioridade] || c.prioridade}</span>
+              </div>
+
+              {/* Barra = progresso de HOJE (só quando vence hoje / já tem execução). Catálogo
+                  também lista checklists que não vencem hoje — nesses, sem barra, só o aviso. */}
+              {c.hojePct != null ? (
+                <div className="chk-card-bar">
+                  <i style={{ width: c.hojePct + '%' }} />
+                  <span className="pct" style={{ color: c.hojePct >= 50 ? '#fff' : 'var(--app-text-2)' }}>{c.hojePct}% hoje</span>
+                </div>
+              ) : (
+                <div className="chk-card-norow">Não vence hoje</div>
+              )}
+
+              <div className="chk-card-meta">
+                <span>📁 {c.categoria}</span>
+                <span>· {REC_LABEL[c.recorrenciaTipo] || c.recorrenciaTipo}</span>
+                <span>· {c._count?.itens ?? 0} {c._count?.itens === 1 ? 'item' : 'itens'}</span>
+              </div>
+              <div className="chk-card-resp">👤 {c.responsavel || <em>Sem responsável</em>}</div>
+
+              <div className="chk-card-acoes">
+                <ChkAcaoBtn icon="eye" title="Ver detalhes" onClick={() => navigate(`/checklist/detalhe/${c.id}`)} />
+                <ChkAcaoBtn icon="calendario" title="Ver histórico" onClick={() => navigate(`/checklist/historico/${c.id}`)} />
+                <ChkAcaoBtn icon="grafico" title="Ver estatísticas" onClick={() => navigate(`/checklist/estatisticas/${c.id}`)} />
+                <ChkAcaoBtn icon="play" title="Executar" onClick={() => executar(c)} />
+                <ChkAcaoBtn icon="edit" title="Editar" onClick={() => editar(c)} />
+                <ChkAcaoBtn icon="trash" title="Excluir" danger onClick={() => setExcluir(c)} />
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

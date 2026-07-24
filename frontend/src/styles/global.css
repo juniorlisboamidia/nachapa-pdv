@@ -2476,6 +2476,27 @@ a.ind-act { text-decoration: none; }
 /* Coluna Ações da tabela de Checklists (Task 3) — botões-ícone (Ver detalhes/Executar/
    Editar/Excluir), mesmo tom neutro do .btn-secondary, hover vermelho só no Excluir. */
 .chk-row-acoes { display: inline-flex; gap: 5px; }
+
+/* Lista de checklists do gestor no padrão de cards (hora + nome + progresso de hoje +
+   categoria/recorrência + responsável + ações). Tema-aware pelos --app-*. */
+.chk-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
+.chk-card { background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 14px; padding: 15px 16px; box-shadow: 0 1px 2px rgba(0,0,0,.04); display: flex; flex-direction: column; gap: 10px; }
+.chk-card.alerta { border-color: #e0a0a0; }
+.chk-card-top { display: flex; align-items: center; gap: 11px; }
+.chk-card-time { font-size: 16px; font-weight: 800; letter-spacing: -.02em; color: var(--app-text); flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.chk-card-vdiv { width: 1px; align-self: stretch; min-height: 20px; background: var(--app-border); flex-shrink: 0; }
+.chk-card-nm { font-size: 14.5px; font-weight: 700; color: var(--app-text); line-height: 1.25; flex: 1; min-width: 0; }
+.chk-card-prio { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; padding: 3px 9px; border-radius: 999px; flex-shrink: 0; background: #eef1f4; color: #5b6674; }
+.chk-card-prio.p-ALTA { background: #fde3e3; color: #b3261e; }
+.chk-card-prio.p-MEDIA { background: #fdefc7; color: #8a5b00; }
+.chk-card-bar { position: relative; height: 22px; border-radius: 999px; background: var(--app-surface-2); overflow: hidden; }
+.chk-card-bar i { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, #10b981, #059669); border-radius: 999px; transition: width .35s ease; }
+.chk-card-bar .pct { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 11.5px; font-weight: 800; }
+.chk-card-norow { font-size: 12px; color: var(--app-text-3); font-weight: 600; }
+.chk-card-meta { display: flex; flex-wrap: wrap; gap: 5px; font-size: 12px; color: var(--app-text-3); font-weight: 600; }
+.chk-card-resp { font-size: 12.5px; font-weight: 700; color: var(--app-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chk-card-resp em { color: var(--app-text-3); font-weight: 600; font-style: normal; }
+.chk-card-acoes { display: flex; gap: 6px; flex-wrap: wrap; border-top: 1px solid var(--app-border); padding-top: 11px; }
 .chk-ic-btn {
   display: inline-flex; align-items: center; justify-content: center;
   width: 28px; height: 28px; padding: 0; border-radius: 7px;
