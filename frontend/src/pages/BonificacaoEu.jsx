@@ -183,9 +183,12 @@ function SecaoSeuDia({ saldoCoins, indice, pontoHoje, setTab }) {
   else if (pontoHoje.entrada) { ptT = `Entrada registrada às ${pontoHoje.entrada}`; ptS = pontoHoje.saida ? `Saída às ${pontoHoje.saida}` : 'Bom turno! 💪' }
   else { ptT = 'Você ainda não bateu o ponto hoje'; ptS = 'Registre sua entrada' }
 
+  const dataStr = new Date().toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' }).replace('.', '')
+  const dataHoje = dataStr.charAt(0).toUpperCase() + dataStr.slice(1)
+
   return (
     <section>
-      <h2 className="be-sec-title">☀️ Seu dia</h2>
+      <h2 className="be-sec-title">☀️ Seu dia <span className="be-day-date">{dataHoje}</span></h2>
       <div className="be-card be-day">
         <div className="be-day-chips">
           <span className="be-chip gold">🪙 <b className="be-tnum">{num(saldoCoins)}</b> Coins</span>

@@ -43,6 +43,7 @@ export const AREA_COLABORADOR_CSS = `
 .be-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--rd);padding:18px;box-shadow:var(--sh-sm)}
 .be-b{font-weight:700;color:var(--ink)}
 /* Painel "Seu dia" (aba Início) */
+.be-day-date{margin-left:auto;font-size:11.5px;font-weight:700;color:var(--muted);text-transform:none;letter-spacing:normal}
 .be-day{padding:16px 16px 6px}
 .be-day-chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
 .be-chip{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:700;color:var(--ink-soft);background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:6px 11px}
