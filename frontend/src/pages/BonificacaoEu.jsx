@@ -99,36 +99,15 @@ export default function BonificacaoEu() {
       <div className="be-app">
         <header className="be-hero">
           <div className="be-hero-bar">
-            <span className="be-hero-loja"><span className="lg">{loja?.logoDataUrl ? <img src={loja.logoDataUrl} alt="" /> : (loja?.nome || 'L').charAt(0).toUpperCase()}</span>{loja?.nome}</span>
+            {/* Barra fina persistente: logo (fundo branco) + saudação. As "atividades do
+                dia" (checklists/ponto/chips) moram na aba Início — ver SecaoSeuDia. */}
+            <span className="be-hero-loja"><span className="lg">{loja?.logoDataUrl ? <img src={loja.logoDataUrl} alt="" /> : inicial}</span>Olá, {primeiro} 👋</span>
             <button type="button" className="be-sair" onClick={sair}>Sair</button>
-          </div>
-          <div className="be-hero-main">
-            <div className="be-avatar">{inicial}</div>
-            <div className="be-hero-id">
-              <div className="oi">Área do colaborador</div>
-              <h1>Olá, {primeiro} 👋</h1>
-              {funcionario?.funcao && <div className="fx">{funcionario.funcao}</div>}
-            </div>
-          </div>
-          <div className="be-hero-stats">
-            <div className="be-stat coins">
-              <div className="v be-tnum">🪙 {num(saldoCoins)}</div>
-              <div className="k">Coins</div>
-            </div>
-            {meu?.indice != null && (
-              <>
-                <div className="be-stat-div" />
-                <div className="be-stat">
-                  <div className="v be-tnum">⭐ {meu.indice}%</div>
-                  <div className="k">Índice</div>
-                </div>
-              </>
-            )}
           </div>
         </header>
 
         <main className="be-body">
-          {tab === 'inicio' && <TabInicio meu={meu} totalEquipe={totalEquipe} historico={historico} contribuicoes={contribuicoes} mes={mes} ano={ano} />}
+          {tab === 'inicio' && <TabInicio meu={meu} saldoCoins={saldoCoins} pontoHoje={d.pontoHoje} totalEquipe={totalEquipe} historico={historico} contribuicoes={contribuicoes} mes={mes} ano={ano} setTab={setTab} />}
           {tab === 'ponto' && <TabPonto ponto={ponto} ano={ano} mes={mes} />}
           {tab === 'checklists' && <TabChecklists setAviso={setAviso} />}
           {tab === 'premios' && <TabPremios saldoCoins={saldoCoins} conquistas={conquistas} conquistasResumo={conquistasResumo} mercado={mercado} meusResgates={meusResgates} onResgatar={setConfirmar} />}
@@ -179,13 +158,67 @@ export default function BonificacaoEu() {
 }
 
 /* ══════════ ABA: INÍCIO ══════════ */
-function TabInicio({ meu, totalEquipe, historico, contribuicoes, mes, ano }) {
+// Painel "Seu dia" — o que o colaborador precisa saber HOJE (não o resumo do mês):
+// chips de Coins/Índice + checklists de hoje (com progresso, levando pra aba) + status
+// do ponto do dia. É um RESUMO que encaminha; a execução acontece nas abas próprias.
+function SecaoSeuDia({ saldoCoins, indice, pontoHoje, setTab }) {
+  const [ck, setCk] = useState(null) // { hoje, disponiveis } | null (carregando)
+  useEffect(() => {
+    colabApi.get('/public/colaborador/checklists').then((r) => setCk(r.data)).catch(() => setCk({ hoje: [], disponiveis: [] }))
+  }, [])
+
+  const total = ck?.hoje?.length ?? 0
+  const feitos = ck?.hoje?.filter((c) => c.status === 'CONCLUIDA').length ?? 0
+  const pend = total - feitos
+
+  let ckT, ckS
+  if (ck == null) { ckT = 'Carregando seus checklists…'; ckS = null }
+  else if (total === 0) { ckT = 'Nenhum checklist para hoje'; ckS = 'Tudo em dia por aqui 🎉' }
+  else if (pend === 0) { ckT = 'Checklists de hoje concluídos'; ckS = `${feitos} de ${total} — mandou bem! ✅` }
+  else { ckT = `Você tem ${pend} checklist${pend > 1 ? 's' : ''} para hoje`; ckS = feitos > 0 ? `${feitos} de ${total} concluídos` : `${total} no total` }
+
+  let ptT, ptS
+  if (!pontoHoje) { ptT = null }
+  else if (pontoHoje.folga) { ptT = 'Hoje é sua folga'; ptS = 'Bom descanso 😉' }
+  else if (pontoHoje.entrada) { ptT = `Entrada registrada às ${pontoHoje.entrada}`; ptS = pontoHoje.saida ? `Saída às ${pontoHoje.saida}` : 'Bom turno! 💪' }
+  else { ptT = 'Você ainda não bateu o ponto hoje'; ptS = 'Registre sua entrada' }
+
+  return (
+    <section>
+      <h2 className="be-sec-title">☀️ Seu dia</h2>
+      <div className="be-card be-day">
+        <div className="be-day-chips">
+          <span className="be-chip gold">🪙 <b className="be-tnum">{num(saldoCoins)}</b> Coins</span>
+          {indice != null && <span className="be-chip">⭐ <b className="be-tnum">{indice}%</b> Índice</span>}
+        </div>
+
+        <button type="button" className="be-day-row" onClick={() => setTab('checklists')}>
+          <span className="be-day-ic">✅</span>
+          <span className="be-day-txt"><span className="t">{ckT}</span>{ckS && <span className="s">{ckS}</span>}</span>
+          <span className="be-day-go">›</span>
+        </button>
+
+        {ptT && (
+          <button type="button" className="be-day-row" onClick={() => setTab('ponto')}>
+            <span className="be-day-ic">🕐</span>
+            <span className="be-day-txt"><span className="t">{ptT}</span>{ptS && <span className="s">{ptS}</span>}</span>
+            <span className="be-day-go">›</span>
+          </button>
+        )}
+      </div>
+    </section>
+  )
+}
+
+function TabInicio({ meu, saldoCoins, pontoHoje, totalEquipe, historico, contribuicoes, mes, ano, setTab }) {
   const mesNome = new Date(ano, (mes || 1) - 1, 1).toLocaleDateString('pt-BR', { month: 'long' })
   const pos = meu?.posicao
   const medalCls = pos && pos <= 3 ? MEDAL[pos] : ''
   const idx = meu?.indice != null ? Math.max(0, Math.min(100, Number(meu.indice))) : null
   return (
     <>
+      <SecaoSeuDia saldoCoins={saldoCoins} indice={meu?.indice} pontoHoje={pontoHoje} setTab={setTab} />
+
       <section>
         <h2 className="be-sec-title">🗓️ Seu {mesNome}</h2>
         <div className="be-card">

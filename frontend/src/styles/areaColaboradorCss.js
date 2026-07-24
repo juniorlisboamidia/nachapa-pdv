@@ -12,9 +12,9 @@ export const AREA_COLABORADOR_CSS = `
 .be-tnum{font-variant-numeric:tabular-nums}
 
 /* Hero */
-.be-hero{position:sticky;top:0;z-index:20;color:#fff;padding:16px 20px 18px;border-radius:0 0 26px 26px;background:radial-gradient(120% 80% at 86% -12%,rgba(234,184,2,.20),transparent 58%),linear-gradient(165deg,#1B2532 0%,#0E1319 62%);box-shadow:0 12px 30px rgba(14,19,25,.32)}
-.be-hero-loja{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:750;color:rgba(255,255,255,.9)}
-.be-hero-loja .lg{width:24px;height:24px;border-radius:7px;background:linear-gradient(135deg,#F5CE3A,#EAB802);display:grid;place-items:center;font-size:12px;font-weight:850;color:#0E1319;overflow:hidden}
+.be-hero{position:sticky;top:0;z-index:20;color:#fff;padding:14px 18px;border-radius:0 0 22px 22px;background:radial-gradient(120% 90% at 86% -20%,rgba(234,184,2,.20),transparent 58%),linear-gradient(165deg,#1B2532 0%,#0E1319 62%);box-shadow:0 10px 26px rgba(14,19,25,.30)}
+.be-hero-loja{display:inline-flex;align-items:center;gap:10px;font-size:15px;font-weight:800;color:#fff;min-width:0}
+.be-hero-loja .lg{width:30px;height:30px;border-radius:9px;background:#fff;display:grid;place-items:center;font-size:14px;font-weight:850;color:#0E1319;overflow:hidden;flex-shrink:0;box-shadow:0 2px 6px rgba(0,0,0,.28)}
 .be-hero-loja .lg img{width:100%;height:100%;object-fit:cover}
 .be-hero-main{display:flex;align-items:center;gap:14px;margin-top:16px}
 .be-avatar{width:54px;height:54px;border-radius:16px;flex-shrink:0;background:linear-gradient(145deg,#F5CE3A,#E0A800);display:grid;place-items:center;font-size:23px;font-weight:850;color:#0E1319;box-shadow:0 6px 16px rgba(234,184,2,.28)}
@@ -42,6 +42,20 @@ export const AREA_COLABORADOR_CSS = `
 .be-sec-title{font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:11px;display:flex;align-items:center;gap:7px}
 .be-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--rd);padding:18px;box-shadow:var(--sh-sm)}
 .be-b{font-weight:700;color:var(--ink)}
+/* Painel "Seu dia" (aba Início) */
+.be-day{padding:16px 16px 6px}
+.be-day-chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.be-chip{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:700;color:var(--ink-soft);background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:6px 11px}
+.be-chip b{font-weight:850;color:var(--ink)}
+.be-chip.gold{color:var(--gold-text);background:var(--brand-tint);border-color:transparent}
+.be-chip.gold b{color:var(--gold-text)}
+.be-day-row{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:none;border:none;border-top:1px solid var(--line);padding:13px 0;cursor:pointer;font-family:inherit;color:inherit}
+.be-day-ic{width:38px;height:38px;flex-shrink:0;border-radius:11px;background:var(--brand-tint);display:grid;place-items:center;font-size:19px}
+.be-day-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.be-day-txt .t{font-size:14px;font-weight:750;color:var(--ink);line-height:1.25}
+.be-day-txt .s{font-size:12px;color:var(--muted)}
+.be-day-go{color:var(--muted);font-size:22px;font-weight:700;flex-shrink:0;line-height:1}
+.be-day-row:active .be-day-go{transform:translateX(2px)}
 .be-hint{font-size:12px;color:var(--muted);margin-top:12px;line-height:1.5}
 .be-hint b{color:var(--ink)}
 .be-empty{text-align:center;padding:26px 16px;color:var(--muted);font-size:13px;background:var(--surface);border:1px dashed var(--line);border-radius:var(--rd)}

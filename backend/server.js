@@ -2086,6 +2086,10 @@ app.get('/api/public/colaborador/me', async (req, res) => {
     }).reverse();
     // Área do Colaborador: minhas marcações de ponto do mês (reaproveita o espelho).
     let ponto = { marcacoes: [], resumo: { diasTrabalhados: 0, atrasos: 0, faltas: 0 } };
+    // Ponto de HOJE (dia de expediente) pro painel "Seu dia" da Início: entrada/saída,
+    // se é folga, e a situação. Só derivado quando o dia de expediente cai no mês do
+    // espelho (`ano`/`mes`); na virada de mês fica null pra não dar palpite errado.
+    let pontoHoje = null;
     try {
       const esp = await calcularEspelho(func.id, ano, mes);
       const marc = (esp.dias || [])
@@ -2093,6 +2097,11 @@ app.get('/api/public/colaborador/me', async (req, res) => {
         .map((d) => ({ dia: d.dia, dow: d.dow, entrada: d.entradaHm, saida: d.saidaHm, situacao: d.situacao, atrasoMin: d.atrasoMin }))
         .reverse();
       ponto = { marcacoes: marc, resumo: { diasTrabalhados: esp.totais.diasTrabalhados, atrasos: esp.totais.atrasos, faltas: esp.totais.faltas } };
+      const hf = brFields(chkDataRefAtual().getTime());
+      if (hf.y === ano && hf.mo === mes - 1) {
+        const dh = (esp.dias || []).find((x) => x.dia === hf.day);
+        if (dh && !dh.futuro) pontoHoje = { entrada: dh.entradaHm || null, saida: dh.saidaHm || null, folga: !!dh.folga, situacao: dh.situacao };
+      }
     } catch (e) { console.error('[colaborador/me ponto]', e?.msg || e); }
     res.json({
       loja: { nome: loja?.nome || 'Loja', logoDataUrl: loja?.logoPublicaDataUrl || loja?.logoDataUrl || null },
@@ -2101,6 +2110,7 @@ app.get('/api/public/colaborador/me', async (req, res) => {
       meu: meu ? rowPublicoBonif(meu) : null,
       totalEquipe: rows.length, // p/ "Xº de N", sem expor a pontuação dos colegas
       ponto,
+      pontoHoje,
       conquistas: conquistasOut,
       conquistasResumo: { total: conquistasOut.length, desbloqueadas: desbMap.size },
       coins: saldoMoedas,
