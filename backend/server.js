@@ -6751,6 +6751,96 @@ app.delete('/api/ponto/jornadas/:id', async (req, res) => {
   } catch (err) { console.error('[ponto/jornadas DELETE]', err); res.status(500).json({ error: 'Erro ao excluir a jornada.' }); }
 });
 
+// ===== Afastamentos / Ausências (ADMIN) — férias, atestado, licença, folga abonada =====
+const AUSENCIA_TIPOS = ['FERIAS', 'ATESTADO', 'LICENCA', 'FOLGA_ABONADA', 'OUTRO'];
+// 'YYYY-MM-DD' → Date às 05:00 BR (início do dia de expediente). null se inválido.
+const ausData = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || '')); return m ? new Date(brToUtcMs(+m[1], +m[2] - 1, +m[3], 5, 0)) : null; };
+
+app.get('/api/ponto/ausencias', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const where = {};
+    if (req.query.funcionarioId) where.funcionarioId = parseInt(req.query.funcionarioId, 10);
+    const de = ausData(req.query.de), ate = ausData(req.query.ate);
+    if (de) where.dataFim = { gte: de };
+    if (ate) where.dataInicio = { lte: ate };
+    const rows = await prisma.pontoAusencia.findMany({ where, orderBy: { dataInicio: 'desc' }, take: 500 });
+    const fs = new Map((await prisma.funcionario.findMany()).map((f) => [f.id, f.apelido || f.nome]));
+    res.json({ ausencias: rows.map((a) => ({ id: a.id, funcionarioId: a.funcionarioId, funcionarioNome: fs.get(a.funcionarioId) || '—', tipo: a.tipo, dataInicio: a.dataInicio, dataFim: a.dataFim, observacao: a.observacao || null, trocaGrupo: a.trocaGrupo || null })) });
+  } catch (err) { console.error('[ponto/ausencias GET]', err); res.status(500).json({ error: 'Erro ao carregar afastamentos.' }); }
+});
+
+app.post('/api/ponto/ausencias', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const funcionarioId = parseInt(req.body?.funcionarioId, 10);
+    if (!funcionarioId) return res.status(400).json({ error: 'Selecione o colaborador.' });
+    if (!AUSENCIA_TIPOS.includes(req.body?.tipo)) return res.status(400).json({ error: 'Tipo inválido.' });
+    const dataInicio = ausData(req.body?.dataInicio), dataFim = ausData(req.body?.dataFim);
+    if (!dataInicio || !dataFim) return res.status(400).json({ error: 'Datas inválidas.' });
+    if (dataFim < dataInicio) return res.status(400).json({ error: 'A data fim não pode ser antes do início.' });
+    const func = await prisma.funcionario.findFirst({ where: { id: funcionarioId } });
+    if (!func) return res.status(404).json({ error: 'Colaborador não encontrado.' });
+    // Sobreposição AVISA (não bloqueia): o gestor decide.
+    const sobrepoe = await prisma.pontoAusencia.findFirst({ where: { funcionarioId, dataInicio: { lte: dataFim }, dataFim: { gte: dataInicio } } });
+    const a = await prisma.pontoAusencia.create({ data: { funcionarioId, tipo: req.body.tipo, dataInicio, dataFim, observacao: req.body?.observacao ? String(req.body.observacao).slice(0, 300) : null } });
+    res.status(201).json({ id: a.id, aviso: sobrepoe ? 'Atenção: já existe um afastamento que se sobrepõe a este período.' : null });
+  } catch (err) { console.error('[ponto/ausencias POST]', err); res.status(500).json({ error: 'Erro ao salvar o afastamento.' }); }
+});
+
+app.put('/api/ponto/ausencias/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const id = parseInt(req.params.id, 10);
+    const ex = await prisma.pontoAusencia.findFirst({ where: { id } });
+    if (!ex) return res.status(404).json({ error: 'Afastamento não encontrado.' });
+    const data = {};
+    if (req.body?.tipo !== undefined) {
+      if (!AUSENCIA_TIPOS.includes(req.body.tipo)) return res.status(400).json({ error: 'Tipo inválido.' });
+      data.tipo = req.body.tipo;
+    }
+    if (req.body?.dataInicio !== undefined) { const d = ausData(req.body.dataInicio); if (!d) return res.status(400).json({ error: 'Data início inválida.' }); data.dataInicio = d; }
+    if (req.body?.dataFim !== undefined) { const d = ausData(req.body.dataFim); if (!d) return res.status(400).json({ error: 'Data fim inválida.' }); data.dataFim = d; }
+    const ini = data.dataInicio || ex.dataInicio, fim = data.dataFim || ex.dataFim;
+    if (fim < ini) return res.status(400).json({ error: 'A data fim não pode ser antes do início.' });
+    if (req.body?.observacao !== undefined) data.observacao = req.body.observacao ? String(req.body.observacao).slice(0, 300) : null;
+    await prisma.pontoAusencia.update({ where: { id }, data });
+    res.json({ ok: true });
+  } catch (err) { console.error('[ponto/ausencias PUT]', err); res.status(500).json({ error: 'Erro ao salvar o afastamento.' }); }
+});
+
+app.delete('/api/ponto/ausencias/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const id = parseInt(req.params.id, 10);
+    const ex = await prisma.pontoAusencia.findFirst({ where: { id } });
+    if (!ex) return res.status(404).json({ error: 'Afastamento não encontrado.' });
+    // Troca é atômica: excluir uma ponta remove as duas (mesmo trocaGrupo).
+    if (ex.trocaGrupo) await prisma.pontoAusencia.deleteMany({ where: { trocaGrupo: ex.trocaGrupo } });
+    else await prisma.pontoAusencia.delete({ where: { id } });
+    res.json({ ok: true });
+  } catch (err) { console.error('[ponto/ausencias DELETE]', err); res.status(500).json({ error: 'Erro ao excluir o afastamento.' }); }
+});
+
+// Troca de folga: cria as DUAS pontas (FOLGA_ABONADA de 1 dia) com o mesmo trocaGrupo.
+// createMany NÃO recebe injeção de empresaId da extension → setar explícito.
+app.post('/api/ponto/ausencias/troca', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const aId = parseInt(req.body?.aFuncionarioId, 10), bId = parseInt(req.body?.bFuncionarioId, 10);
+    if (!aId || !bId || aId === bId) return res.status(400).json({ error: 'Escolha dois colaboradores diferentes.' });
+    const aData = ausData(req.body?.aData), bData = ausData(req.body?.bData);
+    if (!aData || !bData) return res.status(400).json({ error: 'Datas inválidas.' });
+    const empresaId = getEmpresaIdAtual();
+    const grupo = randomBytes(9).toString('base64url');
+    await prisma.pontoAusencia.createMany({ data: [
+      { empresaId, funcionarioId: aId, tipo: 'FOLGA_ABONADA', dataInicio: aData, dataFim: aData, trocaGrupo: grupo },
+      { empresaId, funcionarioId: bId, tipo: 'FOLGA_ABONADA', dataInicio: bData, dataFim: bData, trocaGrupo: grupo },
+    ] });
+    res.status(201).json({ ok: true, trocaGrupo: grupo });
+  } catch (err) { console.error('[ponto/ausencias/troca POST]', err); res.status(500).json({ error: 'Erro ao registrar a troca de folga.' }); }
+});
+
 // Atribui (ou remove, jornadaId null) a jornada de um colaborador.
 app.put('/api/ponto/colaboradores/:id/jornada', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
