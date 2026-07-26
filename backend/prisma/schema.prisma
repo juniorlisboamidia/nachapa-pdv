@@ -1995,3 +1995,30 @@ model ChecklistLembreteEnviado {
   @@unique([empresaId, checklistId, dataRef])
   @@index([empresaId])
 }
+
+enum AusenciaTipo {
+  FERIAS
+  ATESTADO
+  LICENCA
+  FOLGA_ABONADA
+  OUTRO
+}
+
+// Ponto Facial — ausência/afastamento por PERÍODO (férias, atestado, licença, folga
+// abonada, outro). O espelho trata cada dia do período como "abonado" (nunca falta).
+// Datas guardadas às 05:00 BR (início do dia de expediente), início e fim inclusivos.
+model PontoAusencia {
+  id            Int          @id @default(autoincrement())
+  empresaId     Int
+  funcionarioId Int
+  tipo          AusenciaTipo
+  dataInicio    DateTime
+  dataFim       DateTime
+  observacao    String?
+  trocaGrupo    String?      // marca as 2 pontas de uma troca de folga
+  criadoEm      DateTime     @default(now())
+  atualizadoEm  DateTime     @updatedAt
+
+  @@index([empresaId, funcionarioId])
+  @@index([empresaId, dataInicio, dataFim])
+}
