@@ -1,12 +1,6 @@
 -- CreateEnum
 CREATE TYPE "AusenciaTipo" AS ENUM ('FERIAS', 'ATESTADO', 'LICENCA', 'FOLGA_ABONADA', 'OUTRO');
 
--- DropForeignKey
-ALTER TABLE "BonificacaoIndicadorValor" DROP CONSTRAINT "BonificacaoIndicadorValor_indicadorId_fkey";
-
--- DropIndex
-DROP INDEX "ConquistaDesbloqueada_conquistaId_funcionarioId_key";
-
 -- CreateTable
 CREATE TABLE "PontoAusencia" (
     "id" SERIAL NOT NULL,
