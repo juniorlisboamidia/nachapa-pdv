@@ -18,6 +18,7 @@ import { itensCriticosNaoConformes, montarMensagemAlerta } from './checklistAler
 import { montarMensagemLembrete, atrasado } from './checklistLembrete.js';
 import { calcularEstatisticas } from './checklistEstatisticas.js';
 import { classificarOcorrencia, agregar, STATUS } from './checklistHistoricoGeral.js';
+import { ausenciaDoDia } from './pontoAusencia.js';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 
@@ -6937,6 +6938,17 @@ async function calcularEspelho(funcionarioId, ano, mes) {
   const porDia = new Map();
   for (const r of regs) { const k = diaExpedienteKey(r.dataHora); const a = porDia.get(k) || []; a.push(r); porDia.set(k, a); }
 
+  // Afastamentos que cruzam o mês (para abonar dias — ver pontoAusencia.js). Query por
+  // funcionarioId (único): funciona dentro do tenantStore (admin) E fora dele (me público).
+  const ausRows = await prisma.pontoAusencia.findMany({
+    where: {
+      funcionarioId,
+      dataFim: { gte: new Date(brToUtcMs(ano, mes - 1, 1, 5, 0)) },
+      dataInicio: { lte: new Date(brToUtcMs(ano, mes - 1, 31, 5, 0)) },
+    },
+  });
+  const ausencias = ausRows.map((a) => ({ tipo: a.tipo, iniMs: new Date(a.dataInicio).getTime(), fimMs: new Date(a.dataFim).getTime() }));
+
   const hojeF = brFields(Date.now());
   const hojeNum = Date.UTC(hojeF.y, hojeF.mo, hojeF.day);
 
@@ -6950,11 +6962,12 @@ async function calcularEspelho(funcionarioId, ano, mes) {
     const cfg = dias ? dias[dow] : null;
     const futuro = Date.UTC(ano, mes - 1, d) > hojeNum;
     const batidas = porDia.get(`${ano}-${mes - 1}-${d}`) || [];
+    const abono = ausenciaDoDia(brToUtcMs(ano, mes - 1, d, 5, 0), ausencias);
 
     // Folga fixa do colaborador sobrepõe a jornada: o dia vira folga mesmo que a jornada previsse trabalho.
     const folgaColab = Array.isArray(func.folgaSemana) && func.folgaSemana.includes(dow);
     let previstoMin = 0, entradaPrevMs = null, folga = true;
-    if (cfg && !cfg.folga && cfg.entrada && cfg.saida && !folgaColab) {
+    if (!abono && cfg && !cfg.folga && cfg.entrada && cfg.saida && !folgaColab) {
       folga = false;
       const em = hmToMin(cfg.entrada), sm = hmToMin(cfg.saida);
       entradaPrevMs = brToUtcMs(ano, mes - 1, d, Math.floor(em / 60), em % 60);
@@ -6972,9 +6985,9 @@ async function calcularEspelho(funcionarioId, ano, mes) {
         trabalhadoMin = Math.round((saidaMs - entradaMs) / 60000);
         noturnoMin = minutosNoturnos(entradaMs, saidaMs);
         if (!semJornada) extraMin = trabalhadoMin;
-        situacao = semJornada ? 'trabalhado' : 'folga_trabalhada';
+        situacao = abono ? 'abonado_trabalhado' : (semJornada ? 'trabalhado' : 'folga_trabalhada');
         tot.diasTrabalhados++;
-      } else situacao = semJornada ? 'vazio' : 'folga';
+      } else situacao = abono ? 'abonado' : (semJornada ? 'vazio' : 'folga');
     } else if (futuro) {
       situacao = 'futuro';
     } else if (!entradaMs) {
@@ -7004,6 +7017,7 @@ async function calcularEspelho(funcionarioId, ano, mes) {
       entradaHm: entradaMs ? hmFmt(brFields(entradaMs).min) : null,
       saidaHm: saidaMs ? hmFmt(brFields(saidaMs).min) : null,
       trabalhadoMin, atrasoMin, extraMin, faltaMin, noturnoMin, saldoMin,
+      ausenciaTipo: abono ? abono.tipo : null,
     });
   }
 
