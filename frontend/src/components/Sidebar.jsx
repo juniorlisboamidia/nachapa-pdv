@@ -200,6 +200,7 @@ const grupos = [
     itens: [
       { to: '/rh/ponto-facial/painel', label: 'Painel', icon: 'ponto' },
       { to: '/rh/ponto-facial/jornadas', label: 'Jornadas e Escalas', icon: 'calendario' },
+      { to: '/rh/ponto-facial/afastamentos', label: 'Afastamentos', icon: 'calendario' },
       { to: '/rh/ponto-facial/marcacoes', label: 'Marcações', icon: 'ponto' },
       { to: '/rh/ponto-facial/espelho', label: 'Espelho', icon: 'ficha' },
       { to: '/rh/ponto-facial/fechamento', label: 'Fechamento', icon: 'custos' },

@@ -205,6 +205,7 @@ const TABS = [
   // aba do ponto. O componente <Colaboradores> continua neste arquivo (compartilha
   // useEnvioColetor/ModalProgressoEnvio com a aba Coletor) e é renderizado por pages/Colaboradores.jsx.
   { id: 'jornadas', label: 'Jornadas e Escalas', sub: 'Horários e folgas' },
+  { id: 'afastamentos', label: 'Afastamentos', sub: 'Férias, atestados e trocas de folga' },
   { id: 'marcacoes', label: 'Marcações', sub: 'Batidas de ponto' },
   { id: 'espelho', label: 'Espelho', sub: 'Previsto × realizado do mês' },
   { id: 'fechamento', label: 'Fechamento', sub: 'Consolidação do mês' },
@@ -233,6 +234,7 @@ export default function PontoFacial() {
 
       {tab === 'painel' && <Painel />}
       {tab === 'jornadas' && <Jornadas notify={notify} />}
+      {tab === 'afastamentos' && <Afastamentos notify={notify} />}
       {tab === 'marcacoes' && <Marcacoes notify={notify} />}
       {tab === 'espelho' && <Espelho notify={notify} />}
       {tab === 'fechamento' && <Fechamento notify={notify} />}
@@ -1215,6 +1217,141 @@ function resumoJornada(dias) {
   return folga.length ? `${base}  ·  Folga: ${folga.join(', ')}` : base
 }
 
+const AUSENCIA_LABEL = { FERIAS: 'Férias', ATESTADO: 'Atestado', LICENCA: 'Licença', FOLGA_ABONADA: 'Folga abonada', OUTRO: 'Outro' }
+const fmtDia = (iso) => { const d = new Date(iso); return isNaN(d) ? '—' : d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }) }
+
+function Afastamentos({ notify }) {
+  const [lista, setLista] = useState([])
+  const [colabs, setColabs] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [modal, setModal] = useState(null)   // { id?, funcionarioId, tipo, dataInicio, dataFim, observacao }
+  const [troca, setTroca] = useState(null)    // { aFuncionarioId, aData, bFuncionarioId, bData }
+  const [salvando, setSalvando] = useState(false)
+  const [excluir, setExcluir] = useState(null)
+
+  const carregar = useCallback(() => {
+    setLoading(true)
+    api.get('/ponto/ausencias')
+      .then((r) => setLista(r.data.ausencias || []))
+      .catch((e) => notify(e?.response?.data?.error ?? 'Não foi possível carregar os afastamentos.', 'error'))
+      .finally(() => setLoading(false))
+  }, [notify])
+  useEffect(() => { carregar() }, [carregar])
+  useEffect(() => { api.get('/funcionarios', { params: { status: 'ATIVO' } }).then((r) => setColabs(Array.isArray(r.data) ? r.data : [])).catch(() => {}) }, [])
+
+  async function salvar() {
+    const m = modal
+    if (!m.funcionarioId || !m.tipo || !m.dataInicio || !m.dataFim) return notify('Preencha colaborador, tipo e período.', 'error')
+    setSalvando(true)
+    try {
+      if (m.id) await api.put(`/ponto/ausencias/${m.id}`, m)
+      else { const r = await api.post('/ponto/ausencias', m); if (r.data?.aviso) notify(r.data.aviso) }
+      notify('Afastamento salvo.')
+      setModal(null); carregar()
+    } catch (e) { notify(e?.response?.data?.error ?? 'Não foi possível salvar.', 'error') }
+    finally { setSalvando(false) }
+  }
+
+  async function salvarTroca() {
+    const t = troca
+    if (!t.aFuncionarioId || !t.aData || !t.bFuncionarioId || !t.bData) return notify('Preencha as duas pessoas e os dois dias.', 'error')
+    if (String(t.aFuncionarioId) === String(t.bFuncionarioId)) return notify('Escolha dois colaboradores diferentes.', 'error')
+    setSalvando(true)
+    try {
+      await api.post('/ponto/ausencias/troca', t)
+      notify('Troca de folga registrada.')
+      setTroca(null); carregar()
+    } catch (e) { notify(e?.response?.data?.error ?? 'Não foi possível registrar a troca.', 'error') }
+    finally { setSalvando(false) }
+  }
+
+  async function confirmarExcluir() {
+    try { await api.delete(`/ponto/ausencias/${excluir.id}`); notify('Afastamento removido.'); setExcluir(null); carregar() }
+    catch (e) { notify(e?.response?.data?.error ?? 'Não foi possível excluir.', 'error') }
+  }
+
+  const upd = (k, v) => setModal((m) => ({ ...m, [k]: v }))
+  const updT = (k, v) => setTroca((t) => ({ ...t, [k]: v }))
+
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        <button type="button" className="btn btn-secondary" onClick={() => setTroca({ aFuncionarioId: '', aData: '', bFuncionarioId: '', bData: '' })}>Troca de folga</button>
+        <button type="button" className="btn btn-primary" style={{ marginLeft: 'auto' }} onClick={() => setModal({ funcionarioId: '', tipo: 'FERIAS', dataInicio: '', dataFim: '', observacao: '' })}>+ Novo afastamento</button>
+      </div>
+
+      {loading ? <div className="loading-state">Carregando…</div>
+        : lista.length === 0 ? <div className="empty-state" style={{ padding: '28px 16px' }}>Nenhum afastamento registrado.</div>
+        : (
+          <div className="table-card">
+            <table className="hb-table">
+              <thead><tr><th>Colaborador</th><th>Tipo</th><th>Período</th><th>Obs.</th><th aria-hidden="true"></th></tr></thead>
+              <tbody>
+                {lista.map((a) => (
+                  <tr key={a.id}>
+                    <td><strong>{a.funcionarioNome}</strong></td>
+                    <td>{AUSENCIA_LABEL[a.tipo] || a.tipo}{a.trocaGrupo && <span className="badge badge-blue" style={{ marginLeft: 8 }}>Troca</span>}</td>
+                    <td>{fmtDia(a.dataInicio)}{a.dataFim !== a.dataInicio ? ` – ${fmtDia(a.dataFim)}` : ''}</td>
+                    <td style={{ color: 'var(--app-text-3)', fontSize: 12.5 }}>{a.observacao || '—'}</td>
+                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      {!a.trocaGrupo && <button type="button" className="btn btn-secondary btn-sm" onClick={() => setModal({ id: a.id, funcionarioId: a.funcionarioId, tipo: a.tipo, dataInicio: String(a.dataInicio).slice(0, 10), dataFim: String(a.dataFim).slice(0, 10), observacao: a.observacao || '' })}>Editar</button>}
+                      <button type="button" className="btn btn-secondary btn-sm" style={{ marginLeft: 6 }} onClick={() => setExcluir(a)}>Excluir</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+      {modal && (
+        <div className="modal-overlay"><div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 460 }}>
+          <div className="modal-title">{modal.id ? 'Editar afastamento' : 'Novo afastamento'}</div>
+          <div className="form-group"><label className="form-label">Colaborador</label>
+            <select className="form-input" value={modal.funcionarioId} onChange={(e) => upd('funcionarioId', e.target.value)} disabled={!!modal.id}>
+              <option value="">Selecione…</option>{colabs.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            </select></div>
+          <div className="form-group"><label className="form-label">Tipo</label>
+            <select className="form-input" value={modal.tipo} onChange={(e) => upd('tipo', e.target.value)}>
+              {Object.entries(AUSENCIA_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            </select></div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <div className="form-group" style={{ flex: 1 }}><label className="form-label">Início</label><input type="date" className="form-input" value={modal.dataInicio} onChange={(e) => upd('dataInicio', e.target.value)} /></div>
+            <div className="form-group" style={{ flex: 1 }}><label className="form-label">Fim</label><input type="date" className="form-input" value={modal.dataFim} onChange={(e) => upd('dataFim', e.target.value)} /></div>
+          </div>
+          <div className="form-group"><label className="form-label">Observação (opcional)</label><input className="form-input" value={modal.observacao} onChange={(e) => upd('observacao', e.target.value)} maxLength={300} /></div>
+          <div className="modal-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => setModal(null)} disabled={salvando}>Cancelar</button>
+            <button type="button" className="btn btn-primary" onClick={salvar} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar'}</button>
+          </div>
+        </div></div>
+      )}
+
+      {troca && (
+        <div className="modal-overlay"><div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 500 }}>
+          <div className="modal-title">Troca de folga</div>
+          <div className="page-header-sub" style={{ marginBottom: 12 }}>Cada pessoa folga no dia da outra. Registra os dois como “Folga abonada”.</div>
+          {[['a', 'Pessoa A'], ['b', 'Pessoa B']].map(([p, lbl]) => (
+            <div key={p} style={{ display: 'flex', gap: 10, marginBottom: 4 }}>
+              <div className="form-group" style={{ flex: 1.5 }}><label className="form-label">{lbl}</label>
+                <select className="form-input" value={troca[`${p}FuncionarioId`]} onChange={(e) => updT(`${p}FuncionarioId`, e.target.value)}>
+                  <option value="">Selecione…</option>{colabs.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                </select></div>
+              <div className="form-group" style={{ flex: 1 }}><label className="form-label">Folga em</label><input type="date" className="form-input" value={troca[`${p}Data`]} onChange={(e) => updT(`${p}Data`, e.target.value)} /></div>
+            </div>
+          ))}
+          <div className="modal-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => setTroca(null)} disabled={salvando}>Cancelar</button>
+            <button type="button" className="btn btn-primary" onClick={salvarTroca} disabled={salvando}>{salvando ? 'Salvando…' : 'Registrar troca'}</button>
+          </div>
+        </div></div>
+      )}
+
+      <ConfirmDialog open={!!excluir} title="Excluir afastamento" message={excluir ? `Excluir o afastamento de ${excluir.funcionarioNome}?` : ''} description={excluir?.trocaGrupo ? 'É uma troca de folga — as duas pontas serão removidas.' : 'Esta ação não pode ser desfeita.'} confirmLabel="Excluir" cancelLabel="Cancelar" variant="danger" onConfirm={confirmarExcluir} onCancel={() => setExcluir(null)} />
+    </div>
+  )
+}
+
 function Jornadas({ notify }) {
   const [lista, setLista] = useState([])
   const [loading, setLoading] = useState(true)
@@ -1381,7 +1518,9 @@ const SIT_ESP = {
   incompleto: { label: 'Incompleto', bg: '#fee2e2', fg: '#991b1b' },
   folga: { label: 'Folga', bg: '#f4f4f5', fg: '#71717a' },
   folga_trabalhada: { label: 'Trab. na folga', bg: '#dbeafe', fg: '#1e40af' },
-  trabalhado: { label: 'Trabalhado', bg: '#dbeafe', fg: '#1e40af' }
+  trabalhado: { label: 'Trabalhado', bg: '#dbeafe', fg: '#1e40af' },
+  abonado: { label: 'Abonado', bg: '#e0e7ff', fg: '#3730a3' },
+  abonado_trabalhado: { label: 'Abonado (trab.)', bg: '#dbeafe', fg: '#1e40af' }
 }
 
 function Espelho() {
