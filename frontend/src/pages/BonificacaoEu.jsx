@@ -33,6 +33,8 @@ const SIT = {
   incompleto: { l: 'Sem saída', c: '#b45309' },
   folga_trabalhada: { l: 'Folga trabalhada', c: '#2563eb' },
   trabalhado: { l: 'Trabalhado', c: '#2563eb' },
+  abonado: { l: 'Abonado', c: '#4f46e5' },
+  abonado_trabalhado: { l: 'Abonado (trab.)', c: '#2563eb' },
 }
 const OUV_TIPOS_PUB = [['SUGESTAO', 'Sugestão'], ['ELOGIO', 'Elogio'], ['RECLAMACAO', 'Reclamação'], ['DENUNCIA', 'Denúncia'], ['OUTRO', 'Outro']]
 const CL_STATUS = { EM_ANDAMENTO: { label: 'Em andamento', cor: '#d97706' }, CONCLUIDA: { label: 'Concluído', cor: '#0F8A54' } }
@@ -179,8 +181,14 @@ function SecaoSeuDia({ saldoCoins, indice, pontoHoje, setTab }) {
   else if (pend === 0) { ckT = 'Checklists de hoje concluídos'; ckS = `${feitos} de ${total} — mandou bem! ✅` }
   else { ckT = `Você tem ${pend} checklist${pend > 1 ? 's' : ''} para hoje`; ckS = feitos > 0 ? `${feitos} de ${total} concluídos` : `${total} no total` }
 
+  const AUS_LBL = { FERIAS: 'férias', ATESTADO: 'atestado', LICENCA: 'licença', FOLGA_ABONADA: 'folga', OUTRO: 'afastamento' }
+  const fmtAte = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) }
   let ptT, ptS
-  if (!pontoHoje) { ptT = null }
+  if (pontoHoje?.ausencia) {
+    const nome = AUS_LBL[pontoHoje.ausencia.tipo] || 'afastamento'
+    ptT = pontoHoje.ausencia.tipo === 'FOLGA_ABONADA' ? 'Você está de folga hoje' : `Você está de ${nome}`
+    ptS = pontoHoje.ausencia.tipo === 'FOLGA_ABONADA' ? 'Aproveite 😉' : `Até ${fmtAte(pontoHoje.ausencia.ate)}`
+  } else if (!pontoHoje) { ptT = null }
   else if (pontoHoje.folga) { ptT = 'Hoje é sua folga'; ptS = 'Bom descanso 😉' }
   else if (pontoHoje.entrada) { ptT = `Entrada registrada às ${pontoHoje.entrada}`; ptS = pontoHoje.saida ? `Saída às ${pontoHoje.saida}` : 'Bom turno! 💪' }
   else { ptT = 'Você ainda não bateu o ponto hoje'; ptS = 'Registre sua entrada' }
