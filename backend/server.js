@@ -6830,7 +6830,8 @@ app.delete('/api/ponto/ausencias/:id', async (req, res) => {
 });
 
 // Troca de folga: cria as DUAS pontas (FOLGA_ABONADA de 1 dia) com o mesmo trocaGrupo.
-// createMany NÃO recebe injeção de empresaId da extension → setar explícito.
+// A extension injeta empresaId no createMany; setamos explícito também (defensivo,
+// mesmo valor). trocaGrupo liga as 2 pontas — excluir uma remove as duas.
 app.post('/api/ponto/ausencias/troca', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
   try {
@@ -6838,6 +6839,11 @@ app.post('/api/ponto/ausencias/troca', async (req, res) => {
     if (!aId || !bId || aId === bId) return res.status(400).json({ error: 'Escolha dois colaboradores diferentes.' });
     const aData = ausData(req.body?.aData), bData = ausData(req.body?.bData);
     if (!aData || !bData) return res.status(400).json({ error: 'Datas inválidas.' });
+    const [aFunc, bFunc] = await Promise.all([
+      prisma.funcionario.findFirst({ where: { id: aId } }),
+      prisma.funcionario.findFirst({ where: { id: bId } }),
+    ]);
+    if (!aFunc || !bFunc) return res.status(404).json({ error: 'Colaborador não encontrado.' });
     const empresaId = getEmpresaIdAtual();
     const grupo = randomBytes(9).toString('base64url');
     await prisma.pontoAusencia.createMany({ data: [
