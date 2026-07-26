@@ -2094,14 +2094,21 @@ app.get('/api/public/colaborador/me', async (req, res) => {
     try {
       const esp = await calcularEspelho(func.id, ano, mes);
       const marc = (esp.dias || [])
-        .filter((d) => !d.futuro && (d.entradaHm || d.situacao === 'falta' || d.situacao === 'incompleto'))
-        .map((d) => ({ dia: d.dia, dow: d.dow, entrada: d.entradaHm, saida: d.saidaHm, situacao: d.situacao, atrasoMin: d.atrasoMin }))
+        .filter((d) => !d.futuro && (d.entradaHm || d.situacao === 'falta' || d.situacao === 'incompleto' || d.situacao === 'abonado' || d.situacao === 'abonado_trabalhado'))
+        .map((d) => ({ dia: d.dia, dow: d.dow, entrada: d.entradaHm, saida: d.saidaHm, situacao: d.situacao, atrasoMin: d.atrasoMin, ausenciaTipo: d.ausenciaTipo || null }))
         .reverse();
       ponto = { marcacoes: marc, resumo: { diasTrabalhados: esp.totais.diasTrabalhados, atrasos: esp.totais.atrasos, faltas: esp.totais.faltas } };
       const hf = brFields(chkDataRefAtual().getTime());
       if (hf.y === ano && hf.mo === mes - 1) {
         const dh = (esp.dias || []).find((x) => x.dia === hf.day);
         if (dh && !dh.futuro) pontoHoje = { entrada: dh.entradaHm || null, saida: dh.saidaHm || null, folga: !!dh.folga, situacao: dh.situacao };
+      }
+      // Ausência que cobre HOJE (pro "Seu dia": "de férias até dd/mm"). Query por
+      // funcionarioId (rota pública, fora do tenantStore).
+      const hojeMs = new Date(brToUtcMs(hf.y, hf.mo, hf.day, 5, 0));
+      const ausHoje = await prisma.pontoAusencia.findFirst({ where: { funcionarioId: func.id, dataInicio: { lte: hojeMs }, dataFim: { gte: hojeMs } }, orderBy: { dataFim: 'desc' } });
+      if (ausHoje) {
+        pontoHoje = { ...(pontoHoje || { entrada: null, saida: null, folga: true, situacao: 'abonado' }), ausencia: { tipo: ausHoje.tipo, ate: ausHoje.dataFim } };
       }
     } catch (e) { console.error('[colaborador/me ponto]', e?.msg || e); }
     res.json({
