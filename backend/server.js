@@ -200,7 +200,7 @@ const AREA_PREFIXOS = [
   ['/financeiro', 'financeiro'],
   ['/relatorios', 'relatorios'],
   ['/candidatos', 'talentos'], ['/vagas', 'talentos'], ['/recrutamento', 'talentos'], ['/talentos', 'talentos'], ['/banco-talentos', 'talentos'],
-  ['/checklist', 'checklist'], ['/etiquetas', 'etiquetas'], ['/automacoes', 'automacoes'],
+  ['/checklist', 'checklist'], ['/etiquetas', 'etiquetas'], ['/automacoes', 'automacoes'], ['/grupo-vip', 'automacoes'],
 ];
 const OPERADOR_LIBERADO = new Set(['/auth/me', '/lojas', '/empresa']); // meta + logo (GET); PUT /empresa exige ADMIN no handler
 function areaDoPath(path) {
