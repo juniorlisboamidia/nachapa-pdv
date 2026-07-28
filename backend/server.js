@@ -50,7 +50,7 @@ const MODELS_TENANT = new Set([
   'acessoOperador',
   'conquista', 'conquistaDesbloqueada',
   'bonificacaoMoeda', 'mercadoItem', 'mercadoResgate',
-  'funcionarioFace', 'pontoRegistro', 'dispositivo', 'jornada', 'coletorBatidaPendente', 'coletorComando', 'pontoConfig', 'funcao', 'pontoAusencia',
+  'funcionarioFace', 'pontoRegistro', 'dispositivo', 'jornada', 'coletorBatidaPendente', 'coletorComando', 'pontoConfig', 'funcao', 'pontoAusencia', 'grupoVipConfig', 'grupoVipMensagem', 'grupoVipDisparo',
   'etiquetaConfig', 'etiquetaRegra', 'etiquetaItemConfig', 'etiquetaImpressa',
   'checklistTemplate', 'checklistTemplateItem', 'checklist', 'checklistItem', 'checklistExecucao', 'checklistResposta', 'checklistFoto',
   'checklistNotificacaoConfig', 'checklistDestinatario', 'checklistNotificacaoLog', 'checklistLembreteEnviado',

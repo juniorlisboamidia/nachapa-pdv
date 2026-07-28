@@ -2022,3 +2022,71 @@ model PontoAusencia {
   @@index([empresaId, funcionarioId])
   @@index([empresaId, dataInicio, dataFim])
 }
+
+enum GrupoVipCupomModo {
+  NENHUM
+  NOVO_POR_DISPARO
+  FIXO
+}
+
+enum CupomTipoCW {
+  FREE_SHIPPING
+  PERCENT_DISCOUNT
+  FLAT_DISCOUNT
+}
+
+// Config do Grupo VIP (1 por loja): instância UAZAPI dedicada do marketing, grupo alvo,
+// e o clienteId da loja no HUB (para a ponte de cupom). ativo liga/desliga o módulo.
+model GrupoVipConfig {
+  id            Int      @id @default(autoincrement())
+  empresaId     Int      @unique
+  instanceName  String?
+  instanceToken String?
+  grupoJid      String?
+  grupoNome     String?
+  hubClienteId  String?
+  ativo         Boolean  @default(false)
+  criadoEm      DateTime @default(now())
+  atualizadoEm  DateTime @updatedAt
+}
+
+// Mensagem VIP: texto (aceita a variável {cupom}) + agenda semanal (diasSemana 0-6 +
+// horário HH:MM BR) + o cupom opcional por modo.
+model GrupoVipMensagem {
+  id                   Int               @id @default(autoincrement())
+  empresaId            Int
+  rotulo               String
+  texto                String
+  diasSemana           Int[]             @default([])
+  horario              String
+  ativa                Boolean           @default(true)
+  cupomModo            GrupoVipCupomModo  @default(NENHUM)
+  cupomTipo            CupomTipoCW?
+  cupomValor           Decimal?          @db.Decimal(10, 2)
+  cupomNome            String?
+  cupomCodigoFixo      String?
+  cupomValidadeHoras   Int?
+  cupomPedidoMinimo    Decimal?          @db.Decimal(10, 2)
+  cupomLimiteUso       Int?
+  cupomSoNovosClientes Boolean?
+  criadoEm             DateTime          @default(now())
+  atualizadoEm         DateTime          @updatedAt
+
+  @@index([empresaId])
+}
+
+// Log + dedup de disparo. unique (empresaId,mensagemId,dataRef) garante 1 disparo/dia.
+model GrupoVipDisparo {
+  id         Int      @id @default(autoincrement())
+  empresaId  Int
+  mensagemId Int
+  dataRef    DateTime
+  status     String
+  erro       String?
+  cupomCode  String?
+  conteudo   String?
+  criadoEm   DateTime @default(now())
+
+  @@unique([empresaId, mensagemId, dataRef])
+  @@index([empresaId, criadoEm])
+}
