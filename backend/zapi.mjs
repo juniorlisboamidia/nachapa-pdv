@@ -5,9 +5,10 @@ const SERVER_URL = () => process.env.UAZAPI_SERVER;
 const ADMIN_TOKEN = () => process.env.UAZAPI_ADMIN_TOKEN;
 const INSTANCE_TOKEN = () => process.env.UAZAPI_INSTANCE_TOKEN;
 
-function requireConfig() {
-  if (!SERVER_URL() || !INSTANCE_TOKEN()) throw { http: 503, msg: 'WhatsApp do PDV não configurado (defina UAZAPI_SERVER e UAZAPI_INSTANCE_TOKEN no .env).' };
+function requireServer() {
+  if (!SERVER_URL()) throw { http: 503, msg: 'WhatsApp do PDV não configurado (defina UAZAPI_SERVER no .env).' };
 }
+const exigirToken = (t) => { if (!t) throw { http: 503, msg: 'Instância do WhatsApp não conectada.' }; };
 
 async function req(method, path, body, token) {
   let res;
@@ -27,9 +28,9 @@ async function req(method, path, body, token) {
 
 export function zapiConfigurado() { return !!(SERVER_URL() && INSTANCE_TOKEN()); }
 
-export async function zapiStatus() {
-  requireConfig();
-  const data = await req('GET', '/instance/status', null, INSTANCE_TOKEN());
+export async function zapiStatus(token = INSTANCE_TOKEN()) {
+  requireServer(); exigirToken(token);
+  const data = await req('GET', '/instance/status', null, token);
   const state = data?.instance?.status || data?.instance?.state || data?.status || data?.state || '';
   const connected = state === 'connected' || state === 'open' || data?.connected === true;
   const widRaw = data?.instance?.wid || data?.wid || data?.number || '';
@@ -37,10 +38,10 @@ export async function zapiStatus() {
   return { connected, status: connected ? 'connected' : (state ? 'disconnected' : 'unknown'), number };
 }
 
-export async function zapiQrCode() {
-  requireConfig();
+export async function zapiQrCode(token = INSTANCE_TOKEN()) {
+  requireServer(); if (!token) return null;
   try {
-    const data = await req('POST', '/instance/connect', {}, INSTANCE_TOKEN());
+    const data = await req('POST', '/instance/connect', {}, token);
     const b64 = data?.qrcode || data?.base64 || data?.qr || data?.code || null;
     if (!b64) return null;
     const clean = String(b64).replace(/^data:image\/\w+;base64,/, '');
@@ -53,8 +54,22 @@ export async function zapiCriarInstancia(nome) {
   return req('POST', '/instance/create', { instanceName: nome }, ADMIN_TOKEN());
 }
 
-// Envia uma mensagem de texto. `numero` = só dígitos com DDI (ex.: 5511999999999).
-export async function zapiEnviarTexto(numero, texto) {
-  requireConfig();
-  return req('POST', '/send/text', { number: numero, text: texto }, INSTANCE_TOKEN());
+// Envia texto. `numero` = só dígitos com DDI, OU o JID de um grupo (…@g.us).
+export async function zapiEnviarTexto(numero, texto, token = INSTANCE_TOKEN()) {
+  requireServer(); exigirToken(token);
+  return req('POST', '/send/text', { number: numero, text: texto }, token);
+}
+
+// Lista os grupos do número conectado. O path/shape do UAZAPI variam entre versões —
+// parse defensivo. Se o endpoint não existir na sua versão, o front tem fallback de
+// colar o JID do grupo à mão. Confirme o path na doc da sua UAZAPI (ex.: /group/list).
+export async function zapiListarGrupos(token = INSTANCE_TOKEN()) {
+  requireServer(); if (!token) return [];
+  let data;
+  try { data = await req('GET', '/group/list', null, token); }
+  catch { return []; }
+  const arr = Array.isArray(data) ? data : (data?.groups || data?.chats || data?.data || []);
+  return arr
+    .map((g) => ({ jid: String(g.jid || g.id || g.wid || g.chatid || '').trim(), nome: String(g.name || g.subject || g.nome || '').trim() }))
+    .filter((g) => g.jid.includes('@g.us') || /^\d+-\d+$/.test(g.jid) || g.jid.length > 8);
 }
