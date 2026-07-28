@@ -2657,7 +2657,8 @@ async function dispararGrupoVipLoja(empresaId, cfg) {
       try { await zapiEnviarTexto(cfg.grupoJid, texto, cfg.instanceToken); }
       catch (e) { status = 'FALHOU'; erroEnvio = textoErro(e).slice(0, 200); }
       const erro = [erroEnvio, erroCupom].filter(Boolean).join(' · ') || null;
-      await prisma.grupoVipDisparo.updateMany({ where: { empresaId, mensagemId: m.id, dataRef }, data: { status, erro, cupomCode, conteudo: texto.slice(0, 1000) } });
+      try { await prisma.grupoVipDisparo.updateMany({ where: { empresaId, mensagemId: m.id, dataRef }, data: { status, erro, cupomCode, conteudo: texto.slice(0, 1000) } }); }
+      catch (e) { console.error('[dispararGrupoVipLoja updateMany]', empresaId, m.id, textoErro(e)); }
     }
   } catch (e) { console.error('[dispararGrupoVipLoja]', empresaId, textoErro(e)); }
 }
