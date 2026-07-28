@@ -26,6 +26,7 @@ import EtiquetasQuiosque from './pages/EtiquetasQuiosque'
 import Checklist, { ChecklistDetalhe, ChecklistHistorico, ChecklistEstatisticas } from './pages/Checklist'
 import ChecklistPublico from './pages/ChecklistPublico'
 import CentralAjuda from './pages/CentralAjuda'
+import GrupoVip from './pages/GrupoVip'
 
 function TelaCarregando() {
   return (
@@ -109,6 +110,7 @@ export default function App() {
             <Route path="etiquetas" element={<Etiquetas />} />
             <Route path="etiquetas/:tab" element={<Etiquetas />} />
             <Route path="automacoes" element={<EmConstrucao titulo="Automações" descricao="Automações da operação." />} />
+            <Route path="automacoes/grupo-vip" element={<GrupoVip />} />
             {/* Extras */}
             <Route path="minha-empresa" element={<MinhaEmpresa />} />
             <Route path="central-de-ajuda" element={<CentralAjuda />} />

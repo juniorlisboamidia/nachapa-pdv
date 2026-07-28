@@ -243,7 +243,12 @@ const grupos = [
       { to: '/rh/banco-de-talentos/formulario', label: 'Formulário permanente', icon: 'ficha' },
     ]
   },
-  { label: 'Automações', icon: 'gestao', to: '/automacoes', area: 'automacoes' },
+  {
+    label: 'Automações', icon: 'gestao', area: 'automacoes',
+    itens: [
+      { to: '/automacoes/grupo-vip', label: 'Grupo VIP', icon: 'marketing' },
+    ]
+  },
 ]
 // Operador (gerente) vê só as áreas liberadas; ADMIN vê tudo.
 function gruposVisiveis(usuario) {
