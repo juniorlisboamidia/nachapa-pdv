@@ -16,7 +16,7 @@
 - **Multi-tenant:** models novos em `MODELS_TENANT`; rotas admin dentro do gate (`exigirAdmin`, extension injeta `empresaId`); agendador fora do gate com `empresaId` explícito. Nunca `req.user.empresaId`.
 - **Cupom:** modos por mensagem — `NENHUM` / `NOVO_POR_DISPARO` (cria no CW, código automático em `{cupom}`) / `FIXO` (usa `cupomCodigoFixo`, sem criar). Payload CW: `type` ∈ `free_shipping|percent_discount|flat_discount`, `value` obrigatório salvo free_shipping (percent ≤ 100).
 - **Dias da semana = `Int[]`** (0=dom..6=sáb).
-- **Não expor** `instanceToken`/`hubClienteId` em respostas de leitura.
+- **Nunca expor `instanceToken`** em respostas de leitura (só `temInstancia`). O `hubClienteId` aparece apenas na config admin (necessário para o formulário de edição da Task 9) — todos os endpoints são admin-gated, não há resposta pública.
 - **Só texto no v1** (sem mídia).
 - Commit por task direto na `main` + `git push origin main` (EXCETO Task 5, que é no repo Traffic Hub — commit sem push, ver a task).
 - **Subagentes: NUNCA `taskkill /IM node.exe`.** Matar só o próprio job (`kill %1`).
