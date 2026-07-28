@@ -19,6 +19,8 @@ import { montarMensagemLembrete, atrasado } from './checklistLembrete.js';
 import { calcularEstatisticas } from './checklistEstatisticas.js';
 import { classificarOcorrencia, agregar, STATUS } from './checklistHistoricoGeral.js';
 import { ausenciaDoDia } from './pontoAusencia.js';
+import { mensagensParaDisparar, montarPayloadCupom } from './grupoVip.js';
+import { criarCupomCW, gerarCodigoCupom } from './cardapioCupom.js';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 
@@ -2619,6 +2621,57 @@ async function varrerLembretes() {
 // chega em 5min) pra não atrasar o start do server.
 function iniciarAgendadorLembretes() {
   setInterval(() => { varrerLembretes().catch((e) => console.error('[lembretes]', e)); }, 5 * 60 * 1000);
+}
+
+// Dispara as mensagens VIP que vencem AGORA numa loja. FORA do tenantStore (empresaId
+// explícito). Dedup: cria GrupoVipDisparo (unique) ANTES de enviar — P2002 ⇒ já foi hoje.
+async function dispararGrupoVipLoja(empresaId, cfg) {
+  try {
+    if (!cfg.ativo || !cfg.grupoJid || !cfg.instanceToken) return;
+    const agoraMs = Date.now();
+    const f = brFields(agoraMs);
+    const dataRef = new Date(brToUtcMs(f.y, f.mo, f.day, 0, 0));
+    const mensagens = await prisma.grupoVipMensagem.findMany({ where: { empresaId, ativa: true } });
+    const jaHoje = await prisma.grupoVipDisparo.findMany({ where: { empresaId, dataRef }, select: { mensagemId: true } });
+    const jaSet = new Set(jaHoje.map((d) => d.mensagemId));
+    const aDisparar = mensagensParaDisparar(agoraMs, mensagens, jaSet);
+    for (const m of aDisparar) {
+      // marcador de dedup ANTES de enviar
+      try { await prisma.grupoVipDisparo.create({ data: { empresaId, mensagemId: m.id, dataRef, status: 'ENVIADO' } }); }
+      catch (e) { if (e?.code === 'P2002') continue; throw e; }
+      let cupomCode = null, erroCupom = null;
+      try {
+        if (m.cupomModo === 'FIXO' && m.cupomCodigoFixo) cupomCode = m.cupomCodigoFixo;
+        else if (m.cupomModo === 'NOVO_POR_DISPARO') {
+          const codigo = gerarCodigoCupom();
+          const payload = montarPayloadCupom(m, agoraMs, codigo);
+          if (payload) {
+            const r = await criarCupomCW(cfg.hubClienteId, payload);
+            if (r?.conectado === false) erroCupom = 'Loja sem Cardápio Web vinculado';
+            else cupomCode = r?.coupon?.code || codigo;
+          }
+        }
+      } catch (e) { erroCupom = textoErro(e).slice(0, 200); }
+      const texto = String(m.texto).split('{cupom}').join(cupomCode || '');
+      let status = 'ENVIADO', erroEnvio = null;
+      try { await zapiEnviarTexto(cfg.grupoJid, texto, cfg.instanceToken); }
+      catch (e) { status = 'FALHOU'; erroEnvio = textoErro(e).slice(0, 200); }
+      const erro = [erroEnvio, erroCupom].filter(Boolean).join(' · ') || null;
+      await prisma.grupoVipDisparo.updateMany({ where: { empresaId, mensagemId: m.id, dataRef }, data: { status, erro, cupomCode, conteudo: texto.slice(0, 1000) } });
+    }
+  } catch (e) { console.error('[dispararGrupoVipLoja]', empresaId, textoErro(e)); }
+}
+
+async function varrerGrupoVip() {
+  const cfgs = await prisma.grupoVipConfig.findMany({ where: { ativo: true } });
+  for (const cfg of cfgs) {
+    try { await dispararGrupoVipLoja(cfg.empresaId, cfg); }
+    catch (e) { console.error('[varrerGrupoVip]', cfg.empresaId, e?.message || e); }
+  }
+}
+
+function iniciarAgendadorGrupoVip() {
+  setInterval(() => { varrerGrupoVip().catch((e) => console.error('[grupo-vip]', e)); }, 60 * 1000);
 }
 
 app.post('/api/public/colaborador/execucoes/:id/concluir', async (req, res) => {
@@ -8879,6 +8932,7 @@ app.get('/api/checklist/notificacoes/lembrete/previa', async (req, res) => {
 
 app.listen(PORT, () => console.log(`Operação (PDV) API rodando em http://localhost:${PORT}`));
 iniciarAgendadorLembretes();
+iniciarAgendadorGrupoVip();
 
 // Servidor de ingest do coletor DIXI (WebSocket na porta própria 7788).
 if (process.env.COLETOR_ENABLED !== 'false') {
