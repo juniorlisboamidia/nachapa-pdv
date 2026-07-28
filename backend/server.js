@@ -10,7 +10,7 @@ import jwt from 'jsonwebtoken';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from './generated/prisma/client.ts';
 import { iniciarColetorServer, gravarPontoColetor } from './coletorServer.js';
-import { zapiConfigurado, zapiStatus, zapiQrCode, zapiCriarInstancia, zapiEnviarTexto } from './zapi.mjs';
+import { zapiConfigurado, zapiStatus, zapiQrCode, zapiCriarInstancia, zapiEnviarTexto, zapiListarGrupos } from './zapi.mjs';
 import { validadeDe, gerarLote, colisaoDeLote, CONSERVACOES } from './etiquetas.js';
 import { avaliarResposta, execucaoEmAlerta, fotosCriticasFaltando } from './checklistConformidade.js';
 import { venceHoje, offsetDiaDoHorario } from './checklistRecorrencia.js';
@@ -6852,6 +6852,78 @@ app.post('/api/ponto/ausencias/troca', async (req, res) => {
     ] });
     res.status(201).json({ ok: true, trocaGrupo: grupo });
   } catch (err) { console.error('[ponto/ausencias/troca POST]', err); res.status(500).json({ error: 'Erro ao registrar a troca de folga.' }); }
+});
+
+// ===== Automações › Grupo VIP — conexão do WhatsApp (ADMIN) =====
+async function garantirGrupoVipConfig() {
+  let c = await prisma.grupoVipConfig.findFirst();
+  if (!c) c = await prisma.grupoVipConfig.create({ data: {} });
+  return c;
+}
+const grupoVipConfigPublica = (c) => ({
+  grupoJid: c.grupoJid || null, grupoNome: c.grupoNome || null,
+  hubClienteId: c.hubClienteId || null, ativo: !!c.ativo,
+  temInstancia: !!c.instanceToken,
+});
+
+app.get('/api/grupo-vip/config', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try { res.json(grupoVipConfigPublica(await garantirGrupoVipConfig())); }
+  catch (err) { console.error('[grupo-vip/config GET]', err); res.status(500).json({ error: 'Erro ao carregar.' }); }
+});
+
+app.post('/api/grupo-vip/instancia', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const c = await garantirGrupoVipConfig();
+    if (c.instanceToken) return res.json({ ok: true, jaExistia: true });
+    const nome = `pdv-vip-${getEmpresaIdAtual()}-${Date.now()}`;
+    const data = await zapiCriarInstancia(nome);
+    const token = data?.token || data?.instance?.token || data?.instanceToken || null;
+    if (!token) return res.status(502).json({ error: 'A UAZAPI não devolveu o token da instância.' });
+    await prisma.grupoVipConfig.update({ where: { id: c.id }, data: { instanceName: nome, instanceToken: token } });
+    res.json({ ok: true });
+  } catch (err) { if (err?.http) return res.status(err.http).json({ error: err.msg }); console.error('[grupo-vip/instancia]', err); res.status(500).json({ error: 'Erro ao criar a instância.' }); }
+});
+
+app.get('/api/grupo-vip/qr', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const c = await garantirGrupoVipConfig();
+    if (!c.instanceToken) return res.status(400).json({ error: 'Crie a instância primeiro.' });
+    res.json({ qr: await zapiQrCode(c.instanceToken) });
+  } catch (err) { if (err?.http) return res.status(err.http).json({ error: err.msg }); console.error('[grupo-vip/qr]', err); res.status(500).json({ error: 'Erro ao gerar o QR.' }); }
+});
+
+app.get('/api/grupo-vip/status', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const c = await garantirGrupoVipConfig();
+    if (!c.instanceToken) return res.json({ connected: false, status: 'sem_instancia', number: null });
+    res.json(await zapiStatus(c.instanceToken));
+  } catch (err) { if (err?.http) return res.status(err.http).json({ error: err.msg }); console.error('[grupo-vip/status]', err); res.status(500).json({ error: 'Erro ao consultar status.' }); }
+});
+
+app.get('/api/grupo-vip/grupos', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const c = await garantirGrupoVipConfig();
+    if (!c.instanceToken) return res.json({ grupos: [] });
+    res.json({ grupos: await zapiListarGrupos(c.instanceToken) });
+  } catch (err) { console.error('[grupo-vip/grupos]', err); res.json({ grupos: [] }); }
+});
+
+app.put('/api/grupo-vip/config', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const c = await garantirGrupoVipConfig();
+    const data = {};
+    if (req.body?.grupoJid !== undefined) { data.grupoJid = req.body.grupoJid ? String(req.body.grupoJid).trim().slice(0, 120) : null; data.grupoNome = req.body?.grupoNome ? String(req.body.grupoNome).trim().slice(0, 120) : null; }
+    if (req.body?.hubClienteId !== undefined) data.hubClienteId = req.body.hubClienteId ? String(req.body.hubClienteId).trim().slice(0, 60) : null;
+    if (req.body?.ativo !== undefined) data.ativo = !!req.body.ativo;
+    await prisma.grupoVipConfig.update({ where: { id: c.id }, data });
+    res.json(grupoVipConfigPublica(await garantirGrupoVipConfig()));
+  } catch (err) { console.error('[grupo-vip/config PUT]', err); res.status(500).json({ error: 'Erro ao salvar.' }); }
 });
 
 // Atribui (ou remove, jornadaId null) a jornada de um colaborador.
