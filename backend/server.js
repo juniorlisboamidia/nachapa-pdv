@@ -6926,6 +6926,91 @@ app.put('/api/grupo-vip/config', async (req, res) => {
   } catch (err) { console.error('[grupo-vip/config PUT]', err); res.status(500).json({ error: 'Erro ao salvar.' }); }
 });
 
+// ===== Grupo VIP — mensagens + histórico (ADMIN) =====
+const GRUPOVIP_CUPOM_MODOS = ['NENHUM', 'NOVO_POR_DISPARO', 'FIXO'];
+const CUPOM_TIPOS_CW = ['FREE_SHIPPING', 'PERCENT_DISCOUNT', 'FLAT_DISCOUNT'];
+const numOrNull = (v) => (v === '' || v == null || !Number.isFinite(Number(v)) ? null : Number(v));
+
+function normalizarMensagemVip(body) {
+  const rotulo = String(body?.rotulo || '').trim().slice(0, 80);
+  const texto = String(body?.texto || '').trim().slice(0, 2000);
+  if (!rotulo) return { error: 'Informe um rótulo.' };
+  if (!texto) return { error: 'Informe o texto da mensagem.' };
+  const diasSemana = Array.isArray(body?.diasSemana) ? [...new Set(body.diasSemana.map((n) => parseInt(n, 10)).filter((n) => n >= 0 && n <= 6))] : [];
+  if (!diasSemana.length) return { error: 'Escolha ao menos um dia da semana.' };
+  const horario = String(body?.horario || '').trim();
+  if (!/^\d{1,2}:\d{2}$/.test(horario)) return { error: 'Horário inválido (HH:MM).' };
+  const cupomModo = GRUPOVIP_CUPOM_MODOS.includes(body?.cupomModo) ? body.cupomModo : 'NENHUM';
+  const d = { rotulo, texto, diasSemana, horario, ativa: body?.ativa !== false, cupomModo };
+  if (cupomModo === 'FIXO') {
+    d.cupomCodigoFixo = String(body?.cupomCodigoFixo || '').trim().slice(0, 40) || null;
+    if (!d.cupomCodigoFixo) return { error: 'Modo fixo: informe o código do cupom.' };
+  }
+  if (cupomModo === 'NOVO_POR_DISPARO') {
+    if (!CUPOM_TIPOS_CW.includes(body?.cupomTipo)) return { error: 'Escolha o tipo do cupom.' };
+    d.cupomTipo = body.cupomTipo;
+    d.cupomNome = String(body?.cupomNome || '').trim().slice(0, 80) || null;
+    d.cupomValor = d.cupomTipo === 'FREE_SHIPPING' ? null : numOrNull(body?.cupomValor);
+    if (d.cupomTipo !== 'FREE_SHIPPING' && (d.cupomValor == null || d.cupomValor <= 0 || (d.cupomTipo === 'PERCENT_DISCOUNT' && d.cupomValor > 100))) return { error: 'Valor do cupom inválido.' };
+    d.cupomValidadeHoras = numOrNull(body?.cupomValidadeHoras);
+    d.cupomPedidoMinimo = numOrNull(body?.cupomPedidoMinimo);
+    d.cupomLimiteUso = numOrNull(body?.cupomLimiteUso);
+    d.cupomSoNovosClientes = body?.cupomSoNovosClientes == null ? null : !!body.cupomSoNovosClientes;
+  }
+  return { data: d };
+}
+
+app.get('/api/grupo-vip/mensagens', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try { res.json({ mensagens: await prisma.grupoVipMensagem.findMany({ orderBy: { criadoEm: 'desc' } }) }); }
+  catch (err) { console.error('[grupo-vip/mensagens GET]', err); res.status(500).json({ error: 'Erro ao carregar.' }); }
+});
+
+app.post('/api/grupo-vip/mensagens', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const n = normalizarMensagemVip(req.body);
+    if (n.error) return res.status(400).json({ error: n.error });
+    const m = await prisma.grupoVipMensagem.create({ data: n.data });
+    res.status(201).json({ id: m.id });
+  } catch (err) { console.error('[grupo-vip/mensagens POST]', err); res.status(500).json({ error: 'Erro ao salvar.' }); }
+});
+
+app.put('/api/grupo-vip/mensagens/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const id = parseInt(req.params.id, 10);
+    const ex = await prisma.grupoVipMensagem.findFirst({ where: { id } });
+    if (!ex) return res.status(404).json({ error: 'Mensagem não encontrada.' });
+    const n = normalizarMensagemVip(req.body);
+    if (n.error) return res.status(400).json({ error: n.error });
+    // full-replace dos campos de cupom: zera os que não vieram no modo atual
+    const zeraCupom = { cupomTipo: null, cupomValor: null, cupomNome: null, cupomCodigoFixo: null, cupomValidadeHoras: null, cupomPedidoMinimo: null, cupomLimiteUso: null, cupomSoNovosClientes: null };
+    await prisma.grupoVipMensagem.update({ where: { id }, data: { ...zeraCupom, ...n.data } });
+    res.json({ ok: true });
+  } catch (err) { console.error('[grupo-vip/mensagens PUT]', err); res.status(500).json({ error: 'Erro ao salvar.' }); }
+});
+
+app.delete('/api/grupo-vip/mensagens/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const id = parseInt(req.params.id, 10);
+    const ex = await prisma.grupoVipMensagem.findFirst({ where: { id } });
+    if (!ex) return res.status(404).json({ error: 'Mensagem não encontrada.' });
+    await prisma.grupoVipMensagem.delete({ where: { id } });
+    res.json({ ok: true });
+  } catch (err) { console.error('[grupo-vip/mensagens DELETE]', err); res.status(500).json({ error: 'Erro ao excluir.' }); }
+});
+
+app.get('/api/grupo-vip/historico', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const rows = await prisma.grupoVipDisparo.findMany({ orderBy: { criadoEm: 'desc' }, take: 100 });
+    const ms = new Map((await prisma.grupoVipMensagem.findMany({ select: { id: true, rotulo: true } })).map((m) => [m.id, m.rotulo]));
+    res.json({ historico: rows.map((d) => ({ id: d.id, rotulo: ms.get(d.mensagemId) || '—', status: d.status, cupomCode: d.cupomCode || null, erro: d.erro || null, criadoEm: d.criadoEm })) });
+  } catch (err) { console.error('[grupo-vip/historico]', err); res.status(500).json({ error: 'Erro ao carregar.' }); }
+});
+
 // Atribui (ou remove, jornadaId null) a jornada de um colaborador.
 app.put('/api/ponto/colaboradores/:id/jornada', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
