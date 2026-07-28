@@ -10,12 +10,14 @@ function requireServer() {
 }
 const exigirToken = (t) => { if (!t) throw { http: 503, msg: 'Instância do WhatsApp não conectada.' }; };
 
-async function req(method, path, body, token) {
+// authHeader: nome do header de auth. Operações de instância usam 'token'; operações de
+// ADMIN da UAZAPI (criar instância) exigem 'admintoken' — senão a UAZAPI responde 401.
+async function req(method, path, body, token, authHeader = 'token') {
   let res;
   try {
     res = await fetch(`${SERVER_URL()}${path}`, {
       method,
-      headers: { 'Content-Type': 'application/json', token: token || '' },
+      headers: { 'Content-Type': 'application/json', [authHeader]: token || '' },
       body: body != null ? JSON.stringify(body) : undefined,
       signal: AbortSignal.timeout(15000),
     });
@@ -51,7 +53,9 @@ export async function zapiQrCode(token = INSTANCE_TOKEN()) {
 
 export async function zapiCriarInstancia(nome) {
   if (!SERVER_URL() || !ADMIN_TOKEN()) throw { http: 503, msg: 'Defina UAZAPI_SERVER e UAZAPI_ADMIN_TOKEN no .env para criar a instância.' };
-  return req('POST', '/instance/create', { instanceName: nome }, ADMIN_TOKEN());
+  // Admin da UAZAPI usa o header `admintoken` (confirmado no servidor: com `token` dá 401
+  // "Missing AdminToken Header"). `name`+`instanceName` cobre variações de versão.
+  return req('POST', '/instance/create', { name: nome, instanceName: nome }, ADMIN_TOKEN(), 'admintoken');
 }
 
 // Envia texto. `numero` = só dígitos com DDI, OU o JID de um grupo (…@g.us).
