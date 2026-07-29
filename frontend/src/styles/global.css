@@ -2648,3 +2648,72 @@ body.theme-dark .chk-ic-btn.is-danger:hover { background: rgba(220, 38, 38, 0.16
 
 /* Botão final — mesma cor de .btn-primary (dourado), só ajusta layout (igual .etq-print-btn). */
 .etqi-fila-print { width: 100%; justify-content: center; margin-top: 12px; }
+
+/* ============================================================
+   Automações › Grupo VIP
+   ============================================================ */
+.gv-card { background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 16px; padding: 18px 20px; margin-bottom: 16px; }
+.gv-head { display: flex; align-items: center; gap: 12px; }
+.gv-head + .gv-body { margin-top: 16px; }
+.gv-ic { width: 40px; height: 40px; border-radius: 12px; background: var(--app-highlight); color: var(--brand-gold-deep); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.gv-ic svg { width: 20px; height: 20px; }
+.gv-tt { font-size: 15px; font-weight: 700; color: var(--app-text); line-height: 1.25; }
+.gv-sub { font-size: 12.5px; color: var(--app-text-3); margin-top: 2px; }
+.gv-right { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+
+/* status pill (conectado / não) */
+.gv-status { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; padding: 7px 13px; border-radius: 999px; white-space: nowrap; }
+.gv-status.on  { background: #f0fdf4; color: #16a34a; }
+.gv-status.off { background: var(--app-surface-2); color: var(--app-text-3); }
+.gv-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.gv-status.on .gv-dot { box-shadow: 0 0 0 3px rgba(22,163,74,0.18); }
+
+/* banner do grupo atual */
+.gv-current { display: flex; align-items: center; gap: 12px; background: var(--app-highlight); border: 1px solid var(--app-border); border-radius: 12px; padding: 12px 14px; }
+.gv-current .gv-mini { width: 34px; height: 34px; border-radius: 9px; background: var(--brand-gold); color: var(--brand-gold-ink); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.gv-current-nm { font-size: 14.5px; font-weight: 700; color: var(--app-text); word-break: break-word; }
+.gv-current-sub { font-size: 12px; color: var(--app-text-3); margin-top: 1px; }
+
+/* lista de grupos selecionáveis */
+.gv-rows { display: flex; flex-direction: column; gap: 8px; }
+.gv-row { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 12px; padding: 11px 14px; cursor: pointer; transition: border-color .12s ease, background .12s ease; }
+.gv-row:hover { border-color: var(--brand-gold-deep); background: var(--app-surface-2); }
+.gv-row.sel { border-color: var(--brand-gold); background: var(--app-highlight); }
+.gv-row-ic { width: 34px; height: 34px; border-radius: 9px; background: var(--app-surface-2); color: var(--app-text-3); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.gv-row-ic svg { width: 17px; height: 17px; }
+.gv-row.sel .gv-row-ic { background: var(--brand-gold); color: var(--brand-gold-ink); }
+.gv-row-tx { min-width: 0; flex: 1; }
+.gv-row-nm { font-size: 14px; font-weight: 600; color: var(--app-text); }
+.gv-row-sub { font-size: 11px; color: var(--app-text-3); margin-top: 1px; word-break: break-all; }
+.gv-row-ck { margin-left: auto; color: var(--brand-gold-deep); flex-shrink: 0; display: flex; }
+
+/* linha "cole o JID" e campos inline */
+.gv-inline { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.gv-inline .form-input { flex: 1; min-width: 200px; }
+.gv-divider { height: 1px; background: var(--app-border); margin: 16px 0; border: none; }
+.gv-hint { font-size: 12px; color: var(--app-text-3); margin-top: 8px; line-height: 1.55; }
+.gv-hint code { background: var(--app-surface-2); border: 1px solid var(--app-border); border-radius: 4px; padding: 1px 5px; font-size: 11px; }
+
+/* QR */
+.gv-qr { text-align: center; margin-top: 16px; padding-top: 16px; border-top: 1px dashed var(--app-border); }
+.gv-qr img { width: 224px; height: 224px; border-radius: 14px; border: 1px solid var(--app-border); padding: 10px; background: #fff; }
+.gv-qr-hint { font-size: 12.5px; color: var(--app-text-3); margin-top: 12px; max-width: 320px; margin-left: auto; margin-right: auto; line-height: 1.5; }
+
+/* toggle de ativação (usa .intel-switch existente) */
+.gv-toggle { display: flex; align-items: center; gap: 14px; }
+.gv-toggle .intel-switch { flex-shrink: 0; margin-left: auto; }
+
+/* mensagens */
+.gv-msgs { display: flex; flex-direction: column; }
+.gv-msg { display: flex; align-items: center; gap: 14px; padding: 13px 0; border-top: 1px solid var(--app-border); }
+.gv-msg:first-child { border-top: none; padding-top: 4px; }
+.gv-msg-main { flex: 1; min-width: 0; }
+.gv-msg-nm { font-size: 14px; font-weight: 600; color: var(--app-text); }
+.gv-msg-meta { display: flex; align-items: center; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.gv-chip { font-size: 11px; font-weight: 600; color: var(--app-text-2); background: var(--app-surface-2); border: 1px solid var(--app-border); border-radius: 6px; padding: 2px 8px; }
+.gv-chip.gold { color: var(--brand-gold-deep); background: var(--app-highlight); }
+.gv-msg-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+/* estado vazio compacto */
+.gv-empty { text-align: center; padding: 26px 16px; color: var(--app-text-3); font-size: 13.5px; }
+.gv-empty svg { width: 26px; height: 26px; margin-bottom: 8px; opacity: .55; }
