@@ -34,8 +34,12 @@ export default function GrupoVip() {
   useEffect(() => {
     if (!conectando) return
     const t = setInterval(() => {
-      api.get('/grupo-vip/status').then((r) => { setStatus(r.data); if (r.data?.connected) { setConectando(false); setQr(null); notify('WhatsApp conectado!'); carregarGrupos() } }).catch(() => {})
-      api.get('/grupo-vip/qr').then((r) => r.data?.qr && setQr(r.data.qr)).catch(() => {})
+      // Só pollar /status (o /connect é rate-limited). O status já traz o QR renovado.
+      api.get('/grupo-vip/status').then((r) => {
+        setStatus(r.data)
+        if (r.data?.qr) setQr(r.data.qr)
+        if (r.data?.connected) { setConectando(false); setQr(null); notify('WhatsApp conectado!'); carregarGrupos() }
+      }).catch(() => {})
     }, 3000)
     return () => clearInterval(t)
   }, [conectando]) // eslint-disable-line react-hooks/exhaustive-deps

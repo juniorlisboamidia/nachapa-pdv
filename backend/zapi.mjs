@@ -33,18 +33,23 @@ export function zapiConfigurado() { return !!(SERVER_URL() && INSTANCE_TOKEN());
 export async function zapiStatus(token = INSTANCE_TOKEN()) {
   requireServer(); exigirToken(token);
   const data = await req('GET', '/instance/status', null, token);
-  const state = data?.instance?.status || data?.instance?.state || data?.status || data?.state || '';
-  const connected = state === 'connected' || state === 'open' || data?.connected === true;
-  const widRaw = data?.instance?.wid || data?.wid || data?.number || '';
-  const number = String(widRaw).split('@')[0] || null;
-  return { connected, status: connected ? 'connected' : (state ? 'disconnected' : 'unknown'), number };
+  // uazapiGO: { instance: { status, qrcode, owner, ... }, status: { connected, jid, ... } }
+  const inst = data?.instance || {};
+  const st = (data?.status && typeof data.status === 'object') ? data.status : {};
+  const state = inst.status || inst.state || (typeof data?.status === 'string' ? data.status : '') || data?.state || '';
+  const connected = st.connected === true || state === 'connected' || state === 'open' || data?.connected === true;
+  const widRaw = st.jid || inst.wid || inst.owner || data?.wid || data?.number || '';
+  const number = String(widRaw).split('@')[0].split(':')[0] || null;
+  const qrRaw = inst.qrcode || data?.qrcode || '';
+  const qr = qrRaw ? `data:image/png;base64,${String(qrRaw).replace(/^data:image\/\w+;base64,/, '')}` : null;
+  return { connected, status: connected ? 'connected' : (state ? 'disconnected' : 'unknown'), number, qr };
 }
 
 export async function zapiQrCode(token = INSTANCE_TOKEN()) {
   requireServer(); if (!token) return null;
   try {
     const data = await req('POST', '/instance/connect', {}, token);
-    const b64 = data?.qrcode || data?.base64 || data?.qr || data?.code || null;
+    const b64 = data?.instance?.qrcode || data?.qrcode || data?.base64 || data?.qr || data?.code || null;
     if (!b64) return null;
     const clean = String(b64).replace(/^data:image\/\w+;base64,/, '');
     return `data:image/png;base64,${clean}`;
