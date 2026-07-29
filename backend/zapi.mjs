@@ -53,14 +53,20 @@ export async function zapiStatus(token = INSTANCE_TOKEN()) {
 // o front usa avatar com inicial. Best-effort: retorna null em erro.
 export async function zapiGrupoInfo(jid, token = INSTANCE_TOKEN()) {
   requireServer(); if (!token || !jid) return null;
+  const out = { nome: null, membros: 0, descricao: null, foto: null };
   try {
-    const data = await req('POST', '/group/info', { groupjid: jid }, token);
-    return {
-      nome: data?.Name || data?.name || null,
-      membros: Number(data?.ParticipantCount ?? data?.participantCount ?? 0) || 0,
-      descricao: String(data?.Topic || data?.topic || '').trim() || null,
-    };
-  } catch { return null; }
+    const info = await req('POST', '/group/info', { groupjid: jid }, token);
+    out.nome = info?.Name || info?.name || null;
+    out.membros = Number(info?.ParticipantCount ?? info?.participantCount ?? 0) || 0;
+    out.descricao = String(info?.Topic || info?.topic || '').trim() || null;
+  } catch { /* best-effort */ }
+  try {
+    // Foto do grupo: vem no objeto de chat (imagePreview), como o HUB faz (whatsappInbox.js).
+    const cf = await req('POST', '/chat/find', { id: jid }, token);
+    const chat = (cf?.chats || (Array.isArray(cf) ? cf : []))[0];
+    out.foto = chat?.imagePreview || chat?.image || null;
+  } catch { /* best-effort */ }
+  return out;
 }
 
 export async function zapiQrCode(token = INSTANCE_TOKEN()) {

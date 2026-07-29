@@ -152,7 +152,7 @@ export default function GrupoVip() {
       {conectado && (<>
         <div className="gv-wa">
           <div className="gv-wa-head">
-            <Avatar nome={temGrupo ? (cfg.grupoNome || 'G') : '?'} className="gv-av-lg" />
+            <Avatar src={temGrupo ? grupoInfo?.foto : null} nome={temGrupo ? (cfg.grupoNome || 'G') : '?'} className="gv-av-lg" />
             <div className="gv-wa-id">
               <div className="gv-wa-tt">{temGrupo ? (cfg.grupoNome || cfg.grupoJid) : 'Nenhum grupo escolhido'}</div>
               <div className="gv-wa-sub">{subGrupo}</div>
@@ -166,30 +166,39 @@ export default function GrupoVip() {
           <div className="gv-wa-body">
             <div className="gv-wa-note">{I.lock} Conectado como <strong>{status.profileName || status.number}</strong>{status.number ? ` · ${status.number}` : ''}</div>
 
+            {temGrupo && mensagens.length > 0 && (
+              <div className="gv-wa-info">📅 Estas são as <strong>mensagens programadas</strong> — o sistema envia sozinho no grupo, nos dias e horários mostrados. Use <strong>Editar</strong> em cada uma para alterar.</div>
+            )}
+
             {!temGrupo
               ? <div className="gv-wa-empty">Escolha o grupo VIP nas <strong>Configurações</strong> logo abaixo para começar a programar as mensagens.</div>
               : mensagens.length === 0
-                ? <div className="gv-wa-empty">Nenhuma mensagem programada.<br />Toque em <strong>+ Nova mensagem</strong> para criar a primeira.</div>
+                ? <div className="gv-wa-empty">Nenhuma mensagem programada.<br />Toque no <strong>+</strong> abaixo para criar a primeira.</div>
                 : mensagens.map((m) => (
-                  <div key={m.id} className={'gv-bubble' + (m.ativa ? '' : ' off')}>
-                    <div className="gv-bubble-act">
-                      <button type="button" className="gv-bubble-actbtn" onClick={() => editarMsg(m)}>Editar</button>
-                      <button type="button" className="gv-bubble-actbtn" onClick={() => setExcluir(m)}>Excluir</button>
+                  <div key={m.id} className="gv-msg-item">
+                    <div className={'gv-bubble' + (m.ativa ? '' : ' off')}>
+                      <div className="gv-bubble-tx">{renderTexto(m.texto)}</div>
+                      {m.cupomModo !== 'NENHUM' && <div className="gv-bubble-tag">🎟️ {m.cupomModo === 'FIXO' ? `cupom ${m.cupomCodigoFixo || ''}` : 'cria cupom no disparo'}</div>}
+                      <div className="gv-bubble-foot">
+                        <span className="gv-bubble-day">{fmtDias(m.diasSemana)}</span>
+                        <span>{m.horario}</span>
+                        {I.clock}
+                      </div>
                     </div>
-                    <div className="gv-bubble-tx">{renderTexto(m.texto)}</div>
-                    {m.cupomModo !== 'NENHUM' && <div className="gv-bubble-tag">🎟️ {m.cupomModo === 'FIXO' ? `cupom ${m.cupomCodigoFixo || ''}` : 'cria cupom no disparo'}</div>}
-                    <div className="gv-bubble-foot">
-                      <span className="gv-bubble-day">{fmtDias(m.diasSemana)}</span>
-                      <span>{m.horario}</span>
-                      {!m.ativa ? <span>· pausada</span> : I.clock}
+                    <div className="gv-cap">
+                      <span className="gv-cap-tag">{m.ativa ? '🕒 Programada' : '⏸️ Pausada'}</span>
+                      <span className="sep">·</span>
+                      <button type="button" onClick={() => editarMsg(m)}>Editar</button>
+                      <span className="sep">·</span>
+                      <button type="button" className="del" onClick={() => setExcluir(m)}>Excluir</button>
                     </div>
                   </div>
                 ))}
           </div>
 
           <div className="gv-wa-compose">
-            <button type="button" className="gv-wa-fakeinput" onClick={novaMsg}>Escreva uma mensagem programada…</button>
-            <button type="button" className="gv-wa-send" onClick={novaMsg} title="Nova mensagem">+</button>
+            <button type="button" className="gv-wa-fakeinput" onClick={novaMsg}>Programar uma nova mensagem…</button>
+            <button type="button" className="gv-wa-send" onClick={novaMsg} title="Programar mensagem">+</button>
           </div>
         </div>
 
