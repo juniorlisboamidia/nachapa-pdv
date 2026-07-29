@@ -42,7 +42,25 @@ export async function zapiStatus(token = INSTANCE_TOKEN()) {
   const number = String(widRaw).split('@')[0].split(':')[0] || null;
   const qrRaw = inst.qrcode || data?.qrcode || '';
   const qr = qrRaw ? `data:image/png;base64,${String(qrRaw).replace(/^data:image\/\w+;base64,/, '')}` : null;
-  return { connected, status: connected ? 'connected' : (state ? 'disconnected' : 'unknown'), number, qr };
+  return {
+    connected, status: connected ? 'connected' : (state ? 'disconnected' : 'unknown'), number, qr,
+    profileName: inst.profileName || null,
+    avatar: inst.profilePicUrl || null,
+  };
+}
+
+// Info do grupo (nome, membros, descrição). A UAZAPI 2.1.4 NÃO expõe a foto do grupo, então
+// o front usa avatar com inicial. Best-effort: retorna null em erro.
+export async function zapiGrupoInfo(jid, token = INSTANCE_TOKEN()) {
+  requireServer(); if (!token || !jid) return null;
+  try {
+    const data = await req('POST', '/group/info', { groupjid: jid }, token);
+    return {
+      nome: data?.Name || data?.name || null,
+      membros: Number(data?.ParticipantCount ?? data?.participantCount ?? 0) || 0,
+      descricao: String(data?.Topic || data?.topic || '').trim() || null,
+    };
+  } catch { return null; }
 }
 
 export async function zapiQrCode(token = INSTANCE_TOKEN()) {

@@ -10,7 +10,7 @@ import jwt from 'jsonwebtoken';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from './generated/prisma/client.ts';
 import { iniciarColetorServer, gravarPontoColetor } from './coletorServer.js';
-import { zapiConfigurado, zapiStatus, zapiQrCode, zapiCriarInstancia, zapiEnviarTexto, zapiListarGrupos } from './zapi.mjs';
+import { zapiConfigurado, zapiStatus, zapiQrCode, zapiCriarInstancia, zapiEnviarTexto, zapiListarGrupos, zapiGrupoInfo } from './zapi.mjs';
 import { validadeDe, gerarLote, colisaoDeLote, CONSERVACOES } from './etiquetas.js';
 import { avaliarResposta, execucaoEmAlerta, fotosCriticasFaltando } from './checklistConformidade.js';
 import { venceHoje, offsetDiaDoHorario } from './checklistRecorrencia.js';
@@ -6965,6 +6965,16 @@ app.get('/api/grupo-vip/grupos', async (req, res) => {
     if (!c.instanceToken) return res.json({ grupos: [] });
     res.json({ grupos: await zapiListarGrupos(c.instanceToken) });
   } catch (err) { console.error('[grupo-vip/grupos]', err); res.json({ grupos: [] }); }
+});
+
+// Info do grupo configurado (membros + descrição) para o cabeçalho estilo WhatsApp.
+app.get('/api/grupo-vip/grupo-info', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const c = await garantirGrupoVipConfig();
+    if (!c.instanceToken || !c.grupoJid) return res.json({ info: null });
+    res.json({ info: await zapiGrupoInfo(c.grupoJid, c.instanceToken) });
+  } catch (err) { console.error('[grupo-vip/grupo-info]', err); res.json({ info: null }); }
 });
 
 app.put('/api/grupo-vip/config', async (req, res) => {
