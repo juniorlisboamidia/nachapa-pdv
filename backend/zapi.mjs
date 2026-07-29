@@ -79,6 +79,10 @@ export async function zapiListarGrupos(token = INSTANCE_TOKEN()) {
   catch { return []; }
   const arr = Array.isArray(data) ? data : (data?.groups || data?.chats || data?.data || []);
   return arr
-    .map((g) => ({ jid: String(g.jid || g.id || g.wid || g.chatid || '').trim(), nome: String(g.name || g.subject || g.nome || '').trim() }))
+    // uazapiGO devolve os campos capitalizados: JID / Name (com fallback p/ minúsculo).
+    .map((g) => ({
+      jid: String(g.JID || g.jid || g.id || g.wid || g.chatid || '').trim(),
+      nome: String(g.Name || g.name || g.subject || g.Subject || g.nome || '').trim(),
+    }))
     .filter((g) => g.jid.includes('@g.us') || /^\d+-\d+$/.test(g.jid) || g.jid.length > 8);
 }
