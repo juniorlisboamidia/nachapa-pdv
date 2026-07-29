@@ -26,9 +26,28 @@ function Avatar({ src, nome, className }) {
 const DIAS = [['Dom', 0], ['Seg', 1], ['Ter', 2], ['Qua', 3], ['Qui', 4], ['Sex', 5], ['Sáb', 6]]
 const CUPOM_TIPOS = [['PERCENT_DISCOUNT', '% de desconto'], ['FLAT_DISCOUNT', 'R$ de desconto'], ['FREE_SHIPPING', 'Frete grátis']]
 const fmtDias = (dd) => dd.map((d) => DIAS.find(([, n]) => n === d)?.[0]).join(', ')
-const renderTexto = (txt) => String(txt || '').split('{cupom}').map((part, i, arr) => (
-  <span key={i}>{part}{i < arr.length - 1 && <span className="gv-bubble-cupom">CUPOM</span>}</span>
-))
+// Renderiza o texto com a formatação do WhatsApp: *negrito*, _itálico_, ~tachado~,
+// ```mono```, `mono`, links clicáveis (azul) e a variável {cupom}.
+function renderTexto(txt) {
+  const re = /(\{cupom\})|(```[\s\S]+?```)|(\*[^*\n]+\*)|(_[^_\n]+_)|(~[^~\n]+~)|(`[^`\n]+`)|((?:https?:\/\/|www\.)[^\s]+)/g
+  const s = String(txt || '')
+  const out = []
+  let last = 0, m, k = 0
+  while ((m = re.exec(s)) !== null) {
+    if (m.index > last) out.push(s.slice(last, m.index))
+    const tok = m[0]
+    if (m[1]) out.push(<span key={k++} className="gv-bubble-cupom">CUPOM</span>)
+    else if (m[2]) out.push(<code key={k++} className="wa-mono">{tok.slice(3, -3)}</code>)
+    else if (m[3]) out.push(<strong key={k++}>{renderTexto(tok.slice(1, -1))}</strong>)
+    else if (m[4]) out.push(<em key={k++}>{renderTexto(tok.slice(1, -1))}</em>)
+    else if (m[5]) out.push(<span key={k++} className="wa-strike">{renderTexto(tok.slice(1, -1))}</span>)
+    else if (m[6]) out.push(<code key={k++} className="wa-mono">{tok.slice(1, -1)}</code>)
+    else if (m[7]) { const href = tok.startsWith('www.') ? `https://${tok}` : tok; out.push(<a key={k++} href={href} target="_blank" rel="noopener noreferrer" className="wa-link">{tok}</a>) }
+    last = re.lastIndex
+  }
+  if (last < s.length) out.push(s.slice(last))
+  return out
+}
 
 export default function GrupoVip() {
   const [toast, setToast] = useState(null)
@@ -304,7 +323,9 @@ export default function GrupoVip() {
         <div className="modal-overlay"><div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
           <div className="modal-title">{modal.id ? 'Editar mensagem' : 'Nova mensagem'}</div>
           <div className="form-group"><label className="form-label">Rótulo</label><input className="form-input" value={modal.rotulo} onChange={(e) => updM('rotulo', e.target.value)} placeholder="Ex.: Terça em dobro" /></div>
-          <div className="form-group"><label className="form-label">Texto (use <code>{'{cupom}'}</code> para inserir o código)</label><textarea className="form-input" rows={4} value={modal.texto} onChange={(e) => updM('texto', e.target.value)} /></div>
+          <div className="form-group"><label className="form-label">Texto (use <code>{'{cupom}'}</code> para inserir o código)</label><textarea className="form-input" rows={4} value={modal.texto} onChange={(e) => updM('texto', e.target.value)} />
+            <div className="gv-hint">Formatação do WhatsApp: <code>*negrito*</code> · <code>_itálico_</code> · <code>~tachado~</code> · <code>```mono```</code>. Links viram azul automaticamente.</div>
+          </div>
           <div className="form-group"><label className="form-label">Dias</label><div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{DIAS.map(([lbl, n]) => <button key={n} type="button" className={'btn btn-sm ' + (modal.diasSemana.includes(n) ? 'btn-primary' : 'btn-secondary')} onClick={() => toggleDia(n)}>{lbl}</button>)}</div></div>
           <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
             <div className="form-group" style={{ margin: 0 }}><label className="form-label">Horário</label><input type="time" className="form-input" style={{ maxWidth: 140 }} value={modal.horario} onChange={(e) => updM('horario', e.target.value)} /></div>

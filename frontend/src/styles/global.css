@@ -2781,3 +2781,12 @@ body.theme-dark .gv-wa-info strong { color: #c3d1d9; }
 .gv-cap button:hover { text-decoration: underline; }
 .gv-cap button.del { color: #b91c1c; }
 .gv-cap .sep { opacity: .4; }
+
+/* formatação estilo WhatsApp dentro do balão */
+.gv-bubble strong { font-weight: 700; }
+.gv-bubble em { font-style: italic; }
+.gv-bubble .wa-strike { text-decoration: line-through; }
+.gv-bubble .wa-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; background: rgba(0,0,0,.06); border-radius: 3px; padding: 0 3px; }
+body.theme-dark .gv-bubble .wa-mono { background: rgba(255,255,255,.13); }
+.gv-bubble .wa-link { color: #027eb5; text-decoration: underline; word-break: break-all; }
+body.theme-dark .gv-bubble .wa-link { color: #53bdeb; }
