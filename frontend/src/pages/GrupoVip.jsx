@@ -347,6 +347,11 @@ export default function GrupoVip() {
               <div className="gv-hint" style={{ margin: 0 }}>Para ver Conversões e Receita, vincule o <strong>ID da loja no HUB</strong> nas Configurações (aba Conversas). Sem isso, mostramos só as mensagens enviadas.</div>
             </div>
           )}
+          {cfg.hubClienteId && visao && visao.cwOk === false && (
+            <div className="gv-card" style={{ padding: 14 }}>
+              <div className="gv-hint" style={{ margin: 0 }}>Não foi possível falar com o HUB agora — Conversões e Receita podem aparecer zeradas. Tente de novo em instantes.</div>
+            </div>
+          )}
           <div className="gv-kpis">
             <div className="gv-kpi"><div className="gv-kpi-l">Mensagens Enviadas</div><div className="gv-kpi-n">{visao ? visao.mensagensEnviadas : '—'}</div></div>
             <div className="gv-kpi"><div className="gv-kpi-l">Conversões</div><div className="gv-kpi-n">{visao ? visao.conversoes : '—'}</div></div>

@@ -7089,12 +7089,20 @@ app.get('/api/grupo-vip/visao-geral', async (req, res) => {
     const mensagens = await prisma.grupoVipMensagem.findMany();
     const cfg = await garantirGrupoVipConfig();
     let origensCW = [];
+    let cwOk = true;
     if (cfg.hubClienteId) {
       try { origensCW = await buscarOrigensCW(cfg.hubClienteId, inicio.toISOString(), fim.toISOString()); }
-      catch (e) { console.error('[grupo-vip/visao-geral] CW', textoErro(e)); }
+      catch (e) { console.error('[grupo-vip/visao-geral] CW', textoErro(e)); cwOk = false; }
     }
     const norm = (s) => String(s || '').trim().toLowerCase();
-    const mapaCW = new Map(origensCW.map((o) => [norm(o.origem), o]));
+    const mapaCW = new Map();
+    for (const o of origensCW) {
+      const k = norm(o.origem);
+      const cur = mapaCW.get(k) || { origem: o.origem, pedidos: 0, receita: 0 };
+      cur.pedidos += o.pedidos || 0;
+      cur.receita += o.receita || 0;
+      mapaCW.set(k, cur);
+    }
     const porMensagem = [];
     let conversoes = 0, receita = 0;
     const jaContou = new Set(); // não dobra se 2 mensagens usarem a mesma origem
@@ -7105,7 +7113,7 @@ app.get('/api/grupo-vip/visao-geral', async (req, res) => {
       porMensagem.push({ rotulo: m.rotulo, origem, pedidos: hit ? hit.pedidos : 0, receita: hit ? hit.receita : 0 });
       if (hit && !jaContou.has(norm(origem))) { conversoes += hit.pedidos; receita += hit.receita; jaContou.add(norm(origem)); }
     }
-    res.json({ dias, mensagensEnviadas, conversoes, receita, porMensagem });
+    res.json({ dias, mensagensEnviadas, conversoes, receita, porMensagem, cwOk });
   } catch (err) { console.error('[grupo-vip/visao-geral]', err); res.status(500).json({ error: 'Erro ao carregar a visão geral.' }); }
 });
 
