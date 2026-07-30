@@ -2627,7 +2627,7 @@ function iniciarAgendadorLembretes() {
 // explícito). Dedup: cria GrupoVipDisparo (unique) ANTES de enviar — P2002 ⇒ já foi hoje.
 async function dispararGrupoVipLoja(empresaId, cfg) {
   try {
-    if (!cfg.ativo || !cfg.grupoJid || !cfg.instanceToken) return;
+    if (!cfg.grupoJid || !cfg.instanceToken) return; // sem master switch: controla-se por mensagem (ativa) + ter grupo/instância
     const agoraMs = Date.now();
     const f = brFields(agoraMs);
     const dataRef = new Date(brToUtcMs(f.y, f.mo, f.day, 0, 0));
@@ -2664,7 +2664,7 @@ async function dispararGrupoVipLoja(empresaId, cfg) {
 }
 
 async function varrerGrupoVip() {
-  const cfgs = await prisma.grupoVipConfig.findMany({ where: { ativo: true } });
+  const cfgs = await prisma.grupoVipConfig.findMany({ where: { grupoJid: { not: null }, instanceToken: { not: null } } });
   for (const cfg of cfgs) {
     try { await dispararGrupoVipLoja(cfg.empresaId, cfg); }
     catch (e) { console.error('[varrerGrupoVip]', cfg.empresaId, e?.message || e); }

@@ -58,7 +58,6 @@ export default function GrupoVip() {
   const [qr, setQr] = useState(null)
   const [conectando, setConectando] = useState(false)
   const [grupos, setGrupos] = useState([])
-  const [jidManual, setJidManual] = useState('')
   const [hubId, setHubId] = useState('')
   const [mensagens, setMensagens] = useState([])
   const [historico, setHistorico] = useState([])
@@ -108,15 +107,13 @@ export default function GrupoVip() {
     try { const r = await api.get('/grupo-vip/grupos'); setGrupos(r.data.grupos || []) } catch { setGrupos([]) }
   }
   async function salvarGrupo(jid, nome) {
-    try { const r = await api.put('/grupo-vip/config', { grupoJid: jid, grupoNome: nome || null }); setCfg(r.data); setJidManual(''); setGrupos([]); notify('Grupo salvo.') }
+    try { const r = await api.put('/grupo-vip/config', { grupoJid: jid, grupoNome: nome || null }); setCfg(r.data); setGrupos([]); notify('Grupo salvo.') }
     catch (e) { notify(e?.response?.data?.error ?? 'Erro ao salvar o grupo.', 'error') }
   }
   async function salvarConfig(patch) {
     try { const r = await api.put('/grupo-vip/config', patch); setCfg(r.data); notify('Salvo.') }
     catch (e) { notify(e?.response?.data?.error ?? 'Erro ao salvar.', 'error') }
   }
-  const toggleAtivo = () => salvarConfig({ ativo: !cfg.ativo })
-
   const novaMsg = () => setModal({ rotulo: '', texto: '', diasSemana: [], horario: '18:00', ativa: true, cupomModo: 'NENHUM', cupomTipo: 'PERCENT_DISCOUNT', cupomValor: '', cupomNome: '', cupomCodigoFixo: '', cupomValidadeHoras: '', cupomPedidoMinimo: '', cupomLimiteUso: '', cupomSoNovosClientes: false })
   const editarMsg = (m) => setModal({ ...m, cupomValor: m.cupomValor ?? '', cupomValidadeHoras: m.cupomValidadeHoras ?? '', cupomPedidoMinimo: m.cupomPedidoMinimo ?? '', cupomLimiteUso: m.cupomLimiteUso ?? '', cupomNome: m.cupomNome ?? '', cupomCodigoFixo: m.cupomCodigoFixo ?? '', cupomTipo: m.cupomTipo || 'PERCENT_DISCOUNT', cupomSoNovosClientes: !!m.cupomSoNovosClientes })
   const updM = (k, v) => setModal((m) => ({ ...m, [k]: v }))
@@ -139,6 +136,7 @@ export default function GrupoVip() {
   const subGrupo = temGrupo
     ? [grupoInfo?.membros > 0 ? `${grupoInfo.membros} membros` : null, grupoInfo?.descricao].filter(Boolean).join('  ·  ') || 'grupo selecionado'
     : 'toque na engrenagem para escolher o grupo'
+  const nAtivas = mensagens.filter((m) => m.ativa).length
 
   return (
     <div>
@@ -177,7 +175,7 @@ export default function GrupoVip() {
               <div className="gv-wa-sub">{subGrupo}</div>
             </div>
             <div className="gv-wa-actions">
-              <span className={'gv-wa-pill ' + (cfg.ativo ? 'on' : 'off')}>{cfg.ativo ? 'Ativo' : 'Pausado'}</span>
+              {nAtivas > 0 && <span className="gv-wa-pill on">{nAtivas} programada{nAtivas > 1 ? 's' : ''}</span>}
               <button type="button" className="gv-wa-gear" title="Configurações" onClick={irConfig}>{I.gear}</button>
             </div>
           </div>
@@ -225,56 +223,47 @@ export default function GrupoVip() {
         <div className="gv-card" ref={configRef}>
           <div className="gv-head">
             <div className="gv-ic">{I.gear}</div>
-            <div><div className="gv-tt">Configurações</div><div className="gv-sub">Grupo, ativação e cupom.</div></div>
+            <div><div className="gv-tt">Configurações</div><div className="gv-sub">Grupo e cupom.</div></div>
           </div>
           <div className="gv-body">
             {/* grupo */}
-            <div className="gv-inline" style={{ justifyContent: 'space-between', marginBottom: 10 }}>
-              <label className="form-label" style={{ margin: 0 }}>Grupo do WhatsApp</label>
-              <button type="button" className="btn btn-secondary btn-sm" onClick={carregarGrupos}>{grupos.length ? 'Atualizar lista' : 'Listar grupos'}</button>
-            </div>
-            {temGrupo && grupos.length === 0 && (
-              <div className="gv-current" style={{ marginBottom: 10 }}>
-                <div className="gv-mini">{I.check}</div>
-                <div><div className="gv-current-nm">{cfg.grupoNome || cfg.grupoJid}</div><div className="gv-current-sub">Grupo selecionado</div></div>
-              </div>
-            )}
-            {grupos.length > 0 && (
-              <div className="gv-rows" style={{ marginBottom: 10 }}>
-                {grupos.map((g) => {
-                  const sel = g.jid === cfg.grupoJid
-                  return (
-                    <div key={g.jid} className={'gv-row' + (sel ? ' sel' : '')} role="button" tabIndex={0}
-                      onClick={() => salvarGrupo(g.jid, g.nome)}
-                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); salvarGrupo(g.jid, g.nome) } }}>
-                      <div className="gv-row-ic">{I.users}</div>
-                      <div className="gv-row-tx">
-                        <div className="gv-row-nm">{g.nome || g.jid}</div>
-                        {g.nome && <div className="gv-row-sub">{g.jid}</div>}
+            <label className="form-label">Grupo do WhatsApp</label>
+            {grupos.length > 0 ? (
+              <>
+                <div className="gv-rows" style={{ marginBottom: 8 }}>
+                  {grupos.map((g) => {
+                    const sel = g.jid === cfg.grupoJid
+                    return (
+                      <div key={g.jid} className={'gv-row' + (sel ? ' sel' : '')} role="button" tabIndex={0}
+                        onClick={() => salvarGrupo(g.jid, g.nome)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); salvarGrupo(g.jid, g.nome) } }}>
+                        <div className="gv-row-ic">{I.users}</div>
+                        <div className="gv-row-tx">
+                          <div className="gv-row-nm">{g.nome || g.jid}</div>
+                          {g.nome && <div className="gv-row-sub">{g.jid}</div>}
+                        </div>
+                        {sel && <div className="gv-row-ck">{I.check}</div>}
                       </div>
-                      {sel && <div className="gv-row-ck">{I.check}</div>}
-                    </div>
-                  )
-                })}
+                    )
+                  })}
+                </div>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setGrupos([])}>Fechar lista</button>
+              </>
+            ) : temGrupo ? (
+              <div className="gv-current">
+                <Avatar src={grupoInfo?.foto} nome={cfg.grupoNome} className="gv-av-lg" />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="gv-current-nm">{cfg.grupoNome || cfg.grupoJid}</div>
+                  <div className="gv-current-sub">{grupoInfo?.membros > 0 ? `${grupoInfo.membros} membros · ` : ''}Grupo selecionado</div>
+                </div>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={carregarGrupos}>Trocar</button>
+              </div>
+            ) : (
+              <div className="gv-inline">
+                <span style={{ flex: 1, fontSize: 13, color: 'var(--app-text-3)' }}>Nenhum grupo escolhido ainda.</span>
+                <button type="button" className="btn btn-primary btn-sm" onClick={carregarGrupos}>Escolher grupo</button>
               </div>
             )}
-            <div className="gv-inline">
-              <input className="form-input" placeholder="…ou cole o ID do grupo (…@g.us)" value={jidManual} onChange={(e) => setJidManual(e.target.value)} />
-              <button type="button" className="btn btn-secondary btn-sm" onClick={() => jidManual.trim() && salvarGrupo(jidManual.trim(), null)}>Usar este</button>
-            </div>
-
-            <hr className="gv-divider" />
-
-            {/* ativação */}
-            <div className="gv-toggle">
-              <div className="gv-ic">{I.zap}</div>
-              <div style={{ minWidth: 0 }}>
-                <div className="gv-tt">{cfg.ativo ? 'Grupo VIP ativo' : 'Grupo VIP pausado'}</div>
-                <div className="gv-sub">{cfg.ativo ? 'As mensagens agendadas estão sendo disparadas.' : 'Ative para disparar no horário agendado.'}</div>
-              </div>
-              <div className={'intel-switch' + (cfg.ativo ? ' on' : '')} role="switch" aria-checked={cfg.ativo} tabIndex={0}
-                onClick={toggleAtivo} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleAtivo() } }} />
-            </div>
 
             <hr className="gv-divider" />
 
