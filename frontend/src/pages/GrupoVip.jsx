@@ -59,7 +59,7 @@ export default function GrupoVip() {
   const [conectando, setConectando] = useState(false)
   const [grupos, setGrupos] = useState([])
   const [hubId, setHubId] = useState('')
-  const [aba, setAba] = useState('conversas') // 'conversas' | 'visao'
+  const [aba, setAba] = useState('visao') // 'visao' | 'mensagens'
   const [dias, setDias] = useState(30)
   const [visao, setVisao] = useState(null)
   const [mensagens, setMensagens] = useState([])
@@ -155,8 +155,8 @@ export default function GrupoVip() {
 
       {conectado && (
         <div className="gv-tabs">
-          <button type="button" className={'gv-tab' + (aba === 'conversas' ? ' on' : '')} onClick={() => setAba('conversas')}>Conversas</button>
           <button type="button" className={'gv-tab' + (aba === 'visao' ? ' on' : '')} onClick={() => setAba('visao')}>Visão Geral</button>
+          <button type="button" className={'gv-tab' + (aba === 'mensagens' ? ' on' : '')} onClick={() => setAba('mensagens')}>Mensagens</button>
         </div>
       )}
 
@@ -183,7 +183,7 @@ export default function GrupoVip() {
       )}
 
       {/* Conectado → chat estilo WhatsApp */}
-      {conectado && aba === 'conversas' && (<>
+      {conectado && aba === 'mensagens' && (<>
         <div className="gv-wa">
           <div className="gv-wa-head">
             <Avatar src={temGrupo ? grupoInfo?.foto : null} nome={temGrupo ? (cfg.grupoNome || 'G') : '?'} className="gv-av-lg" />
@@ -344,7 +344,7 @@ export default function GrupoVip() {
           </div>
           {!cfg.hubClienteId && (
             <div className="gv-card" style={{ padding: 14 }}>
-              <div className="gv-hint" style={{ margin: 0 }}>Para ver Conversões e Receita, vincule o <strong>ID da loja no HUB</strong> nas Configurações (aba Conversas). Sem isso, mostramos só as mensagens enviadas.</div>
+              <div className="gv-hint" style={{ margin: 0 }}>Para ver Conversões e Receita, vincule o <strong>ID da loja no HUB</strong> nas Configurações (aba Mensagens). Sem isso, mostramos só as mensagens enviadas.</div>
             </div>
           )}
           {cfg.hubClienteId && visao && visao.cwOk === false && (
