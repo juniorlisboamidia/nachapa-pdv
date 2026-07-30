@@ -2790,3 +2790,16 @@ body.theme-dark .gv-wa-info strong { color: #c3d1d9; }
 body.theme-dark .gv-bubble .wa-mono { background: rgba(255,255,255,.13); }
 .gv-bubble .wa-link { color: #027eb5; text-decoration: underline; word-break: break-all; }
 body.theme-dark .gv-bubble .wa-link { color: #53bdeb; }
+
+/* Grupo VIP › abas + Visão Geral */
+.gv-tabs { display: inline-flex; gap: 4px; background: var(--app-surface-2); border: 1px solid var(--app-border); border-radius: 12px; padding: 4px; margin-bottom: 16px; }
+.gv-tab { border: none; background: none; padding: 8px 18px; border-radius: 9px; font-size: 13.5px; font-weight: 600; color: var(--app-text-3); cursor: pointer; }
+.gv-tab.on { background: var(--app-surface); color: var(--app-text); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.gv-seg { display: inline-flex; border: 1px solid var(--app-border); border-radius: 10px; overflow: hidden; margin-bottom: 16px; }
+.gv-seg button { border: none; border-right: 1px solid var(--app-border); background: var(--app-surface); color: var(--app-text-2); font-size: 12.5px; font-weight: 600; padding: 7px 16px; cursor: pointer; }
+.gv-seg button:last-child { border-right: none; }
+.gv-seg button.on { background: var(--brand-gold); color: var(--brand-gold-ink); }
+.gv-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; margin-bottom: 16px; }
+.gv-kpi { background: var(--app-surface); border: 1px solid var(--app-border); border-radius: 14px; padding: 16px 18px; }
+.gv-kpi-l { font-size: 12.5px; color: var(--app-text-3); font-weight: 600; }
+.gv-kpi-n { font-size: 26px; font-weight: 800; color: var(--app-text); margin-top: 6px; line-height: 1; }

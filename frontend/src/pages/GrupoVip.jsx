@@ -59,6 +59,9 @@ export default function GrupoVip() {
   const [conectando, setConectando] = useState(false)
   const [grupos, setGrupos] = useState([])
   const [hubId, setHubId] = useState('')
+  const [aba, setAba] = useState('conversas') // 'conversas' | 'visao'
+  const [dias, setDias] = useState(30)
+  const [visao, setVisao] = useState(null)
   const [mensagens, setMensagens] = useState([])
   const [historico, setHistorico] = useState([])
   const [modal, setModal] = useState(null)
@@ -78,6 +81,13 @@ export default function GrupoVip() {
 
   const conectado = !!status?.connected
   const temGrupo = !!cfg?.grupoJid
+
+  // Visão Geral: carrega quando a aba estiver ativa / mudar o período
+  useEffect(() => {
+    if (!conectado || aba !== 'visao') return
+    setVisao(null)
+    api.get(`/grupo-vip/visao-geral?dias=${dias}`).then((r) => setVisao(r.data)).catch(() => setVisao({ mensagensEnviadas: 0, conversoes: 0, receita: 0, porMensagem: [] }))
+  }, [conectado, aba, dias]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // info do grupo (membros/descrição) quando conectado e com grupo
   useEffect(() => {
@@ -143,6 +153,13 @@ export default function GrupoVip() {
       <div className="page-header"><div><h1>Grupo VIP</h1><div className="page-header-sub">Disparos agendados no seu grupo VIP do WhatsApp + cupom do Cardápio Web.</div></div></div>
       <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />
 
+      {conectado && (
+        <div className="gv-tabs">
+          <button type="button" className={'gv-tab' + (aba === 'conversas' ? ' on' : '')} onClick={() => setAba('conversas')}>Conversas</button>
+          <button type="button" className={'gv-tab' + (aba === 'visao' ? ' on' : '')} onClick={() => setAba('visao')}>Visão Geral</button>
+        </div>
+      )}
+
       {/* Não conectado → setup de conexão */}
       {!conectado && (
         <div className="gv-card">
@@ -166,7 +183,7 @@ export default function GrupoVip() {
       )}
 
       {/* Conectado → chat estilo WhatsApp */}
-      {conectado && (<>
+      {conectado && aba === 'conversas' && (<>
         <div className="gv-wa">
           <div className="gv-wa-head">
             <Avatar src={temGrupo ? grupoInfo?.foto : null} nome={temGrupo ? (cfg.grupoNome || 'G') : '?'} className="gv-av-lg" />
@@ -317,6 +334,49 @@ export default function GrupoVip() {
           </div>
         </div>
       </>)}
+
+      {conectado && aba === 'visao' && (
+        <>
+          <div className="gv-seg">
+            {[7, 30, 90].map((d) => (
+              <button key={d} type="button" className={dias === d ? 'on' : ''} onClick={() => setDias(d)}>{d} dias</button>
+            ))}
+          </div>
+          {!cfg.hubClienteId && (
+            <div className="gv-card" style={{ padding: 14 }}>
+              <div className="gv-hint" style={{ margin: 0 }}>Para ver Conversões e Receita, vincule o <strong>ID da loja no HUB</strong> nas Configurações (aba Conversas). Sem isso, mostramos só as mensagens enviadas.</div>
+            </div>
+          )}
+          <div className="gv-kpis">
+            <div className="gv-kpi"><div className="gv-kpi-l">Mensagens Enviadas</div><div className="gv-kpi-n">{visao ? visao.mensagensEnviadas : '—'}</div></div>
+            <div className="gv-kpi"><div className="gv-kpi-l">Conversões</div><div className="gv-kpi-n">{visao ? visao.conversoes : '—'}</div></div>
+            <div className="gv-kpi"><div className="gv-kpi-l">Receita Gerada</div><div className="gv-kpi-n">{visao ? `R$ ${Number(visao.receita || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}</div></div>
+            <div className="gv-kpi"><div className="gv-kpi-l">Clientes no Grupo</div><div className="gv-kpi-n">{grupoInfo?.membros > 0 ? grupoInfo.membros : '—'}</div></div>
+          </div>
+          <div className="gv-card">
+            <div className="gv-head"><div className="gv-ic">{I.zap}</div><div><div className="gv-tt">Retorno por mensagem</div><div className="gv-sub">Pedidos e receita atribuídos a cada mensagem (pelo link).</div></div></div>
+            <div className="gv-body">
+              {!visao || visao.porMensagem.length === 0
+                ? <div className="gv-empty">{I.zap}<div>Nenhuma mensagem com link do Cardápio Web ainda. Cole um link com <code>?s=</code> na mensagem para rastrear.</div></div>
+                : <div className="table-card" style={{ border: 'none' }}>
+                  <table className="hb-table">
+                    <thead><tr><th>Mensagem</th><th>Origem</th><th>Pedidos</th><th>Receita</th></tr></thead>
+                    <tbody>
+                      {visao.porMensagem.map((p, i) => (
+                        <tr key={i}>
+                          <td>{p.rotulo}</td>
+                          <td><span className="gv-chip">{p.origem}</span></td>
+                          <td>{p.pedidos}</td>
+                          <td>R$ {Number(p.receita || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>}
+            </div>
+          </div>
+        </>
+      )}
 
       {modal && (
         <div className="modal-overlay"><div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
