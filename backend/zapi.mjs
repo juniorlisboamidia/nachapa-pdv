@@ -61,10 +61,11 @@ export async function zapiGrupoInfo(jid, token = INSTANCE_TOKEN()) {
     out.descricao = String(info?.Topic || info?.topic || '').trim() || null;
   } catch { /* best-effort */ }
   try {
-    // Foto do grupo: vem no objeto de chat (imagePreview), como o HUB faz (whatsappInbox.js).
-    const cf = await req('POST', '/chat/find', { id: jid }, token);
-    const chat = (cf?.chats || (Array.isArray(cf) ? cf : []))[0];
-    out.foto = chat?.imagePreview || chat?.image || null;
+    // Foto do grupo: /chat/details busca a URL ao vivo no campo `image` (o imagePreview do
+    // /chat/find costuma vir vazio p/ número recém-conectado). Precisa de `number` = o JID.
+    const d = await req('POST', '/chat/details', { number: jid }, token);
+    out.foto = d?.image || d?.imagePreview || null;
+    if (!out.nome) out.nome = d?.name || d?.wa_name || null;
   } catch { /* best-effort */ }
   return out;
 }

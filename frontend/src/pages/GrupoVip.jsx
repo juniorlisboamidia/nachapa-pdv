@@ -181,8 +181,6 @@ export default function GrupoVip() {
           </div>
 
           <div className="gv-wa-body">
-            <div className="gv-wa-note">{I.lock} Conectado como <strong>{status.profileName || status.number}</strong>{status.number ? ` · ${status.number}` : ''}</div>
-
             {temGrupo && mensagens.length > 0 && (
               <div className="gv-wa-info">📅 Estas são as <strong>mensagens programadas</strong> — o sistema envia sozinho no grupo, nos dias e horários mostrados. Use <strong>Editar</strong> em cada uma para alterar.</div>
             )}
@@ -226,6 +224,18 @@ export default function GrupoVip() {
             <div><div className="gv-tt">Configurações</div><div className="gv-sub">Grupo e cupom.</div></div>
           </div>
           <div className="gv-body">
+            {/* número conectado */}
+            <label className="form-label">Número conectado</label>
+            <div className="gv-current">
+              <Avatar src={status.avatar} nome={status.profileName || status.number} className="gv-av-lg" />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="gv-current-nm">{status.profileName || 'Número do WhatsApp'}</div>
+                <div className="gv-current-sub">{status.number || '—'} · <span style={{ color: '#16a34a', fontWeight: 600 }}>conectado</span></div>
+              </div>
+            </div>
+
+            <hr className="gv-divider" />
+
             {/* grupo */}
             <label className="form-label">Grupo do WhatsApp</label>
             {grupos.length > 0 ? (
