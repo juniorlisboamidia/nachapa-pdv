@@ -57,7 +57,10 @@ export async function zapiGrupoInfo(jid, token = INSTANCE_TOKEN()) {
   try {
     const info = await req('POST', '/group/info', { groupjid: jid }, token);
     out.nome = info?.Name || info?.name || null;
-    out.membros = Number(info?.ParticipantCount ?? info?.participantCount ?? 0) || 0;
+    // A UAZAPI costuma devolver ParticipantCount=0 mesmo com grupo cheio; a lista real
+    // vem no array Participants — usa o length dele e cai no count só como fallback.
+    out.membros = (Array.isArray(info?.Participants) && info.Participants.length)
+      || Number(info?.ParticipantCount ?? info?.participantCount ?? 0) || 0;
     out.descricao = String(info?.Topic || info?.topic || '').trim() || null;
   } catch { /* best-effort */ }
   try {
