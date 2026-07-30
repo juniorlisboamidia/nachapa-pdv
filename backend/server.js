@@ -21,6 +21,8 @@ import { classificarOcorrencia, agregar, STATUS } from './checklistHistoricoGera
 import { ausenciaDoDia } from './pontoAusencia.js';
 import { mensagensParaDisparar, montarPayloadCupom } from './grupoVip.js';
 import { criarCupomCW, gerarCodigoCupom } from './cardapioCupom.js';
+import { extrairOrigem } from './grupoVipOrigem.js';
+import { buscarOrigensCW } from './cardapioOrigens.js';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 
@@ -7073,6 +7075,38 @@ app.get('/api/grupo-vip/historico', async (req, res) => {
     const ms = new Map((await prisma.grupoVipMensagem.findMany({ select: { id: true, rotulo: true } })).map((m) => [m.id, m.rotulo]));
     res.json({ historico: rows.map((d) => ({ id: d.id, rotulo: ms.get(d.mensagemId) || '—', status: d.status, cupomCode: d.cupomCode || null, erro: d.erro || null, criadoEm: d.criadoEm })) });
   } catch (err) { console.error('[grupo-vip/historico]', err); res.status(500).json({ error: 'Erro ao carregar.' }); }
+});
+
+// Grupo VIP › Visão Geral: KPIs de retorno por período (cruza o ?s= das mensagens com
+// o customer_origin dos pedidos, agregados no HUB). Best-effort com o CW.
+app.get('/api/grupo-vip/visao-geral', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const dias = [7, 30, 90].includes(parseInt(req.query?.dias, 10)) ? parseInt(req.query.dias, 10) : 30;
+    const fim = new Date();
+    const inicio = new Date(fim.getTime() - dias * 24 * 3600 * 1000);
+    const mensagensEnviadas = await prisma.grupoVipDisparo.count({ where: { status: 'ENVIADO', criadoEm: { gte: inicio, lte: fim } } });
+    const mensagens = await prisma.grupoVipMensagem.findMany();
+    const cfg = await garantirGrupoVipConfig();
+    let origensCW = [];
+    if (cfg.hubClienteId) {
+      try { origensCW = await buscarOrigensCW(cfg.hubClienteId, inicio.toISOString(), fim.toISOString()); }
+      catch (e) { console.error('[grupo-vip/visao-geral] CW', textoErro(e)); }
+    }
+    const norm = (s) => String(s || '').trim().toLowerCase();
+    const mapaCW = new Map(origensCW.map((o) => [norm(o.origem), o]));
+    const porMensagem = [];
+    let conversoes = 0, receita = 0;
+    const jaContou = new Set(); // não dobra se 2 mensagens usarem a mesma origem
+    for (const m of mensagens) {
+      const origem = extrairOrigem(m.texto);
+      if (!origem) continue;
+      const hit = mapaCW.get(norm(origem));
+      porMensagem.push({ rotulo: m.rotulo, origem, pedidos: hit ? hit.pedidos : 0, receita: hit ? hit.receita : 0 });
+      if (hit && !jaContou.has(norm(origem))) { conversoes += hit.pedidos; receita += hit.receita; jaContou.add(norm(origem)); }
+    }
+    res.json({ dias, mensagensEnviadas, conversoes, receita, porMensagem });
+  } catch (err) { console.error('[grupo-vip/visao-geral]', err); res.status(500).json({ error: 'Erro ao carregar a visão geral.' }); }
 });
 
 // Atribui (ou remove, jornadaId null) a jornada de um colaborador.
