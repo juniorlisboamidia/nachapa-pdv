@@ -98,9 +98,15 @@ export async function zapiEnviarTexto(numero, texto, token = INSTANCE_TOKEN()) {
 }
 
 // Envia uma imagem (data URL base64 ou URL) com legenda opcional. `numero` = dígitos+DDI ou JID de grupo.
+// Espelha o envio de mídia do Inbox do HUB (em produção): se vier data URL, separa o base64 CRU
+// do mime e manda os dois em campos distintos — é o formato que a UAZAPI aceita ao vivo.
 export async function zapiEnviarImagem(numero, imagem, legenda, token = INSTANCE_TOKEN()) {
   requireServer(); exigirToken(token);
-  const body = { number: numero, type: 'image', file: imagem };
+  let file = String(imagem || ''); let mimetype;
+  const mm = /^data:([^;]+);base64,(.*)$/s.exec(file);
+  if (mm) { mimetype = mm[1]; file = mm[2]; }
+  const body = { number: numero, type: 'image', file };
+  if (mimetype) body.mimetype = mimetype;
   if (legenda) body.text = legenda;
   return req('POST', '/send/media', body, token);
 }

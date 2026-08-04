@@ -28,8 +28,9 @@ const DIAS = [['Dom', 0], ['Seg', 1], ['Ter', 2], ['Qua', 3], ['Qui', 4], ['Sex'
 const CUPOM_TIPOS = [['PERCENT_DISCOUNT', '% de desconto'], ['FLAT_DISCOUNT', 'R$ de desconto'], ['FREE_SHIPPING', 'Frete grátis']]
 const fmtDias = (dd) => dd.map((d) => DIAS.find(([, n]) => n === d)?.[0]).join(', ')
 
-// Comprime a foto no navegador (redimensiona p/ até 1280px e exporta JPEG) — evita base64 gigante.
-async function comprimirImagem(file, maxDim = 1280, quality = 0.72) {
+// Comprime a foto no navegador (redimensiona p/ até 1600px e exporta JPEG q~0.85) — nítida no
+// teto que o WhatsApp preserva, sem virar base64 gigante.
+async function comprimirImagem(file, maxDim = 1600, quality = 0.85) {
   const dataUrl = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(file) })
   const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = dataUrl })
   let w = img.width, h = img.height
