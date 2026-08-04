@@ -15,6 +15,7 @@ const I = {
   check: svg(<path d="m4 10 4 4 8-9" />, '0 0 20 20'),
   gear: svg(<><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1Z" /></>),
   lock: svg(<><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></>),
+  image: svg(<><rect x="3" y="4" width="18" height="16" rx="2" /><circle cx="8.5" cy="9.5" r="1.5" /><path d="m4 18 5-5 4 4 3-3 4 4" /></>),
 }
 
 function Avatar({ src, nome, className }) {
@@ -26,6 +27,17 @@ function Avatar({ src, nome, className }) {
 const DIAS = [['Dom', 0], ['Seg', 1], ['Ter', 2], ['Qua', 3], ['Qui', 4], ['Sex', 5], ['Sáb', 6]]
 const CUPOM_TIPOS = [['PERCENT_DISCOUNT', '% de desconto'], ['FLAT_DISCOUNT', 'R$ de desconto'], ['FREE_SHIPPING', 'Frete grátis']]
 const fmtDias = (dd) => dd.map((d) => DIAS.find(([, n]) => n === d)?.[0]).join(', ')
+
+// Comprime a foto no navegador (redimensiona p/ até 1280px e exporta JPEG) — evita base64 gigante.
+async function comprimirImagem(file, maxDim = 1280, quality = 0.72) {
+  const dataUrl = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = rej; fr.readAsDataURL(file) })
+  const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = dataUrl })
+  let w = img.width, h = img.height
+  if (w > maxDim || h > maxDim) { const r = Math.min(maxDim / w, maxDim / h); w = Math.round(w * r); h = Math.round(h * r) }
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h
+  cv.getContext('2d').drawImage(img, 0, 0, w, h)
+  return cv.toDataURL('image/jpeg', quality)
+}
 // Renderiza o texto com a formatação do WhatsApp: *negrito*, _itálico_, ~tachado~,
 // ```mono```, `mono`, links clicáveis (azul) e a variável {cupom}.
 function renderTexto(txt) {
@@ -124,10 +136,20 @@ export default function GrupoVip() {
     try { const r = await api.put('/grupo-vip/config', patch); setCfg(r.data); notify('Salvo.') }
     catch (e) { notify(e?.response?.data?.error ?? 'Erro ao salvar.', 'error') }
   }
-  const novaMsg = () => setModal({ rotulo: '', texto: '', diasSemana: [], horario: '18:00', ativa: true, cupomModo: 'NENHUM', cupomTipo: 'PERCENT_DISCOUNT', cupomValor: '', cupomNome: '', cupomCodigoFixo: '', cupomValidadeHoras: '', cupomPedidoMinimo: '', cupomLimiteUso: '', cupomSoNovosClientes: false })
+  const novaMsg = () => setModal({ rotulo: '', texto: '', imagem: '', diasSemana: [], horario: '18:00', ativa: true, cupomModo: 'NENHUM', cupomTipo: 'PERCENT_DISCOUNT', cupomValor: '', cupomNome: '', cupomCodigoFixo: '', cupomValidadeHoras: '', cupomPedidoMinimo: '', cupomLimiteUso: '', cupomSoNovosClientes: false })
   const editarMsg = (m) => setModal({ ...m, cupomValor: m.cupomValor ?? '', cupomValidadeHoras: m.cupomValidadeHoras ?? '', cupomPedidoMinimo: m.cupomPedidoMinimo ?? '', cupomLimiteUso: m.cupomLimiteUso ?? '', cupomNome: m.cupomNome ?? '', cupomCodigoFixo: m.cupomCodigoFixo ?? '', cupomTipo: m.cupomTipo || 'PERCENT_DISCOUNT', cupomSoNovosClientes: !!m.cupomSoNovosClientes })
   const updM = (k, v) => setModal((m) => ({ ...m, [k]: v }))
   const toggleDia = (n) => setModal((m) => ({ ...m, diasSemana: m.diasSemana.includes(n) ? m.diasSemana.filter((x) => x !== n) : [...m.diasSemana, n] }))
+  async function onPickImage(e) {
+    const file = e.target.files?.[0]; e.target.value = ''
+    if (!file) return
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) { notify('Use uma foto JPG, PNG ou WEBP.', 'error'); return }
+    try {
+      const dataUrl = await comprimirImagem(file)
+      if (dataUrl.length > 4_500_000) { notify('Foto muito grande, tente outra.', 'error'); return }
+      updM('imagem', dataUrl)
+    } catch { notify('Não consegui processar a foto.', 'error') }
+  }
   async function salvarMsg() {
     try {
       if (modal.id) await api.put(`/grupo-vip/mensagens/${modal.id}`, modal)
@@ -209,6 +231,7 @@ export default function GrupoVip() {
                 : mensagens.map((m) => (
                   <div key={m.id} className="gv-msg-item">
                     <div className={'gv-bubble' + (m.ativa ? '' : ' off')}>
+                      {m.imagem && <img src={m.imagem} alt="" style={{ maxWidth: '100%', borderRadius: 8, marginBottom: 6, display: 'block' }} />}
                       <div className="gv-bubble-tx">{renderTexto(m.texto)}</div>
                       {m.cupomModo !== 'NENHUM' && <div className="gv-bubble-tag">🎟️ {m.cupomModo === 'FIXO' ? `cupom ${m.cupomCodigoFixo || ''}` : 'cria cupom no disparo'}</div>}
                       <div className="gv-bubble-foot">
@@ -389,6 +412,23 @@ export default function GrupoVip() {
           <div className="form-group"><label className="form-label">Rótulo</label><input className="form-input" value={modal.rotulo} onChange={(e) => updM('rotulo', e.target.value)} placeholder="Ex.: Terça em dobro" /></div>
           <div className="form-group"><label className="form-label">Texto (use <code>{'{cupom}'}</code> para inserir o código)</label><textarea className="form-input" rows={4} value={modal.texto} onChange={(e) => updM('texto', e.target.value)} />
             <div className="gv-hint">Formatação do WhatsApp: <code>*negrito*</code> · <code>_itálico_</code> · <code>~tachado~</code> · <code>```mono```</code>. Links viram azul automaticamente.</div>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Foto (opcional)</label>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, flexWrap: 'wrap' }}>
+              <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ width: 16, height: 16, display: 'inline-flex' }}>{I.image}</span>
+                {modal.imagem ? 'Trocar foto' : 'Anexar foto'}
+                <input type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={onPickImage} />
+              </label>
+              {modal.imagem && (
+                <div style={{ position: 'relative', display: 'inline-block' }}>
+                  <img src={modal.imagem} alt="Prévia da foto" style={{ maxWidth: 140, maxHeight: 140, borderRadius: 8, display: 'block', border: '1px solid rgba(0,0,0,0.12)' }} />
+                  <button type="button" className="btn btn-sm btn-secondary" onClick={() => updM('imagem', '')} style={{ position: 'absolute', top: 4, right: 4, padding: '2px 8px' }}>Remover</button>
+                </div>
+              )}
+            </div>
+            <div className="gv-hint">Vai junto com o texto (como legenda) neste disparo.</div>
           </div>
           <div className="form-group"><label className="form-label">Dias</label><div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{DIAS.map(([lbl, n]) => <button key={n} type="button" className={'btn btn-sm ' + (modal.diasSemana.includes(n) ? 'btn-primary' : 'btn-secondary')} onClick={() => toggleDia(n)}>{lbl}</button>)}</div></div>
           <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>

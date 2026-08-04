@@ -97,6 +97,14 @@ export async function zapiEnviarTexto(numero, texto, token = INSTANCE_TOKEN()) {
   return req('POST', '/send/text', { number: numero, text: texto }, token);
 }
 
+// Envia uma imagem (data URL base64 ou URL) com legenda opcional. `numero` = dígitos+DDI ou JID de grupo.
+export async function zapiEnviarImagem(numero, imagem, legenda, token = INSTANCE_TOKEN()) {
+  requireServer(); exigirToken(token);
+  const body = { number: numero, type: 'image', file: imagem };
+  if (legenda) body.text = legenda;
+  return req('POST', '/send/media', body, token);
+}
+
 // Lista os grupos do número conectado. O path/shape do UAZAPI variam entre versões —
 // parse defensivo. Se o endpoint não existir na sua versão, o front tem fallback de
 // colar o JID do grupo à mão. Confirme o path na doc da sua UAZAPI (ex.: /group/list).

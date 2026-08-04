@@ -2057,6 +2057,7 @@ model GrupoVipMensagem {
   empresaId            Int
   rotulo               String
   texto                String
+  imagem               String?           // foto opcional (data URL base64) enviada como legenda no disparo
   diasSemana           Int[]             @default([])
   horario              String
   ativa                Boolean           @default(true)

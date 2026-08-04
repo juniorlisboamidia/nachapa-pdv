@@ -10,7 +10,7 @@ import jwt from 'jsonwebtoken';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from './generated/prisma/client.ts';
 import { iniciarColetorServer, gravarPontoColetor } from './coletorServer.js';
-import { zapiConfigurado, zapiStatus, zapiQrCode, zapiCriarInstancia, zapiEnviarTexto, zapiListarGrupos, zapiGrupoInfo } from './zapi.mjs';
+import { zapiConfigurado, zapiStatus, zapiQrCode, zapiCriarInstancia, zapiEnviarTexto, zapiEnviarImagem, zapiListarGrupos, zapiGrupoInfo } from './zapi.mjs';
 import { validadeDe, gerarLote, colisaoDeLote, CONSERVACOES } from './etiquetas.js';
 import { avaliarResposta, execucaoEmAlerta, fotosCriticasFaltando } from './checklistConformidade.js';
 import { venceHoje, offsetDiaDoHorario } from './checklistRecorrencia.js';
@@ -2656,7 +2656,10 @@ async function dispararGrupoVipLoja(empresaId, cfg) {
       } catch (e) { erroCupom = textoErro(e).slice(0, 200); }
       const texto = String(m.texto).split('{cupom}').join(cupomCode || '');
       let status = 'ENVIADO', erroEnvio = null;
-      try { await zapiEnviarTexto(cfg.grupoJid, texto, cfg.instanceToken); }
+      try {
+        if (m.imagem) await zapiEnviarImagem(cfg.grupoJid, m.imagem, texto, cfg.instanceToken); // foto com o texto de legenda
+        else await zapiEnviarTexto(cfg.grupoJid, texto, cfg.instanceToken);
+      }
       catch (e) { status = 'FALHOU'; erroEnvio = textoErro(e).slice(0, 200); }
       const erro = [erroEnvio, erroCupom].filter(Boolean).join(' · ') || null;
       try { await prisma.grupoVipDisparo.updateMany({ where: { empresaId, mensagemId: m.id, dataRef }, data: { status, erro, cupomCode, conteudo: texto.slice(0, 1000) } }); }
@@ -7022,6 +7025,15 @@ function normalizarMensagemVip(body) {
     d.cupomPedidoMinimo = numOrNull(body?.cupomPedidoMinimo);
     d.cupomLimiteUso = numOrNull(body?.cupomLimiteUso);
     d.cupomSoNovosClientes = body?.cupomSoNovosClientes == null ? null : !!body.cupomSoNovosClientes;
+  }
+  // Foto opcional (data URL base64, mesmo padrão da foto do Checklist). Vazio → limpa.
+  const imagem = typeof body?.imagem === 'string' ? body.imagem.trim() : '';
+  if (imagem) {
+    if (!/^data:image\/(jpeg|png|webp);base64,/.test(imagem)) return { error: 'Foto inválida (use JPG, PNG ou WEBP).' };
+    if (imagem.length > 4_500_000) return { error: 'Foto muito grande. Comprima e tente de novo.' };
+    d.imagem = imagem;
+  } else {
+    d.imagem = null;
   }
   return { data: d };
 }
