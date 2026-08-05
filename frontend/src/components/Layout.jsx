@@ -1,4 +1,5 @@
 import { Outlet } from 'react-router-dom'
+import { useEffect, useState } from 'react'
 import Sidebar from './Sidebar'
 import Header from './Header'
 import { useAuth } from '../contexts/AuthContext'
@@ -9,11 +10,21 @@ const HUB_URL = import.meta.env.VITE_HUB_URL || 'https://nachapahub.com.br'
 export default function Layout() {
   const { usuario } = useAuth()
   const mostrarHub = usuario && usuario.papel !== 'CLIENTE'
+  // Estado de recolher a sidebar vive aqui: o header (botão + card da loja) e a
+  // sidebar (largura) compartilham. Body class dirige o CSS de largura/margens.
+  const [colapsada, setColapsada] = useState(
+    () => typeof localStorage !== 'undefined' && localStorage.getItem('hb-sidebar-collapsed') === '1'
+  )
+  useEffect(() => {
+    document.body.classList.toggle('sidebar-collapsed', colapsada)
+    localStorage.setItem('hb-sidebar-collapsed', colapsada ? '1' : '0')
+  }, [colapsada])
+
   return (
     <div className="app-layout">
-      <Sidebar />
+      <Header colapsada={colapsada} onToggleColapsar={() => setColapsada((c) => !c)} />
+      <Sidebar colapsada={colapsada} />
       <div className="main-area">
-        <Header />
         <main className="page-content">
           <Outlet />
         </main>

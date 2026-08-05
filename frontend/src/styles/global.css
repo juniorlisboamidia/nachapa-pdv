@@ -48,7 +48,7 @@ a { text-decoration: none; color: inherit; }
   flex-direction: column;
   flex-shrink: 0;
   position: fixed;
-  top: 0; left: 0; bottom: 0;
+  top: 60px; left: 0; bottom: 0;
   box-shadow: 2px 0 16px rgba(0, 0, 0, 0.30);
   z-index: 20;
   transition: width 0.18s ease;
@@ -379,22 +379,42 @@ body.sidebar-collapsed .main-area { margin-left: 76px; }
 /* Main content */
 .main-area {
   margin-left: 268px;
+  margin-top: 60px;
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  min-height: calc(100vh - 60px);
   transition: margin-left 0.18s ease;
 }
 .page-content { padding: 22px 26px; }
 
 /* Header do topo — ícones de utilidade (ajuda, tema, conta). Tokens --app-* trocam no dark. */
+/* Barra full-width no topo, ACIMA da sidebar. Segmento da loja à esquerda (acompanha
+   a largura da sidebar), saudação/frase + ícones no restante. */
 .app-header {
-  display: flex; align-items: center; justify-content: space-between; gap: 16px;
-  height: 56px; padding: 0 26px; flex-shrink: 0;
-  border-bottom: 1px solid var(--app-border); background: var(--app-surface);
-  position: sticky; top: 0; z-index: 30;
+  position: fixed; top: 0; left: 0; right: 0; height: 60px; z-index: 40;
+  display: flex; align-items: stretch;
+  background: var(--app-surface); border-bottom: 1px solid var(--app-border);
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08); /* destaque no modo claro (some no escuro) */
 }
+.app-header-loja {
+  width: 268px; flex-shrink: 0; box-sizing: border-box;
+  display: flex; align-items: center; gap: 10px; padding: 0 12px 0 16px;
+  border-right: 1px solid var(--app-border); transition: width 0.18s ease;
+}
+body.sidebar-collapsed .app-header-loja { width: 76px; padding: 0 8px; justify-content: center; }
+.app-header-loja-logo { width: 36px; height: 36px; border-radius: 9px; flex-shrink: 0; object-fit: cover; background: #fff; }
+.app-header-loja-inicial { display: grid; place-items: center; background: var(--brand-gold); color: var(--brand-gold-ink); font-size: 17px; font-weight: 800; }
+.app-header-loja-nome { flex: 1; min-width: 0; font-size: 15px; font-weight: 800; letter-spacing: -0.02em; color: var(--app-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.sidebar-collapsed .app-header-loja-logo, body.sidebar-collapsed .app-header-loja-nome { display: none; }
+.app-header-colapsar {
+  flex-shrink: 0; width: 30px; height: 30px; border-radius: 9px;
+  border: 1px solid var(--app-border); background: var(--app-bg); color: var(--app-text-2);
+  display: flex; align-items: center; justify-content: center; cursor: pointer; transition: background 0.14s;
+}
+.app-header-colapsar:hover { background: var(--app-border); color: var(--app-text); }
+.app-header-colapsar-flip { display: inline-flex; transform: rotate(180deg); }
+.app-header-main { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 26px; }
 .app-header-left { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
 .app-header-hello { font-size: 14px; font-weight: 700; color: var(--app-text); white-space: nowrap; flex-shrink: 0; }
 .app-header-frase { font-size: 13px; font-style: italic; color: var(--app-text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
@@ -426,7 +446,7 @@ body.sidebar-collapsed .main-area { margin-left: 76px; }
 .app-header-menu-item:hover { background: var(--app-bg); }
 .app-header-menu-item.danger { color: #dc2626; }
 .app-header-menu-item.danger:hover { background: rgba(220, 38, 38, 0.12); }
-@media (max-width: 768px) { .app-header { padding: 0 16px; } }
+@media (max-width: 768px) { .app-header-loja { width: 228px; } .app-header-main { padding: 0 16px; } }
 @media (max-width: 620px) { .app-header-frase { display: none; } }
 
 /* Em telas menores a sidebar afina para não espremer demais o conteúdo */

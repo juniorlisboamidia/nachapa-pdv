@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import api from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 
 const PAPEL_LABEL = { ADMIN: 'Administrador', AGENCIA: 'Agência', CLIENTE: 'Cliente', GERENTE: 'Gerente' }
@@ -278,9 +277,9 @@ function itemClass({ isActive }) {
   return 'sidebar-item' + (isActive ? ' active' : '')
 }
 
-export default function Sidebar() {
+export default function Sidebar({ colapsada }) {
   const location = useLocation()
-  const { usuario, logout, lojas, empresaAtual } = useAuth()
+  const { usuario } = useAuth()
   const visiveis = gruposVisiveis(usuario) // operador vê só as áreas liberadas
   // Nível atual da sidebar: grupo aberto e subgrupo aberto (ou null = lista de
   // grupos). Inicia no caminho da rota atual.
@@ -291,86 +290,8 @@ export default function Sidebar() {
     if (grupo) { setGrupoAberto(grupo); setSubAberto(sub) }
   }, [location.pathname])
 
-  const [collapsed, setCollapsed] = useState(
-    () => typeof localStorage !== 'undefined' && localStorage.getItem('hb-sidebar-collapsed') === '1'
-  )
-  useEffect(() => {
-    document.body.classList.toggle('sidebar-collapsed', collapsed)
-    localStorage.setItem('hb-sidebar-collapsed', collapsed ? '1' : '0')
-  }, [collapsed])
-
-  // Dados reais da empresa (card da sidebar). Fallback se a API falhar/estiver vazia.
-  const [empresa, setEmpresa] = useState({ nome: 'Hamburgueria', logoDataUrl: null })
-  useEffect(() => {
-    let ativo = true
-    function aplicar(d) {
-      setEmpresa({
-        nome: (d?.nome ?? '').trim() || 'Hamburgueria',
-        logoDataUrl: d?.logoDataUrl ?? null
-      })
-    }
-    function carregar() {
-      api
-        .get('/empresa')
-        .then((r) => { if (ativo) aplicar(r.data ?? {}) })
-        .catch(() => {})
-    }
-    carregar()
-    // Atualiza quando "Minha Empresa" salvar (sem precisar de reload)
-    function onAtualizada(e) {
-      if (e?.detail) aplicar(e.detail)
-      else carregar()
-    }
-    window.addEventListener('empresa-atualizada', onAtualizada)
-    return () => {
-      ativo = false
-      window.removeEventListener('empresa-atualizada', onAtualizada)
-    }
-  }, [])
-
-  const avatarInicial = empresa.nome.trim().charAt(0).toUpperCase() || 'H'
-
-  // Loja atual — o PDV não alterna entre lojas (sem seletor/dropdown).
-  const lojaAtual = lojas.find((l) => String(l.id) === String(empresaAtual))
-  const nomeLojaAtual = lojaAtual?.nome || empresa.nome || 'Hamburgueria'
-
   return (
-    <aside className={'sidebar' + (collapsed ? ' collapsed' : '')}>
-      {/* Card da loja + botão de recolher (PDV não alterna entre lojas). */}
-      <div className="sidebar-company">
-        {empresa.logoDataUrl ? (
-          <img className="sidebar-company-avatar sidebar-company-logo" src={empresa.logoDataUrl} alt="" />
-        ) : (
-          <div className="sidebar-company-avatar">{avatarInicial}</div>
-        )}
-        <div className="sidebar-company-info">
-          <div className="sidebar-company-name">{nomeLojaAtual}</div>
-          {lojaAtual?.clienteNome
-            && lojaAtual.clienteNome.trim().toLowerCase() !== nomeLojaAtual.trim().toLowerCase()
-            && <div className="sidebar-company-sub">{lojaAtual.clienteNome}</div>}
-        </div>
-        <button
-          type="button"
-          className="sidebar-collapse"
-          onClick={() => setCollapsed((c) => !c)}
-          aria-label={collapsed ? 'Expandir menu' : 'Recolher menu'}
-          title={collapsed ? 'Expandir menu' : 'Recolher menu'}
-        >
-          <svg
-            className={'sidebar-icon' + (collapsed ? ' flip' : '')}
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            {ICONS.chevron}
-          </svg>
-        </button>
-      </div>
-
+    <aside className={'sidebar' + (colapsada ? ' collapsed' : '')}>
       <nav className="sidebar-nav">
         {grupoAberto ? (
           (() => {
@@ -381,12 +302,12 @@ export default function Sidebar() {
             if (sub) {
               return (
                 <>
-                  <button type="button" className="sidebar-back" onClick={() => setSubAberto(null)} title={collapsed ? 'Voltar' : undefined}>
+                  <button type="button" className="sidebar-back" onClick={() => setSubAberto(null)} title={colapsada ? 'Voltar' : undefined}>
                     <Icon name="chevron" />
                     <span className="sidebar-item-label">{sub.label}</span>
                   </button>
                   {sub.itens.map((item) => (
-                    <NavLink key={item.to} to={item.to} end={item.end} className={itemClass} title={collapsed ? item.label : undefined}>
+                    <NavLink key={item.to} to={item.to} end={item.end} className={itemClass} title={colapsada ? item.label : undefined}>
                       <Icon name={item.icon} />
                       <span className="sidebar-item-label">{item.label}</span>
                     </NavLink>
@@ -397,19 +318,19 @@ export default function Sidebar() {
             // Nível 2: itens do grupo — item folha (NavLink) OU subgrupo (drill).
             return (
               <>
-                <button type="button" className="sidebar-back" onClick={() => setGrupoAberto(null)} title={collapsed ? 'Voltar' : undefined}>
+                <button type="button" className="sidebar-back" onClick={() => setGrupoAberto(null)} title={colapsada ? 'Voltar' : undefined}>
                   <Icon name="chevron" />
                   <span className="sidebar-item-label">{g.label}</span>
                 </button>
                 {g.itens.map((item) => (
                   item.itens ? (
-                    <button key={item.label} type="button" className="sidebar-grupo" onClick={() => setSubAberto(item.label)} title={collapsed ? item.label : undefined}>
+                    <button key={item.label} type="button" className="sidebar-grupo" onClick={() => setSubAberto(item.label)} title={colapsada ? item.label : undefined}>
                       <Icon name={item.icon} />
                       <span className="sidebar-item-label">{item.label}</span>
                       <Icon name="chevronRight" extra="sidebar-grupo-arrow" />
                     </button>
                   ) : (
-                    <NavLink key={item.to} to={item.to} end={item.end} className={itemClass} title={collapsed ? item.label : undefined}>
+                    <NavLink key={item.to} to={item.to} end={item.end} className={itemClass} title={colapsada ? item.label : undefined}>
                       <Icon name={item.icon} />
                       <span className="sidebar-item-label">{item.label}</span>
                     </NavLink>
@@ -424,7 +345,7 @@ export default function Sidebar() {
               to="/"
               end
               className={itemClass}
-              title={collapsed ? 'Visão Geral' : undefined}
+              title={colapsada ? 'Visão Geral' : undefined}
             >
               <Icon name="dashboard" />
               <span className="sidebar-item-label">Visão Geral</span>
@@ -433,7 +354,7 @@ export default function Sidebar() {
               // Grupo-folha (link direto) — usado nos "em construção".
               if (g.to) {
                 return (
-                  <NavLink key={g.label} to={g.to} className={itemClass} title={collapsed ? g.label : undefined}>
+                  <NavLink key={g.label} to={g.to} className={itemClass} title={colapsada ? g.label : undefined}>
                     <Icon name={g.icon} />
                     <span className="sidebar-item-label">{g.label}</span>
                   </NavLink>
@@ -446,7 +367,7 @@ export default function Sidebar() {
                   type="button"
                   className="sidebar-grupo"
                   onClick={() => { if (bloqueado) return; setGrupoAberto(g.label); setSubAberto(null) }}
-                  title={collapsed ? g.label : (bloqueado ? 'Acesso restrito ao administrador' : undefined)}
+                  title={colapsada ? g.label : (bloqueado ? 'Acesso restrito ao administrador' : undefined)}
                   aria-disabled={bloqueado || undefined}
                   style={bloqueado ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
                 >
