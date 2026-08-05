@@ -294,19 +294,10 @@ export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(
     () => typeof localStorage !== 'undefined' && localStorage.getItem('hb-sidebar-collapsed') === '1'
   )
-  const [dark, setDark] = useState(
-    () => typeof localStorage !== 'undefined' && localStorage.getItem('hb-theme') === 'dark'
-  )
-
   useEffect(() => {
     document.body.classList.toggle('sidebar-collapsed', collapsed)
     localStorage.setItem('hb-sidebar-collapsed', collapsed ? '1' : '0')
   }, [collapsed])
-
-  useEffect(() => {
-    document.body.classList.toggle('theme-dark', dark)
-    localStorage.setItem('hb-theme', dark ? 'dark' : 'light')
-  }, [dark])
 
   // Dados reais da empresa (card da sidebar). Fallback se a API falhar/estiver vazia.
   const [empresa, setEmpresa] = useState({ nome: 'Hamburgueria', logoDataUrl: null })
@@ -469,53 +460,6 @@ export default function Sidebar() {
         )}
       </nav>
 
-      <div className="sidebar-footer">
-        {/* Acesso ao NaChapa HUB virou um botão flutuante (ver Layout.jsx). */}
-        {usuario?.papel === 'ADMIN' && (
-          <NavLink to="/minha-empresa" className={itemClass} title={collapsed ? 'Minha Empresa' : undefined}>
-            <Icon name="empresa" />
-            <span className="sidebar-item-label">Minha Empresa</span>
-          </NavLink>
-        )}
-        <NavLink to="/central-de-ajuda" className={itemClass} title={collapsed ? 'Central de Ajuda' : undefined}>
-          <Icon name="ajuda" />
-          <span className="sidebar-item-label">Central de Ajuda</span>
-        </NavLink>
-        <button
-          type="button"
-          className="sidebar-theme-toggle"
-          onClick={() => setDark((d) => !d)}
-          role="switch"
-          aria-checked={dark}
-          title={dark ? 'Mudar para tema claro' : 'Mudar para tema escuro'}
-        >
-          <span className="sidebar-theme-left">
-            <Icon name={dark ? 'lua' : 'sol'} />
-            <span className="sidebar-item-label">{dark ? 'Escuro' : 'Claro'}</span>
-          </span>
-          <span className={'sidebar-theme-track' + (dark ? ' on' : '')}>
-            <span className="sidebar-theme-knob" />
-          </span>
-        </button>
-        <div className="sidebar-user">
-          <div className="sidebar-user-avatar">{iniciais(usuario?.nome)}</div>
-          <div className="sidebar-user-info">
-            <div className="sidebar-user-name">{usuario?.nome || 'Usuário'}</div>
-            <div className="sidebar-user-sub">{PAPEL_LABEL[usuario?.papel] || 'Conta'}</div>
-          </div>
-          <button
-            type="button"
-            onClick={logout}
-            title="Sair"
-            style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 6, opacity: 0.7, display: 'flex' }}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-              <path d="M16 17l5-5-5-5M21 12H9" />
-            </svg>
-          </button>
-        </div>
-      </div>
     </aside>
   )
 }

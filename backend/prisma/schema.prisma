@@ -2091,3 +2091,15 @@ model GrupoVipDisparo {
   @@unique([empresaId, mensagemId, dataRef])
   @@index([empresaId, criadoEm])
 }
+
+// Frases motivacionais do banner de boas-vindas (por loja). Sorteadas a cada acesso.
+model Frase {
+  id           Int      @id @default(autoincrement())
+  empresaId    Int
+  texto        String
+  ativa        Boolean  @default(true)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([empresaId])
+}

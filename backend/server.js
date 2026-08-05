@@ -58,6 +58,7 @@ const MODELS_TENANT = new Set([
   'etiquetaConfig', 'etiquetaRegra', 'etiquetaItemConfig', 'etiquetaImpressa',
   'checklistTemplate', 'checklistTemplateItem', 'checklist', 'checklistItem', 'checklistExecucao', 'checklistResposta', 'checklistFoto',
   'checklistNotificacaoConfig', 'checklistDestinatario', 'checklistNotificacaoLog', 'checklistLembreteEnviado',
+  'frase',
 ]);
 const OPS_WHERE = new Set([
   'findMany', 'findFirst', 'findFirstOrThrow', 'findUnique', 'findUniqueOrThrow',
@@ -7078,6 +7079,64 @@ app.delete('/api/grupo-vip/mensagens/:id', async (req, res) => {
     await prisma.grupoVipMensagem.delete({ where: { id } });
     res.json({ ok: true });
   } catch (err) { console.error('[grupo-vip/mensagens DELETE]', err); res.status(500).json({ error: 'Erro ao excluir.' }); }
+});
+
+// ===== Frases motivacionais (banner de boas-vindas do Início) =====
+// Fallback embutido: se a loja ainda não cadastrou nenhuma, o banner nunca fica vazio.
+const FRASES_PADRAO = [
+  'Liderança não é dar respostas. É construir um ambiente onde as respostas aparecem.',
+  'Cuide dos detalhes; o cliente sente cada um deles.',
+  'Time forte não nasce pronto — se constrói todo dia.',
+  'Consistência vale mais que intensidade.',
+  'O padrão de hoje é o resultado de amanhã.',
+  'Feito com atenção rende mais do que feito com pressa.',
+];
+// Sorteia uma frase ATIVA da loja (ou uma padrão). Qualquer usuário logado.
+app.get('/api/frases/aleatoria', async (req, res) => {
+  try {
+    const lista = await prisma.frase.findMany({ where: { ativa: true }, select: { texto: true } });
+    const fonte = lista.length ? lista.map((f) => f.texto) : FRASES_PADRAO;
+    const texto = fonte[Math.floor(Math.random() * fonte.length)];
+    res.json({ texto, personalizada: lista.length > 0 });
+  } catch (err) { console.error('[frases/aleatoria]', err?.message || err); res.json({ texto: FRASES_PADRAO[0], personalizada: false }); }
+});
+// CRUD — só o dono (ADMIN).
+app.get('/api/frases', async (req, res) => {
+  if (!exigirDono(req, res)) return;
+  try { res.json({ frases: await prisma.frase.findMany({ orderBy: { criadoEm: 'desc' } }) }); }
+  catch (err) { console.error('[frases GET]', err?.message || err); res.status(500).json({ error: 'Erro ao carregar.' }); }
+});
+app.post('/api/frases', async (req, res) => {
+  if (!exigirDono(req, res)) return;
+  try {
+    const texto = String(req.body?.texto || '').trim();
+    if (!texto) return res.status(400).json({ error: 'Escreva a frase.' });
+    const f = await prisma.frase.create({ data: { texto: texto.slice(0, 400), ativa: req.body?.ativa !== false } });
+    res.status(201).json(f);
+  } catch (err) { console.error('[frases POST]', err?.message || err); res.status(500).json({ error: 'Erro ao salvar.' }); }
+});
+app.put('/api/frases/:id', async (req, res) => {
+  if (!exigirDono(req, res)) return;
+  try {
+    const id = Number(req.params.id);
+    const ex = await prisma.frase.findFirst({ where: { id } });
+    if (!ex) return res.status(404).json({ error: 'Frase não encontrada.' });
+    const data = {};
+    if (req.body?.texto !== undefined) { const t = String(req.body.texto).trim(); if (!t) return res.status(400).json({ error: 'A frase não pode ficar vazia.' }); data.texto = t.slice(0, 400); }
+    if (req.body?.ativa !== undefined) data.ativa = !!req.body.ativa;
+    const f = await prisma.frase.update({ where: { id }, data });
+    res.json(f);
+  } catch (err) { console.error('[frases PUT]', err?.message || err); res.status(500).json({ error: 'Erro ao salvar.' }); }
+});
+app.delete('/api/frases/:id', async (req, res) => {
+  if (!exigirDono(req, res)) return;
+  try {
+    const id = Number(req.params.id);
+    const ex = await prisma.frase.findFirst({ where: { id } });
+    if (!ex) return res.status(404).json({ error: 'Frase não encontrada.' });
+    await prisma.frase.delete({ where: { id } });
+    res.json({ ok: true });
+  } catch (err) { console.error('[frases DELETE]', err?.message || err); res.status(500).json({ error: 'Erro ao excluir.' }); }
 });
 
 app.get('/api/grupo-vip/historico', async (req, res) => {

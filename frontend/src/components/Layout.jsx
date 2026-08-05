@@ -1,5 +1,6 @@
 import { Outlet } from 'react-router-dom'
 import Sidebar from './Sidebar'
+import Header from './Header'
 import { useAuth } from '../contexts/AuthContext'
 
 // Acesso ao NaChapa HUB (igual ao FAB do HUB pro H360). Só para quem não é Cliente.
@@ -12,6 +13,7 @@ export default function Layout() {
     <div className="app-layout">
       <Sidebar />
       <div className="main-area">
+        <Header />
         <main className="page-content">
           <Outlet />
         </main>

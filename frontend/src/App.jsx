@@ -21,6 +21,7 @@ import CustosVariaveis from './pages/CustosVariaveis'
 import PontoEquilibrio from './pages/PontoEquilibrio'
 import Faturamento from './pages/Faturamento'
 import MinhaEmpresa from './pages/MinhaEmpresa'
+import Frases from './pages/Frases'
 import Etiquetas from './pages/Etiquetas'
 import EtiquetasQuiosque from './pages/EtiquetasQuiosque'
 import Checklist, { ChecklistDetalhe, ChecklistHistorico, ChecklistEstatisticas } from './pages/Checklist'
@@ -113,6 +114,7 @@ export default function App() {
             <Route path="automacoes/grupo-vip" element={<GrupoVip />} />
             {/* Extras */}
             <Route path="minha-empresa" element={<MinhaEmpresa />} />
+            <Route path="frases" element={<Frases />} />
             <Route path="central-de-ajuda" element={<CentralAjuda />} />
           </Route>
           {/* Públicas — ranking da equipe (por token) e Área do Colaborador (login por WhatsApp) */}
