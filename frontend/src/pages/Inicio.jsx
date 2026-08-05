@@ -47,26 +47,14 @@ function ModuloCard({ m }) {
   )
 }
 
-function saudacao() {
-  const h = new Date(Date.now() - 3 * 3600 * 1000).getUTCHours() // fuso BR (UTC-3)
-  if (h >= 5 && h < 12) return 'Bom dia'
-  if (h >= 12 && h < 18) return 'Boa tarde'
-  return 'Boa noite'
-}
-
 export default function Inicio() {
   const { usuario, lojas, empresaAtual } = useAuth()
   const [empresa, setEmpresa] = useState(null)
   const [erro, setErro] = useState(false)
-  const [frase, setFrase] = useState('')
 
   useEffect(() => {
     api.get('/empresa').then((r) => setEmpresa(r.data)).catch(() => setErro(true))
   }, [empresaAtual])
-
-  useEffect(() => {
-    api.get('/frases/aleatoria').then((r) => setFrase(r.data?.texto || '')).catch(() => {})
-  }, [])
 
   const loja = lojas.find((l) => String(l.id) === String(empresaAtual)) || empresa
   const nomeLoja = loja?.nome || 'sua loja'
@@ -87,9 +75,8 @@ export default function Inicio() {
           {loja?.logoDataUrl ? <img src={loja.logoDataUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (nomeLoja.charAt(0).toUpperCase())}
         </div>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 12.5, color: 'var(--app-text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{nomeLoja}</div>
-          <div style={{ fontSize: 21, fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--app-text)', marginTop: 2 }}>{primeiro ? `${saudacao()}, ${primeiro}!` : 'Bem-vindo!'}</div>
-          {frase && <div style={{ fontSize: 14, color: 'var(--app-text-2)', fontStyle: 'italic', marginTop: 6, lineHeight: 1.5 }}>“{frase}”</div>}
+          <div style={{ fontSize: 13, color: 'var(--app-text-3)', fontWeight: 600 }}>{primeiro ? `Olá, ${primeiro}!` : 'Bem-vindo!'}</div>
+          <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em', color: 'var(--app-text)' }}>{nomeLoja}</div>
         </div>
       </div>
 

@@ -2,9 +2,16 @@ import { useEffect, useRef, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useTema } from '../hooks/useTema'
+import api from '../services/api'
 
 const PAPEL_LABEL = { ADMIN: 'Administrador', AGENCIA: 'Agência', CLIENTE: 'Cliente', GERENTE: 'Gerente' }
 const iniciais = (nome) => (nome || '?').trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || 'U'
+function saudacao() {
+  const h = new Date(Date.now() - 3 * 3600 * 1000).getUTCHours() // fuso BR (UTC-3)
+  if (h >= 5 && h < 12) return 'Bom dia'
+  if (h >= 12 && h < 18) return 'Boa tarde'
+  return 'Boa noite'
+}
 
 // Ícones de linha (SVG inline)
 const svg = (children) => (
@@ -18,8 +25,14 @@ export default function Header() {
   const { usuario, logout } = useAuth()
   const [dark, setDark] = useTema()
   const [menu, setMenu] = useState(false)
+  const [frase, setFrase] = useState('')
   const ref = useRef(null)
   const isAdmin = usuario?.papel === 'ADMIN'
+  const primeiro = (usuario?.nome || '').trim().split(/\s+/)[0]
+
+  useEffect(() => {
+    api.get('/frases/aleatoria').then((r) => setFrase(r.data?.texto || '')).catch(() => {})
+  }, [])
 
   useEffect(() => {
     function onDoc(e) { if (ref.current && !ref.current.contains(e.target)) setMenu(false) }
@@ -31,6 +44,11 @@ export default function Header() {
 
   return (
     <header className="app-header">
+      <div className="app-header-left">
+        {primeiro && <span className="app-header-hello">{saudacao()}, {primeiro}!</span>}
+        {frase && <span className="app-header-frase" title={frase}>“{frase}”</span>}
+      </div>
+
       <div className="app-header-right">
         <NavLink to="/central-de-ajuda" className="app-header-btn" title="Central de Ajuda" aria-label="Central de Ajuda">
           {IcoAjuda}
