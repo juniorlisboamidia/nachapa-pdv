@@ -4372,7 +4372,7 @@ app.post('/api/insumos/:id/receita', async (req, res) => {
     });
 
     // Atualiza automaticamente o custo do insumo produzido a partir da receita
-    res.json(await sincronizarCustoComReceita(id));
+    res.json(await sincronizarCustoEPropagar(id));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro interno ao salvar receita' });
@@ -4437,7 +4437,7 @@ app.post('/api/insumos/:id/receita/itens', async (req, res) => {
       }
     });
 
-    res.status(201).json(await sincronizarCustoComReceita(id));
+    res.status(201).json(await sincronizarCustoEPropagar(id));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro interno ao adicionar ingrediente' });
@@ -4471,7 +4471,7 @@ app.put('/api/receitas-producao/itens/:itemId', async (req, res) => {
       data: { quantidade: Number(quantidade) }
     });
 
-    res.json(await sincronizarCustoComReceita(item.receita.insumoId));
+    res.json(await sincronizarCustoEPropagar(item.receita.insumoId));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro interno ao atualizar ingrediente' });
@@ -4494,7 +4494,7 @@ app.delete('/api/receitas-producao/itens/:itemId', async (req, res) => {
 
     await prisma.receitaProducaoItem.delete({ where: { id: itemId } });
 
-    res.json(await sincronizarCustoComReceita(item.receita.insumoId));
+    res.json(await sincronizarCustoEPropagar(item.receita.insumoId));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro interno ao remover ingrediente' });
