@@ -3107,3 +3107,127 @@ textarea.tal-inp { resize: vertical; line-height: 1.5; }
 .tal-ph { color: #b6a596; display: flex; align-items: center; min-height: 23px; }
 .tal-pbox { width: 22px; height: 22px; flex: 0 0 auto; border-radius: 7px; background: #ea580c; color: #fff; display: grid; place-items: center; font-size: 13px; font-weight: 800; margin-top: 1px; }
 ::view-transition-old(root) { z-index: 1; }
+
+/* ===== Motoboys — Escala (Admin) — seletores portados do H360 (Task 10) ===== */
+.esc-head-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.esc-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 16px; padding-top: 14px; border-top: 1px solid #f2f2f2; }
+.esc-stat { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.esc-stat-valor { font-size: 21px; font-weight: 800; color: #111; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.esc-stat-label { font-size: 10px; font-weight: 700; color: #9a9a9a; text-transform: uppercase; letter-spacing: 0.5px; }
+.esc-stat-preench .esc-stat-valor { color: #ea580c; }
+@media (max-width: 620px) { .esc-stats { grid-template-columns: repeat(2, 1fr); gap: 12px; } }
+.esc-link-row { display: flex; align-items: center; gap: 6px; margin-top: 4px; min-width: 0; }
+.esc-link-btn {
+  flex-shrink: 0; width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid #ececec; border-radius: 8px; background: #fff; color: #999; cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+.esc-link-btn:hover { color: #ea580c; border-color: #fdba74; background: #fff7ed; }
+.esc-semana-agora { font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #c2410c; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 999px; padding: 2px 8px; flex-shrink: 0; }
+.esc-semana-meta { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.esc-semana-mini { width: 84px; height: 6px; border-radius: 999px; background: #f0f0f0; overflow: hidden; flex-shrink: 0; }
+.esc-semana-mini-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #fb923c, #ea580c); transition: width 0.3s ease; }
+@media (max-width: 520px) { .esc-semana-mini { width: 52px; } }
+.esc-dia-quando { min-width: 0; }
+.esc-dia-hoje { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #fff; background: #ea580c; border-radius: 5px; padding: 1px 6px; }
+.esc-dia-bar { height: 6px; border-radius: 999px; background: #f0f0f0; overflow: hidden; }
+.esc-dia-bar-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #fb923c, #ea580c); transition: width 0.3s ease; }
+
+/* Escala — tema escuro (admin) — só os seletores acima */
+body.theme-dark .esc-stats { border-top-color: var(--d-border) !important; }
+body.theme-dark .esc-stat-valor { color: var(--d-text) !important; }
+body.theme-dark .esc-stat-label { color: var(--d-text-3) !important; }
+body.theme-dark .esc-stat-preench .esc-stat-valor { color: #fb923c !important; }
+body.theme-dark .esc-semana-mini, body.theme-dark .esc-dia-bar { background: var(--d-surface-2) !important; }
+body.theme-dark .esc-semana-agora { background: #3a2412 !important; border-color: #7c3a12 !important; color: #fdba74 !important; }
+body.theme-dark .esc-link-btn { background: var(--d-surface) !important; border-color: var(--d-border) !important; color: var(--d-text-3) !important; }
+body.theme-dark .esc-link-btn:hover { color: #fb923c !important; border-color: #7c3a12 !important; background: #2a1f14 !important; }
+
+/* ===== Motoboys — Entregadores — seletores portados do H360 (Task 10) ===== */
+.ent-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+@media (max-width: 620px) { .ent-kpis { grid-template-columns: repeat(2, 1fr); } }
+.ent-kpi { background: var(--app-surface, #fff); border: 1px solid var(--app-border, #ececec); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ent-kpi-valor { font-size: 24px; font-weight: 800; color: var(--app-text, #111); line-height: 1.05; font-variant-numeric: tabular-nums; }
+.ent-kpi-label { font-size: 10.5px; font-weight: 700; color: #9a9a9a; text-transform: uppercase; letter-spacing: 0.5px; }
+.ent-kpi-pend { background: #fff7ed; border-color: #fed7aa; }
+.ent-kpi-pend .ent-kpi-valor { color: #ea580c; }
+.ent-hero { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 12px; }
+@media (max-width: 720px) { .ent-hero { grid-template-columns: repeat(2, 1fr); } }
+.ent-hero-card { background: linear-gradient(180deg, #fff, #fafafa); border: 1px solid #ececec; border-radius: 14px; padding: 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.ent-hero-label { font-size: 10.5px; font-weight: 700; color: #9a9a9a; text-transform: uppercase; letter-spacing: 0.4px; }
+.ent-hero-valor { font-size: 26px; font-weight: 800; color: #111; line-height: 1.05; font-variant-numeric: tabular-nums; }
+.ent-hero-sub { font-size: 11px; color: #9a9a9a; font-weight: 600; }
+.ent-hero-bar { height: 6px; border-radius: 999px; background: #f0f0f0; overflow: hidden; margin-top: 4px; }
+.ent-hero-bar-fill { height: 100%; border-radius: 999px; transition: width 0.3s ease; }
+.ent-collapse-head { display: flex; align-items: center; gap: 10px; width: 100%; background: #fafafa; border: 1px solid #eee; border-radius: 10px; cursor: pointer; padding: 11px 14px; text-align: left; margin-top: 14px; transition: background 0.12s, border-color 0.12s; }
+.ent-collapse-head:hover { background: #f3f3f3; border-color: #e2e2e2; }
+.ent-collapse-head .section-title { font-size: 12px; color: #3a3a3a; letter-spacing: 0.6px; }
+.ent-sec-head { display: flex; align-items: center; gap: 10px; background: #fafafa; border: 1px solid #eee; border-radius: 10px; padding: 11px 14px; margin-top: 14px; }
+.ent-sec-head .section-title { font-size: 12px; color: #3a3a3a; letter-spacing: 0.6px; margin: 0; }
+.ent-collapse-count { font-size: 11px; font-weight: 700; color: #c2410c; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 999px; padding: 1px 9px; font-variant-numeric: tabular-nums; }
+.ent-collapse-chevron { margin-left: auto; color: #9a9a9a; transition: transform 0.18s ease; flex-shrink: 0; }
+.ent-collapse-chevron.open { transform: rotate(180deg); }
+.ent-hist-wrap { max-height: 300px; overflow: auto; }
+.ent-hist-filtro { display: flex; align-items: center; gap: 12px; margin: 2px 0 10px; flex-wrap: wrap; }
+.ent-hist-filtro .form-input { max-width: 240px; }
+.ent-hist-resumo { font-size: 12px; color: #888; font-weight: 600; }
+.ent-pendentes-banner { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 12px; padding: 12px 16px; margin-bottom: 14px; }
+.ent-pendentes-num { flex-shrink: 0; min-width: 26px; height: 26px; padding: 0 8px; display: inline-flex; align-items: center; justify-content: center; background: #ea580c; color: #fff; border-radius: 999px; font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.ent-pendentes-txt { font-size: 13px; color: #9a3412; font-weight: 600; flex: 1; min-width: 140px; }
+.ent-pendente-box { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; }
+.ent-pendente-info { display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; color: #9a3412; min-width: 180px; }
+.ent-pendente-tag { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; color: #c2410c; }
+.ent-pendente-acoes { display: flex; gap: 8px; flex-shrink: 0; }
+
+/* Entregadores — tema escuro — só os seletores acima */
+body.theme-dark .ent-hist-resumo { color: var(--d-text-3) !important; }
+body.theme-dark .ent-collapse-count { background: #3a2412 !important; border-color: #7c3a12 !important; color: #fdba74 !important; }
+body.theme-dark .ent-collapse-chevron { color: var(--d-text-3) !important; }
+body.theme-dark .ent-collapse-head, body.theme-dark .ent-sec-head { background: var(--d-surface-2) !important; border-color: var(--d-border) !important; }
+body.theme-dark .ent-collapse-head:hover { background: var(--d-surface) !important; }
+body.theme-dark .ent-collapse-head .section-title, body.theme-dark .ent-sec-head .section-title { color: var(--d-text-2) !important; }
+body.theme-dark .ent-pendentes-banner, body.theme-dark .ent-pendente-box { background: #3a2412 !important; border-color: #7c3a12 !important; }
+body.theme-dark .ent-pendentes-txt, body.theme-dark .ent-pendente-info { color: #fdba74 !important; }
+body.theme-dark .ent-pendente-tag { color: #fb923c !important; }
+body.theme-dark .ent-kpi { background: var(--d-surface) !important; border-color: var(--d-border) !important; }
+body.theme-dark .ent-kpi-valor { color: var(--d-text) !important; }
+body.theme-dark .ent-kpi-label, body.theme-dark .ent-hero-label, body.theme-dark .ent-hero-sub { color: var(--d-text-3) !important; }
+body.theme-dark .ent-kpi-pend { background: #3a2412 !important; border-color: #7c3a12 !important; }
+body.theme-dark .ent-kpi-pend .ent-kpi-valor { color: #fb923c !important; }
+body.theme-dark .ent-hero-card { background: var(--d-surface-2) !important; border-color: var(--d-border) !important; }
+body.theme-dark .ent-hero-valor { color: var(--d-text) !important; }
+body.theme-dark .ent-hero-bar { background: var(--d-border) !important; }
+
+/* ===== Motoboys — Escala pública — seletores portados do H360 (Task 10) ===== */
+.pub-dia-quando { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.pub-dia-estado { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.pub-dia-check { font-size: 13px; font-weight: 700; color: #ea580c; opacity: 0; transition: opacity .12s; }
+.pub-dia.sel .pub-dia-check { opacity: 1; }
+.pub-cta {
+  position: sticky; bottom: 0; z-index: 1;
+  margin: 4px calc(var(--pub-pad) * -1) calc(var(--pub-pad) * -1);
+  padding: 12px var(--pub-pad) calc(12px + env(safe-area-inset-bottom));
+  background: rgba(255,255,255,0.97);
+  border-top: 1px solid #f0f0f0; border-radius: 0 0 15px 15px;
+}
+.pub-grade-cabecalho { display: none; }
+.pub-saudacao { font-size: 14.5px; font-weight: 700; color: #111; margin-bottom: 12px; }
+.pub-aviso { margin-top: 14px; border-radius: 12px; padding: 16px; text-align: center; border: 1px solid; }
+.pub-aviso-titulo { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+.pub-aviso-msg { font-size: 13px; line-height: 1.5; }
+.pub-aviso-btn { margin-top: 12px; width: 100%; justify-content: center; min-height: 46px; }
+.pub-aviso-bloqueado { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+.pub-aviso-pendente { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+.pub-aviso-novo { background: #fff7ed; border-color: #fed7aa; color: #9a3412; }
+.pub-aviso-ok { background: #f0fdf4; border-color: #bbf7d0; color: #166534; }
+@media (min-width: 600px) {
+  .pub-grade-cabecalho {
+    display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px;
+    margin: 0 0 8px; padding-bottom: 6px; border-bottom: 1px solid #f2f2f2;
+    font-size: 10.5px; font-weight: 700; color: #b0b0b0;
+    text-transform: uppercase; letter-spacing: 0.5px; text-align: center;
+  }
+  .pub-dia-quando { flex-direction: column; align-items: center; gap: 0; min-width: 0; max-width: 100%; }
+  .pub-dia-estado { flex-direction: column; gap: 0; min-width: 0; max-width: 100%; }
+  .pub-dia-check { position: absolute; top: 3px; right: 5px; font-size: 11px; }
+}

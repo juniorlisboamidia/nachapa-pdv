@@ -36,6 +36,11 @@ import SejaPromotor from './pages/SejaPromotor'
 import PainelPromotor from './pages/PainelPromotor'
 import IndicacaoAtendente from './pages/IndicacaoAtendente'
 import AmigoIndicacao from './pages/AmigoIndicacao'
+import EscalaMotoboys from './pages/EscalaMotoboys'
+import Entregadores from './pages/Entregadores'
+import CalcFrete from './pages/CalcFrete'
+import MotoboysConfig from './pages/MotoboysConfig'
+import EscalaMotoboysPublica from './pages/EscalaMotoboysPublica'
 
 function TelaCarregando() {
   return (
@@ -113,10 +118,10 @@ export default function App() {
             <Route path="indicacao" element={<Indicacao />} />
             <Route path="indicacao/:secao" element={<Indicacao />} />
             {/* Dep. Pessoal › Motoboys (viram páginas reais na Fase 2) */}
-            <Route path="escala-motoboys" element={<EmConstrucao titulo="Escala" descricao="Escala semanal dos motoboys." />} />
-            <Route path="entregadores" element={<EmConstrucao titulo="Entregadores" descricao="Base de motoboys." />} />
-            <Route path="calc-frete" element={<EmConstrucao titulo="Calc. Frete" descricao="Calculadora de taxa de entrega." />} />
-            <Route path="motoboys/config" element={<EmConstrucao titulo="Configuração" descricao="Configuração de Motoboys." />} />
+            <Route path="escala-motoboys" element={<EscalaMotoboys />} />
+            <Route path="entregadores" element={<Entregadores />} />
+            <Route path="calc-frete" element={<CalcFrete />} />
+            <Route path="motoboys/config" element={<MotoboysConfig />} />
             {/* Dep. Pessoal — abas viram subitens da sidebar (a página lê a aba da URL) */}
             <Route path="rh/colaboradores" element={<Colaboradores />} />
             <Route path="rh/ponto-facial" element={<PontoFacial />} />
@@ -162,6 +167,8 @@ export default function App() {
           {/* Checklist Inteligente — execução pública por link/QR (nome + PIN), sem
               login: o token identifica o checklist, o PIN identifica o colaborador. */}
           <Route path="checklist/publico/:token" element={<ChecklistPublico />} />
+          {/* Escala de Motoboys — inscrição pública por token (sem login) */}
+          <Route path="escala/motoboys/:token" element={<EscalaMotoboysPublica />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
