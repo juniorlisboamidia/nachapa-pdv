@@ -25,6 +25,7 @@ import { extrairOrigem } from './grupoVipOrigem.js';
 import { buscarOrigensCW } from './cardapioOrigens.js';
 import { ordemDeRecalculo } from './custos/propagacaoCusto.js';
 import { AREAS_DISPONIVEIS, AREA_PREFIXOS, areaDoPath } from './acessos/areas.js';
+import { calcularCmvGlobal } from './cmv/calculo.js';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 
@@ -6880,6 +6881,476 @@ app.get('/api/ponto-equilibrio', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro interno ao calcular ponto de equilíbrio' });
+  }
+});
+
+// ===== CMV Global =====
+// Mês-a-mês: consumo = estoqueInicial (contagem do mês anterior) + compras do
+// mês - estoqueFinal (contagem do próprio mês). O cálculo em si (puro, sem
+// Prisma) vive em cmv/calculo.js — aqui só busca os dados do tenant e monta a
+// evolução dos últimos 12 meses reaproveitando 3 queries de range (contagens,
+// compras, faturamento), sem N+1 por mês.
+
+function cmvMesAnterior({ ano, mes }) {
+  return mes === 1 ? { ano: ano - 1, mes: 12 } : { ano, mes: mes - 1 };
+}
+const cmvChave = (ano, mes) => `${ano}-${mes}`;
+
+app.get('/api/cmv', async (req, res) => {
+  try {
+    const agora = new Date();
+    const ano = req.query.ano !== undefined && req.query.ano !== ''
+      ? Number(req.query.ano) : agora.getUTCFullYear();
+    const mes = req.query.mes !== undefined && req.query.mes !== ''
+      ? Number(req.query.mes) : agora.getUTCMonth() + 1;
+    if (!Number.isInteger(ano) || !Number.isInteger(mes) || mes < 1 || mes > 12) {
+      return res.status(400).json({ error: 'ano/mes inválidos' });
+    }
+
+    const round2 = (n) => Number((Number(n) || 0).toFixed(2));
+
+    // Os 12 pontos da evolução (do mês pedido p/ trás), em ordem cronológica
+    // (mais antigo -> mais novo). O ponto mais antigo precisa da contagem de UM
+    // mês antes dele (offset 12), que cai sempre em ano-1 (12 meses = 1 ano) —
+    // por isso o range de busca abaixo cobre exatamente [ano - 1, ano].
+    const pontosEvolucao = [];
+    {
+      let atual = { ano, mes };
+      for (let i = 0; i < 12; i++) {
+        pontosEvolucao.unshift(atual);
+        atual = cmvMesAnterior(atual);
+      }
+    }
+
+    const inicioRange = new Date(Date.UTC(ano - 1, 0, 1));
+    const fimRange = new Date(Date.UTC(ano + 1, 0, 1)); // exclusivo
+
+    const [contagens, compras, faturamentos, config] = await Promise.all([
+      prisma.cmvContagem.findMany({
+        where: { ano: { in: [ano - 1, ano] } },
+        include: { itens: { orderBy: { nome: 'asc' } } }
+      }),
+      prisma.cmvCompra.findMany({
+        where: { ano: { in: [ano - 1, ano] } },
+        include: { itens: true },
+        orderBy: { data: 'asc' }
+      }),
+      prisma.faturamentoDiario.findMany({
+        where: { ativo: true, data: { gte: inicioRange, lt: fimRange } }
+      }),
+      getConfigPrecificacao()
+    ]);
+
+    const contagemPorChave = new Map(contagens.map((c) => [cmvChave(c.ano, c.mes), c]));
+    const comprasPorChave = new Map();
+    for (const c of compras) {
+      const k = cmvChave(c.ano, c.mes);
+      comprasPorChave.set(k, (comprasPorChave.get(k) || 0) + Number(c.valor));
+    }
+    const faturamentoPorChave = new Map();
+    for (const f of faturamentos) {
+      const d = f.data;
+      const k = cmvChave(d.getUTCFullYear(), d.getUTCMonth() + 1);
+      faturamentoPorChave.set(k, (faturamentoPorChave.get(k) || 0) + Number(f.valorTotal));
+    }
+
+    const evolucao = pontosEvolucao.map(({ ano: a, mes: m }) => {
+      const atualC = contagemPorChave.get(cmvChave(a, m));
+      const antPt = cmvMesAnterior({ ano: a, mes: m });
+      const antC = contagemPorChave.get(cmvChave(antPt.ano, antPt.mes));
+      const fat = faturamentoPorChave.get(cmvChave(a, m)) || 0;
+      let cmvPercent = null;
+      if (atualC && antC && fat > 0) {
+        const comprasM = comprasPorChave.get(cmvChave(a, m)) || 0;
+        cmvPercent = calcularCmvGlobal({
+          estoqueInicial: Number(antC.valorTotal),
+          compras: comprasM,
+          estoqueFinal: Number(atualC.valorTotal),
+          faturamento: fat,
+          meta: null
+        }).cmvPercent;
+      }
+      return { ano: a, mes: m, cmvPercent };
+    });
+
+    const contagemFinalRec = contagemPorChave.get(cmvChave(ano, mes)) || null;
+    const contagemAnteriorPt = cmvMesAnterior({ ano, mes });
+    const contagemAnteriorRec = contagemPorChave.get(cmvChave(contagemAnteriorPt.ano, contagemAnteriorPt.mes)) || null;
+
+    const estoqueFinal = contagemFinalRec ? Number(contagemFinalRec.valorTotal) : 0;
+    const estoqueInicial = contagemAnteriorRec ? Number(contagemAnteriorRec.valorTotal) : 0;
+
+    const comprasMesAtual = compras.filter((c) => c.ano === ano && c.mes === mes);
+    const comprasTotal = comprasMesAtual.reduce((acc, c) => acc + Number(c.valor), 0);
+    const faturamentoTotal = faturamentoPorChave.get(cmvChave(ano, mes)) || 0;
+    const meta = Number(config?.cmvAlvoPercentual ?? 32);
+
+    const resultado = calcularCmvGlobal({
+      estoqueInicial, compras: comprasTotal, estoqueFinal, faturamento: faturamentoTotal, meta
+    });
+
+    const contagemFinal = contagemFinalRec ? {
+      id: contagemFinalRec.id,
+      ano: contagemFinalRec.ano,
+      mes: contagemFinalRec.mes,
+      valorTotal: round2(contagemFinalRec.valorTotal),
+      observacao: contagemFinalRec.observacao ?? null,
+      itens: contagemFinalRec.itens.map((i) => ({
+        id: i.id,
+        insumoId: i.insumoId ?? null,
+        nome: i.nome,
+        unidade: i.unidade ?? null,
+        custoUnitario: round2(i.custoUnitario),
+        quantidade: round2(i.quantidade),
+        valor: round2(i.valor)
+      }))
+    } : null;
+
+    res.json({
+      ano,
+      mes,
+      estoqueInicial: round2(estoqueInicial),
+      estoqueFinal: round2(estoqueFinal),
+      compras: {
+        total: round2(comprasTotal),
+        lista: comprasMesAtual.map((c) => ({
+          id: c.id,
+          ano: c.ano,
+          mes: c.mes,
+          data: c.data,
+          valor: round2(c.valor),
+          fornecedor: c.fornecedor ?? null,
+          observacao: c.observacao ?? null,
+          itens: c.itens.map((i) => ({
+            id: i.id,
+            insumoId: i.insumoId ?? null,
+            nome: i.nome,
+            custoUnitario: round2(i.custoUnitario),
+            quantidade: round2(i.quantidade),
+            valor: round2(i.valor)
+          }))
+        }))
+      },
+      faturamento: round2(faturamentoTotal),
+      meta: round2(meta),
+      resultado,
+      contagemFinal,
+      temContagemAnterior: !!contagemAnteriorRec,
+      evolucao
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno ao calcular CMV Global' });
+  }
+});
+
+// Salva a contagem de estoque (item a item) de um mês — SUBSTITUI os itens
+// antigos daquele mês. O upsert é por (empresaId, ano, mes); dentro da mesma
+// $transaction o contexto de tenant é preservado (mesma execução assíncrona),
+// mas passamos empresaId explícito no create/createMany como defense-in-depth.
+app.put('/api/cmv/contagem', async (req, res) => {
+  try {
+    const { observacao, itens } = req.body ?? {};
+    const ano = Number(req.body?.ano);
+    const mes = Number(req.body?.mes);
+    if (!Number.isInteger(ano) || !Number.isInteger(mes) || mes < 1 || mes > 12) {
+      return res.status(400).json({ error: 'ano/mes inválidos' });
+    }
+    if (!Array.isArray(itens)) {
+      return res.status(400).json({ error: 'itens deve ser uma lista' });
+    }
+
+    const round2 = (n) => Number((Number(n) || 0).toFixed(2));
+
+    const itensValidos = [];
+    for (const item of itens) {
+      const nome = String(item?.nome ?? '').trim();
+      if (!nome) return res.status(400).json({ error: 'Todo item precisa de nome' });
+      const custoUnitario = Number(item?.custoUnitario);
+      const quantidade = Number(item?.quantidade);
+      if (!Number.isFinite(custoUnitario) || custoUnitario < 0) {
+        return res.status(400).json({ error: `custoUnitario inválido para o item "${nome}"` });
+      }
+      if (!Number.isFinite(quantidade) || quantidade < 0) {
+        return res.status(400).json({ error: `quantidade inválida para o item "${nome}"` });
+      }
+      itensValidos.push({
+        insumoId: item?.insumoId != null && item.insumoId !== '' ? Number(item.insumoId) : null,
+        nome,
+        unidade: item?.unidade ? String(item.unidade).trim() : null,
+        custoUnitario,
+        quantidade,
+        valor: round2(quantidade * custoUnitario)
+      });
+    }
+    const valorTotal = round2(itensValidos.reduce((acc, i) => acc + i.valor, 0));
+    const observacaoNorm =
+      observacao != null && String(observacao).trim() !== '' ? String(observacao).trim() : null;
+
+    const empresaId = getEmpresaIdAtual();
+
+    const contagem = await prisma.$transaction(async (tx) => {
+      const salva = await tx.cmvContagem.upsert({
+        where: { empresaId_ano_mes: { empresaId, ano, mes } },
+        create: { empresaId, ano, mes, valorTotal, observacao: observacaoNorm },
+        update: { valorTotal, observacao: observacaoNorm }
+      });
+
+      await tx.cmvContagemItem.deleteMany({ where: { contagemId: salva.id } });
+
+      if (itensValidos.length > 0) {
+        await tx.cmvContagemItem.createMany({
+          data: itensValidos.map((i) => ({ ...i, empresaId, contagemId: salva.id }))
+        });
+      }
+
+      return tx.cmvContagem.findUnique({
+        where: { id: salva.id },
+        include: { itens: { orderBy: { nome: 'asc' } } }
+      });
+    });
+
+    res.json({
+      id: contagem.id,
+      ano: contagem.ano,
+      mes: contagem.mes,
+      valorTotal: round2(contagem.valorTotal),
+      observacao: contagem.observacao ?? null,
+      itens: contagem.itens.map((i) => ({
+        id: i.id,
+        insumoId: i.insumoId ?? null,
+        nome: i.nome,
+        unidade: i.unidade ?? null,
+        custoUnitario: round2(i.custoUnitario),
+        quantidade: round2(i.quantidade),
+        valor: round2(i.valor)
+      }))
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno ao salvar a contagem de estoque' });
+  }
+});
+
+// Valida os itens (opcionais) de uma compra do CMV Global e já calcula o
+// `valor` de cada um (round2(qtd×custo)) — reaproveitado por POST e PUT.
+function validarItensCompra(itens) {
+  if (itens === undefined) return { itens: null, error: null };
+  if (!Array.isArray(itens)) return { itens: null, error: 'itens deve ser uma lista' };
+
+  const round2 = (n) => Number((Number(n) || 0).toFixed(2));
+  const itensValidos = [];
+  for (const item of itens) {
+    const nome = String(item?.nome ?? '').trim();
+    if (!nome) return { itens: null, error: 'Todo item precisa de nome' };
+    const custoUnitario = Number(item?.custoUnitario);
+    const quantidade = Number(item?.quantidade);
+    if (!Number.isFinite(custoUnitario) || custoUnitario < 0) {
+      return { itens: null, error: `custoUnitario inválido para o item "${nome}"` };
+    }
+    if (!Number.isFinite(quantidade) || quantidade < 0) {
+      return { itens: null, error: `quantidade inválida para o item "${nome}"` };
+    }
+    itensValidos.push({
+      insumoId: item?.insumoId != null && item.insumoId !== '' ? Number(item.insumoId) : null,
+      nome,
+      custoUnitario,
+      quantidade,
+      valor: round2(quantidade * custoUnitario)
+    });
+  }
+  return { itens: itensValidos, error: null };
+}
+
+function serializarCompra(compra) {
+  const round2 = (n) => Number((Number(n) || 0).toFixed(2));
+  return {
+    id: compra.id,
+    ano: compra.ano,
+    mes: compra.mes,
+    data: compra.data,
+    valor: round2(compra.valor),
+    fornecedor: compra.fornecedor ?? null,
+    observacao: compra.observacao ?? null,
+    itens: compra.itens.map((i) => ({
+      id: i.id,
+      insumoId: i.insumoId ?? null,
+      nome: i.nome,
+      custoUnitario: round2(i.custoUnitario),
+      quantidade: round2(i.quantidade),
+      valor: round2(i.valor)
+    }))
+  };
+}
+
+// Registra uma compra de insumos do mês (CMV Global) — itens opcionais. Se
+// vierem itens (length > 0), `valor` é recalculado como a soma dos itens;
+// sem itens, respeita o `valor` informado no body. Mesmo padrão do PUT da
+// contagem: empresaId explícito + $transaction (não usa tenantStore.run
+// arrow-lazy, que perderia o contexto de tenant).
+app.post('/api/cmv/compra', async (req, res) => {
+  try {
+    const { fornecedor, observacao, itens } = req.body ?? {};
+    const ano = Number(req.body?.ano);
+    const mes = Number(req.body?.mes);
+    if (!Number.isInteger(ano) || !Number.isInteger(mes) || mes < 1 || mes > 12) {
+      return res.status(400).json({ error: 'ano/mes inválidos' });
+    }
+    const dataCompra = parseDataFaturamento(req.body?.data);
+    if (!dataCompra) {
+      return res.status(400).json({ error: 'data inválida (use formato YYYY-MM-DD)' });
+    }
+
+    const { itens: itensValidos, error: itensError } = validarItensCompra(itens);
+    if (itensError) return res.status(400).json({ error: itensError });
+
+    const round2 = (n) => Number((Number(n) || 0).toFixed(2));
+    let valor;
+    if (itensValidos && itensValidos.length > 0) {
+      valor = round2(itensValidos.reduce((acc, i) => acc + i.valor, 0));
+    } else {
+      valor = Number(req.body?.valor);
+      if (!Number.isFinite(valor) || valor < 0) {
+        return res.status(400).json({ error: 'valor inválido' });
+      }
+      valor = round2(valor);
+    }
+
+    const fornecedorNorm =
+      fornecedor != null && String(fornecedor).trim() !== '' ? String(fornecedor).trim() : null;
+    const observacaoNorm =
+      observacao != null && String(observacao).trim() !== '' ? String(observacao).trim() : null;
+
+    const empresaId = getEmpresaIdAtual();
+
+    const compra = await prisma.$transaction(async (tx) => {
+      const criada = await tx.cmvCompra.create({
+        data: {
+          empresaId, ano, mes, data: dataCompra, valor,
+          fornecedor: fornecedorNorm, observacao: observacaoNorm
+        }
+      });
+
+      if (itensValidos && itensValidos.length > 0) {
+        await tx.cmvCompraItem.createMany({
+          data: itensValidos.map((i) => ({ ...i, empresaId, compraId: criada.id }))
+        });
+      }
+
+      return tx.cmvCompra.findUnique({
+        where: { id: criada.id },
+        include: { itens: true }
+      });
+    });
+
+    res.status(201).json(serializarCompra(compra));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno ao registrar a compra' });
+  }
+});
+
+// Atualiza uma compra existente (CMV Global). Só altera os campos enviados
+// no body (partial update, igual PUT /api/produtos/:id e /api/faturamento/:id);
+// se `itens` vier, substitui a lista inteira (deleteMany + createMany na
+// mesma transação) e recalcula `valor` quando a lista não vier vazia.
+app.put('/api/cmv/compra/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ error: 'id inválido' });
+    }
+
+    const existente = await prisma.cmvCompra.findUnique({ where: { id } });
+    if (!existente) {
+      return res.status(404).json({ error: 'Compra não encontrada' });
+    }
+
+    const { fornecedor, observacao, itens } = req.body ?? {};
+    const round2 = (n) => Number((Number(n) || 0).toFixed(2));
+    const data = {};
+
+    if (req.body?.ano !== undefined) {
+      const ano = Number(req.body.ano);
+      if (!Number.isInteger(ano)) {
+        return res.status(400).json({ error: 'ano inválido' });
+      }
+      data.ano = ano;
+    }
+    if (req.body?.mes !== undefined) {
+      const mes = Number(req.body.mes);
+      if (!Number.isInteger(mes) || mes < 1 || mes > 12) {
+        return res.status(400).json({ error: 'mes inválido' });
+      }
+      data.mes = mes;
+    }
+    if (req.body?.data !== undefined) {
+      const dataParsed = parseDataFaturamento(req.body.data);
+      if (!dataParsed) {
+        return res.status(400).json({ error: 'data inválida (use formato YYYY-MM-DD)' });
+      }
+      data.data = dataParsed;
+    }
+    if (fornecedor !== undefined) {
+      data.fornecedor =
+        fornecedor != null && String(fornecedor).trim() !== '' ? String(fornecedor).trim() : null;
+    }
+    if (observacao !== undefined) {
+      data.observacao =
+        observacao != null && String(observacao).trim() !== '' ? String(observacao).trim() : null;
+    }
+
+    const { itens: itensValidos, error: itensError } = validarItensCompra(itens);
+    if (itensError) return res.status(400).json({ error: itensError });
+
+    if (itensValidos && itensValidos.length > 0) {
+      data.valor = round2(itensValidos.reduce((acc, i) => acc + i.valor, 0));
+    } else if (req.body?.valor !== undefined) {
+      const valor = Number(req.body.valor);
+      if (!Number.isFinite(valor) || valor < 0) {
+        return res.status(400).json({ error: 'valor inválido' });
+      }
+      data.valor = round2(valor);
+    }
+
+    const empresaId = getEmpresaIdAtual();
+
+    const compra = await prisma.$transaction(async (tx) => {
+      await tx.cmvCompra.update({ where: { id }, data });
+
+      if (itensValidos !== null) {
+        await tx.cmvCompraItem.deleteMany({ where: { compraId: id } });
+        if (itensValidos.length > 0) {
+          await tx.cmvCompraItem.createMany({
+            data: itensValidos.map((i) => ({ ...i, empresaId, compraId: id }))
+          });
+        }
+      }
+
+      return tx.cmvCompra.findUnique({ where: { id }, include: { itens: true } });
+    });
+
+    res.json(serializarCompra(compra));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno ao atualizar a compra' });
+  }
+});
+
+// Remove uma compra do CMV Global. `deleteMany` (mesmo padrão de
+// /api/recrutamento/cargos/:id etc.) porque o id sozinho não prova posse — a
+// extension do tenant injeta o filtro empresaId; os itens caem em cascade via FK.
+app.delete('/api/cmv/compra/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ error: 'id inválido' });
+    }
+    await prisma.cmvCompra.deleteMany({ where: { id } });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno ao remover a compra' });
   }
 });
 
