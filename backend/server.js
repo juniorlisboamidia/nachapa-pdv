@@ -102,6 +102,14 @@ const PORT = process.env.PORT || 4001;
 // chega pelo cookie SSO (th_sso, domínio .nachapahub.com.br) ou por Bearer.
 const JWT_SECRET = process.env.JWT_SECRET;
 
+// API do HUB (server-to-server): o PDV lê dados que vivem no HUB assinando um JWT de
+// SERVIÇO com o mesmo JWT_SECRET (compartilhado via SSO). O HUB valida só assinatura +
+// claim `svc`, sem checar origem — assinamos 'h360-dashboard', o svc que todos os
+// /internal/* do HUB aceitam. (A ponte de cupom do Grupo VIP em cardapioCupom.js usa o
+// seu próprio 'pdv-operacao', aceito só em 2 rotas; não misturar.)
+const HUB_API_URL = process.env.HUB_API_URL || 'https://nachapahub.com.br/api';
+const svcTokenHub = () => jwt.sign({ svc: 'h360-dashboard' }, JWT_SECRET, { expiresIn: '30s' });
+
 const CORS_ORIGINS = (process.env.CORS_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean);
 app.use(cors({
   origin(origin, cb) {
@@ -9569,6 +9577,602 @@ app.post('/api/public/avaliacao/:token', async (req, res) => {
     console.error(err);
     res.status(500).json({ error: 'Erro interno ao enviar avaliação' });
   }
+});
+
+// ============================================================
+// Marketing › Programa de Indicação (referral)
+// ============================================================
+// Alfabeto sem caracteres ambíguos (sem O/0/I/1) — código legível no balcão.
+const CODIGO_ALFABETO = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function codigoAleatorio(len) {
+  const b = randomBytes(len);
+  let s = '';
+  for (let i = 0; i < len; i++) s += CODIGO_ALFABETO[b[i] % CODIGO_ALFABETO.length];
+  return s;
+}
+// Token secreto longo (links do atendente/painel/seja-promotor) — não adivinhável.
+function tokenSecreto() {
+  return randomBytes(24).toString('base64url');
+}
+// Código curto único GLOBAL (via $queryRaw, fora do escopo de tenant) — a unique
+// do banco é a garantia final; este loop evita colisão no dia a dia.
+async function gerarCodigoUnico(tabela, len) {
+  for (let i = 0; i < 8; i++) {
+    const c = codigoAleatorio(len);
+    const rows = await prisma.$queryRawUnsafe(`SELECT 1 FROM "${tabela}" WHERE "codigo" = $1 LIMIT 1`, c);
+    if (!rows.length) return c;
+  }
+  return codigoAleatorio(len + 2);
+}
+// renomeado no PDV: gerarCodigoCupom já é o helper síncrono do Grupo VIP (cardapioCupom.js)
+const gerarCodigoCupomIndicacao = () => gerarCodigoUnico('Cupom', 8);
+const gerarCodigoPromotor = () => gerarCodigoUnico('Promotor', 6);
+
+async function getOrCreateIndicacaoConfig() {
+  const existente = await prisma.indicacaoConfig.findFirst();
+  if (existente) return existente;
+  return prisma.indicacaoConfig.create({ data: { promotorToken: tokenSecreto(), atendenteToken: tokenSecreto() } });
+}
+const nomeEmpresaPorId = async (empresaId) => {
+  const e = await prisma.empresa.findUnique({ where: { id: empresaId }, select: { nome: true } }).catch(() => null);
+  return (e?.nome ?? '').trim() || 'Hamburgueria';
+};
+
+// Ponte HUB→CW (a chave do CW mora no HUB). Sem CW / falha ⇒ { conectado:false }.
+
+async function criarCupomCardapioWeb(clienteId, coupon) {
+  if (!clienteId) return { conectado: false };
+  try {
+    const r = await fetch(`${HUB_API_URL}/internal/cardapio-cupom`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${svcTokenHub()}` },
+      body: JSON.stringify({ clienteId, coupon }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) { console.error('[cw-cupom]', r.status, data?.error, data?.detalhe); return { conectado: false, erro: true, error: data?.error, detalhe: data?.detalhe }; }
+    return data; // { conectado, coupon }
+  } catch (e) { console.error('[cw-cupom]', e?.message); return { conectado: false, erro: true }; }
+}
+
+async function listarCuponsCardapioWeb(clienteId) {
+  if (!clienteId) return { conectado: false };
+  try {
+    const r = await fetch(`${HUB_API_URL}/internal/cardapio-cupons?clienteId=${encodeURIComponent(clienteId)}`, {
+      headers: { Authorization: `Bearer ${svcTokenHub()}` },
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) { console.error('[cw-cupons]', r.status, data?.error); return { conectado: false, erro: true }; }
+    return data; // { conectado, coupons }
+  } catch (e) { console.error('[cw-cupons]', e?.message); return { conectado: false, erro: true }; }
+}
+
+// clienteId (do HUB) da loja ativa — para as pontes de Cardápio Web.
+async function clienteIdDaLojaAtual() {
+  const e = await prisma.empresa.findUnique({ where: { id: getEmpresaIdAtual() }, select: { clienteId: true } }).catch(() => null);
+  return e?.clienteId || null;
+}
+
+// URL do webhook do CW da loja (o HUB gera com base no clienteId).
+async function webhookUrlCardapioWeb(clienteId) {
+  if (!clienteId) return { conectado: false };
+  try {
+    const r = await fetch(`${HUB_API_URL}/internal/cardapio-webhook-url?clienteId=${encodeURIComponent(clienteId)}`, { headers: { Authorization: `Bearer ${svcTokenHub()}` } });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || !data?.url) return { conectado: false };
+    return { conectado: true, url: data.url };
+  } catch (e) { console.error('[cw-webhook-url]', e?.message); return { conectado: false }; }
+}
+
+// Ativa/desativa um cupom no CW (via HUB). Retorna a resposta (ok/erro).
+async function setStatusCupomCardapioWeb(clienteId, couponId, active) {
+  if (!clienteId || !couponId) return { ok: false };
+  try {
+    const r = await fetch(`${HUB_API_URL}/internal/cardapio-cupom-desativar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${svcTokenHub()}` },
+      body: JSON.stringify({ clienteId, couponId, active: !!active }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) { console.error('[cw-cupom-status]', r.status, data?.error); return { ok: false, error: data?.error }; }
+    return data;
+  } catch (e) { console.error('[cw-cupom-status]', e?.message); return { ok: false }; }
+}
+// Uso único já validado → desativa (best-effort).
+const desativarCupomCardapioWeb = (clienteId, couponId) => setStatusCupomCardapioWeb(clienteId, couponId, false);
+
+// ---------- PÚBLICO: cadastro de promotor ----------
+app.get('/api/public/indicacao/promotor/:token', async (req, res) => {
+  try {
+    const config = await prisma.indicacaoConfig.findUnique({ where: { promotorToken: String(req.params.token) }, select: { empresaId: true, ativo: true, bannerDataUrl: true, cupomEmoji: true, cupomAmigoTitulo: true, cupomAmigoTipoDesconto: true, cupomAmigoValor: true, cupomAmigoPercentual: true } });
+    if (!config) return res.status(404).json({ error: 'Programa não encontrado' });
+    const empr = await prisma.empresa.findUnique({ where: { id: config.empresaId }, select: { nome: true, logoDataUrl: true } }).catch(() => null);
+    // Recompensas ativas p/ mostrar os benefícios (escopado por loja — rota pública sem tenantStore).
+    const recompensas = config.ativo
+      ? await prisma.recompensaTier.findMany({ where: { ativo: true, empresaId: config.empresaId }, orderBy: { meta: 'asc' }, take: 12, select: { meta: true, titulo: true, emoji: true, tipo: true, destinos: true, descricao: true } })
+      : [];
+    res.json({
+      empresa: { nome: (empr?.nome ?? '').trim() || 'Hamburgueria', logo: empr?.logoDataUrl ?? null },
+      ativo: config.ativo,
+      banner: config.bannerDataUrl ?? null,
+      recompensas,
+      cupomAmigo: { titulo: config.cupomAmigoTitulo, emoji: config.cupomEmoji ?? '🎁', tipoDesconto: config.cupomAmigoTipoDesconto || 'percent_discount', valor: config.cupomAmigoValor ?? config.cupomAmigoPercentual },
+    });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+app.post('/api/public/indicacao/promotor/:token', async (req, res) => {
+  try {
+    const config = await prisma.indicacaoConfig.findUnique({ where: { promotorToken: String(req.params.token) }, select: { empresaId: true, ativo: true } });
+    if (!config) return res.status(404).json({ error: 'Programa não encontrado' });
+    if (!config.ativo) return res.status(409).json({ error: 'O programa de indicação está pausado no momento.' });
+    const nome = String(req.body?.nome ?? '').trim();
+    if (!nome) return res.status(400).json({ error: 'Informe seu nome.' });
+    const whatsapp = normalizarWhatsapp(req.body?.whatsapp);
+    if (!whatsapp) return res.status(400).json({ error: 'Informe um WhatsApp válido.' });
+
+    const promotor = await tenantStore.run({ empresaId: config.empresaId }, async () => {
+      const existente = await prisma.promotor.findFirst({ where: { whatsapp } });
+      if (existente) return existente; // idempotente: mesmo whatsapp reaproveita o promotor
+      const codigo = await gerarCodigoPromotor();
+      try {
+        return await prisma.promotor.create({ data: { nome, whatsapp, codigo, painelToken: tokenSecreto(), origem: 'PUBLICO' } });
+      } catch (e) {
+        if (e?.code === 'P2002') return prisma.promotor.findFirst({ where: { whatsapp } });
+        throw e;
+      }
+    });
+    res.status(201).json({ nome: promotor.nome, codigo: promotor.codigo, painelToken: promotor.painelToken });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+// ---------- PÚBLICO: cadastro do amigo (resgata o cupom) ----------
+app.get('/api/public/indicacao/i/:codigo', async (req, res) => {
+  try {
+    const promotor = await prisma.promotor.findUnique({ where: { codigo: String(req.params.codigo) }, select: { nome: true, status: true, empresaId: true } });
+    if (!promotor || promotor.status !== 'ATIVO') return res.status(404).json({ error: 'Link inválido ou expirado' });
+    const config = await prisma.indicacaoConfig.findUnique({ where: { empresaId: promotor.empresaId }, select: { ativo: true, cupomAmigoTitulo: true, cupomEmoji: true, cupomAmigoTipoDesconto: true, cupomAmigoValor: true, cupomAmigoPercentual: true, bannerDataUrl: true, cupomCorTipo: true, cupomCor1: true, cupomCor2: true, botaoCor: true, campoEmail: true, campoNascimento: true } });
+    if (!config || !config.ativo) return res.status(409).json({ error: 'O programa de indicação está pausado no momento.' });
+    const empr = await prisma.empresa.findUnique({ where: { id: promotor.empresaId }, select: { nome: true, logoDataUrl: true } }).catch(() => null);
+    res.json({
+      empresa: { nome: (empr?.nome ?? '').trim() || 'Hamburgueria', logo: empr?.logoDataUrl ?? null },
+      promotor: { nome: promotor.nome },
+      cupom: { titulo: config.cupomAmigoTitulo, emoji: config.cupomEmoji ?? '🎁', tipoDesconto: config.cupomAmigoTipoDesconto || 'percent_discount', valor: config.cupomAmigoValor ?? config.cupomAmigoPercentual },
+      banner: config.bannerDataUrl ?? null,
+      visual: { cupomCorTipo: config.cupomCorTipo, cupomCor1: config.cupomCor1, cupomCor2: config.cupomCor2, botaoCor: config.botaoCor },
+      campos: { email: config.campoEmail, nascimento: config.campoNascimento },
+    });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+app.post('/api/public/indicacao/i/:codigo', async (req, res) => {
+  try {
+    const promotor = await prisma.promotor.findUnique({ where: { codigo: String(req.params.codigo) }, select: { id: true, status: true, whatsapp: true, empresaId: true } });
+    if (!promotor || promotor.status !== 'ATIVO') return res.status(404).json({ error: 'Link inválido ou expirado' });
+    const config = await prisma.indicacaoConfig.findUnique({ where: { empresaId: promotor.empresaId }, select: { ativo: true, cupomAmigoTitulo: true, cupomAmigoDestino: true, cupomAmigoPercentual: true, cupomAmigoTipoDesconto: true, cupomAmigoValor: true, cupomAmigoTipos: true, campoEmail: true, campoNascimento: true } });
+    if (!config || !config.ativo) return res.status(409).json({ error: 'O programa de indicação está pausado no momento.' });
+    const nome = String(req.body?.nome ?? '').trim();
+    if (!nome) return res.status(400).json({ error: 'Informe seu nome.' });
+    const whatsapp = normalizarWhatsapp(req.body?.whatsapp);
+    if (!whatsapp) return res.status(400).json({ error: 'Informe um WhatsApp válido.' });
+    if (whatsapp === promotor.whatsapp) return res.status(409).json({ error: 'Você não pode usar o seu próprio link de indicação.' });
+    const email = String(req.body?.email ?? '').trim().slice(0, 160) || null;
+    let nascimento = null;
+    const nasc = String(req.body?.nascimento ?? '').trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(nasc)) { const d = new Date(nasc + 'T00:00:00Z'); if (!isNaN(d.getTime())) nascimento = d; }
+    if (config.campoEmail === 'obrigatorio' && !email) return res.status(400).json({ error: 'Informe seu e-mail.' });
+    if (config.campoNascimento === 'obrigatorio' && !nascimento) return res.status(400).json({ error: 'Informe sua data de nascimento.' });
+
+    const resultado = await tenantStore.run({ empresaId: promotor.empresaId }, async () => {
+      const existente = await prisma.indicacao.findFirst({ where: { promotorId: promotor.id, amigoWhatsapp: whatsapp }, include: { cupom: true } });
+      if (existente?.cupom) return { cupom: existente.cupom, repetido: true, cw: existente.cupom.cwCouponId != null };
+      const codigo = await gerarCodigoCupomIndicacao();
+      // Cria o cupom real no Cardápio Web (se a loja tiver CW): código único, uso
+      // único, X% (config) só p/ novos clientes. Falha → segue com a baixa manual.
+      const empresa = await prisma.empresa.findUnique({ where: { id: promotor.empresaId }, select: { clienteId: true } }).catch(() => null);
+      const tipoDesc = config.cupomAmigoTipoDesconto || 'percent_discount';
+      const valorDesc = tipoDesc === 'free_shipping' ? null : (config.cupomAmigoValor ?? config.cupomAmigoPercentual ?? 10);
+      const orderTypes = Array.isArray(config.cupomAmigoTipos) ? config.cupomAmigoTipos : [];
+      const destinoInterno = orderTypes.includes('delivery') && !orderTypes.includes('onsite') ? 'DELIVERY' : (config.cupomAmigoDestino || 'SALAO');
+      let cwCouponId = null;
+      if (empresa?.clienteId) {
+        const cw = await criarCupomCardapioWeb(empresa.clienteId, {
+          code: codigo, name: config.cupomAmigoTitulo, type: tipoDesc, value: valorDesc,
+          active: true, use_limit: 1, new_customers_only: true, customer_multi_use: false,
+          ...(orderTypes.length ? { available_order_types: orderTypes } : {}),
+        });
+        if (cw?.conectado && cw?.coupon) cwCouponId = cw.coupon.id ?? null;
+      }
+      return prisma.$transaction(async (tx) => {
+        const ind = await tx.indicacao.create({ data: { promotorId: promotor.id, amigoNome: nome, amigoWhatsapp: whatsapp, amigoEmail: email, amigoNascimento: nascimento, status: 'PENDENTE' } });
+        const cupom = await tx.cupom.create({ data: { codigo, tipo: 'INDICACAO', titulo: config.cupomAmigoTitulo, destino: destinoInterno, indicacaoId: ind.id, cwCouponId } });
+        return { cupom, repetido: false, cw: cwCouponId != null };
+      });
+    });
+    res.status(201).json({ codigo: resultado.cupom.codigo, titulo: resultado.cupom.titulo, repetido: resultado.repetido, cw: resultado.cw, tipoDesconto: config.cupomAmigoTipoDesconto || 'percent_discount', valor: config.cupomAmigoValor ?? config.cupomAmigoPercentual });
+  } catch (err) {
+    if (err?.code === 'P2002') return res.status(409).json({ error: 'Este WhatsApp já resgatou o cupom deste promotor.' });
+    console.error(err); res.status(500).json({ error: 'Erro interno' });
+  }
+});
+
+// ---------- PÚBLICO: painel do promotor (token secreto) ----------
+app.get('/api/public/indicacao/painel/:painelToken', async (req, res) => {
+  try {
+    const promotor = await prisma.promotor.findUnique({ where: { painelToken: String(req.params.painelToken) }, select: { id: true, nome: true, codigo: true, empresaId: true } });
+    if (!promotor) return res.status(404).json({ error: 'Painel não encontrado' });
+    const dados = await tenantStore.run({ empresaId: promotor.empresaId }, async () => {
+      const validadas = await prisma.indicacao.count({ where: { promotorId: promotor.id, status: 'VALIDADA' } });
+      const pendentes = await prisma.indicacao.count({ where: { promotorId: promotor.id, status: 'PENDENTE' } });
+      const tiers = await prisma.recompensaTier.findMany({ where: { ativo: true }, orderBy: { meta: 'asc' } });
+      const recompensas = await prisma.cupom.findMany({ where: { promotorId: promotor.id, tipo: 'RECOMPENSA' }, orderBy: { criadoEm: 'desc' }, select: { codigo: true, titulo: true, destino: true, status: true } });
+      const proxima = tiers.find((t) => t.meta > validadas) || null;
+      return {
+        validadas, pendentes,
+        proxima: proxima ? { meta: proxima.meta, titulo: proxima.titulo, faltam: proxima.meta - validadas } : null,
+        tiers: tiers.map((t) => ({ meta: t.meta, titulo: t.titulo, destino: t.destino, atingido: validadas >= t.meta })),
+        recompensas,
+      };
+    });
+    const cfg = await prisma.indicacaoConfig.findUnique({ where: { empresaId: promotor.empresaId }, select: { bannerDataUrl: true } }).catch(() => null);
+    res.json({ empresa: { nome: await nomeEmpresaPorId(promotor.empresaId) }, promotor: { nome: promotor.nome, codigo: promotor.codigo }, banner: cfg?.bannerDataUrl ?? null, ...dados });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+// ---------- PÚBLICO: atendente (token secreto) — buscar e dar baixa ----------
+app.get('/api/public/indicacao/atendente/:token/cupom', async (req, res) => {
+  try {
+    const config = await prisma.indicacaoConfig.findUnique({ where: { atendenteToken: String(req.params.token) }, select: { empresaId: true } });
+    if (!config) return res.status(404).json({ error: 'Acesso inválido' });
+    const codigo = String(req.query.codigo ?? '').trim().toUpperCase();
+    if (!codigo) return res.status(400).json({ error: 'Informe um código.' });
+    const cupom = await prisma.cupom.findFirst({ where: { codigo, empresaId: config.empresaId }, include: { promotor: { select: { nome: true } }, indicacao: { select: { amigoNome: true } } } });
+    if (!cupom) return res.status(404).json({ error: 'Cupom não encontrado nesta loja.' });
+    res.json({
+      codigo: cupom.codigo, tipo: cupom.tipo, titulo: cupom.titulo, destino: cupom.destino, status: cupom.status,
+      usadoEm: cupom.usadoEm, usadoPor: cupom.usadoPor,
+      para: cupom.tipo === 'RECOMPENSA' ? (cupom.promotor?.nome ?? '—') : (cupom.indicacao?.amigoNome ?? '—'),
+    });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+// Núcleo da baixa: marca o cupom USADO e, se INDICACAO, valida a indicação
+// (PENDENTE→VALIDADA), recomputa validadas e concede marcos novos (idempotente via
+// unique). Reutilizado pela baixa manual (atendente) E pela auto-validação (CW).
+async function processarBaixaCupom(tx, cupom, usadoPor, valorPedido = null) {
+  await tx.cupom.update({ where: { id: cupom.id }, data: { status: 'USADO', usadoEm: new Date(), usadoPor: usadoPor ?? null, ...(valorPedido != null ? { valorPedido } : {}) } });
+  const novasRecompensas = [];
+  if (cupom.tipo === 'INDICACAO' && cupom.indicacaoId) {
+    const ind = await tx.indicacao.findUnique({ where: { id: cupom.indicacaoId } });
+    if (ind && ind.status === 'PENDENTE') await tx.indicacao.update({ where: { id: ind.id }, data: { status: 'VALIDADA', validadoEm: new Date() } });
+    if (ind) {
+      const validadas = await tx.indicacao.count({ where: { promotorId: ind.promotorId, status: 'VALIDADA' } });
+      const tiers = await tx.recompensaTier.findMany({ where: { ativo: true, meta: { lte: validadas } }, orderBy: { meta: 'asc' } });
+      const jaConcedidos = await tx.cupom.findMany({ where: { promotorId: ind.promotorId, tipo: 'RECOMPENSA' }, select: { recompensaTierId: true } });
+      const concedidos = new Set(jaConcedidos.map((c) => c.recompensaTierId));
+      const paraConceder = tiers.filter((t) => !concedidos.has(t.id));
+      if (paraConceder.length) {
+        const dados = [];
+        for (const t of paraConceder) dados.push({ codigo: await gerarCodigoCupomIndicacao(), tipo: 'RECOMPENSA', titulo: t.titulo, destino: t.destino, promotorId: ind.promotorId, recompensaTierId: t.id });
+        await tx.cupom.createMany({ data: dados, skipDuplicates: true });
+        const criados = await tx.cupom.findMany({ where: { promotorId: ind.promotorId, tipo: 'RECOMPENSA', recompensaTierId: { in: paraConceder.map((t) => t.id) } }, select: { codigo: true, titulo: true, destino: true } });
+        novasRecompensas.push(...criados);
+      }
+    }
+  }
+  return novasRecompensas;
+}
+
+app.post('/api/public/indicacao/atendente/:token/baixa', async (req, res) => {
+  try {
+    const config = await prisma.indicacaoConfig.findUnique({ where: { atendenteToken: String(req.params.token) }, select: { empresaId: true } });
+    if (!config) return res.status(404).json({ error: 'Acesso inválido' });
+    const codigo = String(req.body?.codigo ?? '').trim().toUpperCase();
+    if (!codigo) return res.status(400).json({ error: 'Informe um código.' });
+    const usadoPor = String(req.body?.usadoPor ?? '').trim().slice(0, 80) || null;
+
+    const out = await tenantStore.run({ empresaId: config.empresaId }, () => prisma.$transaction(async (tx) => {
+      const cupom = await tx.cupom.findFirst({ where: { codigo } });
+      if (!cupom) throw { http: 404, msg: 'Cupom não encontrado nesta loja.' };
+      if (cupom.status === 'USADO') throw { http: 409, msg: 'Este cupom já foi utilizado.' };
+      if (cupom.status === 'CANCELADO') throw { http: 409, msg: 'Este cupom foi cancelado.' };
+      const novasRecompensas = await processarBaixaCupom(tx, cupom, usadoPor);
+      return { tipo: cupom.tipo, titulo: cupom.titulo, destino: cupom.destino, novasRecompensas, cwCouponId: cupom.cwCouponId };
+    }));
+    if (out.cwCouponId) {
+      const emp = await prisma.empresa.findUnique({ where: { id: config.empresaId }, select: { clienteId: true } }).catch(() => null);
+      if (emp?.clienteId) await desativarCupomCardapioWeb(emp.clienteId, out.cwCouponId);
+    }
+    const { cwCouponId, ...pub } = out;
+    res.json({ success: true, ...pub });
+  } catch (err) {
+    if (err && err.http) return res.status(err.http).json({ error: err.msg });
+    console.error(err); res.status(500).json({ error: 'Erro interno ao dar baixa' });
+  }
+});
+
+// ---------- ADMIN: configuração ----------
+app.get('/api/indicacao/config', async (req, res) => {
+  try {
+    const config = await getOrCreateIndicacaoConfig();
+    let loja = null;
+    const empresaId = getEmpresaIdAtual();
+    if (empresaId != null) {
+      const emp = await prisma.empresa.findUnique({ where: { id: empresaId }, select: { nome: true, logoDataUrl: true } }).catch(() => null);
+      loja = { nome: (emp?.nome ?? '').trim() || 'Hamburgueria', logo: emp?.logoDataUrl ?? null };
+    }
+    res.json({ ...config, loja });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+app.put('/api/indicacao/config', async (req, res) => {
+  try {
+    const config = await getOrCreateIndicacaoConfig();
+    const { ativo, cupomAmigoTitulo, cupomEmoji, cupomAmigoDestino, cupomAmigoPercentual, cupomAmigoTipoDesconto, cupomAmigoValor, cupomAmigoTipos, bannerDataUrl,
+      cupomCorTipo, cupomCor1, cupomCor2, botaoCor, campoEmail, campoNascimento } = req.body ?? {};
+    const isHex = (s) => /^#[0-9a-fA-F]{6}$/.test(String(s));
+    const data = {};
+    if (ativo !== undefined) data.ativo = !!ativo;
+    if (cupomAmigoTitulo !== undefined) { const v = String(cupomAmigoTitulo).trim(); if (!v) return res.status(400).json({ error: 'O título do cupom não pode ficar vazio.' }); data.cupomAmigoTitulo = v.slice(0, 120); }
+    if (cupomEmoji !== undefined) data.cupomEmoji = String(cupomEmoji).trim().slice(0, 16);
+    if (cupomAmigoDestino !== undefined) { if (!['SALAO', 'DELIVERY'].includes(cupomAmigoDestino)) return res.status(400).json({ error: 'Destino inválido' }); data.cupomAmigoDestino = cupomAmigoDestino; }
+    if (cupomAmigoPercentual !== undefined) { const p = Number(cupomAmigoPercentual); if (!Number.isInteger(p) || p <= 0 || p > 100) return res.status(400).json({ error: 'Percentual inválido (1 a 100).' }); data.cupomAmigoPercentual = p; }
+    if (cupomAmigoTipoDesconto !== undefined) { if (!['percent_discount', 'flat_discount', 'free_shipping'].includes(cupomAmigoTipoDesconto)) return res.status(400).json({ error: 'Tipo de desconto inválido' }); data.cupomAmigoTipoDesconto = cupomAmigoTipoDesconto; }
+    if (cupomAmigoValor !== undefined) { if (cupomAmigoValor === null || cupomAmigoValor === '') data.cupomAmigoValor = null; else { const v = Number(cupomAmigoValor); if (!Number.isFinite(v) || v <= 0) return res.status(400).json({ error: 'Valor inválido' }); data.cupomAmigoValor = v; } }
+    if (cupomAmigoTipos !== undefined) { const perm = ['delivery', 'takeout', 'onsite']; data.cupomAmigoTipos = Array.isArray(cupomAmigoTipos) ? [...new Set(cupomAmigoTipos.filter((t) => perm.includes(t)))] : []; }
+    if (bannerDataUrl !== undefined) {
+      if (!bannerDataUrl) data.bannerDataUrl = null;
+      else { const s = String(bannerDataUrl); if (s.length > 4_500_000) return res.status(400).json({ error: 'Banner muito grande. Use uma imagem de até ~3 MB.' }); data.bannerDataUrl = s; }
+    }
+    if (cupomCorTipo !== undefined) { if (!['solido', 'gradiente'].includes(cupomCorTipo)) return res.status(400).json({ error: 'Tipo de cor inválido' }); data.cupomCorTipo = cupomCorTipo; }
+    if (cupomCor1 !== undefined) { if (!isHex(cupomCor1)) return res.status(400).json({ error: 'Cor inválida' }); data.cupomCor1 = cupomCor1; }
+    if (cupomCor2 !== undefined) { if (!isHex(cupomCor2)) return res.status(400).json({ error: 'Cor inválida' }); data.cupomCor2 = cupomCor2; }
+    if (botaoCor !== undefined) { if (!isHex(botaoCor)) return res.status(400).json({ error: 'Cor inválida' }); data.botaoCor = botaoCor; }
+    if (campoEmail !== undefined) { if (!['nao', 'opcional', 'obrigatorio'].includes(campoEmail)) return res.status(400).json({ error: 'Config de e-mail inválida' }); data.campoEmail = campoEmail; }
+    if (campoNascimento !== undefined) { if (!['nao', 'opcional', 'obrigatorio'].includes(campoNascimento)) return res.status(400).json({ error: 'Config de nascimento inválida' }); data.campoNascimento = campoNascimento; }
+    res.json(await prisma.indicacaoConfig.update({ where: { id: config.id }, data }));
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+app.post('/api/indicacao/config/rotacionar', async (req, res) => {
+  try {
+    const config = await getOrCreateIndicacaoConfig();
+    const qual = String(req.body?.qual ?? '');
+    const data = {};
+    if (qual === 'promotor') data.promotorToken = tokenSecreto();
+    else if (qual === 'atendente') data.atendenteToken = tokenSecreto();
+    else return res.status(400).json({ error: 'qual deve ser "promotor" ou "atendente".' });
+    res.json(await prisma.indicacaoConfig.update({ where: { id: config.id }, data }));
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+// ---------- ADMIN: painel geral (KPIs) ----------
+app.get('/api/indicacao/painel', async (req, res) => {
+  try {
+    const [promotores, promotoresAtivos, indicacoes, validadas, pendentes, canceladas, cuponsGerados, cuponsUsados, fatAgg, grupos] = await Promise.all([
+      prisma.promotor.count(),
+      prisma.promotor.count({ where: { status: 'ATIVO' } }),
+      prisma.indicacao.count(),
+      prisma.indicacao.count({ where: { status: 'VALIDADA' } }),
+      prisma.indicacao.count({ where: { status: 'PENDENTE' } }),
+      prisma.indicacao.count({ where: { status: 'CANCELADA' } }),
+      prisma.cupom.count({ where: { tipo: 'INDICACAO' } }),
+      prisma.cupom.count({ where: { tipo: 'INDICACAO', status: 'USADO' } }),
+      prisma.cupom.aggregate({ _sum: { valorPedido: true }, where: { tipo: 'INDICACAO', status: 'USADO' } }),
+      prisma.indicacao.groupBy({ by: ['promotorId'], where: { status: 'VALIDADA' }, _count: { _all: true } }),
+    ]);
+    const faturamento = fatAgg?._sum?.valorPedido ?? 0;
+    grupos.sort((a, b) => b._count._all - a._count._all);
+    const top = grupos.slice(0, 8);
+    const ids = top.map((g) => g.promotorId);
+    const proms = ids.length ? await prisma.promotor.findMany({ where: { id: { in: ids } }, select: { id: true, nome: true, status: true } }) : [];
+    const byId = new Map(proms.map((p) => [p.id, p]));
+    const topPromotores = top.map((g) => ({ nome: byId.get(g.promotorId)?.nome ?? '—', status: byId.get(g.promotorId)?.status ?? 'ATIVO', validadas: g._count._all }));
+    res.json({
+      promotores, promotoresAtivos,
+      indicacoes, validadas, pendentes, canceladas,
+      cuponsGerados, cuponsUsados,
+      faturamento,
+      ticketMedio: cuponsUsados > 0 ? faturamento / cuponsUsados : 0,
+      convValidacao: indicacoes > 0 ? validadas / indicacoes : 0,
+      convUso: cuponsGerados > 0 ? cuponsUsados / cuponsGerados : 0,
+      topPromotores,
+    });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+// ---------- ADMIN: recompensas (marcos) ----------
+app.get('/api/indicacao/recompensas', async (req, res) => {
+  try {
+    const tiers = await prisma.recompensaTier.findMany({ orderBy: { meta: 'asc' } });
+    // resgatadas = cupons de recompensa desse marco já usados (baixa no balcão)
+    const usados = await prisma.cupom.groupBy({ by: ['recompensaTierId'], where: { tipo: 'RECOMPENSA', status: 'USADO' }, _count: { _all: true } });
+    const geradas = await prisma.cupom.groupBy({ by: ['recompensaTierId'], where: { tipo: 'RECOMPENSA' }, _count: { _all: true } });
+    const mUsados = new Map(usados.map((g) => [g.recompensaTierId, g._count._all]));
+    const mGeradas = new Map(geradas.map((g) => [g.recompensaTierId, g._count._all]));
+    res.json(tiers.map((t) => ({ ...t, resgatadas: mUsados.get(t.id) ?? 0, desbloqueadas: mGeradas.get(t.id) ?? 0 })));
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+// Histórico de resgates de recompensas (auditoria): cupons RECOMPENSA já usados.
+app.get('/api/indicacao/recompensas/historico', async (req, res) => {
+  try {
+    const cupons = await prisma.cupom.findMany({
+      where: { tipo: 'RECOMPENSA', status: 'USADO' },
+      orderBy: { usadoEm: 'desc' },
+      take: 500,
+      include: { promotor: { select: { nome: true, whatsapp: true } }, recompensaTier: { select: { emoji: true, meta: true } } },
+    });
+    res.json(cupons.map((c) => ({
+      id: c.id, codigo: c.codigo, titulo: c.titulo,
+      emoji: c.recompensaTier?.emoji ?? '🎁', meta: c.recompensaTier?.meta ?? null,
+      promotor: c.promotor?.nome ?? '—', whatsapp: c.promotor?.whatsapp ?? null,
+      usadoEm: c.usadoEm, usadoPor: c.usadoPor ?? null,
+    })));
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+app.post('/api/indicacao/recompensas', async (req, res) => {
+  try {
+    const meta = Number(req.body?.meta);
+    if (!Number.isInteger(meta) || meta <= 0) return res.status(400).json({ error: 'A meta deve ser um número inteiro positivo.' });
+    const titulo = String(req.body?.titulo ?? '').trim();
+    if (!titulo) return res.status(400).json({ error: 'Informe o título da recompensa.' });
+    const tipo = ['CONSUMO', 'BRINDE'].includes(req.body?.tipo) ? req.body.tipo : 'CONSUMO';
+    const perm = ['salao', 'delivery', 'retirada'];
+    let destinos = tipo === 'CONSUMO' && Array.isArray(req.body?.destinos) ? [...new Set(req.body.destinos.filter((d) => perm.includes(d)))] : [];
+    const destino = destinos.includes('delivery') && !destinos.includes('salao') ? 'DELIVERY' : 'SALAO'; // legado derivado
+    const emoji = String(req.body?.emoji ?? '🎁').trim().slice(0, 16);
+    const descricao = req.body?.descricao != null ? (String(req.body.descricao).trim().slice(0, 200) || null) : null;
+    const ativo = req.body?.ativo === undefined ? true : !!req.body.ativo;
+    res.status(201).json(await prisma.recompensaTier.create({ data: { meta, titulo: titulo.slice(0, 120), tipo, destino, destinos, emoji, descricao, ativo } }));
+  } catch (err) { if (err?.code === 'P2002') return res.status(409).json({ error: 'Já existe uma recompensa para essa meta.' }); console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+app.put('/api/indicacao/recompensas/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'id inválido' });
+    const existe = await prisma.recompensaTier.findUnique({ where: { id }, select: { id: true } });
+    if (!existe) return res.status(404).json({ error: 'Recompensa não encontrada' });
+    const { meta, titulo, tipo, destinos, emoji, descricao, ativo } = req.body ?? {};
+    const data = {};
+    if (meta !== undefined) { const m = Number(meta); if (!Number.isInteger(m) || m <= 0) return res.status(400).json({ error: 'Meta inválida' }); data.meta = m; }
+    if (titulo !== undefined) { const v = String(titulo).trim(); if (!v) return res.status(400).json({ error: 'Título vazio' }); data.titulo = v.slice(0, 120); }
+    if (tipo !== undefined) { if (!['CONSUMO', 'BRINDE'].includes(tipo)) return res.status(400).json({ error: 'Tipo inválido' }); data.tipo = tipo; }
+    if (destinos !== undefined) { const perm = ['salao', 'delivery', 'retirada']; const arr = Array.isArray(destinos) ? [...new Set(destinos.filter((d) => perm.includes(d)))] : []; data.destinos = arr; data.destino = arr.includes('delivery') && !arr.includes('salao') ? 'DELIVERY' : 'SALAO'; }
+    if (emoji !== undefined) data.emoji = String(emoji).trim().slice(0, 16);
+    if (descricao !== undefined) data.descricao = descricao ? String(descricao).trim().slice(0, 200) : null;
+    if (ativo !== undefined) data.ativo = !!ativo;
+    res.json(await prisma.recompensaTier.update({ where: { id }, data }));
+  } catch (err) { if (err?.code === 'P2002') return res.status(409).json({ error: 'Já existe uma recompensa para essa meta.' }); console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+app.delete('/api/indicacao/recompensas/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'id inválido' });
+    const existe = await prisma.recompensaTier.findUnique({ where: { id }, select: { id: true } });
+    if (!existe) return res.status(404).json({ error: 'Recompensa não encontrada' });
+    await prisma.recompensaTier.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+// ---------- ADMIN: promotores ----------
+app.get('/api/indicacao/promotores', async (req, res) => {
+  try {
+    const promotores = await prisma.promotor.findMany({ orderBy: { criadoEm: 'desc' }, include: { _count: { select: { indicacoes: true } } } });
+    const [validadas, recompGrp, usados] = await Promise.all([
+      prisma.indicacao.groupBy({ by: ['promotorId'], where: { status: 'VALIDADA' }, _count: { _all: true } }),
+      prisma.cupom.groupBy({ by: ['promotorId'], where: { tipo: 'RECOMPENSA' }, _count: { _all: true } }),
+      // Cupom INDICACAO não tem promotorId — o vínculo é via indicacao.promotorId
+      prisma.cupom.findMany({ where: { tipo: 'INDICACAO', status: 'USADO' }, select: { valorPedido: true, indicacao: { select: { promotorId: true } } } }),
+    ]);
+    const mapaVal = new Map(validadas.map((v) => [v.promotorId, v._count._all]));
+    const mapaRec = new Map(recompGrp.map((r) => [r.promotorId, r._count._all]));
+    const mapaFat = new Map();
+    for (const c of usados) {
+      const pid = c.indicacao?.promotorId;
+      if (pid == null) continue;
+      mapaFat.set(pid, (mapaFat.get(pid) || 0) + (Number(c.valorPedido) || 0));
+    }
+    res.json(promotores.map((p) => ({
+      id: p.id, nome: p.nome, whatsapp: p.whatsapp, codigo: p.codigo, painelToken: p.painelToken, origem: p.origem, tipo: p.tipo, status: p.status, criadoEm: p.criadoEm,
+      totalIndicacoes: p._count.indicacoes, totalValidadas: mapaVal.get(p.id) ?? 0,
+      totalRecompensas: mapaRec.get(p.id) ?? 0, faturamento: mapaFat.get(p.id) ?? 0,
+    })));
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+app.post('/api/indicacao/promotores', async (req, res) => {
+  try {
+    const nome = String(req.body?.nome ?? '').trim();
+    if (!nome) return res.status(400).json({ error: 'Informe o nome.' });
+    const whatsapp = normalizarWhatsapp(req.body?.whatsapp);
+    if (!whatsapp) return res.status(400).json({ error: 'Informe um WhatsApp válido.' });
+    const tipo = ['CLIENTE', 'INFLUENCER', 'PARCEIRA'].includes(req.body?.tipo) ? req.body.tipo : 'CLIENTE';
+    const codigo = await gerarCodigoPromotor();
+    res.status(201).json(await prisma.promotor.create({ data: { nome, whatsapp, codigo, painelToken: tokenSecreto(), origem: 'ADMIN', tipo } }));
+  } catch (err) { if (err?.code === 'P2002') return res.status(409).json({ error: 'Já existe um promotor com esse WhatsApp.' }); console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+app.put('/api/indicacao/promotores/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'id inválido' });
+    const existe = await prisma.promotor.findUnique({ where: { id }, select: { id: true } });
+    if (!existe) return res.status(404).json({ error: 'Promotor não encontrado' });
+    const { nome, whatsapp, status, tipo } = req.body ?? {};
+    const data = {};
+    if (nome !== undefined) { const v = String(nome).trim(); if (!v) return res.status(400).json({ error: 'Nome vazio' }); data.nome = v; }
+    if (whatsapp !== undefined) { const w = normalizarWhatsapp(whatsapp); if (!w) return res.status(400).json({ error: 'WhatsApp inválido' }); data.whatsapp = w; }
+    if (status !== undefined) { if (!['ATIVO', 'BLOQUEADO'].includes(status)) return res.status(400).json({ error: 'Status inválido' }); data.status = status; }
+    if (tipo !== undefined) { if (!['CLIENTE', 'INFLUENCER', 'PARCEIRA'].includes(tipo)) return res.status(400).json({ error: 'Tipo inválido' }); data.tipo = tipo; }
+    res.json(await prisma.promotor.update({ where: { id }, data }));
+  } catch (err) { if (err?.code === 'P2002') return res.status(409).json({ error: 'Já existe um promotor com esse WhatsApp.' }); console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+// ---------- ADMIN: listagens (auditoria) ----------
+app.get('/api/indicacao/indicacoes', async (req, res) => {
+  try {
+    const where = {};
+    if (req.query.status && ['PENDENTE', 'VALIDADA', 'CANCELADA'].includes(req.query.status)) where.status = req.query.status;
+    if (req.query.promotorId) { const pid = Number(req.query.promotorId); if (Number.isInteger(pid)) where.promotorId = pid; }
+    res.json(await prisma.indicacao.findMany({ where, orderBy: { criadoEm: 'desc' }, take: 500, include: { promotor: { select: { nome: true } }, cupom: { select: { codigo: true, status: true } } } }));
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+app.get('/api/indicacao/cupons', async (req, res) => {
+  try {
+    const where = {};
+    if (req.query.tipo && ['INDICACAO', 'RECOMPENSA'].includes(req.query.tipo)) where.tipo = req.query.tipo;
+    if (req.query.status && ['DISPONIVEL', 'USADO', 'CANCELADO'].includes(req.query.status)) where.status = req.query.status;
+    res.json(await prisma.cupom.findMany({ where, orderBy: { criadoEm: 'desc' }, take: 500, include: { promotor: { select: { nome: true } }, indicacao: { select: { amigoNome: true } } } }));
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+// ---------- ADMIN: cupons do Cardápio Web (aba Cupons) ----------
+app.get('/api/indicacao/cw-cupons', async (req, res) => {
+  try {
+    const clienteId = await clienteIdDaLojaAtual();
+    if (!clienteId) return res.json({ conectado: false });
+    res.json(await listarCuponsCardapioWeb(clienteId));
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+// URL do webhook do CW p/ o dono colar no painel (auto-validação da indicação).
+app.get('/api/indicacao/cw-webhook', async (req, res) => {
+  try {
+    const clienteId = await clienteIdDaLojaAtual();
+    if (!clienteId) return res.json({ conectado: false });
+    res.json(await webhookUrlCardapioWeb(clienteId));
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+app.post('/api/indicacao/cw-cupons', async (req, res) => {
+  try {
+    const clienteId = await clienteIdDaLojaAtual();
+    if (!clienteId) return res.status(409).json({ error: 'Loja sem Cardápio Web conectado.' });
+    const coupon = req.body?.coupon;
+    if (!coupon || typeof coupon !== 'object') return res.status(400).json({ error: 'Dados do cupom ausentes.' });
+    const out = await criarCupomCardapioWeb(clienteId, coupon);
+    if (out?.conectado && out?.coupon) return res.status(201).json(out.coupon);
+    return res.status(out?.detalhe ? 502 : 409).json({ error: out?.error || 'Cardápio Web não conectado.', detalhe: out?.detalhe });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
+});
+
+// Ativa/desativa um cupom no CW pelo H360 (toggle na lista).
+app.post('/api/indicacao/cw-cupons/status', async (req, res) => {
+  try {
+    const clienteId = await clienteIdDaLojaAtual();
+    if (!clienteId) return res.status(409).json({ error: 'Loja sem Cardápio Web conectado.' });
+    const couponId = Number(req.body?.couponId);
+    if (!Number.isInteger(couponId)) return res.status(400).json({ error: 'couponId inválido.' });
+    const active = req.body?.active === true;
+    const r = await setStatusCupomCardapioWeb(clienteId, couponId, active);
+    if (r?.ok === false) return res.status(502).json({ error: r?.error || 'Não foi possível atualizar o cupom no Cardápio Web.' });
+    return res.json({ ok: true, active });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
 });
 
 app.listen(PORT, () => console.log(`Operação (PDV) API rodando em http://localhost:${PORT}`));
