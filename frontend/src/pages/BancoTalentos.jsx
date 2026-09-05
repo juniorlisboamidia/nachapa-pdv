@@ -7,11 +7,12 @@ import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
 import CandidatoDrawer from '../components/CandidatoDrawer'
 import FormBuilder from '../components/FormBuilder'
+import FormPreview from '../components/FormPreview'
 import { mascararTelefone, formatarWhats } from '../utils/telefone'
 import BotaoCopiar from '../components/BotaoCopiar'
 import {
   ORIGENS, ORIGEM_LABEL, FUNCOES, EXPERIENCIAS, VAGA_STATUS, VAGA_STATUS_CLS,
-  SITUACAO_LABEL, SITUACAO_CLS, CLASSIF_LABEL, CLASSIF_CLS, fmtData, dispResumo, formularioPadrao, waLink,
+  SITUACAO_LABEL, SITUACAO_CLS, CLASSIF_LABEL, CLASSIF_CLS, fmtData, dispResumo, formularioPadrao, waLink, iniciais,
 } from '../utils/recrutamento'
 
 const origin = typeof window !== 'undefined' ? window.location.origin : ''
@@ -132,29 +133,35 @@ export default function BancoTalentos() {
           {lista === null ? <div className="loading-state">Carregando…</div>
           : lista.itens.length === 0 ? <div className="card" style={{ textAlign: 'center', padding: '40px 20px', color: '#777' }}><div style={{ fontSize: 34, marginBottom: 8 }}>👥</div>Ninguém aqui ainda. Divulgue o link permanente ou cadastre alguém.</div>
           : (<>
-            <div className="table-card"><table className="hb-table">
-              <thead><tr><th>Nome</th><th>Funções</th><th>Local</th><th>Disponibilidade</th><th>Cadastro</th><th>Situação</th><th style={{ textAlign: 'right' }}>Ações</th></tr></thead>
-              <tbody>
-                {lista.itens.map((c) => (
-                  <tr key={c.id} className="bt-row" onClick={() => setSel(c.id)}>
-                    <td><div className="ent-row-id-txt"><span className="ent-row-nome">{c.nome}</span><span className="ent-row-whats">{formatarWhats(c.telefone)}</span></div></td>
-                    <td style={{ fontSize: 12, color: '#666' }}>{(c.funcoesInteresse || []).slice(0, 2).join(', ') || '—'}</td>
-                    <td style={{ fontSize: 12, color: '#666' }}>{c.cidade ? `${c.cidade}${c.bairro ? '/' + c.bairro : ''}` : '—'}</td>
-                    <td style={{ fontSize: 12, color: '#666' }}>{dispResumo(c.disponibilidade)}</td>
-                    <td style={{ fontSize: 12, color: '#888' }}>{fmtData(c.criadoEm)}</td>
-                    <td><span className={'badge ' + (SITUACAO_CLS[c.situacao] || 'badge-gray')}>{SITUACAO_LABEL[c.situacao] || 'Ativo'}</span>{c.totalCandidaturas > 0 && <span className="badge badge-blue" style={{ marginLeft: 6 }}>{c.totalCandidaturas} vaga(s)</span>}</td>
-                    <td style={{ textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
-                      <div className="ind-acts">
-                        <a className="ind-act" href={waLink(c.telefone)} target="_blank" rel="noreferrer">💬 WhatsApp</a>
-                        {c.situacao !== 'CONTRATADO' && <button className="ind-act ind-act-ok" onClick={() => mudarSituacao(c, 'CONTRATADO', 'Marcado como contratado.')}>✓ Contratado</button>}
-                        {c.situacao !== 'ARQUIVADO' ? <button className="ind-act" onClick={() => mudarSituacao(c, 'ARQUIVADO', 'Arquivado.')}>Arquivar</button> : <button className="ind-act" onClick={() => mudarSituacao(c, 'ATIVO', 'Reativado.')}>Reativar</button>}
-                        <button className="ind-act ind-act-danger" onClick={() => anonimizar(c)}>Excluir</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table></div>
+            <div className="bt-cards">
+              {lista.itens.map((c) => (
+                <article key={c.id} className="bt-cand" onClick={() => setSel(c.id)}>
+                  <div className="bt-cand-top">
+                    <span className="ent-av">{iniciais(c.nome)}</span>
+                    <div className="bt-cand-id">
+                      <span className="bt-cand-nome">{c.nome}</span>
+                      <span className="bt-cand-fone">{formatarWhats(c.telefone)}</span>
+                    </div>
+                    <span className={'badge ' + (SITUACAO_CLS[c.situacao] || 'badge-gray')}>{SITUACAO_LABEL[c.situacao] || 'Ativo'}</span>
+                  </div>
+                  <div className="bt-cand-selos">
+                    {(c.funcoesInteresse || []).slice(0, 2).map((fn) => <span key={fn} className="chip" style={{ cursor: 'inherit' }}>{fn}</span>)}
+                    {c.totalCandidaturas > 0 && <span className="badge badge-blue">{c.totalCandidaturas} vaga(s)</span>}
+                  </div>
+                  <div className="bt-cand-meta">
+                    <span>📍 {c.cidade ? `${c.cidade}${c.bairro ? '/' + c.bairro : ''}` : '—'}</span>
+                    <span>🕑 {dispResumo(c.disponibilidade)}</span>
+                    <span>🗓 {fmtData(c.criadoEm)}</span>
+                  </div>
+                  <div className="bt-cand-acts" onClick={(e) => e.stopPropagation()}>
+                    <a className="ind-act" href={waLink(c.telefone)} target="_blank" rel="noreferrer">💬 WhatsApp</a>
+                    {c.situacao !== 'CONTRATADO' && <button className="ind-act ind-act-ok" onClick={() => mudarSituacao(c, 'CONTRATADO', 'Marcado como contratado.')}>✓ Contratado</button>}
+                    {c.situacao !== 'ARQUIVADO' ? <button className="ind-act" onClick={() => mudarSituacao(c, 'ARQUIVADO', 'Arquivado.')}>Arquivar</button> : <button className="ind-act" onClick={() => mudarSituacao(c, 'ATIVO', 'Reativado.')}>Reativar</button>}
+                    <button className="ind-act ind-act-danger" onClick={() => anonimizar(c)}>Excluir</button>
+                  </div>
+                </article>
+              ))}
+            </div>
             {lista.total > lista.pageSize && (
               <div className="bt-paginacao">
                 <button className="btn btn-secondary btn-sm" disabled={filtros.page <= 1} onClick={() => setFiltros({ ...filtros, page: filtros.page - 1 })}>‹ Anterior</button>
@@ -207,9 +214,12 @@ export default function BancoTalentos() {
             <span className="ind-linkfield-url">{linkPermanente}</span>
             <BotaoCopiar texto={linkPermanente} label="Copiar" className="ind-linkfield-copy" onCopiado={() => setToast({ message: 'Link copiado!', type: 'success' })} />
           </div>
-          <div style={{ maxWidth: 720 }}>
-            <FormBuilder value={formPerm} onChange={setFormPerm} />
-            <div style={{ marginTop: 16 }}><button className="btn btn-primary" onClick={salvarFormPerm} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar formulário'}</button></div>
+          <div className="bt-fp-grid">
+            <div>
+              <FormBuilder value={formPerm} onChange={setFormPerm} />
+              <div style={{ marginTop: 16 }}><button className="btn btn-primary" onClick={salvarFormPerm} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar formulário'}</button></div>
+            </div>
+            <FormPreview value={formPerm} linkPermanente={linkPermanente} />
           </div>
         </div>
       )}

@@ -17,6 +17,7 @@ export const ORIGENS = [['MANUAL', 'Manual'], ['PUBLICO', 'Formulário'], ['INST
 export const ORIGEM_LABEL = Object.fromEntries(ORIGENS)
 export const VINCULOS = [['CLT', 'CLT'], ['FREELANCER', 'Freelancer'], ['DIARISTA', 'Diarista'], ['ESTAGIO', 'Estágio'], ['A_COMBINAR', 'A combinar']]
 export const VINCULO_LABEL = Object.fromEntries(VINCULOS)
+export const iniciais = (nome) => String(nome || '').trim().split(/\s+/).slice(0, 2).map((p) => p[0] || '').join('').toUpperCase() || '?'
 export const TURNOS = [['manha', 'Manhã'], ['tarde', 'Tarde'], ['noite', 'Noite'], ['madrugada', 'Madrugada']]
 export const TURNO_LABEL = Object.fromEntries(TURNOS)
 export const DIAS = [['seg', 'Seg'], ['ter', 'Ter'], ['qua', 'Qua'], ['qui', 'Qui'], ['sex', 'Sex'], ['sab', 'Sáb'], ['dom', 'Dom']]
