@@ -140,11 +140,11 @@ function MiniGrafico({ valores }) {
   const [ux, uy] = coords[coords.length - 1]
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} style={{ display: 'block' }} aria-hidden="true">
-      <path d={linha} fill="none" stroke="#eab802" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={linha} fill="none" stroke="#f97316" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       {coords.map(([x, y], i) => (
-        <circle key={i} cx={x} cy={y} r={i === coords.length - 1 ? 3 : 2} fill="#eab802" />
+        <circle key={i} cx={x} cy={y} r={i === coords.length - 1 ? 3 : 2} fill="#f97316" />
       ))}
-      <circle cx={ux} cy={uy} r="5" fill="none" stroke="#eab802" strokeWidth="1.5" />
+      <circle cx={ux} cy={uy} r="5" fill="none" stroke="#f97316" strokeWidth="1.5" />
     </svg>
   )
 }
