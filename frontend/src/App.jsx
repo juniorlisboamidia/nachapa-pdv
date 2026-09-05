@@ -29,6 +29,8 @@ import Checklist, { ChecklistDetalhe, ChecklistHistorico, ChecklistEstatisticas 
 import ChecklistPublico from './pages/ChecklistPublico'
 import CentralAjuda from './pages/CentralAjuda'
 import GrupoVip from './pages/GrupoVip'
+import Avaliacao from './pages/Avaliacao'
+import AvaliacaoPublica from './pages/AvaliacaoPublica'
 
 function TelaCarregando() {
   return (
@@ -100,7 +102,7 @@ export default function App() {
             <Route path="relatorios/cardapio" element={<EmConstrucao titulo="Cardápio" descricao="Relatório de vendas do cardápio." />} />
             <Route path="relatorios/gmn" element={<EmConstrucao titulo="Google Meu Negócio" descricao="Em breve." />} />
             {/* Marketing › Avaliador e Indicação (viram páginas reais na Fase 1) */}
-            <Route path="avaliacoes" element={<EmConstrucao titulo="Avaliação" descricao="Campanhas de avaliação dos clientes." />} />
+            <Route path="avaliacoes" element={<Avaliacao />} />
             <Route path="clientes" element={<EmConstrucao titulo="Clientes" descricao="Em breve." />} />
             <Route path="respostas" element={<EmConstrucao titulo="Respostas" descricao="Em breve." />} />
             <Route path="indicacao" element={<EmConstrucao titulo="Indicação" descricao="Programa de indicação." />} />
@@ -143,6 +145,7 @@ export default function App() {
           <Route path="eu/:token" element={<EuLinkAntigo />} />
           {/* Banco de Talentos — formulário público de candidatura */}
           <Route path="talentos/:slug" element={<TalentosPublico />} />
+          <Route path="avaliacao/:token" element={<AvaliacaoPublica />} />
           {/* Etiquetas — quiosque da cozinha (tablet, por token do dispositivo).
               O caminho é /etiquetas/:token/imprimir e não /etiquetas/:token para não
               colidir com o /etiquetas/:tab da tela de admin, logo acima. */}
