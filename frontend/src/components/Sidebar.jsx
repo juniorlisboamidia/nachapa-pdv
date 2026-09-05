@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { gruposVisiveis, localizarRota } from './sidebarNav.js'
 
 const PAPEL_LABEL = { ADMIN: 'Administrador', AGENCIA: 'Agência', CLIENTE: 'Cliente', GERENTE: 'Gerente' }
 function iniciais(nome) {
@@ -152,7 +153,13 @@ const ICONS = {
       <rect x="5" y="11" width="14" height="9" rx="2" />
       <path d="M8 11V8a4 4 0 0 1 8 0v3" />
     </>
-  )
+  ),
+  config: (
+    <>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z" />
+    </>
+  ),
 }
 
 function Icon({ name, extra }) {
@@ -172,106 +179,10 @@ function Icon({ name, extra }) {
   )
 }
 
-// Grupos com `itens` fazem drill (nível 2). Grupos com `to` (sem itens) são
-// link direto no nível raiz — usado nos "em construção".
-const grupos = [
-  {
-    label: 'Gestão', icon: 'gestao', area: 'gestao',
-    itens: [
-      { to: '/custos', label: 'Custos', icon: 'custos' },
-      { to: '/faturamento', label: 'Faturamento', icon: 'faturamento' },
-    ]
-  },
-  {
-    label: 'Produtos', icon: 'produtos', area: 'produtos',
-    itens: [
-      { to: '/produtos', label: 'Ficha técnica', icon: 'ficha' },
-      { to: '/insumos', label: 'Insumos', icon: 'insumos' },
-      { to: '/fornecedores', label: 'Fornecedores', icon: 'insumos' },
-      { to: '/estoque', label: 'Estoque', icon: 'produtos' },
-    ]
-  },
-  { label: 'Financeiro', icon: 'financeiro', to: '/financeiro', area: 'financeiro' },
-  { label: 'Relatórios', icon: 'relatorios', to: '/relatorios', area: 'relatorios' },
-  // Cadastro de pessoas da loja (global): saiu de dentro de Ponto Facial pra cá.
-  { label: 'Colaboradores', icon: 'clientes', to: '/rh/colaboradores', area: 'ponto' },
-  {
-    label: 'Ponto Facial', icon: 'ponto', area: 'ponto',
-    itens: [
-      { to: '/rh/ponto-facial/painel', label: 'Painel', icon: 'ponto' },
-      { to: '/rh/ponto-facial/jornadas', label: 'Jornadas e Escalas', icon: 'calendario' },
-      { to: '/rh/ponto-facial/afastamentos', label: 'Afastamentos', icon: 'calendario' },
-      { to: '/rh/ponto-facial/marcacoes', label: 'Marcações', icon: 'ponto' },
-      { to: '/rh/ponto-facial/espelho', label: 'Espelho', icon: 'ficha' },
-      { to: '/rh/ponto-facial/fechamento', label: 'Fechamento', icon: 'custos' },
-      { to: '/rh/ponto-facial/coletor', label: 'Coletor', icon: 'ponto' },
-    ]
-  },
-  {
-    label: 'Bonificação', icon: 'faturamento', area: 'bonificacao',
-    itens: [
-      { to: '/rh/bonificacao/mes', label: 'Mês atual', icon: 'calendario' },
-      { to: '/rh/bonificacao/equipe', label: 'Equipe & Coins', icon: 'clientes' },
-      { to: '/rh/bonificacao/conquistas', label: 'Conquistas', icon: 'avaliacao' },
-      { to: '/rh/bonificacao/mercado', label: 'Mercado', icon: 'produtos' },
-      { to: '/rh/bonificacao/config', label: 'Configuração', icon: 'gestao' },
-    ]
-  },
-  {
-    label: 'Checklist', icon: 'ficha', area: 'checklist',
-    itens: [
-      { to: '/checklist/painel', label: 'Painel', icon: 'gestao' },
-      { to: '/checklist/checklists', label: 'Checklists', icon: 'ficha' },
-      { to: '/checklist/templates', label: 'Templates', icon: 'produtos' },
-      { to: '/checklist/notificacoes', label: 'Notificações', icon: 'marketing' },
-      { to: '/checklist/configuracoes', label: 'Configurações', icon: 'gestao' },
-    ]
-  },
-  {
-    label: 'Etiquetas', icon: 'ficha', area: 'etiquetas',
-    itens: [
-      { to: '/etiquetas/config', label: 'Configuração', icon: 'gestao' },
-      { to: '/etiquetas/itens', label: 'Itens', icon: 'ficha' },
-      { to: '/etiquetas/historico', label: 'Histórico', icon: 'relatorios' },
-    ]
-  },
-  {
-    label: 'Banco de talentos', icon: 'clientes', area: 'talentos',
-    itens: [
-      { to: '/rh/banco-de-talentos/banco', label: 'Cadastros', icon: 'clientes' },
-      { to: '/rh/banco-de-talentos/vagas', label: 'Vagas abertas', icon: 'ficha' },
-      { to: '/rh/banco-de-talentos/formulario', label: 'Formulário permanente', icon: 'ficha' },
-    ]
-  },
-  {
-    label: 'Automações', icon: 'gestao', area: 'automacoes',
-    itens: [
-      { to: '/automacoes/grupo-vip', label: 'Grupo VIP', icon: 'marketing' },
-    ]
-  },
-]
-// Operador (gerente) vê só as áreas liberadas; ADMIN vê tudo.
-function gruposVisiveis(usuario) {
-  if (!usuario || usuario.tipo !== 'operador') return grupos
-  const areas = new Set(usuario.areas || [])
-  return grupos.filter((g) => !g.area || areas.has(g.area))
-}
-
-// Casa a rota atual e devolve o caminho { grupo, sub } para abrir a sidebar já
-// dentro dele. Suporta subgrupos aninhados (ex.: Marketing › Indicação).
-const matchLeaf = (it, pathname) => it.to && (it.to === '/' ? pathname === '/' : pathname === it.to || pathname.startsWith(it.to + '/'))
-function localizarRota(pathname) {
-  for (const g of grupos) {
-    if (!g.itens) continue // grupo-folha (link direto) não abre subnível
-    for (const it of g.itens) {
-      if (it.itens) {
-        if (it.itens.some((sub) => matchLeaf(sub, pathname))) return { grupo: g.label, sub: it.label }
-      } else if (matchLeaf(it, pathname)) {
-        return { grupo: g.label, sub: null }
-      }
-    }
-  }
-  return { grupo: null, sub: null }
+// Ícone de um item: imagem (logo oficial da marca) quando `iconImg`, senão o SVG monocromático.
+function ItemIcon({ item }) {
+  if (item.iconImg) return <img src={item.iconImg} alt="" className="sidebar-icon" style={{ objectFit: 'contain' }} />
+  return <Icon name={item.icon} />
 }
 
 function itemClass({ isActive }) {
@@ -309,7 +220,7 @@ export default function Sidebar({ colapsada }) {
                   </button>
                   {sub.itens.map((item) => (
                     <NavLink key={item.to} to={item.to} end={item.end} className={itemClass} title={colapsada ? item.label : undefined}>
-                      <Icon name={item.icon} />
+                      <ItemIcon item={item} />
                       <span className="sidebar-item-label">{item.label}</span>
                     </NavLink>
                   ))}
@@ -326,13 +237,13 @@ export default function Sidebar({ colapsada }) {
                 {g.itens.map((item) => (
                   item.itens ? (
                     <button key={item.label} type="button" className="sidebar-grupo" onClick={() => setSubAberto(item.label)} title={colapsada ? item.label : undefined}>
-                      <Icon name={item.icon} />
+                      <ItemIcon item={item} />
                       <span className="sidebar-item-label">{item.label}</span>
                       <Icon name="chevronRight" extra="sidebar-grupo-arrow" />
                     </button>
                   ) : (
                     <NavLink key={item.to} to={item.to} end={item.end} className={itemClass} title={colapsada ? item.label : undefined}>
-                      <Icon name={item.icon} />
+                      <ItemIcon item={item} />
                       <span className="sidebar-item-label">{item.label}</span>
                     </NavLink>
                   )
