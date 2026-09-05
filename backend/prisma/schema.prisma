@@ -503,6 +503,13 @@ model Empresa {
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
+  // ── Configuração de Motoboys (Dep. Pessoal › Motoboys › Configuração) ──
+  motoboyContatoWhatsapp      String?               // nº do "Falar no WhatsApp" da escala (prioritário; vazio = cai no contato da empresa)
+  motoboyBloqueadoPodeEscalar Boolean @default(false) // se um entregador BLOQUEADO pode se inscrever na escala
+  motoboyPerguntaCnh          Boolean @default(false) // se o cadastro público pergunta "Você possui CNH?"
+  whatsappEmpresa String?                              // número público da empresa (opcional)
+  whatsappContato String?  @default("RESPONSAVEL")     // RESPONSAVEL | EMPRESA — nº usado no contato público
+
   @@index([clienteId])
 }
 
@@ -600,6 +607,7 @@ enum MotoboyStatus {
   ATIVO
   INATIVO
   BLOQUEADO
+  PENDENTE // solicitação de cadastro via link público, aguardando aprovação da equipe
 }
 enum PresencaMotoboyStatus {
   PENDENTE
@@ -632,6 +640,7 @@ model Motoboy {
   whatsapp     String
   status       MotoboyStatus @default(ATIVO)
   observacoes  String?
+  possuiCnh    Boolean?      // resposta "Você possui CNH?" (null = não informado). Informativo, não bloqueia.
   criadoEm     DateTime      @default(now())
   atualizadoEm DateTime      @updatedAt
 
