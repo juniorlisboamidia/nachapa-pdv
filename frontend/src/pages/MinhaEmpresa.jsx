@@ -9,9 +9,10 @@ const CAMPOS_VAZIOS = { nome: '', whatsapp: '', email: '', endereco: '', logoDat
 const TIPOS_LOGO = ['image/png', 'image/jpeg', 'image/webp']
 const LIMITE_LOGO_BYTES = 2 * 1024 * 1024 // 2 MB
 const AREA_LABEL = {
-  ponto: 'Ponto Facial', bonificacao: 'Bonificação', produtos: 'Produtos',
-  gestao: 'Gestão (custos/faturamento)', financeiro: 'Financeiro', relatorios: 'Relatórios',
-  talentos: 'Banco de talentos', checklist: 'Checklist', etiquetas: 'Etiquetas', automacoes: 'Automações',
+  relatorios: 'Relatórios', produtos: 'Produtos (ficha, insumos, estoque, fornecedores)',
+  gestao: 'Gestão (faturamento, custos)', marketing: 'Marketing (Grupo VIP, Avaliador, Indicação)',
+  ponto: 'Ponto Facial e Colaboradores', motoboys: 'Motoboys', bonificacao: 'Bonificação',
+  talentos: 'Banco de talentos', checklist: 'Checklist', etiquetas: 'Etiquetas',
 }
 const inicial = (nome) => { const s = String(nome ?? '').trim(); return s ? s.charAt(0).toUpperCase() : 'H' }
 const foneMask = (v) => {

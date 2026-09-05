@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import Login from './pages/Login'
 import Layout from './components/Layout'
@@ -90,10 +90,26 @@ export default function App() {
             <Route path="custos-variaveis" element={<CustosVariaveis />} />
             <Route path="ponto-equilibrio" element={<PontoEquilibrio />} />
             <Route path="faturamento" element={<Faturamento />} />
-            {/* Produtos / Financeiro / Relatórios (em construção) */}
-            <Route path="estoque" element={<EmConstrucao titulo="Estoque" descricao="Controle de estoque dos insumos e produtos." />} />
-            <Route path="financeiro" element={<EmConstrucao titulo="Financeiro" descricao="Fluxo de caixa, contas a pagar e a receber." />} />
-            <Route path="relatorios" element={<EmConstrucao titulo="Relatórios" descricao="Relatórios e análises da operação." />} />
+            {/* Produtos › Estoque (vira CMV Global na Fase 3) */}
+            <Route path="estoque" element={<EmConstrucao titulo="Estoque" descricao="Contagem de estoque, compras e CMV real." />} />
+            {/* Relatórios (viram páginas reais na Fase 4) */}
+            <Route path="relatorios" element={<Navigate to="/relatorios/meta" replace />} />
+            <Route path="relatorios/meta" element={<EmConstrucao titulo="Meta Ads" descricao="Relatório de Meta Ads da loja." />} />
+            <Route path="relatorios/instagram" element={<EmConstrucao titulo="Instagram" descricao="Relatório do Instagram da loja." />} />
+            <Route path="relatorios/google" element={<EmConstrucao titulo="Google Ads" descricao="Relatório de Google Ads da loja." />} />
+            <Route path="relatorios/cardapio" element={<EmConstrucao titulo="Cardápio" descricao="Relatório de vendas do cardápio." />} />
+            <Route path="relatorios/gmn" element={<EmConstrucao titulo="Google Meu Negócio" descricao="Em breve." />} />
+            {/* Marketing › Avaliador e Indicação (viram páginas reais na Fase 1) */}
+            <Route path="avaliacoes" element={<EmConstrucao titulo="Avaliação" descricao="Campanhas de avaliação dos clientes." />} />
+            <Route path="clientes" element={<EmConstrucao titulo="Clientes" descricao="Em breve." />} />
+            <Route path="respostas" element={<EmConstrucao titulo="Respostas" descricao="Em breve." />} />
+            <Route path="indicacao" element={<EmConstrucao titulo="Indicação" descricao="Programa de indicação." />} />
+            <Route path="indicacao/:secao" element={<EmConstrucao titulo="Indicação" descricao="Programa de indicação." />} />
+            {/* Dep. Pessoal › Motoboys (viram páginas reais na Fase 2) */}
+            <Route path="escala-motoboys" element={<EmConstrucao titulo="Escala" descricao="Escala semanal dos motoboys." />} />
+            <Route path="entregadores" element={<EmConstrucao titulo="Entregadores" descricao="Base de motoboys." />} />
+            <Route path="calc-frete" element={<EmConstrucao titulo="Calc. Frete" descricao="Calculadora de taxa de entrega." />} />
+            <Route path="motoboys/config" element={<EmConstrucao titulo="Configuração" descricao="Configuração de Motoboys." />} />
             {/* Dep. Pessoal — abas viram subitens da sidebar (a página lê a aba da URL) */}
             <Route path="rh/colaboradores" element={<Colaboradores />} />
             <Route path="rh/ponto-facial" element={<PontoFacial />} />
@@ -112,8 +128,9 @@ export default function App() {
             {/* Em construção */}
             <Route path="etiquetas" element={<Etiquetas />} />
             <Route path="etiquetas/:tab" element={<Etiquetas />} />
-            <Route path="automacoes" element={<EmConstrucao titulo="Automações" descricao="Automações da operação." />} />
-            <Route path="automacoes/grupo-vip" element={<GrupoVip />} />
+            {/* Marketing › Grupo VIP (Automações virou Marketing; rota antiga redireciona) */}
+            <Route path="marketing/grupo-vip" element={<GrupoVip />} />
+            <Route path="automacoes/grupo-vip" element={<Navigate to="/marketing/grupo-vip" replace />} />
             {/* Extras */}
             <Route path="minha-empresa" element={<MinhaEmpresa />} />
             <Route path="frases" element={<Frases />} />
