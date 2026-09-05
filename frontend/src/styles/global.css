@@ -42,14 +42,14 @@ a { text-decoration: none; color: inherit; }
 /* Sidebar */
 .sidebar {
   width: 268px;
-  background: linear-gradient(180deg, #161d27 0%, #0e1319 58%, #0a0e13 100%);
+  background: linear-gradient(180deg, #f97316 0%, #ea580c 52%, #c2410b 100%);
   border-right: none;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
   position: fixed;
   top: 60px; left: 0; bottom: 0;
-  box-shadow: 2px 0 16px rgba(0, 0, 0, 0.30);
+  box-shadow: 2px 0 16px rgba(124, 45, 18, 0.22);
   z-index: 20;
   transition: width 0.18s ease;
 }
@@ -100,8 +100,8 @@ a { text-decoration: none; color: inherit; }
 }
 .sidebar-company-avatar {
   width: 38px; height: 38px;
-  background: var(--brand-gold);
-  color: var(--brand-gold-ink);
+  background: #fff;
+  color: #ea580c;
   border-radius: 10px;
   display: flex; align-items: center; justify-content: center;
   font-size: 18px; font-weight: 800; flex-shrink: 0;
@@ -140,10 +140,10 @@ a { text-decoration: none; color: inherit; }
 }
 .sidebar-item:hover  { background: rgba(255,255,255,0.16); color: #fff; }
 .sidebar-item.active {
-  background: var(--brand-gold);
-  color: var(--brand-gold-ink);
-  font-weight: 700;
-  box-shadow: 0 2px 10px rgba(249, 115, 22,0.30);
+  background: #fff;
+  color: #ea580c;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.10);
 }
 .sidebar-icon { width: 20px; height: 20px; flex-shrink: 0; }
 .sidebar-item-label { line-height: 1.2; }
@@ -185,8 +185,8 @@ a { text-decoration: none; color: inherit; }
 }
 .sidebar-user-avatar {
   width: 32px; height: 32px;
-  background: var(--brand-gold);
-  color: var(--brand-gold-ink);
+  background: rgba(255,255,255,0.92);
+  color: #ea580c;
   border-radius: 9px;
   display: flex; align-items: center; justify-content: center;
   font-size: 12.5px; font-weight: 700; flex-shrink: 0;
@@ -394,8 +394,8 @@ body.sidebar-collapsed .main-area { margin-left: 76px; }
 .app-header {
   position: fixed; top: 0; left: 0; right: 0; height: 60px; z-index: 40;
   display: flex; align-items: stretch;
-  background: #161d27; /* casco escuro contínuo com a sidebar (igual no claro e no escuro) */
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.22);
+  background: #f97316; /* laranja da marca no claro; body.theme-dark redefine pra navy */
+  box-shadow: 0 2px 12px rgba(124, 45, 18, 0.28);
 }
 .app-header-loja {
   width: 268px; flex-shrink: 0; box-sizing: border-box;
@@ -404,7 +404,7 @@ body.sidebar-collapsed .main-area { margin-left: 76px; }
 }
 body.sidebar-collapsed .app-header-loja { width: 76px; padding: 0 8px; justify-content: center; }
 .app-header-loja-logo { width: 36px; height: 36px; border-radius: 9px; flex-shrink: 0; object-fit: cover; background: #fff; }
-.app-header-loja-inicial { display: grid; place-items: center; background: var(--brand-gold); color: var(--brand-gold-ink); font-size: 17px; font-weight: 800; }
+.app-header-loja-inicial { display: grid; place-items: center; background: #fff; color: #ea580c; font-size: 17px; font-weight: 800; }
 .app-header-loja-nome { flex: 1; min-width: 0; font-size: 15px; font-weight: 800; letter-spacing: -0.02em; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 body.sidebar-collapsed .app-header-loja-logo, body.sidebar-collapsed .app-header-loja-nome { display: none; }
 .app-header-colapsar {
@@ -429,7 +429,7 @@ body.sidebar-collapsed .app-header-loja-logo, body.sidebar-collapsed .app-header
 .app-header-avatar-btn { background: none; border: none; cursor: pointer; padding: 2px; border-radius: 999px; display: flex; }
 .app-header-avatar {
   width: 34px; height: 34px; border-radius: 999px; display: grid; place-items: center;
-  background: linear-gradient(150deg, #f97316, #ea580c); color: #fff; font-size: 12.5px; font-weight: 800;
+  background: #fff; color: #ea580c; font-size: 12.5px; font-weight: 800;
 }
 .app-header-menu {
   position: absolute; top: calc(100% + 8px); right: 0; min-width: 210px;
@@ -1287,6 +1287,7 @@ body.theme-dark .sidebar {
   box-shadow: 2px 0 16px rgba(0, 0, 0, 0.45);
   border-right: 1px solid #1f2640;
 }
+body.theme-dark .app-header { background: #13172b; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.35); }
 body.theme-dark .sidebar-company {
   background: rgba(255, 255, 255, 0.06);
   border-color: rgba(255, 255, 255, 0.12);
