@@ -93,9 +93,6 @@ function AbaConfig({ notify }) {
   const [config, setConfig] = useState(null)
   const [regras, setRegras] = useState([])
   const [salvando, setSalvando] = useState(false)
-  // Estado da impressora física — vive na Config (não no config salvo no banco): é uma
-  // sessão Bluetooth do navegador, não uma preferência da loja. `conn` é `{nome}` ou null.
-  const [conn, setConn] = useState(null)
   const [imprimindo, setImprimindo] = useState(false)
   // Controla se o select de altura está em modo "Personalizar" — precisa ser um estado
   // próprio (e não derivado de `!ALTURA_PRESETS.includes(config.alturaMm)`), senão
@@ -171,15 +168,11 @@ function AbaConfig({ notify }) {
   // corre risco de disputa com o useEffect de prévia redesenhando no meio da impressão.
   async function imprimirTeste() {
     if (imprimindo) return
-    // `conectado()` pode "mentir" depois de a impressora cair (ver niimbotB1.js) — mas
-    // aqui é a checagem de entrada mais barata antes de tentar, e o catch abaixo cobre o
-    // caso de a sessão já ter caído sem a gente saber.
-    if (!conectado()) {
-      notify('Conecte a impressora primeiro.', 'error')
-      return
-    }
     setImprimindo(true)
     try {
+      // Sem card de conexão fixo: conecta sob demanda (dentro do gesto de clique, que é o
+      // que o Web Bluetooth exige) se a impressora ainda não estiver conectada.
+      if (!conectado()) await conectar()
       const canvas = document.createElement('canvas')
       desenharEtiqueta(canvas, dadosExemplo(), config)
       await imprimir(canvas, { copias: 1, densidade: cal.densidade, ajusteY: cal.ajusteY })
@@ -207,11 +200,11 @@ function AbaConfig({ notify }) {
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
+      {/* Aparelhos cadastrados no topo: é onde se cadastra o aparelho que imprime na cozinha. */}
+      <CardDispositivos notify={notify} />
       <div className="etq-grid">
-        {/* ESQUERDA: impressora + identificação + tamanho/fonte + regras de validade. */}
+        {/* ESQUERDA: identificação + tamanho/fonte + regras de validade. */}
         <div style={{ display: 'grid', gap: 16, alignContent: 'start' }}>
-          <CardImpressora conn={conn} setConn={setConn} notify={notify} />
-
           <div className="table-card" style={{ padding: 16 }}>
             <h2 style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>Identificação do estabelecimento</h2>
             {/* Só pedimos o que o rodapé da etiqueta imprime de fato (ver etiquetaCanvas.js):
@@ -418,8 +411,6 @@ function AbaConfig({ notify }) {
           {salvando ? 'Salvando…' : 'Salvar configurações'}
         </button>
       </div>
-
-      <CardDispositivos notify={notify} />
     </div>
   )
 }
@@ -591,7 +582,7 @@ function CardDispositivos({ notify }) {
                     <BotaoCopiar
                       texto={() => linkDe(d.token)}
                       label="Copiar link"
-                      className="btn btn-secondary btn-sm"
+                      className="btn btn-primary btn-sm btn-copiar-inverso"
                       onCopiado={() => notify(`Link do "${d.nome}" copiado. Cole no navegador do tablet — é secreto, não repasse.`)}
                       onErro={() => notify('Não foi possível copiar o link neste navegador.', 'error')}
                     />{' '}
@@ -1116,17 +1107,31 @@ function AbaItens({ notify }) {
 
               <div className="form-group">
                 <label className="form-label">Responsável (quem manipulou)</label>
-                <select
-                  className="form-input"
-                  value={sel.responsavelNome}
-                  onChange={(e) => updSel({ responsavelNome: e.target.value })}
-                >
-                  <option value="">Selecione…</option>
-                  {funcionarios.map((f) => {
-                    const nome = f.apelido || f.nome
-                    return <option key={f.id} value={nome}>{nome}</option>
-                  })}
-                </select>
+                {/* Sem colaborador ativo (para além de entregador/motoboy, filtrados acima):
+                    aviso discreto e select desabilitado, em vez de deixar a pessoa escolher
+                    "" e só descobrir que faltava alguém quando o botão de imprimir travar. */}
+                {funcionarios.length === 0 ? (
+                  <>
+                    <select className="form-input" value="" disabled>
+                      <option value="">Nenhum colaborador ativo</option>
+                    </select>
+                    <div className="page-header-sub" style={{ marginTop: 6 }}>
+                      Nenhum colaborador ativo — cadastre em Colaboradores.
+                    </div>
+                  </>
+                ) : (
+                  <select
+                    className="form-input"
+                    value={sel.responsavelNome}
+                    onChange={(e) => updSel({ responsavelNome: e.target.value })}
+                  >
+                    <option value="">Selecione…</option>
+                    {funcionarios.map((f) => {
+                      const nome = f.apelido || f.nome
+                      return <option key={f.id} value={nome}>{nome}</option>
+                    })}
+                  </select>
+                )}
               </div>
 
               <div className="etq-previa etqi-previa">
