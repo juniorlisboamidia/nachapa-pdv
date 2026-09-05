@@ -31,6 +31,11 @@ import CentralAjuda from './pages/CentralAjuda'
 import GrupoVip from './pages/GrupoVip'
 import Avaliacao from './pages/Avaliacao'
 import AvaliacaoPublica from './pages/AvaliacaoPublica'
+import Indicacao from './pages/Indicacao'
+import SejaPromotor from './pages/SejaPromotor'
+import PainelPromotor from './pages/PainelPromotor'
+import IndicacaoAtendente from './pages/IndicacaoAtendente'
+import AmigoIndicacao from './pages/AmigoIndicacao'
 
 function TelaCarregando() {
   return (
@@ -105,8 +110,8 @@ export default function App() {
             <Route path="avaliacoes" element={<Avaliacao />} />
             <Route path="clientes" element={<EmConstrucao titulo="Clientes" descricao="Em breve." />} />
             <Route path="respostas" element={<EmConstrucao titulo="Respostas" descricao="Em breve." />} />
-            <Route path="indicacao" element={<EmConstrucao titulo="Indicação" descricao="Programa de indicação." />} />
-            <Route path="indicacao/:secao" element={<EmConstrucao titulo="Indicação" descricao="Programa de indicação." />} />
+            <Route path="indicacao" element={<Indicacao />} />
+            <Route path="indicacao/:secao" element={<Indicacao />} />
             {/* Dep. Pessoal › Motoboys (viram páginas reais na Fase 2) */}
             <Route path="escala-motoboys" element={<EmConstrucao titulo="Escala" descricao="Escala semanal dos motoboys." />} />
             <Route path="entregadores" element={<EmConstrucao titulo="Entregadores" descricao="Base de motoboys." />} />
@@ -146,6 +151,10 @@ export default function App() {
           {/* Banco de Talentos — formulário público de candidatura */}
           <Route path="talentos/:slug" element={<TalentosPublico />} />
           <Route path="avaliacao/:token" element={<AvaliacaoPublica />} />
+          <Route path="indicacao/seja-promotor/:token" element={<SejaPromotor />} />
+          <Route path="indicacao/painel/:token" element={<PainelPromotor />} />
+          <Route path="indicacao/atendente/:token" element={<IndicacaoAtendente />} />
+          <Route path="i/:codigo" element={<AmigoIndicacao />} />
           {/* Etiquetas — quiosque da cozinha (tablet, por token do dispositivo).
               O caminho é /etiquetas/:token/imprimir e não /etiquetas/:token para não
               colidir com o /etiquetas/:tab da tela de admin, logo acima. */}
