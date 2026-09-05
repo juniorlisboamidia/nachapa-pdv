@@ -3621,10 +3621,11 @@ app.get('/api/insumos', async (req, res) => {
       include: {
         receitaProducao: {
           select: { modoRendimento: true, quantidadePorcoes: true, pesoPorcao: true }
-        }
+        },
+        _count: { select: { fornecedores: true } }
       }
     });
-    res.json(insumos.map(insumoSaida));
+    res.json(insumos.map((i) => ({ ...insumoSaida(i), qtdFornecedores: i._count?.fornecedores ?? 0 })));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erro interno ao listar insumos' });

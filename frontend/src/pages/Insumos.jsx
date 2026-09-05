@@ -882,7 +882,7 @@ export default function Insumos() {
                 <th>Tipo</th>
                 <th>Unidade</th>
                 <th>Custo unitário</th>
-                <th>Fornecedor</th>
+                <th>Fornecedores</th>
                 <th style={{ textAlign: 'right' }}>Ações</th>
               </tr>
             </thead>
@@ -915,8 +915,10 @@ export default function Insumos() {
                       })()
                     )}
                   </td>
-                  <td className={i.fornecedor ? '' : 'clr-muted'}>
-                    {i.fornecedor || 'Sem fornecedor'}
+                  <td className={Number(i.qtdFornecedores) > 0 ? '' : 'clr-muted'}>
+                    {Number(i.qtdFornecedores) > 0
+                      ? `${Number(i.qtdFornecedores)} ${Number(i.qtdFornecedores) === 1 ? 'fornecedor' : 'fornecedores'}`
+                      : '—'}
                   </td>
                   <td style={{ textAlign: 'right' }}>
                     <div style={{ display: 'inline-flex', gap: 6 }}>
