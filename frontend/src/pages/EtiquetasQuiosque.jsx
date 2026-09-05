@@ -18,11 +18,11 @@ const erroDa = (e, fallback) => e?.response?.data?.error || e?.message || fallba
 const FONT = '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif'
 
 // Paleta da marca — neutros escolhidos (não o cinza genérico): a borda e o texto
-// apagado puxam pro creme da página, não pro cinza-frio. Dourado é o único acento.
+// apagado puxam pro creme da página, não pro cinza-frio. Laranja é o único acento.
 const C = {
   ground: '#f4f1ea',  // creme (fundo)
   ink: '#0e1319',     // tinta (texto/primário)
-  gold: '#eab802',    // acento da marca
+  gold: '#f97316',    // acento da marca
   surface: '#ffffff', // cartão
   border: '#e6e0d2',  // borda quente
   muted: '#7a7268',   // texto secundário (quente, não cinza-frio)
@@ -34,15 +34,15 @@ const C = {
 const KIOSK_CSS = `
 .etq-btn{cursor:pointer;-webkit-tap-highlight-color:transparent;transition:transform .12s ease,box-shadow .18s ease,background .18s ease,border-color .18s ease}
 .etq-btn:active{transform:scale(.98)}
-.etq-conectar:hover{box-shadow:0 6px 18px rgba(234,184,2,.55)}
+.etq-conectar:hover{box-shadow:0 6px 18px rgba(249,115,22,.55)}
 .etq-item{cursor:pointer;transition:transform .1s ease,box-shadow .18s ease,border-color .18s ease}
 .etq-item:hover{border-color:#d8ca9a;box-shadow:0 4px 12px rgba(14,19,25,.08)}
 .etq-item:active{transform:scale(.995)}
 .etq-opcao{cursor:pointer;transition:transform .1s ease,border-color .18s ease,box-shadow .18s ease}
 .etq-opcao:hover{border-color:#d8ca9a}
 .etq-opcao:active{transform:scale(.995)}
-.etq-btn:focus-visible,.etq-item:focus-visible,.etq-opcao:focus-visible{outline:2px solid #eab802;outline-offset:2px}
-.etq-busca:focus{outline:none;border-color:#eab802;box-shadow:0 0 0 3px rgba(234,184,2,.18)}
+.etq-btn:focus-visible,.etq-item:focus-visible,.etq-opcao:focus-visible{outline:2px solid #f97316;outline-offset:2px}
+.etq-busca:focus{outline:none;border-color:#f97316;box-shadow:0 0 0 3px rgba(249,115,22,.18)}
 @media(prefers-reduced-motion:reduce){.etq-btn,.etq-item,.etq-opcao{transition:none}.etq-btn:active,.etq-item:active,.etq-opcao:active{transform:none}}
 `
 
@@ -52,13 +52,13 @@ const S = {
   nota: { background: '#fffbe6', border: '1px solid #f0dd8a', borderRadius: 8, padding: 12, marginBottom: 12, fontSize: 13 },
   rotulo: { fontSize: 11, fontWeight: 800, letterSpacing: '.06em', color: '#7a7268' },
   opcao: (on) => ({
-    padding: 13, borderRadius: 10, border: on ? '2px solid #eab802' : '1px solid #e6e0d2',
-    background: on ? '#fffdf3' : '#fff', textAlign: 'left', fontSize: 15, width: '100%',
+    padding: 13, borderRadius: 10, border: on ? '2px solid #f97316' : '1px solid #e6e0d2',
+    background: on ? '#fff7ed' : '#fff', textAlign: 'left', fontSize: 15, width: '100%',
   }),
   botao: (forte) => ({
     padding: '10px 14px', borderRadius: 8, fontSize: 13, fontWeight: 700,
     border: forte ? 'none' : '1px solid #ddd', background: forte ? '#0e1319' : '#fff',
-    color: forte ? '#eab802' : '#0e1319',
+    color: forte ? '#f97316' : '#0e1319',
   }),
   campoNumero: {
     padding: 12, borderRadius: 10, border: '1px solid #e6e0d2', fontSize: 16, width: 90,
@@ -408,7 +408,7 @@ export default function EtiquetasQuiosque() {
               <img src={dados.loja.logoDataUrl} alt={dados.loja.nome}
                 style={{ width: 46, height: 46, borderRadius: 12, objectFit: 'cover', border: `1px solid ${C.border}`, flexShrink: 0 }} />
             ) : (
-              // Sem logo: monograma dourado sobre tinta — mantém a marca sem imagem.
+              // Sem logo: monograma laranja sobre tinta — mantém a marca sem imagem.
               <div style={{ width: 46, height: 46, borderRadius: 12, flexShrink: 0, background: C.ink, color: C.gold, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 800 }}>
                 {inicialLoja}
               </div>
@@ -435,8 +435,8 @@ export default function EtiquetasQuiosque() {
               opacity: semBt ? 0.5 : 1, maxWidth: '100%',
             } : {
               display: 'flex', alignItems: 'center', gap: 8, padding: '13px 20px', borderRadius: 999,
-              border: 'none', background: C.gold, color: C.ink, fontSize: 14.5, fontWeight: 800,
-              boxShadow: '0 3px 12px rgba(234,184,2,.45)', opacity: semBt ? 0.5 : 1,
+              border: 'none', background: C.gold, color: '#fff', fontSize: 14.5, fontWeight: 800,
+              boxShadow: '0 3px 12px rgba(249,115,22,.45)', opacity: semBt ? 0.5 : 1,
             }}>
             {impressora ? (
               <>
@@ -549,12 +549,12 @@ export default function EtiquetasQuiosque() {
           </div>
 
           {/* Validade em destaque: é o resultado que importa (e o motivo da etiqueta
-              existir). Callout dourado com o ícone de calendário puxa o olho pra data. */}
+              existir). Callout laranja com o ícone de calendário puxa o olho pra data. */}
           {validoAte && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#fffdf3', border: '1px solid #f0e4b0', borderRadius: 12, padding: '11px 14px', marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 11, background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 12, padding: '11px 14px', marginBottom: 16 }}>
               <IconeCalendario />
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.06em', color: '#9a7d00' }}>VALIDADE (PRÉVIA)</div>
+                <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.06em', color: '#9a3412' }}>VALIDADE (PRÉVIA)</div>
                 <div style={{ fontSize: 15.5, fontWeight: 700, marginTop: 1 }}>
                   {validoAte.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
                   <span style={{ color: C.muted, fontWeight: 600 }}> · {dias} dia{dias > 1 ? 's' : ''}</span>
@@ -686,7 +686,7 @@ function TelaSimples({ children }) {
 }
 
 // Ícone de impressora (linear, mesma linguagem do IconePower). Cor herda por prop
-// porque aparece sobre fundos diferentes (dourado no header, dourado sobre tinta nos
+// porque aparece sobre fundos diferentes (laranja no header, laranja sobre tinta nos
 // botões primários). Sem emoji (regra do checklist de UX).
 function IconePrinter({ size = 18, color = '#0e1319' }) {
   return (
@@ -710,8 +710,8 @@ function IconeBusca() {
   )
 }
 
-// Calendário do callout de validade (dourado escurecido pra ler no fundo creme claro).
-function IconeCalendario({ size = 20, color = '#9a7d00' }) {
+// Calendário do callout de validade (laranja escurecido pra ler no fundo creme claro).
+function IconeCalendario({ size = 20, color = '#9a3412' }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2"
       strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
@@ -736,7 +736,7 @@ function IconeAparelho() {
 // de ligar, ilustra o Passo 1 do guia.
 function IconePower() {
   return (
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#eab802" strokeWidth="2.3"
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f97316" strokeWidth="2.3"
       strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
       <path d="M12 2v8" />
       <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
@@ -745,13 +745,13 @@ function IconePower() {
 }
 
 // Passo numerado do guia: círculo com o número + título em negrito + descrição menor.
-// Puramente visual, reusa a paleta creme/dourado da própria página do quiosque.
+// Puramente visual, reusa a paleta creme/laranja da própria página do quiosque.
 function PassoGuia({ n, titulo, cor, icone, children }) {
   return (
     <div style={{ display: 'flex', gap: 10, marginBottom: 16, alignItems: 'flex-start' }}>
       <div style={{
         width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
-        background: cor || '#0e1319', color: cor ? '#fff' : '#eab802',
+        background: cor || '#0e1319', color: cor ? '#fff' : '#f97316',
         display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 13,
       }}>
         {n}
@@ -806,7 +806,7 @@ function GuiaConexao({ semBt, erro, impressora, conectando, onConectar, onFechar
                 ? 'Conectando…'
                 : impressora
                   ? <><span style={{ width: 8, height: 8, borderRadius: '50%', background: '#16a34a', flexShrink: 0 }} /> {impressora}</>
-                  : <><IconePrinter size={17} color="#eab802" /> Conectar impressora</>}
+                  : <><IconePrinter size={17} color="#f97316" /> Conectar impressora</>}
             </button>
             {erro && <div style={{ ...S.aviso, marginBottom: 16 }}>{erro}</div>}
           </>

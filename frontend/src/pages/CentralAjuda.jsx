@@ -15,7 +15,7 @@ function salvarGuiaAprendidos(arr) {
   try { localStorage.setItem(GUIA_KEY, JSON.stringify(arr)) } catch { /* storage indisponível — segue sem persistir */ }
 }
 const GUIA_PASSOS = [
-  { k: 'checklist', n: 1, cor: '#eab802', corTxt: '#0e1319', titulo: 'Crie seu primeiro checklist',
+  { k: 'checklist', n: 1, cor: '#f97316', corTxt: '#ffffff', titulo: 'Crie seu primeiro checklist',
     desc: 'Em Checklist › Checklists, clique em "+ Novo checklist". Monte as informações, os itens e a recorrência (todo dia / dias da semana / avulso) — ou parta de um Template pronto.',
     chips: ['Check', 'Avaliação', 'Texto', 'Numérico', 'Seleção', 'Foto'] },
   { k: 'funcao', n: 2, cor: '#e8850c', corTxt: '#ffffff', titulo: 'Defina quem executa',

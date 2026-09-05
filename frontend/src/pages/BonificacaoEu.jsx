@@ -16,13 +16,13 @@ const DOW = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 const MES_CURTO = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
 const RAR = {
   COMUM: { label: 'Comum', cor: '#64748b' },
-  RARO: { label: 'Raro', cor: '#eab802' },
+  RARO: { label: 'Raro', cor: '#f97316' },
   EPICO: { label: 'Épico', cor: '#8b5cf6' },
   LENDARIO: { label: 'Lendário', cor: '#f59e0b' },
 }
 const STAT = {
   PENDENTE: { label: 'Pendente', cor: '#b45309' },
-  APROVADO: { label: 'Aprovado', cor: '#a17c00' },
+  APROVADO: { label: 'Aprovado', cor: '#ea580c' },
   ENTREGUE: { label: 'Entregue', cor: '#0F8A54' },
   REJEITADO: { label: 'Rejeitado', cor: '#dc2626' },
 }

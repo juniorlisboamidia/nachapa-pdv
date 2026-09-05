@@ -87,7 +87,7 @@ export default function Checklist() {
 
 // ===================== PAINEL =====================
 // Visão consolidada do gestor no layout da referência (Cardápio Web), com as cores da
-// marca (dourado sobre creme, tema-aware via tokens): KPIs com ícone, três colunas
+// marca (laranja sobre creme, tema-aware via tokens): KPIs com ícone, três colunas
 // (próximos agendamentos, sem agendamento, checks em alerta) e a tabela "Meus
 // checklists". "Hoje" já vem resolvido pelo backend com o dia de expediente (corte
 // 05:00 BR). Abaixo, as execuções recentes (Fatia 2) pra abrir o detalhe com foto.
@@ -616,7 +616,7 @@ function AbaTemplates({ notify }) {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
           {templates.map((t) => (
             <div key={t.id} className="table-card" style={{ padding: 14 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#a17c00', textTransform: 'uppercase' }}>{t.categoria}</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#ea580c', textTransform: 'uppercase' }}>{t.categoria}</div>
               <div style={{ fontWeight: 700, fontSize: 15, margin: '4px 0' }}>{t.nome}</div>
               <div style={{ fontSize: 12, color: 'var(--app-text-soft, #888)', minHeight: 32 }}>{t.descricao}</div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, fontSize: 12, color: 'var(--app-text-soft, #888)' }}>
@@ -827,7 +827,7 @@ function AbaChecklists({ notify }) {
 
 // As 4 etapas do wizard do editor de checklist (Task B1): Informações → Itens →
 // Agendamento → Revisão. WZ_PRIORIDADES dá cor semântica aos 3 botões segmentados
-// de prioridade (verde/dourado/vermelho — mesma leitura de "farol" do resto do app).
+// de prioridade (verde/laranja/vermelho — mesma leitura de "farol" do resto do app).
 const WZ_ETAPAS = [
   { n: 1, label: 'Informações' },
   { n: 2, label: 'Itens do Checklist' },
@@ -836,7 +836,7 @@ const WZ_ETAPAS = [
 ]
 const WZ_PRIORIDADES = [
   { v: 'BAIXA', l: 'Baixa', cor: '#16a34a' },
-  { v: 'MEDIA', l: 'Média', cor: '#eab802' },
+  { v: 'MEDIA', l: 'Média', cor: '#f97316' },
   { v: 'ALTA', l: 'Alta', cor: '#dc2626' },
 ]
 

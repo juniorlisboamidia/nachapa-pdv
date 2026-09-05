@@ -5,7 +5,7 @@ import { colabApi } from '../services/api'
 // Reset de senha e gerido pelo HUB (login unificado).
 const HUB_URL = import.meta.env.VITE_HUB_URL || 'https://nachapahub.com.br'
 
-const C = { laranja: '#a17c00', laranjaHover: '#7f6300' }
+const C = { laranja: '#f97316', laranjaHover: '#ea580c' }
 
 const MailIcon = () => (
   <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">

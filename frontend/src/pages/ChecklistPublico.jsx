@@ -45,7 +45,7 @@ const CSS = `
 .cp-head-desc{font-size:13px;color:var(--muted);margin-top:6px;line-height:1.5}
 .cp-nome-list{display:flex;flex-direction:column;gap:8px}
 .cp-nome-row{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:13px 14px;box-shadow:var(--sh-sm);width:100%;text-align:left;cursor:pointer;font-family:inherit;color:inherit}
-.cp-nome-avatar{width:40px;height:40px;border-radius:12px;flex-shrink:0;background:linear-gradient(145deg,#F5CE3A,#E0A800);display:grid;place-items:center;font-size:15px;font-weight:850;color:#0E1319}
+.cp-nome-avatar{width:40px;height:40px;border-radius:12px;flex-shrink:0;background:linear-gradient(145deg,#fb923c,#ea580c);display:grid;place-items:center;font-size:15px;font-weight:850;color:#fff}
 .cp-nome-info{flex:1;min-width:0}
 .cp-nome-nome{font-size:14.5px;font-weight:800;color:var(--ink)}
 .cp-nome-funcao{font-size:11.5px;color:var(--muted);font-weight:650;margin-top:1px}

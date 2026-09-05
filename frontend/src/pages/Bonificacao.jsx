@@ -229,7 +229,7 @@ function SecaoPendencias({ ano, mes }) {
   const itens = []
   if (p.reconhecimentosPendentes > 0) itens.push({ t: `${p.reconhecimentosPendentes} reconhecimento(s) p/ aprovar`, c: '#7c3aed' })
   if (p.ouvidoriaAberta > 0) itens.push({ t: `${p.ouvidoriaAberta} mensagem(ns) na ouvidoria`, c: '#2563eb' })
-  if (p.resgatesPendentes > 0) itens.push({ t: `${p.resgatesPendentes} resgate(s) pendente(s)`, c: '#B8860B' })
+  if (p.resgatesPendentes > 0) itens.push({ t: `${p.resgatesPendentes} resgate(s) pendente(s)`, c: '#ea580c' })
   if (p.indicadoresPendentes) itens.push({ t: 'Indicadores do mês sem lançamento', c: '#dc2626' })
   if (itens.length === 0) return null
   return (
@@ -334,7 +334,7 @@ function SecaoContribuicoesMes({ funcs, fechado, ano, mes, toast }) {
             <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
               <span style={{ fontWeight: 600, minWidth: 90, flexShrink: 0 }}>{c.funcionario}</span>
               <span style={{ color: '#16a34a', fontWeight: 700, flexShrink: 0 }}>+{c.pontos}pt</span>
-              {c.coins > 0 && <span style={{ color: '#B8860B', fontWeight: 700, flexShrink: 0 }}>🪙 {c.coins}</span>}
+              {c.coins > 0 && <span style={{ color: '#ea580c', fontWeight: 700, flexShrink: 0 }}>🪙 {c.coins}</span>}
               <span style={{ color: '#666', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.descricao}</span>
               {!fechado && <button type="button" className="btn btn-danger btn-sm" style={{ marginLeft: 'auto', flexShrink: 0 }} onClick={() => remover(c.id)}>✕</button>}
             </div>
@@ -514,7 +514,7 @@ function AbaEquipe({ toast }) {
                     <div style={{ fontWeight: 600 }}>{f.nome} {f.status !== 'ATIVO' && <span className="badge badge-gray" style={{ marginLeft: 4 }}>inativo</span>}</div>
                     {f.funcao && <div style={{ fontSize: 11.5, color: '#999' }}>{f.funcao}</div>}
                   </td>
-                  <td style={{ textAlign: 'right', fontWeight: 800, color: '#B8860B', fontSize: 15 }}>{new Intl.NumberFormat('pt-BR').format(f.coins ?? f.moedas ?? 0)}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 800, color: '#ea580c', fontSize: 15 }}>{new Intl.NumberFormat('pt-BR').format(f.coins ?? f.moedas ?? 0)}</td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                     <button type="button" className="btn btn-secondary btn-sm" onClick={() => setMoedaSel(f)}>🪙 Coins</button>
                   </td>
@@ -565,7 +565,7 @@ function MoedasModal({ func, onClose, onMudou, toast }) {
         <div className="modal-header">
           <div>
             <div style={{ fontWeight: 700, fontSize: 16 }}>🪙 Coins de {func.nome}</div>
-            <div style={{ fontSize: 12, color: '#999' }}>Saldo atual: <strong style={{ color: '#B8860B' }}>{nf.format(dados?.saldo ?? 0)} Coins</strong></div>
+            <div style={{ fontSize: 12, color: '#999' }}>Saldo atual: <strong style={{ color: '#ea580c' }}>{nf.format(dados?.saldo ?? 0)} Coins</strong></div>
           </div>
           <button type="button" className="btn btn-secondary btn-sm" onClick={onClose}>Fechar</button>
         </div>
@@ -603,7 +603,7 @@ function MoedasModal({ func, onClose, onMudou, toast }) {
                     <td>{dataHora(x.criadoEm)}</td>
                     <td style={{ color: '#666', fontSize: 12 }}>{x.motivo || '—'}</td>
                     <td><span className="badge badge-gray">{ORIGEM[x.origem] || x.origem}</span></td>
-                    <td style={{ textAlign: 'right', fontWeight: 700, color: x.pontos < 0 ? '#7f6300' : '#0F8A54' }}>{x.pontos > 0 ? '+' : ''}{nf.format(x.pontos)}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700, color: x.pontos < 0 ? '#c2410c' : '#0F8A54' }}>{x.pontos > 0 ? '+' : ''}{nf.format(x.pontos)}</td>
                     <td style={{ textAlign: 'right' }}>{x.origem === 'MANUAL' && <button type="button" className="btn btn-danger btn-sm" onClick={() => excluir(x.id)}>Excluir</button>}</td>
                   </tr>
                 ))}
@@ -620,7 +620,7 @@ function MoedasModal({ func, onClose, onMudou, toast }) {
 const RARIDADES = [
   // faixa = Coins sugeridos (orientativo: avisa, não impede)
   { id: 'COMUM', label: 'Comum', cor: '#64748b', bg: '#f1f5f9', faixa: [25, 75], ref: 'Normalmente obtida nos primeiros ciclos' },
-  { id: 'RARO', label: 'Raro', cor: '#a17c00', bg: '#fdf6da', faixa: [75, 200], ref: 'Exige resultado relevante ou consistência' },
+  { id: 'RARO', label: 'Raro', cor: '#ea580c', bg: '#fff7ed', faixa: [75, 200], ref: 'Exige resultado relevante ou consistência' },
   { id: 'EPICO', label: 'Épico', cor: '#7c3aed', bg: '#f5f3ff', faixa: [200, 400], ref: 'Exige repetição de alto desempenho' },
   { id: 'LENDARIO', label: 'Lendário', cor: '#d97706', bg: '#fffbeb', faixa: [400, 750], ref: 'Exige completar uma jornada ampla' },
 ]
@@ -756,7 +756,7 @@ function AbaConquistas({ toast }) {
                   </div>
                 )}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, fontSize: 11.5, color: '#999', marginTop: 'auto', paddingTop: 4 }}>
-                  <span>{c.tipo === 'PROGRESSIVA' ? 'Coins por nível' : (c.xpBonus > 0 ? <span style={{ color: '#B8860B', fontWeight: 700 }}>+{c.xpBonus} 🪙</span> : 'sem bônus')}</span>
+                  <span>{c.tipo === 'PROGRESSIVA' ? 'Coins por nível' : (c.xpBonus > 0 ? <span style={{ color: '#ea580c', fontWeight: 700 }}>+{c.xpBonus} 🪙</span> : 'sem bônus')}</span>
                   <span>{c.desbloqueada === 1 ? '1 conquistador' : `${c.desbloqueada} conquistadores`}</span>
                 </div>
                 <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
@@ -841,7 +841,7 @@ function VerificarConquistasModal({ onClose, onFeito, toast }) {
                   <span style={{ fontSize: 16 }}>{n.emoji}</span>
                   <span style={{ fontWeight: 600 }}>{n.funcionarioNome}</span>
                   <span style={{ color: '#666' }}>{n.conquistaNome}{n.nivelNome ? ` · ${n.nivelNome}` : ''}</span>
-                  {n.coins > 0 && <span style={{ marginLeft: 'auto', color: '#B8860B', fontWeight: 700, flexShrink: 0 }}>+{n.coins} 🪙</span>}
+                  {n.coins > 0 && <span style={{ marginLeft: 'auto', color: '#ea580c', fontWeight: 700, flexShrink: 0 }}>+{n.coins} 🪙</span>}
                 </div>
               ))}
             </div>
@@ -1160,7 +1160,7 @@ function ConcederModal({ conquista, onClose, onMudou, toast }) {
 /* ───────────── Aba: Mercado (itens + resgates) ───────────── */
 const STATUS_RESGATE = {
   PENDENTE: { label: 'Pendente', cor: '#b45309', bg: '#fffbeb' },
-  APROVADO: { label: 'Aprovado', cor: '#a17c00', bg: '#fdf6da' },
+  APROVADO: { label: 'Aprovado', cor: '#ea580c', bg: '#fff7ed' },
   ENTREGUE: { label: 'Entregue', cor: '#059669', bg: '#ecfdf5' },
   REJEITADO: { label: 'Rejeitado', cor: '#dc2626', bg: '#fef2f2' },
 }
@@ -1219,7 +1219,7 @@ function MercadoItens({ toast }) {
                 <span style={{ fontSize: 28, lineHeight: 1 }}>{i.emoji}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 700, fontSize: 14.5 }}>{i.nome}</div>
-                  <div style={{ fontSize: 13, fontWeight: 800, color: '#B8860B' }}>🪙 {moeda(i.custo)}</div>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: '#ea580c' }}>🪙 {moeda(i.custo)}</div>
                 </div>
               </div>
               {i.descricao && <div style={{ fontSize: 12, color: '#777', lineHeight: 1.4 }}>{i.descricao}</div>}
@@ -1361,7 +1361,7 @@ function MercadoResgates({ toast }) {
                   <tr key={r.id}>
                     <td><div style={{ fontWeight: 600 }}>{r.funcionarioNome}</div><div style={{ fontSize: 11, color: '#999' }}>{dataHora(r.criadoEm)}</div></td>
                     <td>{r.itemEmoji} {r.itemNome}{r.tipoItem === 'FOLGA' && r.dataDesejada && <div style={{ fontSize: 11, color: '#2563eb', fontWeight: 600, marginTop: 1 }}>🏖️ {new Date(r.dataDesejada).toLocaleDateString('pt-BR')}</div>}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 700, color: '#B8860B' }}>🪙 {moeda(r.custo)}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 700, color: '#ea580c' }}>🪙 {moeda(r.custo)}</td>
                     <td><span className="badge" style={{ color: s.cor, background: s.bg }}>{s.label || r.status}</span>{r.observacao && r.status === 'REJEITADO' && <div style={{ fontSize: 10.5, color: '#999', marginTop: 2 }}>{r.observacao}</div>}</td>
                     <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                       {podeDecidir ? (
@@ -1407,7 +1407,7 @@ function MercadoResgates({ toast }) {
 
 /* ───────────── Aba: Configuração ───────────── */
 const PILARES = [
-  { id: 'ASSIDUIDADE', label: 'Assiduidade', hint: 'presença — falta, atraso, atestado…', cor: '#a17c00' },
+  { id: 'ASSIDUIDADE', label: 'Assiduidade', hint: 'presença — falta, atraso, atestado…', cor: '#ea580c' },
   { id: 'DESEMPENHO', label: 'Desempenho', hint: 'trabalho — advertência, erro…', cor: '#7c3aed' },
   { id: 'COLETIVA', label: 'Coletiva (equipe)', hint: 'da loja toda — meta não batida, inspeção reprovada…', cor: '#0d9488' },
 ]
@@ -1878,7 +1878,7 @@ function AbaEngajamento({ toast }) {
             {pend.map((r) => (
               <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', border: '1px solid var(--app-border, #eee)', borderRadius: 10, flexWrap: 'wrap' }}>
                 <div style={{ flex: 1, minWidth: 180 }}>
-                  <div style={{ fontSize: 13 }}><strong>{r.de}</strong> → <strong>{r.para}</strong> {r.coins > 0 && <span style={{ color: '#B8860B', fontWeight: 700 }}>🪙 {r.coins}</span>}</div>
+                  <div style={{ fontSize: 13 }}><strong>{r.de}</strong> → <strong>{r.para}</strong> {r.coins > 0 && <span style={{ color: '#ea580c', fontWeight: 700 }}>🪙 {r.coins}</span>}</div>
                   <div style={{ fontSize: 12.5, color: '#666', marginTop: 2 }}>“{r.mensagem}”</div>
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>

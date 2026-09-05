@@ -34,7 +34,7 @@ function ModuloCard({ m }) {
         textDecoration: 'none', color: 'inherit', padding: 16, borderRadius: 14,
         border: '1px solid ' + (hover ? 'var(--brand-gold)' : 'var(--app-border)'), background: 'var(--app-surface)',
         display: 'flex', flexDirection: 'column', gap: 6,
-        boxShadow: hover ? '0 4px 14px rgba(234,184,2,0.18)' : 'none', transition: 'border-color .14s, box-shadow .14s',
+        boxShadow: hover ? '0 4px 14px rgba(249,115,22,0.18)' : 'none', transition: 'border-color .14s, box-shadow .14s',
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -71,7 +71,7 @@ export default function Inicio() {
 
       {/* Hero da loja */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 20, borderRadius: 16, border: '1px solid var(--app-border)', background: 'linear-gradient(135deg, var(--app-highlight), var(--app-surface))', marginBottom: 22 }}>
-        <div style={{ width: 56, height: 56, borderRadius: 14, background: 'linear-gradient(150deg,#eab802,#d4a600)', display: 'grid', placeItems: 'center', color: '#0e1319', fontSize: 26, fontWeight: 800, overflow: 'hidden', flexShrink: 0 }}>
+        <div style={{ width: 56, height: 56, borderRadius: 14, background: 'linear-gradient(150deg,#f97316,#ea580c)', display: 'grid', placeItems: 'center', color: '#fff', fontSize: 26, fontWeight: 800, overflow: 'hidden', flexShrink: 0 }}>
           {loja?.logoDataUrl ? <img src={loja.logoDataUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (nomeLoja.charAt(0).toUpperCase())}
         </div>
         <div style={{ minWidth: 0 }}>

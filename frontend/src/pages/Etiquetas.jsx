@@ -365,8 +365,8 @@ function AbaConfig({ notify }) {
                       style={{
                         width: 34, height: 34, borderRadius: 8, fontWeight: 700, cursor: 'pointer',
                         border: '1px solid var(--app-border, #e7dcc2)',
-                        background: cal.densidade === d ? 'var(--brand-gold, #eab802)' : 'var(--app-surface, #fffdf8)',
-                        color: cal.densidade === d ? '#0e1319' : 'var(--app-text, #333)',
+                        background: cal.densidade === d ? 'var(--brand-gold, #f97316)' : 'var(--app-surface, #fffdf8)',
+                        color: cal.densidade === d ? '#ffffff' : 'var(--app-text, #333)',
                       }}
                     >
                       {d}
