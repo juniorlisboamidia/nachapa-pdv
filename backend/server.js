@@ -24,6 +24,7 @@ import { criarCupomCW, gerarCodigoCupom } from './cardapioCupom.js';
 import { extrairOrigem } from './grupoVipOrigem.js';
 import { buscarOrigensCW } from './cardapioOrigens.js';
 import { ordemDeRecalculo } from './custos/propagacaoCusto.js';
+import { AREAS_DISPONIVEIS, AREA_PREFIXOS, areaDoPath } from './acessos/areas.js';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 
@@ -195,25 +196,9 @@ app.use('/api', (req, res, next) => {
     .catch((err) => res.status(err?.http || 500).json({ error: err?.msg || 'Erro ao resolver a loja' }));
 });
 
-// Permissão por área (só para operadores; ADMIN vê tudo). Mapa rota→área, FAIL-CLOSED:
-// rota não mapeada = negada. Config/Acessos/WhatsApp não estão no mapa → só o dono.
-const AREAS_DISPONIVEIS = ['ponto', 'bonificacao', 'produtos', 'gestao', 'financeiro', 'relatorios', 'talentos', 'checklist', 'etiquetas', 'automacoes'];
-const AREA_PREFIXOS = [
-  ['/bonificacao', 'bonificacao'],
-  ['/funcionarios', 'ponto'], ['/ponto', 'ponto'], ['/jornadas', 'ponto'], ['/funcoes', 'ponto'], ['/dispositivos', 'ponto'], ['/coletor', 'ponto'],
-  ['/produtos', 'produtos'], ['/insumos', 'produtos'], ['/estoque', 'produtos'], ['/ficha-tecnica', 'produtos'], ['/fichas', 'produtos'],
-  ['/fornecedores', 'produtos'], ['/fornecedor-insumo', 'produtos'],
-  ['/custos', 'gestao'], ['/faturamento', 'gestao'], ['/ponto-equilibrio', 'gestao'],
-  ['/financeiro', 'financeiro'],
-  ['/relatorios', 'relatorios'],
-  ['/candidatos', 'talentos'], ['/vagas', 'talentos'], ['/recrutamento', 'talentos'], ['/talentos', 'talentos'], ['/banco-talentos', 'talentos'],
-  ['/checklist', 'checklist'], ['/etiquetas', 'etiquetas'], ['/automacoes', 'automacoes'], ['/grupo-vip', 'automacoes'],
-];
+// Permissão por área (só para operadores; ADMIN vê tudo). Mapa rota→área em acessos/areas.js,
+// FAIL-CLOSED: rota não mapeada = negada. Config/Acessos/WhatsApp não estão no mapa → só o dono.
 const OPERADOR_LIBERADO = new Set(['/auth/me', '/lojas', '/empresa']); // meta + logo (GET); PUT /empresa exige ADMIN no handler
-function areaDoPath(path) {
-  for (const [pre, area] of AREA_PREFIXOS) { if (path === pre || path.startsWith(pre + '/')) return area; }
-  return null;
-}
 app.use('/api', (req, res, next) => {
   if (req.method === 'OPTIONS') return next();
   const u = req.user;
