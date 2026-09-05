@@ -4,6 +4,7 @@ import Card from '../components/Card'
 import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
 import InsumoAutocomplete from '../components/InsumoAutocomplete'
+import IconeLixeira from '../components/IconeLixeira'
 import { mascaraMoeda, parseMoeda } from '../utils/moeda'
 
 const brlFormatter = new Intl.NumberFormat('pt-BR', {
@@ -1127,11 +1128,13 @@ export default function Produtos() {
                   </button>
                   <button
                     type="button"
-                    className="btn btn-danger"
+                    className="btn btn-danger btn-lixeira"
+                    aria-label="Excluir"
+                    title="Excluir"
                     onClick={(e) => { e.stopPropagation(); handleDelete(p) }}
                     disabled={deletingId === p.id}
                   >
-                    {deletingId === p.id ? 'Excluindo…' : 'Excluir'}
+                    <IconeLixeira />
                   </button>
                 </div>
               </div>

@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import Sidebar from './Sidebar'
 import Header from './Header'
@@ -8,6 +8,7 @@ import { useAuth } from '../contexts/AuthContext'
 const HUB_URL = import.meta.env.VITE_HUB_URL || 'https://nachapahub.com.br'
 
 export default function Layout() {
+  const location = useLocation()
   const { usuario } = useAuth()
   const mostrarHub = usuario && usuario.papel !== 'CLIENTE'
   // Estado de recolher a sidebar vive aqui: o header (botão + card da loja) e a
@@ -26,7 +27,10 @@ export default function Layout() {
       <Sidebar colapsada={colapsada} />
       <div className="main-area">
         <main className="page-content">
-          <Outlet />
+          {/* key por rota: remonta o wrapper a cada navegação e redispara o fade-in */}
+          <div key={location.pathname} className="page-fade">
+            <Outlet />
+          </div>
         </main>
       </div>
       {mostrarHub && (

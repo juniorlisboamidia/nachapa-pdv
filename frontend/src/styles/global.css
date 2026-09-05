@@ -944,6 +944,46 @@ body.theme-dark .badge-slate { background: rgba(255, 255, 255, 0.1); color: #d4d
 .loading-state { text-align: center; padding: 48px; color: #aaa; font-size: 14px; }
 .empty-state   { text-align: center; padding: 48px; color: #aaa; font-size: 14px; }
 
+/* Spinner no loading: melhora todas as telas com .loading-state de uma vez
+   (um círculo laranja/amarelo girando acima do texto "Carregando…"). */
+.loading-state::before {
+  content: '';
+  display: block;
+  width: 26px; height: 26px;
+  margin: 0 auto 14px;
+  border: 3px solid rgba(0, 0, 0, 0.08);
+  border-top-color: #eab802;
+  border-radius: 50%;
+  animation: hb-spin 0.7s linear infinite;
+}
+@keyframes hb-spin { to { transform: rotate(360deg); } }
+body.theme-dark .loading-state::before { border-color: rgba(255, 255, 255, 0.1); border-top-color: #eab802; }
+
+/* Transição de página: fade + leve slide ao trocar de rota (wrapper .page-fade). */
+@keyframes page-fade-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.page-fade { animation: page-fade-in 0.28s cubic-bezier(0.16, 1, 0.3, 1); }
+
+/* Skeleton loaders (.sk): placeholder cinza com um brilho deslizando por cima,
+   no formato do conteúdo que vai aparecer. Montado por tela com <Skeleton />. */
+.sk { position: relative; overflow: hidden; background: #ececec; display: block; }
+.sk::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.65), transparent);
+  animation: sk-shimmer 1.3s ease-in-out infinite;
+}
+@keyframes sk-shimmer { 100% { transform: translateX(100%); } }
+body.theme-dark .sk { background: #262b33; }
+body.theme-dark .sk::after { background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.07), transparent); }
+@media (prefers-reduced-motion: reduce) { .sk::after { animation: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-state::before { animation: none; }
+  .page-fade { animation: none; }
+}
+
 /* Formulário */
 .form-grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 /* Item de grid nasce com min-width:auto e não encolhe abaixo do próprio conteúdo:
@@ -2888,3 +2928,21 @@ body.theme-dark .gv-bubble .wa-link { color: #53bdeb; }
 .btn-copiar.btn-copiar-inverso .btn-copiar-ico svg:last-child { color: #fff; }
 .btn-copiar.btn-copiar-inverso.copiado .btn-copiar-label { color: #fff; }
 @media (prefers-reduced-motion: reduce) { .btn-copiar-ico svg { transition: opacity 0.15s linear; } }
+
+/* Lixeira animada (inspirado no skiper42): a tampa (grupo .ico-trash-lid) LEVANTA
+   — sobe e inclina, como abrir a lata — no hover do botão. A dobradiça fica no canto
+   inferior esquerdo, então a frente da tampa sobe. currentColor mantém a cor do botão. */
+.btn-lixeira { display: inline-flex; align-items: center; justify-content: center; padding: 7px 9px; }
+.ico-lixeira { flex-shrink: 0; overflow: visible; }
+.ico-trash-lid { transform-box: fill-box; transform-origin: left bottom; transition: transform 0.24s cubic-bezier(0.34, 1.5, 0.5, 1); }
+:where(button, a, [role="button"], label):hover .ico-trash-lid { transform: translateY(-3px) rotate(-26deg); }
+@media (prefers-reduced-motion: reduce) { .ico-trash-lid { transition: none; } }
+
+/* Transição de tema (View Transitions API, à la skiper26): o novo tema é revelado
+   por um círculo que cresce do ponto do clique — o clip-path é animado em JS
+   (useTema.alternar). Aqui desligamos o cross-fade padrão do view-transition e
+   deixamos o snapshot NOVO por cima do antigo, para o círculo revelar o tema novo. */
+::view-transition-old(root),
+::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+::view-transition-new(root) { z-index: 9999; }
+::view-transition-old(root) { z-index: 1; }

@@ -45,7 +45,7 @@ const IcoTema = (
 
 export default function Header({ colapsada, onToggleColapsar }) {
   const { usuario, logout, lojas, empresaAtual } = useAuth()
-  const [dark, setDark] = useTema()
+  const [dark, , alternarTema] = useTema()
   const [menu, setMenu] = useState(false)
   const [frase, setFrase] = useState('')
   const [empresa, setEmpresa] = useState({ nome: 'Hamburgueria', logoDataUrl: null })
@@ -104,7 +104,7 @@ export default function Header({ colapsada, onToggleColapsar }) {
           <NavLink to="/central-de-ajuda" className="app-header-btn" title="Central de Ajuda" aria-label="Central de Ajuda">
             {IcoAjuda}
           </NavLink>
-          <button type="button" className={'app-header-btn tema-toggle' + (dark ? ' on' : '')} onClick={() => setDark((d) => !d)} title={dark ? 'Tema claro' : 'Tema escuro'} aria-label="Alternar tema">
+          <button type="button" className={'app-header-btn tema-toggle' + (dark ? ' on' : '')} onClick={alternarTema} title={dark ? 'Tema claro' : 'Tema escuro'} aria-label="Alternar tema">
             {IcoTema}
           </button>
           <div className="app-header-user" ref={ref}>

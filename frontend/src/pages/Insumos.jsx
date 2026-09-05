@@ -5,6 +5,8 @@ import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
 import InsumoAutocomplete from '../components/InsumoAutocomplete'
 import InputMoeda from '../components/InputMoeda'
+import IconeLixeira from '../components/IconeLixeira'
+import SkeletonTabela from '../components/SkeletonTabela'
 
 const brlFormatter = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -438,7 +440,19 @@ export default function Insumos() {
   const totalProducaoPropria = countTipo('PRODUCAO_PROPRIA')
   const totalEmbAcomp = countTipo('EMBALAGEM') + countTipo('ACOMPANHAMENTO')
 
-  if (loading) return <div className="loading-state">Carregando insumos…</div>
+  if (loading) return (
+    <div>
+      <div className="page-header">
+        <div>
+          <h1>Insumos</h1>
+          <div className="page-header-sub">
+            Cadastre ingredientes, embalagens, acompanhamentos, bebidas, hortifruti e produções próprias.
+          </div>
+        </div>
+      </div>
+      <SkeletonTabela colunas={6} linhas={7} />
+    </div>
+  )
   if (error) {
     return (
       <div className="alert alert-red">
@@ -920,11 +934,13 @@ export default function Insumos() {
                       </button>
                       <button
                         type="button"
-                        className="btn btn-danger"
+                        className="btn btn-danger btn-lixeira"
+                        aria-label="Excluir"
+                        title="Excluir"
                         onClick={() => handleDelete(i)}
                         disabled={deletingId === i.id}
                       >
-                        {deletingId === i.id ? 'Excluindo…' : 'Excluir'}
+                        <IconeLixeira />
                       </button>
                     </div>
                   </td>

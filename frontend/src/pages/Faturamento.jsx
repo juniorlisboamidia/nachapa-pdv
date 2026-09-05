@@ -4,6 +4,8 @@ import Card from '../components/Card'
 import ConfirmDialog from '../components/ConfirmDialog'
 import Toast from '../components/Toast'
 import InputMoeda from '../components/InputMoeda'
+import IconeLixeira from '../components/IconeLixeira'
+import SkeletonTabela from '../components/SkeletonTabela'
 
 const brlFormatter = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -659,7 +661,7 @@ export default function Faturamento() {
 
               <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
                 <button type="button" className="btn btn-secondary" onClick={() => openEditarMes(mesSel, infoMes)}>Editar mês</button>
-                <button type="button" className="btn btn-danger" onClick={() => setMesParaExcluir(mesSel)}>Excluir mês</button>
+                <button type="button" className="btn btn-danger btn-lixeira" aria-label="Excluir mês" title="Excluir mês" onClick={() => setMesParaExcluir(mesSel)}><IconeLixeira /></button>
               </div>
             </>
           )}
@@ -671,7 +673,7 @@ export default function Faturamento() {
         <>
           <div className="section-title">Visão Anual · {ano}</div>
           {anualLoading || anualData === null ? (
-            <div className="loading-state">Carregando visão anual…</div>
+            <SkeletonTabela colunas={9} linhas={12} />
           ) : (
             <div className="table-card">
               <table className="hb-table">
@@ -718,7 +720,7 @@ export default function Faturamento() {
                               {m.semDados ? 'Lançar' : 'Editar'}
                             </button>
                             {!m.semDados && (
-                              <button type="button" className="btn btn-danger" onClick={() => setMesParaExcluir(i + 1)}>Excluir</button>
+                              <button type="button" className="btn btn-danger btn-lixeira" aria-label="Excluir" title="Excluir" onClick={() => setMesParaExcluir(i + 1)}><IconeLixeira /></button>
                             )}
                           </div>
                         </td>
