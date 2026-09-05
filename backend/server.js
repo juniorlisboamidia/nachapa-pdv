@@ -63,6 +63,8 @@ const MODELS_TENANT = new Set([
   'frase',
   // Produtos › Fornecedores (cadastro + cotações de preço por insumo)
   'fornecedor', 'fornecedorInsumo', 'fornecedorInsumoCotacao',
+  // Produtos › Estoque (CMV Global): contagem mensal + compras
+  'cmvContagem', 'cmvContagemItem', 'cmvCompra', 'cmvCompraItem',
 ]);
 const OPS_WHERE = new Set([
   'findMany', 'findFirst', 'findFirstOrThrow', 'findUnique', 'findUniqueOrThrow',

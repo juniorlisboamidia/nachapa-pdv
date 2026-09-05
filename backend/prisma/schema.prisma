@@ -2183,3 +2183,68 @@ model Frase {
 
   @@index([empresaId])
 }
+
+// ============================================================
+// CMV Global (CMV Real): contagem de estoque mensal + compras do período
+// ============================================================
+model CmvContagem {
+  id           Int               @id @default(autoincrement())
+  empresaId    Int
+  ano          Int
+  mes          Int
+  valorTotal   Decimal           @default(0) @db.Decimal(12, 2)
+  observacao   String?
+  criadoEm     DateTime          @default(now())
+  atualizadoEm DateTime          @updatedAt
+  itens        CmvContagemItem[]
+
+  @@unique([empresaId, ano, mes])
+  @@index([empresaId, ano, mes])
+}
+
+model CmvContagemItem {
+  id            Int     @id @default(autoincrement())
+  empresaId     Int
+  contagemId    Int
+  insumoId      Int?
+  nome          String
+  unidade       String?
+  custoUnitario Decimal @default(0) @db.Decimal(12, 4)
+  quantidade    Decimal @default(0) @db.Decimal(12, 4)
+  valor         Decimal @default(0) @db.Decimal(12, 2)
+
+  contagem CmvContagem @relation(fields: [contagemId], references: [id], onDelete: Cascade)
+
+  @@index([empresaId, contagemId])
+}
+
+model CmvCompra {
+  id           Int             @id @default(autoincrement())
+  empresaId    Int
+  ano          Int
+  mes          Int
+  data         DateTime        @db.Date
+  valor        Decimal         @db.Decimal(12, 2)
+  fornecedor   String?
+  observacao   String?
+  criadoEm     DateTime        @default(now())
+  atualizadoEm DateTime        @updatedAt
+  itens        CmvCompraItem[]
+
+  @@index([empresaId, ano, mes])
+}
+
+model CmvCompraItem {
+  id            Int     @id @default(autoincrement())
+  empresaId     Int
+  compraId      Int
+  insumoId      Int?
+  nome          String
+  custoUnitario Decimal @default(0) @db.Decimal(12, 4)
+  quantidade    Decimal @default(0) @db.Decimal(12, 4)
+  valor         Decimal @default(0) @db.Decimal(12, 2)
+
+  compra CmvCompra @relation(fields: [compraId], references: [id], onDelete: Cascade)
+
+  @@index([empresaId, compraId])
+}
