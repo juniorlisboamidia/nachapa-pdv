@@ -10175,6 +10175,957 @@ app.post('/api/indicacao/cw-cupons/status', async (req, res) => {
   } catch (err) { console.error(err); res.status(500).json({ error: 'Erro interno' }); }
 });
 
+// ============================================================
+// Escala de Motoboys (V1) — portado do H360
+// ============================================================
+const INSCRICAO_ATIVA = ['INSCRITO', 'CONFIRMADO'];
+
+// Token público curto (node:crypto, sem dependência). Regenera se colidir.
+async function gerarTokenPublico() {
+  for (let i = 0; i < 6; i++) {
+    const t = randomBytes(9).toString('base64url');
+    const existe = await prisma.escalaMotoboy.findUnique({
+      where: { tokenPublico: t },
+      select: { id: true }
+    });
+    if (!existe) return t;
+  }
+  return randomBytes(12).toString('base64url');
+}
+
+// Segunda = 0 ... Domingo = 6 (para montar as linhas de semana iniciando na segunda)
+function semanaIniciandoSegunda(jsDay) {
+  return (jsDay + 6) % 7;
+}
+
+// Gera todos os dias do mês (UTC, sem deslocar dia por fuso). diaSemana: 0=Dom..6=Sáb.
+// semanaDoMes: linha da semana (1..6) considerando semana iniciando na segunda.
+function gerarDiasDoMes(ano, mes) {
+  const offsetPrimeiro = semanaIniciandoSegunda(new Date(Date.UTC(ano, mes - 1, 1)).getUTCDay());
+  const diasNoMes = new Date(Date.UTC(ano, mes, 0)).getUTCDate();
+  const dias = [];
+  for (let d = 1; d <= diasNoMes; d++) {
+    const data = new Date(Date.UTC(ano, mes - 1, d));
+    dias.push({
+      data,
+      diaSemana: data.getUTCDay(),
+      semanaDoMes: Math.floor((d - 1 + offsetPrimeiro) / 7) + 1,
+      vagas: 0,
+      status: 'ABERTO'
+    });
+  }
+  return dias;
+}
+
+function contarAtivas(inscricoes) {
+  return (inscricoes ?? []).filter((i) => INSCRICAO_ATIVA.includes(i.status)).length;
+}
+
+// Métricas por dia (comuns a admin e público)
+function metricasDia(dia) {
+  const inscritosAtivos = contarAtivas(dia.inscricoes);
+  const vagasRestantes = Math.max(0, Number(dia.vagas) - inscritosAtivos);
+  return {
+    inscritosAtivos,
+    vagasRestantes,
+    lotado: inscritosAtivos >= Number(dia.vagas)
+  };
+}
+
+// Admin: inclui nomes/WhatsApps dos inscritos
+function montarEscalaAdmin(escala) {
+  if (!escala) return null;
+  return {
+    id: escala.id,
+    ano: escala.ano,
+    mes: escala.mes,
+    titulo: escala.titulo,
+    tokenPublico: escala.tokenPublico,
+    status: escala.status,
+    criadoEm: escala.criadoEm,
+    atualizadoEm: escala.atualizadoEm,
+    dias: (escala.dias ?? []).map((dia) => {
+      const m = metricasDia(dia);
+      return {
+        id: dia.id,
+        data: dia.data,
+        diaSemana: dia.diaSemana,
+        semanaDoMes: dia.semanaDoMes,
+        vagas: dia.vagas,
+        status: dia.status,
+        ...m,
+        inscricoes: (dia.inscricoes ?? []).map((i) => ({
+          id: i.id,
+          nome: i.nome,
+          whatsapp: i.whatsapp,
+          status: i.status,
+          origem: i.origem,
+          motoboyId: i.motoboyId,
+          presencaStatus: i.presencaStatus,
+          presencaObservacao: i.presencaObservacao,
+          criadoEm: i.criadoEm
+        }))
+      };
+    })
+  };
+}
+
+// Público: NÃO expõe nomes/WhatsApps dos inscritos (apenas contagens)
+function montarEscalaPublica(escala, empresaNome) {
+  return {
+    empresaNome: empresaNome || 'Hamburgueria',
+    ano: escala.ano,
+    mes: escala.mes,
+    titulo: escala.titulo,
+    status: escala.status,
+    dias: (escala.dias ?? []).map((dia) => {
+      const m = metricasDia(dia);
+      return {
+        id: dia.id,
+        data: dia.data,
+        diaSemana: dia.diaSemana,
+        semanaDoMes: dia.semanaDoMes,
+        vagas: dia.vagas,
+        status: dia.status,
+        ...m
+      };
+    })
+  };
+}
+
+const DIAS_INCLUDE = {
+  dias: { orderBy: { data: 'asc' }, include: { inscricoes: { orderBy: { criadoEm: 'asc' } } } }
+};
+
+function validarAnoMes(ano, mes) {
+  const a = Number(ano);
+  const mm = Number(mes);
+  if (!Number.isInteger(a) || a < 2000 || a > 2100) return 'ano inválido';
+  if (!Number.isInteger(mm) || mm < 1 || mm > 12) return 'mês inválido (1 a 12)';
+  return null;
+}
+
+// ===== Admin =====
+app.get('/api/escala-motoboys', async (req, res) => {
+  try {
+    const { ano, mes } = req.query;
+    const erro = validarAnoMes(ano, mes);
+    if (erro) return res.status(400).json({ error: erro });
+    const escala = await prisma.escalaMotoboy.findFirst({
+      where: { ano: Number(ano), mes: Number(mes) },
+      include: DIAS_INCLUDE
+    });
+    res.json(escala ? montarEscalaAdmin(escala) : null);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno ao consultar a escala de motoboys' });
+  }
+});
+
+app.post('/api/escala-motoboys', async (req, res) => {
+  try {
+    const { ano, mes, titulo } = req.body ?? {};
+    const erro = validarAnoMes(ano, mes);
+    if (erro) return res.status(400).json({ error: erro });
+    const existe = await prisma.escalaMotoboy.findFirst({
+      where: { ano: Number(ano), mes: Number(mes) },
+      select: { id: true }
+    });
+    if (existe) return res.status(409).json({ error: 'Já existe uma escala para este mês.' });
+    const tokenPublico = await gerarTokenPublico();
+    const empresaIdAtual = getEmpresaIdAtual();
+    const escala = await prisma.escalaMotoboy.create({
+      data: {
+        ano: Number(ano),
+        mes: Number(mes),
+        titulo: titulo ? String(titulo).trim() : null,
+        tokenPublico,
+        // nested create NAO passa pela extension: carimba os dias com a loja atual
+        dias: { create: gerarDiasDoMes(Number(ano), Number(mes)).map((d) => ({ ...d, empresaId: empresaIdAtual })) }
+      },
+      include: DIAS_INCLUDE
+    });
+    res.status(201).json(montarEscalaAdmin(escala));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno ao criar a escala de motoboys' });
+  }
+});
+
+app.put('/api/escala-motoboys/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'id inválido' });
+    const escala = await prisma.escalaMotoboy.findUnique({ where: { id }, select: { id: true } });
+    if (!escala) return res.status(404).json({ error: 'Escala não encontrada' });
+    const { titulo, status } = req.body ?? {};
+    const data = {};
+    if (titulo !== undefined) data.titulo = String(titulo).trim() === '' ? null : String(titulo).trim();
+    if (status !== undefined) {
+      if (!['ABERTA', 'FECHADA'].includes(status)) {
+        return res.status(400).json({ error: 'status deve ser ABERTA ou FECHADA' });
+      }
+      data.status = status;
+    }
+    await prisma.escalaMotoboy.update({ where: { id }, data });
+    const atual = await prisma.escalaMotoboy.findUnique({ where: { id }, include: DIAS_INCLUDE });
+    res.json(montarEscalaAdmin(atual));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno ao atualizar a escala' });
+  }
+});
+
+app.put('/api/escala-motoboys/:id/dias', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'id inválido' });
+    const escala = await prisma.escalaMotoboy.findUnique({
+      where: { id },
+      include: { dias: { include: { inscricoes: true } } }
+    });
+    if (!escala) return res.status(404).json({ error: 'Escala não encontrada' });
+    const { dias } = req.body ?? {};
+    if (!Array.isArray(dias) || dias.length === 0) {
+      return res.status(400).json({ error: 'Informe os dias a atualizar.' });
+    }
+    const porId = new Map(escala.dias.map((d) => [d.id, d]));
+    const updates = [];
+    for (const item of dias) {
+      const diaId = Number(item?.id);
+      const dia = porId.get(diaId);
+      if (!dia) return res.status(400).json({ error: `Dia ${item?.id} não pertence a esta escala.` });
+      const data = {};
+      if (item.vagas !== undefined) {
+        const v = Number(item.vagas);
+        if (!Number.isInteger(v) || v < 0) {
+          return res.status(400).json({ error: 'vagas deve ser inteiro maior ou igual a 0' });
+        }
+        const ativos = contarAtivas(dia.inscricoes);
+        if (v < ativos) {
+          return res.status(400).json({
+            error: `Não é possível definir ${v} vaga(s) no dia ${new Date(dia.data).toISOString().slice(0, 10)}: já há ${ativos} inscrito(s) ativo(s).`
+          });
+        }
+        data.vagas = v;
+      }
+      if (item.status !== undefined) {
+        if (!['ABERTO', 'FECHADO'].includes(item.status)) {
+          return res.status(400).json({ error: 'status do dia deve ser ABERTO ou FECHADO' });
+        }
+        data.status = item.status;
+      }
+      if (Object.keys(data).length > 0) {
+        updates.push(prisma.escalaMotoboyDia.update({ where: { id: diaId }, data }));
+      }
+    }
+    if (updates.length > 0) await prisma.$transaction(updates);
+    const atual = await prisma.escalaMotoboy.findUnique({ where: { id }, include: DIAS_INCLUDE });
+    res.json(montarEscalaAdmin(atual));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno ao atualizar os dias da escala' });
+  }
+});
+
+app.delete('/api/escala-motoboys/inscricoes/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'id inválido' });
+    const insc = await prisma.escalaMotoboyInscricao.findUnique({ where: { id }, select: { id: true } });
+    if (!insc) return res.status(404).json({ error: 'Inscrição não encontrada' });
+    // Não apaga: marca CANCELADO (libera vaga)
+    await prisma.escalaMotoboyInscricao.update({ where: { id }, data: { status: 'CANCELADO' } });
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno ao cancelar a inscrição' });
+  }
+});
+
+app.put('/api/escala-motoboys/inscricoes/:id/confirmar', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'id inválido' });
+    const insc = await prisma.escalaMotoboyInscricao.findUnique({
+      where: { id },
+      include: { dia: { include: { inscricoes: true } } }
+    });
+    if (!insc) return res.status(404).json({ error: 'Inscrição não encontrada' });
+    // Se estava CANCELADA, só volta a ativa se ainda houver vaga
+    if (insc.status === 'CANCELADO') {
+      const ativos = contarAtivas(insc.dia.inscricoes);
+      if (ativos >= Number(insc.dia.vagas)) {
+        return res.status(409).json({ error: 'Não há vagas disponíveis neste dia para reativar a inscrição.' });
+      }
+    }
+    await prisma.escalaMotoboyInscricao.update({ where: { id }, data: { status: 'CONFIRMADO' } });
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno ao confirmar a inscrição' });
+  }
+});
+
+// Admin: escala manualmente um entregador JÁ CADASTRADO num dia (origem ADMIN), sem
+// depender da auto-inscrição pública. status = CONFIRMADO. Não exige escala/dia ABERTO
+// (o admin está montando a escala). Bloqueia entregador BLOQUEADO e duplicado no dia;
+// reaproveita uma inscrição CANCELADA do mesmo motoboy; sobe as vagas do dia se preciso
+// (mantém a invariante vagas >= inscritos ativos, igual ao PUT /dias).
+app.post('/api/escala-motoboys/dias/:diaId/inscricoes', async (req, res) => {
+  try {
+    const diaId = Number(req.params.diaId);
+    if (!Number.isInteger(diaId)) return res.status(400).json({ error: 'dia inválido' });
+    const motoboyId = Number(req.body?.motoboyId);
+    if (!Number.isInteger(motoboyId)) return res.status(400).json({ error: 'Selecione um entregador.' });
+
+    const cfgAdmin = await getEmpresa();
+    const inscricaoId = await prisma.$transaction(async (tx) => {
+      const dia = await tx.escalaMotoboyDia.findFirst({ where: { id: diaId }, include: { inscricoes: true } });
+      if (!dia) throw { http: 404, msg: 'Dia da escala não encontrado.' };
+      const motoboy = await tx.motoboy.findFirst({ where: { id: motoboyId } });
+      if (!motoboy) throw { http: 404, msg: 'Entregador não encontrado.' };
+      if (motoboy.status === 'BLOQUEADO' && !cfgAdmin.motoboyBloqueadoPodeEscalar) throw { http: 409, msg: 'Este entregador está bloqueado.' };
+
+      const ativos = dia.inscricoes.filter((i) => INSCRICAO_ATIVA.includes(i.status));
+      if (ativos.some((i) => i.motoboyId === motoboy.id || i.whatsapp === motoboy.whatsapp)) {
+        throw { http: 409, msg: 'Este entregador já está escalado neste dia.' };
+      }
+      // Reaproveita uma inscrição CANCELADA do mesmo motoboy (não duplica a linha).
+      const cancelada = dia.inscricoes.find((i) => i.status === 'CANCELADO' && i.motoboyId === motoboy.id);
+      let insc;
+      if (cancelada) {
+        insc = await tx.escalaMotoboyInscricao.update({
+          where: { id: cancelada.id },
+          data: { status: 'CONFIRMADO', origem: 'ADMIN', nome: motoboy.nome, whatsapp: motoboy.whatsapp }
+        });
+      } else {
+        insc = await tx.escalaMotoboyInscricao.create({
+          data: { escalaDiaId: diaId, nome: motoboy.nome, whatsapp: motoboy.whatsapp, status: 'CONFIRMADO', origem: 'ADMIN', motoboyId: motoboy.id }
+        });
+      }
+      const novosAtivos = ativos.length + 1;
+      if (novosAtivos > Number(dia.vagas)) {
+        await tx.escalaMotoboyDia.update({ where: { id: diaId }, data: { vagas: novosAtivos } });
+      }
+      return insc.id;
+    });
+
+    res.status(201).json({ success: true, inscricaoId });
+  } catch (err) {
+    if (err && err.http) return res.status(err.http).json({ error: err.msg });
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno ao escalar o entregador' });
+  }
+});
+
+// ===== Público (acesso por token) =====
+app.get('/api/public/escala-motoboys/:token', async (req, res) => {
+  try {
+    const escala = await prisma.escalaMotoboy.findUnique({
+      where: { tokenPublico: String(req.params.token) },
+      include: DIAS_INCLUDE
+    });
+    if (!escala) return res.status(404).json({ error: 'Escala não encontrada' });
+    // O nome tem que ser o da loja DONA da escala (o link é público e roda fora do
+    // tenantStore — getEmpresa() aqui cairia no fallback "primeira loja" e todo
+    // cliente veria o nome da loja id=1).
+    let empresaNome = 'Hamburgueria';
+    try {
+      const empresa = await prisma.empresa.findUnique({
+        where: { id: escala.empresaId },
+        select: { nome: true }
+      });
+      empresaNome = (empresa?.nome ?? '').trim() || 'Hamburgueria';
+    } catch {
+      // mantém fallback
+    }
+    res.json(montarEscalaPublica(escala, empresaNome));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno ao consultar a escala' });
+  }
+});
+
+app.post('/api/public/escala-motoboys/:token/inscricao', async (req, res) => {
+  try {
+    const escala = await prisma.escalaMotoboy.findUnique({
+      where: { tokenPublico: String(req.params.token) },
+      select: { id: true, status: true, empresaId: true }
+    });
+    if (!escala) return res.status(404).json({ error: 'Escala não encontrada' });
+    if (escala.status !== 'ABERTA') {
+      return res.status(409).json({ error: 'As inscrições desta escala estão fechadas.' });
+    }
+    const { nome, whatsapp, diaIds } = req.body ?? {};
+    const nomeLimpo = String(nome ?? '').trim();
+    if (!nomeLimpo) return res.status(400).json({ error: 'Informe seu nome.' });
+    const whatsappLimpo = normalizarWhatsapp(whatsapp);
+    if (!whatsappLimpo) return res.status(400).json({ error: 'Informe um WhatsApp válido.' });
+    if (!Array.isArray(diaIds) || diaIds.length === 0) {
+      return res.status(400).json({ error: 'Selecione pelo menos um dia.' });
+    }
+    const idsUnicos = [...new Set(diaIds.map((x) => Number(x)))].filter((n) => Number.isInteger(n));
+    if (idsUnicos.length === 0) return res.status(400).json({ error: 'Dias inválidos.' });
+    // Hoje no fuso BR (UTC-3): dia com data anterior já passou (defesa contra página aberta de ontem).
+    const _hb = new Date(Date.now() - 3 * 3600 * 1000);
+    const hojeBR = `${_hb.getUTCFullYear()}-${String(_hb.getUTCMonth() + 1).padStart(2, '0')}-${String(_hb.getUTCDate()).padStart(2, '0')}`;
+
+    // All-or-nothing: valida e cria tudo numa transacao, no contexto da loja dona
+    // da escala — a partir daqui a extension escopa Motoboy/Inscricao por empresaId.
+    const criadas = await tenantStore.run({ empresaId: escala.empresaId }, () => prisma.$transaction(async (tx) => {
+      // Só a equipe cadastrada e ATIVA se inscreve. O link NÃO cadastra mais ninguém
+      // automaticamente — quem não é da equipe passa por "Enviar meu cadastro" → aprovação.
+      const cfgEmpresa = await tx.empresa.findUnique({ where: { id: escala.empresaId }, select: { motoboyBloqueadoPodeEscalar: true } });
+      const bloqPodeEscalar = !!cfgEmpresa?.motoboyBloqueadoPodeEscalar;
+      const motoboy = await tx.motoboy.findFirst({ where: { whatsapp: whatsappLimpo } });
+      // ATIVO sempre pode; BLOQUEADO só se a loja permitir (Motoboys › Configuração). INATIVO/PENDENTE nunca.
+      const podeEscalar = motoboy && (motoboy.status === 'ATIVO' || (motoboy.status === 'BLOQUEADO' && bloqPodeEscalar));
+      if (!podeEscalar) {
+        throw { http: 403, msg: 'Você não tem acesso à escala desta empresa. Fale com a equipe da loja.' };
+      }
+      for (const diaId of idsUnicos) {
+        const dia = await tx.escalaMotoboyDia.findUnique({
+          where: { id: diaId },
+          include: { inscricoes: true }
+        });
+        if (!dia || dia.escalaId !== escala.id) {
+          throw { http: 400, msg: 'Um dos dias selecionados não pertence a esta escala.' };
+        }
+        if (dia.status !== 'ABERTO') {
+          throw { http: 409, msg: 'Um dos dias selecionados está fechado.' };
+        }
+        const _dd = new Date(dia.data);
+        const diaISO = `${_dd.getUTCFullYear()}-${String(_dd.getUTCMonth() + 1).padStart(2, '0')}-${String(_dd.getUTCDate()).padStart(2, '0')}`;
+        if (diaISO < hojeBR) {
+          throw { http: 409, msg: 'Um dos dias selecionados já passou.' };
+        }
+        const ativos = dia.inscricoes.filter((i) => INSCRICAO_ATIVA.includes(i.status));
+        if (ativos.length >= Number(dia.vagas)) {
+          throw { http: 409, msg: 'Um dos dias selecionados está lotado.' };
+        }
+        if (ativos.some((i) => i.whatsapp === whatsappLimpo)) {
+          throw { http: 409, msg: 'Este WhatsApp já está inscrito em um dos dias selecionados.' };
+        }
+      }
+      const novas = [];
+      for (const diaId of idsUnicos) {
+        const nova = await tx.escalaMotoboyInscricao.create({
+          data: {
+            escalaDiaId: diaId,
+            // snapshot histórico mantido na inscrição, além do vínculo motoboyId
+            nome: nomeLimpo,
+            whatsapp: whatsappLimpo,
+            status: 'INSCRITO',
+            origem: 'PUBLICO',
+            motoboyId: motoboy.id
+          },
+          select: { id: true }
+        });
+        novas.push(nova);
+      }
+      return novas;
+    }));
+
+    res.status(201).json({
+      success: true,
+      diasInscritos: criadas.length,
+      message: 'Sua inscrição foi registrada. A confirmação final será enviada pela equipe.'
+    });
+  } catch (err) {
+    if (err && err.http) return res.status(err.http).json({ error: err.msg });
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno ao registrar a inscrição' });
+  }
+});
+
+// Público: identifica o motoboy pelo WhatsApp ANTES de liberar a escala (filtro de
+// "quem está apto a trabalhar na loja"). Só ATIVO vê a escala; os demais recebem a
+// orientação certa. Devolve o WhatsApp da loja p/ o botão "falar com a empresa".
+app.post('/api/public/escala-motoboys/:token/identificar', async (req, res) => {
+  try {
+    const escala = await prisma.escalaMotoboy.findUnique({
+      where: { tokenPublico: String(req.params.token) },
+      select: { id: true, empresaId: true }
+    });
+    if (!escala) return res.status(404).json({ error: 'Escala não encontrada' });
+    const whatsappLimpo = normalizarWhatsapp(req.body?.whatsapp);
+    if (!whatsappLimpo || whatsappLimpo.length < 10) return res.status(400).json({ error: 'Informe um WhatsApp válido.' });
+
+    // await DENTRO do run (a arrow-lazy NÃO isola — ver comentário do tenantStore).
+    const dados = await tenantStore.run({ empresaId: escala.empresaId }, async () => {
+      const motoboy = await prisma.motoboy.findFirst({
+        where: { whatsapp: whatsappLimpo },
+        select: { nome: true, status: true }
+      });
+      // Empresa é a raiz do tenant (fora de MODELS_TENANT): findUnique por id direto.
+      const empresa = await prisma.empresa.findUnique({
+        where: { id: escala.empresaId },
+        select: { whatsapp: true, whatsappEmpresa: true, whatsappContato: true, motoboyContatoWhatsapp: true, motoboyPerguntaCnh: true }
+      });
+      // Contato: o número dedicado da escala (Motoboys › Configuração) tem prioridade;
+      // se vazio, cai no número escolhido em Minha Empresa (responsável/empresa).
+      const preferido = empresa?.whatsappContato === 'EMPRESA' ? empresa?.whatsappEmpresa : empresa?.whatsapp;
+      const alternativo = empresa?.whatsappContato === 'EMPRESA' ? empresa?.whatsapp : empresa?.whatsappEmpresa;
+      const empresaWhatsapp = normalizarWhatsapp(empresa?.motoboyContatoWhatsapp) || normalizarWhatsapp(preferido) || normalizarWhatsapp(alternativo) || null;
+      return { motoboy, empresaWhatsapp, perguntaCnh: !!empresa?.motoboyPerguntaCnh };
+    });
+
+    const { motoboy, empresaWhatsapp, perguntaCnh } = dados;
+    let situacao;
+    if (!motoboy) situacao = 'NAO_CADASTRADO';
+    else if (motoboy.status === 'ATIVO') situacao = 'APTO';
+    else if (motoboy.status === 'PENDENTE') situacao = 'PENDENTE';
+    else situacao = 'SEM_ACESSO'; // INATIVO ou BLOQUEADO
+
+    res.json({ situacao, nome: motoboy?.nome ?? null, empresaWhatsapp, perguntaCnh });
+  } catch (err) {
+    console.error('[public/identificar]', err?.message || err);
+    res.status(500).json({ error: 'Erro interno ao identificar' });
+  }
+});
+
+// Público: motoboy que não é da equipe envia a solicitação → fica PENDENTE de aprovação.
+// Idempotente: se o WhatsApp já existe, devolve a situação atual (não recria/duplica).
+app.post('/api/public/escala-motoboys/:token/cadastro', async (req, res) => {
+  try {
+    const escala = await prisma.escalaMotoboy.findUnique({
+      where: { tokenPublico: String(req.params.token) },
+      select: { id: true, empresaId: true }
+    });
+    if (!escala) return res.status(404).json({ error: 'Escala não encontrada' });
+    const nomeLimpo = String(req.body?.nome ?? '').trim();
+    const whatsappLimpo = normalizarWhatsapp(req.body?.whatsapp);
+    if (!nomeLimpo) return res.status(400).json({ error: 'Informe seu nome.' });
+    if (!whatsappLimpo || whatsappLimpo.length < 10) return res.status(400).json({ error: 'Informe um WhatsApp válido.' });
+    // Resposta "Você possui CNH?" (só quando a loja pede) — informativa, não bloqueia.
+    const possuiCnh = req.body?.possuiCnh === true ? true : (req.body?.possuiCnh === false ? false : null);
+
+    const situacao = await tenantStore.run({ empresaId: escala.empresaId }, async () => {
+      const existente = await prisma.motoboy.findFirst({ where: { whatsapp: whatsappLimpo }, select: { status: true } });
+      if (existente) {
+        if (existente.status === 'ATIVO') return 'APTO';
+        if (existente.status === 'PENDENTE') return 'PENDENTE';
+        return 'SEM_ACESSO'; // INATIVO/BLOQUEADO — não recria
+      }
+      await prisma.motoboy.create({ data: { nome: nomeLimpo, whatsapp: whatsappLimpo, status: 'PENDENTE', possuiCnh } });
+      return 'PENDENTE';
+    });
+
+    res.status(201).json({ situacao });
+  } catch (err) {
+    console.error('[public/cadastro]', err?.message || err);
+    res.status(500).json({ error: 'Erro interno ao enviar o cadastro' });
+  }
+});
+
+// ============================================================
+// Base de Entregadores / Motoboys (V2)
+// ============================================================
+const MOTOBOY_STATUS = ['ATIVO', 'INATIVO', 'BLOQUEADO', 'PENDENTE'];
+const PRESENCA_STATUS = ['PENDENTE', 'COMPARECEU', 'FALTOU', 'JUSTIFICOU'];
+const OCORRENCIA_TIPOS = ['NAO_COMPARECEU', 'ABANDONO', 'MOTO_QUEBROU', 'ATRASO', 'PREJUIZO', 'CONDUTA', 'ATENDIMENTO', 'OBSERVACAO_POSITIVA', 'OUTRO'];
+const OCORRENCIA_GRAVIDADES = ['BAIXA', 'MEDIA', 'ALTA', 'CRITICA'];
+
+// Decimal/strings → número seguro (sem NaN)
+function numSeguro(v) {
+  if (v === null || v === undefined) return 0;
+  const n = parseFloat(String(v));
+  return Number.isFinite(n) ? n : 0;
+}
+function maxData(datas) {
+  const validas = datas.filter(Boolean).map((d) => new Date(d)).filter((d) => !isNaN(d.getTime()));
+  if (validas.length === 0) return null;
+  return new Date(Math.max(...validas.map((d) => d.getTime()))).toISOString();
+}
+
+// Métricas do motoboy a partir de inscricoes (com dia.data) e ocorrencias
+function metricasMotoboy(inscricoes, ocorrencias) {
+  const totalInscricoes = inscricoes.length;
+  const totalConfirmadas = inscricoes.filter((i) => i.status === 'CONFIRMADO').length;
+  const totalCanceladas = inscricoes.filter((i) => i.status === 'CANCELADO').length;
+  const totalCompareceu = inscricoes.filter((i) => i.presencaStatus === 'COMPARECEU').length;
+  const totalFaltou = inscricoes.filter((i) => i.presencaStatus === 'FALTOU').length;
+  const totalJustificou = inscricoes.filter((i) => i.presencaStatus === 'JUSTIFICOU').length;
+  const totalOcorrencias = ocorrencias.length;
+  const totalOcorrenciasCriticas = ocorrencias.filter((o) => o.gravidade === 'CRITICA').length;
+  const totalAbandonos = ocorrencias.filter((o) => o.tipo === 'ABANDONO').length;
+  const prejuizoAcumulado = ocorrencias.reduce((s, o) => s + numSeguro(o.valorPrejuizo), 0);
+  const ultimaParticipacao = maxData(inscricoes.map((i) => i.dia?.data));
+  const ultimaOcorrencia = maxData(ocorrencias.map((o) => o.dataOcorrencia));
+  // Taxa de comparecimento = de cada dia CONFIRMADO, quantos ele compareceu
+  const confirmadasComparecidas = inscricoes.filter((i) => i.status === 'CONFIRMADO' && i.presencaStatus === 'COMPARECEU').length;
+  const taxaComparecimento = totalConfirmadas > 0 ? Math.round((confirmadasComparecidas / totalConfirmadas) * 1000) / 10 : null;
+  return {
+    totalInscricoes,
+    totalConfirmadas,
+    totalCanceladas,
+    totalCompareceu,
+    totalFaltou,
+    totalJustificou,
+    totalOcorrencias,
+    totalOcorrenciasCriticas,
+    totalAbandonos,
+    prejuizoAcumulado: Math.round(prejuizoAcumulado * 100) / 100,
+    ultimaParticipacao,
+    ultimaOcorrencia,
+    taxaComparecimento
+  };
+}
+
+// "Atenção" derivado: motoboy ATIVO com sinais de risco. Retorna o flag e os
+// motivos (usados no tooltip/detalhe). Não altera o status real no banco.
+function calcularAtencao(status, m) {
+  if (status !== 'ATIVO') return { atencao: false, atencaoMotivos: [] };
+  const motivos = [];
+  if (m.totalOcorrenciasCriticas > 0) motivos.push(`${m.totalOcorrenciasCriticas} ocorrência(s) crítica(s)`);
+  if (m.totalAbandonos >= 1) motivos.push(`${m.totalAbandonos} abandono(s)`);
+  if (m.totalFaltou >= 2) motivos.push(`${m.totalFaltou} faltas`);
+  if (m.taxaComparecimento !== null && m.totalConfirmadas >= 3 && m.taxaComparecimento < 70) {
+    motivos.push(`Taxa de comparecimento ${m.taxaComparecimento}%`);
+  }
+  return { atencao: motivos.length > 0, atencaoMotivos: motivos };
+}
+
+// ===== Base de entregadores =====
+app.get('/api/motoboys', async (req, res) => {
+  try {
+    const { busca, status } = req.query;
+    const where = {};
+    if (status !== undefined && status !== '') {
+      if (!MOTOBOY_STATUS.includes(status)) return res.status(400).json({ error: 'status inválido' });
+      where.status = status;
+    }
+    if (busca && String(busca).trim() !== '') {
+      const termo = String(busca).trim();
+      const digitos = termo.replace(/\D/g, '');
+      where.OR = [
+        { nome: { contains: termo, mode: 'insensitive' } },
+        ...(digitos ? [{ whatsapp: { contains: digitos } }] : [])
+      ];
+    }
+    const motoboys = await prisma.motoboy.findMany({
+      where,
+      orderBy: { nome: 'asc' },
+      include: {
+        inscricoes: { select: { status: true, presencaStatus: true, dia: { select: { data: true } } } },
+        ocorrencias: { select: { tipo: true, gravidade: true, valorPrejuizo: true, dataOcorrencia: true } }
+      }
+    });
+    res.json(
+      motoboys.map((m) => {
+        const met = metricasMotoboy(m.inscricoes, m.ocorrencias);
+        return {
+          id: m.id,
+          nome: m.nome,
+          whatsapp: m.whatsapp,
+          status: m.status,
+          observacoes: m.observacoes,
+          criadoEm: m.criadoEm,
+          ...met,
+          ...calcularAtencao(m.status, met)
+        };
+      })
+    );
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno ao listar entregadores' });
+  }
+});
+
+// Ferramentas da própria LOJA: qualquer usuário autenticado com acesso à loja usa —
+// o middleware de tenant já resolveu a loja/permissão (não existia no PDV; portado do H360).
+function exigirLoja(req, res) {
+  if (!req.user) { res.status(401).json({ error: 'Não autenticado.' }); return false; }
+  return true;
+}
+
+// ===== Motoboys › Configuração (contato da escala, bloqueado, CNH) — ADMIN =====
+// Definido ANTES de /api/motoboys/:id p/ "config" não cair na rota de id.
+app.get('/api/motoboys/config', async (req, res) => {
+  if (!exigirLoja(req, res)) return;
+  try {
+    const e = await getEmpresa();
+    res.json({ contatoWhatsapp: e.motoboyContatoWhatsapp ?? '', bloqueadoPodeEscalar: !!e.motoboyBloqueadoPodeEscalar, perguntaCnh: !!e.motoboyPerguntaCnh });
+  } catch (err) { console.error('[motoboys/config GET]', err); res.status(500).json({ error: 'Erro ao carregar a configuração.' }); }
+});
+app.put('/api/motoboys/config', async (req, res) => {
+  if (!exigirLoja(req, res)) return;
+  try {
+    const e = await getEmpresa();
+    const b = req.body ?? {};
+    const data = {};
+    if (b.contatoWhatsapp !== undefined) { const d = normalizarWhatsapp(b.contatoWhatsapp); data.motoboyContatoWhatsapp = d === '' ? null : d; }
+    if (b.bloqueadoPodeEscalar !== undefined) data.motoboyBloqueadoPodeEscalar = !!b.bloqueadoPodeEscalar;
+    if (b.perguntaCnh !== undefined) data.motoboyPerguntaCnh = !!b.perguntaCnh;
+    const at = await prisma.empresa.update({ where: { id: e.id }, data });
+    res.json({ contatoWhatsapp: at.motoboyContatoWhatsapp ?? '', bloqueadoPodeEscalar: !!at.motoboyBloqueadoPodeEscalar, perguntaCnh: !!at.motoboyPerguntaCnh });
+  } catch (err) { console.error('[motoboys/config PUT]', err); res.status(500).json({ error: 'Erro ao salvar a configuração.' }); }
+});
+
+app.get('/api/motoboys/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'id inválido' });
+    const m = await prisma.motoboy.findUnique({
+      where: { id },
+      include: {
+        inscricoes: { select: { status: true, presencaStatus: true, dia: { select: { data: true } } } },
+        ocorrencias: { select: { tipo: true, gravidade: true, valorPrejuizo: true, dataOcorrencia: true } }
+      }
+    });
+    if (!m) return res.status(404).json({ error: 'Entregador não encontrado' });
+    const met = metricasMotoboy(m.inscricoes, m.ocorrencias);
+    res.json({
+      id: m.id,
+      nome: m.nome,
+      whatsapp: m.whatsapp,
+      status: m.status,
+      observacoes: m.observacoes,
+      possuiCnh: m.possuiCnh,
+      criadoEm: m.criadoEm,
+      atualizadoEm: m.atualizadoEm,
+      ...met,
+      ...calcularAtencao(m.status, met)
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno ao consultar entregador' });
+  }
+});
+
+app.post('/api/motoboys', async (req, res) => {
+  try {
+    const { nome, whatsapp, status, observacoes, possuiCnh } = req.body ?? {};
+    const nomeLimpo = String(nome ?? '').trim();
+    if (!nomeLimpo) return res.status(400).json({ error: 'Informe o nome do entregador.' });
+    const whatsappLimpo = normalizarWhatsapp(whatsapp);
+    if (!whatsappLimpo) return res.status(400).json({ error: 'Informe um WhatsApp válido.' });
+    const data = { nome: nomeLimpo, whatsapp: whatsappLimpo };
+    if (status !== undefined) {
+      if (!MOTOBOY_STATUS.includes(status)) return res.status(400).json({ error: 'status inválido' });
+      data.status = status;
+    }
+    if (observacoes !== undefined) data.observacoes = String(observacoes).trim() === '' ? null : String(observacoes).trim();
+    if (possuiCnh !== undefined) data.possuiCnh = possuiCnh === true ? true : (possuiCnh === false ? false : null);
+    const m = await prisma.motoboy.create({ data });
+    res.status(201).json(m);
+  } catch (err) {
+    if (err && err.code === 'P2002') {
+      return res.status(409).json({ error: 'Já existe um entregador com este WhatsApp.' });
+    }
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno ao criar entregador' });
+  }
+});
+
+app.put('/api/motoboys/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'id inválido' });
+    const existe = await prisma.motoboy.findUnique({ where: { id }, select: { id: true } });
+    if (!existe) return res.status(404).json({ error: 'Entregador não encontrado' });
+    const { nome, whatsapp, status, observacoes, possuiCnh } = req.body ?? {};
+    const data = {};
+    if (nome !== undefined) {
+      const v = String(nome).trim();
+      if (v === '') return res.status(400).json({ error: 'O nome não pode ficar vazio.' });
+      data.nome = v;
+    }
+    if (whatsapp !== undefined) {
+      const w = normalizarWhatsapp(whatsapp);
+      if (!w) return res.status(400).json({ error: 'WhatsApp inválido.' });
+      data.whatsapp = w;
+    }
+    if (status !== undefined) {
+      if (!MOTOBOY_STATUS.includes(status)) return res.status(400).json({ error: 'status inválido' });
+      data.status = status;
+    }
+    if (observacoes !== undefined) data.observacoes = String(observacoes).trim() === '' ? null : String(observacoes).trim();
+    if (possuiCnh !== undefined) data.possuiCnh = possuiCnh === true ? true : (possuiCnh === false ? false : null);
+    const m = await prisma.motoboy.update({ where: { id }, data });
+    res.json(m);
+  } catch (err) {
+    if (err && err.code === 'P2002') {
+      return res.status(409).json({ error: 'Já existe um entregador com este WhatsApp.' });
+    }
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno ao atualizar entregador' });
+  }
+});
+
+// Exclui o entregador. As ocorrências são removidas (cascade); as inscrições na
+// escala ficam como snapshot histórico, apenas sem vínculo (motoboyId = null).
+app.delete('/api/motoboys/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'id inválido' });
+    const existe = await prisma.motoboy.findUnique({ where: { id }, select: { id: true } });
+    if (!existe) return res.status(404).json({ error: 'Entregador não encontrado' });
+    await prisma.motoboy.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno ao excluir entregador' });
+  }
+});
+
+app.get('/api/motoboys/:id/historico', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'id inválido' });
+    const existe = await prisma.motoboy.findUnique({ where: { id }, select: { id: true } });
+    if (!existe) return res.status(404).json({ error: 'Entregador não encontrado' });
+    const inscricoes = await prisma.escalaMotoboyInscricao.findMany({
+      where: { motoboyId: id },
+      include: { dia: { include: { escala: { select: { id: true, ano: true, mes: true, titulo: true } } } } }
+    });
+    const historico = inscricoes
+      .map((i) => ({
+        inscricaoId: i.id,
+        status: i.status,
+        presencaStatus: i.presencaStatus,
+        presencaObservacao: i.presencaObservacao,
+        data: i.dia?.data ?? null,
+        diaSemana: i.dia?.diaSemana ?? null,
+        escalaId: i.dia?.escala?.id ?? null,
+        ano: i.dia?.escala?.ano ?? null,
+        mes: i.dia?.escala?.mes ?? null,
+        titulo: i.dia?.escala?.titulo ?? null
+      }))
+      .sort((a, b) => new Date(b.data ?? 0) - new Date(a.data ?? 0));
+    res.json(historico);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno ao consultar histórico' });
+  }
+});
+
+// ===== Ocorrências =====
+app.get('/api/motoboys/:id/ocorrencias', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'id inválido' });
+    const existe = await prisma.motoboy.findUnique({ where: { id }, select: { id: true } });
+    if (!existe) return res.status(404).json({ error: 'Entregador não encontrado' });
+    const ocorrencias = await prisma.motoboyOcorrencia.findMany({
+      where: { motoboyId: id },
+      orderBy: { dataOcorrencia: 'desc' }
+    });
+    res.json(ocorrencias);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno ao listar ocorrências' });
+  }
+});
+
+function validarOcorrenciaBody(body, parcial) {
+  const { tipo, gravidade, dataOcorrencia, descricao, valorPrejuizo, resolvida, escalaDiaId, inscricaoId } = body ?? {};
+  const data = {};
+  if (tipo !== undefined || !parcial) {
+    if (!OCORRENCIA_TIPOS.includes(tipo)) return { erro: 'tipo de ocorrência inválido' };
+    data.tipo = tipo;
+  }
+  if (gravidade !== undefined) {
+    if (!OCORRENCIA_GRAVIDADES.includes(gravidade)) return { erro: 'gravidade inválida' };
+    data.gravidade = gravidade;
+  }
+  if (dataOcorrencia !== undefined || !parcial) {
+    const d = new Date(dataOcorrencia);
+    if (isNaN(d.getTime())) return { erro: 'dataOcorrencia inválida' };
+    data.dataOcorrencia = d;
+  }
+  if (descricao !== undefined || !parcial) {
+    const v = String(descricao ?? '').trim();
+    if (v === '') return { erro: 'Descreva a ocorrência.' };
+    data.descricao = v;
+  }
+  if (valorPrejuizo !== undefined) {
+    if (valorPrejuizo === null || valorPrejuizo === '') data.valorPrejuizo = null;
+    else {
+      const n = Number(valorPrejuizo);
+      if (!Number.isFinite(n) || n < 0) return { erro: 'valorPrejuizo deve ser maior ou igual a 0' };
+      data.valorPrejuizo = n;
+    }
+  }
+  if (resolvida !== undefined) data.resolvida = !!resolvida;
+  if (escalaDiaId !== undefined) data.escalaDiaId = escalaDiaId === null ? null : Number(escalaDiaId) || null;
+  if (inscricaoId !== undefined) data.inscricaoId = inscricaoId === null ? null : Number(inscricaoId) || null;
+  return { data };
+}
+
+app.post('/api/motoboys/:id/ocorrencias', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'id inválido' });
+    const existe = await prisma.motoboy.findUnique({ where: { id }, select: { id: true } });
+    if (!existe) return res.status(404).json({ error: 'Entregador não encontrado' });
+    const { erro, data } = validarOcorrenciaBody(req.body, false);
+    if (erro) return res.status(400).json({ error: erro });
+    const oc = await prisma.motoboyOcorrencia.create({ data: { ...data, motoboyId: id } });
+    res.status(201).json(oc);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno ao registrar ocorrência' });
+  }
+});
+
+app.put('/api/motoboys/ocorrencias/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'id inválido' });
+    const existe = await prisma.motoboyOcorrencia.findUnique({ where: { id }, select: { id: true } });
+    if (!existe) return res.status(404).json({ error: 'Ocorrência não encontrada' });
+    const { erro, data } = validarOcorrenciaBody(req.body, true);
+    if (erro) return res.status(400).json({ error: erro });
+    const oc = await prisma.motoboyOcorrencia.update({ where: { id }, data });
+    res.json(oc);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno ao atualizar ocorrência' });
+  }
+});
+
+app.delete('/api/motoboys/ocorrencias/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'id inválido' });
+    const existe = await prisma.motoboyOcorrencia.findUnique({ where: { id }, select: { id: true } });
+    if (!existe) return res.status(404).json({ error: 'Ocorrência não encontrada' });
+    await prisma.motoboyOcorrencia.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno ao excluir ocorrência' });
+  }
+});
+
+// ===== Presença na escala (independente do status de inscrição) =====
+app.put('/api/escala-motoboys/inscricoes/:id/presenca', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'id inválido' });
+    const insc = await prisma.escalaMotoboyInscricao.findUnique({ where: { id }, select: { id: true, status: true } });
+    if (!insc) return res.status(404).json({ error: 'Inscrição não encontrada' });
+    if (insc.status === 'CANCELADO') {
+      return res.status(409).json({ error: 'Não é possível marcar presença em uma inscrição cancelada.' });
+    }
+    const { presencaStatus, presencaObservacao } = req.body ?? {};
+    if (!PRESENCA_STATUS.includes(presencaStatus)) {
+      return res.status(400).json({ error: 'presencaStatus inválido' });
+    }
+    const data = { presencaStatus };
+    if (presencaObservacao !== undefined) {
+      data.presencaObservacao = String(presencaObservacao).trim() === '' ? null : String(presencaObservacao).trim();
+    }
+    await prisma.escalaMotoboyInscricao.update({ where: { id }, data });
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno ao registrar presença' });
+  }
+});
+
 app.listen(PORT, () => console.log(`Operação (PDV) API rodando em http://localhost:${PORT}`));
 iniciarAgendadorLembretes();
 iniciarAgendadorGrupoVip();
