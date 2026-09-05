@@ -40,6 +40,8 @@ model Insumo {
   unidade        String
   custoUnitario  Decimal    @db.Decimal(12, 4)
   fornecedor     String?
+  // Origem do custo atual: fornecedor cuja cotação virou o custoUnitario (exibição/rastreio).
+  custoFornecedorId Int?
   ativo          Boolean    @default(true)
 
   // ===== Perda/rendimento no preparo (V2) =====
@@ -64,11 +66,77 @@ model Insumo {
   usosEmReceitas  ReceitaProducaoItem[] @relation("IngredienteDeReceita")
   // Etiquetas: config de conservação/validade padrão deste insumo
   etiquetaConfig EtiquetaItemConfig?
+  // Fornecedores que vendem este insumo (com cotações de preço)
+  fornecedores FornecedorInsumo[]
 
   @@index([empresaId])
   @@index([nome])
   @@index([ativo])
   @@index([tipo])
+}
+
+// ============================================================
+// Fornecedores (Produtos › Fornecedores) — quem vende cada insumo, com histórico
+// de cotações de preço. A cotação escolhida pode virar o custo do insumo.
+// Portado do H360 (migration 20260812120000 + 20260812140000).
+// ============================================================
+model Fornecedor {
+  id           Int      @id @default(autoincrement())
+  empresaId    Int
+  nome         String
+  whatsapp     String?
+  telefone     String?
+  email        String?
+  website      String?
+  endereco     String? // "local" — endereço para comprar presencialmente
+  observacao   String?
+  ativo        Boolean  @default(true)
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  insumos FornecedorInsumo[]
+
+  @@index([empresaId])
+  @@index([nome])
+}
+
+// Vínculo N:N Insumo↔Fornecedor, com o último preço desnormalizado (precoAtual)
+// para listagens rápidas; o histórico completo fica em FornecedorInsumoCotacao.
+model FornecedorInsumo {
+  id           Int       @id @default(autoincrement())
+  empresaId    Int
+  fornecedorId Int
+  insumoId     Int
+  precoAtual   Decimal?  @db.Decimal(12, 4)
+  precoAtualEm DateTime?
+  criadoEm     DateTime  @default(now())
+  atualizadoEm DateTime  @updatedAt
+
+  fornecedor Fornecedor                @relation(fields: [fornecedorId], references: [id], onDelete: Cascade)
+  insumo     Insumo                    @relation(fields: [insumoId], references: [id], onDelete: Cascade)
+  cotacoes   FornecedorInsumoCotacao[]
+
+  @@unique([fornecedorId, insumoId])
+  @@index([empresaId])
+  @@index([insumoId])
+  @@index([fornecedorId])
+}
+
+// Histórico de cotações de preço (fornecedor × insumo). O preço "atual" é a
+// cotação mais recente (desnormalizada em FornecedorInsumo.precoAtual).
+model FornecedorInsumoCotacao {
+  id                 Int      @id @default(autoincrement())
+  empresaId          Int
+  fornecedorInsumoId Int
+  preco              Decimal  @db.Decimal(12, 4)
+  data               DateTime @default(now())
+  observacao         String?
+  criadoEm           DateTime @default(now())
+
+  fornecedorInsumo FornecedorInsumo @relation(fields: [fornecedorInsumoId], references: [id], onDelete: Cascade)
+
+  @@index([empresaId])
+  @@index([fornecedorInsumoId])
 }
 
 // ============================================================

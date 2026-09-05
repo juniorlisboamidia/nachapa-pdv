@@ -23,6 +23,7 @@ import { mensagensParaDisparar, montarPayloadCupom } from './grupoVip.js';
 import { criarCupomCW, gerarCodigoCupom } from './cardapioCupom.js';
 import { extrairOrigem } from './grupoVipOrigem.js';
 import { buscarOrigensCW } from './cardapioOrigens.js';
+import { ordemDeRecalculo } from './custos/propagacaoCusto.js';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 
@@ -59,6 +60,8 @@ const MODELS_TENANT = new Set([
   'checklistTemplate', 'checklistTemplateItem', 'checklist', 'checklistItem', 'checklistExecucao', 'checklistResposta', 'checklistFoto',
   'checklistNotificacaoConfig', 'checklistDestinatario', 'checklistNotificacaoLog', 'checklistLembreteEnviado',
   'frase',
+  // Produtos › Fornecedores (cadastro + cotações de preço por insumo)
+  'fornecedor', 'fornecedorInsumo', 'fornecedorInsumoCotacao',
 ]);
 const OPS_WHERE = new Set([
   'findMany', 'findFirst', 'findFirstOrThrow', 'findUnique', 'findUniqueOrThrow',
@@ -199,6 +202,7 @@ const AREA_PREFIXOS = [
   ['/bonificacao', 'bonificacao'],
   ['/funcionarios', 'ponto'], ['/ponto', 'ponto'], ['/jornadas', 'ponto'], ['/funcoes', 'ponto'], ['/dispositivos', 'ponto'], ['/coletor', 'ponto'],
   ['/produtos', 'produtos'], ['/insumos', 'produtos'], ['/estoque', 'produtos'], ['/ficha-tecnica', 'produtos'], ['/fichas', 'produtos'],
+  ['/fornecedores', 'produtos'], ['/fornecedor-insumo', 'produtos'],
   ['/custos', 'gestao'], ['/faturamento', 'gestao'], ['/ponto-equilibrio', 'gestao'],
   ['/financeiro', 'financeiro'],
   ['/relatorios', 'relatorios'],
@@ -3948,6 +3952,291 @@ async function sincronizarCustoComReceita(insumoId) {
   const receitaFinal = custoAtualizado ? await getReceitaCompleta(insumoId) : receita;
   return { insumo: insumoResumo(insumo), receita: receitaFinal, custoAtualizado, custoMensagem };
 }
+
+// Um insumo de produção própria carrega dentro dele o custo dos ingredientes, e
+// esse custo fica GRAVADO (é o que as fichas técnicas e os combos leem). Então,
+// sempre que o custo de um ingrediente muda — edição na tela de Insumos ou
+// cotação de fornecedor virando custo —, toda receita que o usa precisa ser
+// refeita na hora.
+// Não lança: a alteração de custo já foi gravada e não deve ser derrubada por
+// uma falha no efeito colateral; o erro vai para o log e volta sinalizado.
+async function propagarCustoParaConsumidores(insumoId) {
+  try {
+    // Quem consome quem, subindo nível a nível a partir do insumo alterado.
+    const consumidoresPorInsumo = new Map();
+    const visitados = new Set([insumoId]);
+    let fronteira = [insumoId];
+    // Teto de segurança: cadastro saudável não passa de 2-3 níveis.
+    for (let nivel = 0; nivel < 20 && fronteira.length > 0; nivel += 1) {
+      const itens = await prisma.receitaProducaoItem.findMany({
+        where: { insumoId: { in: fronteira } },
+        select: { insumoId: true, receita: { select: { insumoId: true } } }
+      });
+      const proxima = [];
+      for (const item of itens) {
+        const consumidorId = item.receita?.insumoId;
+        // Receita que se usa como próprio ingrediente = cadastro inválido; ignora.
+        if (!consumidorId || consumidorId === item.insumoId) continue;
+        const lista = consumidoresPorInsumo.get(item.insumoId) ?? [];
+        if (!lista.includes(consumidorId)) lista.push(consumidorId);
+        consumidoresPorInsumo.set(item.insumoId, lista);
+        if (!visitados.has(consumidorId)) {
+          visitados.add(consumidorId);
+          proxima.push(consumidorId);
+        }
+      }
+      fronteira = proxima;
+    }
+
+    const recalculados = [];
+    for (const id of ordemDeRecalculo(insumoId, consumidoresPorInsumo)) {
+      const { custoAtualizado } = await sincronizarCustoComReceita(id);
+      if (custoAtualizado) recalculados.push(id);
+    }
+    return { recalculados, erro: false };
+  } catch (err) {
+    console.error('[custo] falha ao propagar custo do insumo', insumoId, err);
+    return { recalculados: [], erro: true };
+  }
+}
+
+// Editar a receita muda o custo do insumo produzido — e ele mesmo pode ser
+// ingrediente de outra receita. Recalcula este e espalha para os de cima.
+async function sincronizarCustoEPropagar(insumoId) {
+  const resultado = await sincronizarCustoComReceita(insumoId);
+  if (resultado.custoAtualizado) await propagarCustoParaConsumidores(insumoId);
+  return resultado;
+}
+
+// ===================== Fornecedores (Produtos › Fornecedores) =====================
+// Cadastro de fornecedor + vínculo com insumos + histórico de cotações de preço.
+// Tudo roda dentro do tenantStore das rotas /api/* — o prisma injeta empresaId
+// automaticamente (create/find/update). Não usar nested create (o filho não herda
+// empresaId): crio o pai e depois o filho referenciando por id.
+// Portado do H360 (migration 20260812120000 + 20260812140000).
+
+// Tendência de preço: compara as 2 cotações mais recentes (recebidas por data desc).
+function calcTendenciaPreco(cotacoes) {
+  if (!Array.isArray(cotacoes) || cotacoes.length < 2) return null;
+  const atual = Number(cotacoes[0].preco);
+  const anterior = Number(cotacoes[1].preco);
+  if (!Number.isFinite(atual) || !Number.isFinite(anterior) || anterior === 0) return null;
+  const pct = ((atual - anterior) / anterior) * 100;
+  return { direcao: pct > 0 ? 'up' : pct < 0 ? 'down' : 'flat', pct: Number(pct.toFixed(1)) };
+}
+
+app.get('/api/fornecedores', async (req, res) => {
+  try {
+    const fornecedores = await prisma.fornecedor.findMany({
+      where: { ativo: true },
+      orderBy: { nome: 'asc' },
+      include: { _count: { select: { insumos: true } } },
+    });
+    res.json(fornecedores.map((f) => ({
+      id: f.id, nome: f.nome, whatsapp: f.whatsapp, telefone: f.telefone, email: f.email,
+      website: f.website, endereco: f.endereco, observacao: f.observacao,
+      qtdInsumos: f._count.insumos,
+    })));
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro ao listar fornecedores' }); }
+});
+
+app.get('/api/fornecedores/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'id inválido' });
+    const f = await prisma.fornecedor.findUnique({
+      where: { id },
+      include: {
+        insumos: {
+          include: {
+            insumo: { select: { id: true, nome: true, unidade: true } },
+            cotacoes: { orderBy: { data: 'desc' }, take: 2 },
+          },
+          orderBy: { atualizadoEm: 'desc' },
+        },
+      },
+    });
+    if (!f) return res.status(404).json({ error: 'Fornecedor não encontrado' });
+    res.json({
+      id: f.id, nome: f.nome, whatsapp: f.whatsapp, telefone: f.telefone, email: f.email,
+      website: f.website, endereco: f.endereco, observacao: f.observacao,
+      insumos: f.insumos.map((fi) => ({
+        fornecedorInsumoId: fi.id,
+        insumoId: fi.insumo.id, insumoNome: fi.insumo.nome, unidade: fi.insumo.unidade,
+        precoAtual: fi.precoAtual, precoAtualEm: fi.precoAtualEm,
+        tendencia: calcTendenciaPreco(fi.cotacoes),
+      })),
+    });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro ao carregar fornecedor' }); }
+});
+
+// Normaliza um campo de contato (string vazia/só espaço → null).
+function strOuNull(v) { return v == null || String(v).trim() === '' ? null : String(v).trim(); }
+const CONTATOS_FORNECEDOR = ['whatsapp', 'telefone', 'email', 'website', 'endereco'];
+
+app.post('/api/fornecedores', async (req, res) => {
+  try {
+    const b = req.body ?? {};
+    if (typeof b.nome !== 'string' || b.nome.trim() === '') return res.status(400).json({ error: 'nome é obrigatório' });
+    const f = await prisma.fornecedor.create({
+      data: {
+        nome: b.nome.trim(),
+        whatsapp: strOuNull(b.whatsapp), telefone: strOuNull(b.telefone), email: strOuNull(b.email),
+        website: strOuNull(b.website), endereco: strOuNull(b.endereco), observacao: strOuNull(b.observacao),
+      },
+    });
+    res.status(201).json(f);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro ao criar fornecedor' }); }
+});
+
+app.put('/api/fornecedores/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'id inválido' });
+    const existing = await prisma.fornecedor.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ error: 'Fornecedor não encontrado' });
+    const b = req.body ?? {};
+    const data = {};
+    if (b.nome !== undefined) {
+      if (typeof b.nome !== 'string' || b.nome.trim() === '') return res.status(400).json({ error: 'nome inválido' });
+      data.nome = b.nome.trim();
+    }
+    for (const campo of [...CONTATOS_FORNECEDOR, 'observacao']) {
+      if (b[campo] !== undefined) data[campo] = strOuNull(b[campo]);
+    }
+    const f = await prisma.fornecedor.update({ where: { id }, data });
+    res.json(f);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro ao atualizar fornecedor' }); }
+});
+
+app.delete('/api/fornecedores/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'id inválido' });
+    const existing = await prisma.fornecedor.findUnique({ where: { id } });
+    if (!existing) return res.status(404).json({ error: 'Fornecedor não encontrado' });
+    // Soft delete: preserva o histórico de cotações; some das listagens.
+    await prisma.fornecedor.update({ where: { id }, data: { ativo: false } });
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro ao excluir fornecedor' }); }
+});
+
+// Fornecedores de um insumo (com tendência e destaque do mais barato)
+app.get('/api/insumos/:id/fornecedores', async (req, res) => {
+  try {
+    const insumoId = Number(req.params.id);
+    if (!Number.isInteger(insumoId) || insumoId <= 0) return res.status(400).json({ error: 'id inválido' });
+    const vinculos = await prisma.fornecedorInsumo.findMany({
+      where: { insumoId },
+      include: {
+        fornecedor: { select: { id: true, nome: true, whatsapp: true, ativo: true } },
+        cotacoes: { orderBy: { data: 'desc' }, take: 2 },
+      },
+      orderBy: { precoAtual: 'asc' },
+    });
+    const ativos = vinculos.filter((v) => v.fornecedor.ativo);
+    const precos = ativos.map((v) => (v.precoAtual == null ? null : Number(v.precoAtual))).filter((p) => p != null);
+    const menor = precos.length ? Math.min(...precos) : null;
+    res.json(ativos.map((v) => ({
+      fornecedorInsumoId: v.id,
+      fornecedorId: v.fornecedor.id, fornecedorNome: v.fornecedor.nome, whatsapp: v.fornecedor.whatsapp,
+      precoAtual: v.precoAtual, precoAtualEm: v.precoAtualEm,
+      tendencia: calcTendenciaPreco(v.cotacoes),
+      maisBarato: menor != null && v.precoAtual != null && Number(v.precoAtual) === menor,
+    })));
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro ao listar fornecedores do insumo' }); }
+});
+
+// Vincula um fornecedor (existente OU novo) a um insumo; preço/cotação e "usar como
+// custo" são opcionais. Idempotente no vínculo.
+app.post('/api/insumos/:id/fornecedores', async (req, res) => {
+  try {
+    const insumoId = Number(req.params.id);
+    if (!Number.isInteger(insumoId) || insumoId <= 0) return res.status(400).json({ error: 'id inválido' });
+    const insumo = await prisma.insumo.findUnique({ where: { id: insumoId } });
+    if (!insumo) return res.status(404).json({ error: 'Insumo não encontrado' });
+
+    let { fornecedorId, novoFornecedor, preco, observacao, usarComoCusto } = req.body ?? {};
+
+    if (!fornecedorId) {
+      const nome = novoFornecedor?.nome;
+      if (typeof nome !== 'string' || nome.trim() === '') return res.status(400).json({ error: 'Informe um fornecedor.' });
+      const novo = await prisma.fornecedor.create({
+        data: {
+          nome: nome.trim(),
+          whatsapp: strOuNull(novoFornecedor?.whatsapp), telefone: strOuNull(novoFornecedor?.telefone),
+          email: strOuNull(novoFornecedor?.email), website: strOuNull(novoFornecedor?.website),
+          endereco: strOuNull(novoFornecedor?.endereco),
+        },
+      });
+      fornecedorId = novo.id;
+    } else {
+      fornecedorId = Number(fornecedorId);
+      const forn = await prisma.fornecedor.findUnique({ where: { id: fornecedorId } });
+      if (!forn) return res.status(404).json({ error: 'Fornecedor não encontrado' });
+    }
+
+    let vinculo = await prisma.fornecedorInsumo.findUnique({ where: { fornecedorId_insumoId: { fornecedorId, insumoId } } });
+    if (!vinculo) vinculo = await prisma.fornecedorInsumo.create({ data: { fornecedorId, insumoId } });
+
+    const precoNum = preco == null || preco === '' ? null : Number(preco);
+    if (precoNum != null) {
+      if (!Number.isFinite(precoNum) || precoNum < 0) return res.status(400).json({ error: 'preço inválido' });
+      await prisma.fornecedorInsumoCotacao.create({ data: { fornecedorInsumoId: vinculo.id, preco: precoNum, observacao: observacao ? String(observacao).trim() : null } });
+      await prisma.fornecedorInsumo.update({ where: { id: vinculo.id }, data: { precoAtual: precoNum, precoAtualEm: new Date() } });
+      if (usarComoCusto) {
+        await prisma.insumo.update({ where: { id: insumoId }, data: { custoUnitario: precoNum, custoFornecedorId: fornecedorId } });
+        await propagarCustoParaConsumidores(insumoId);
+      }
+    }
+    res.status(201).json({ ok: true, fornecedorInsumoId: vinculo.id, fornecedorId });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro ao vincular fornecedor' }); }
+});
+
+// Registra uma nova cotação de preço para um vínculo fornecedor×insumo
+app.post('/api/fornecedor-insumo/:id/cotacao', async (req, res) => {
+  try {
+    const fiId = Number(req.params.id);
+    if (!Number.isInteger(fiId) || fiId <= 0) return res.status(400).json({ error: 'id inválido' });
+    const vinculo = await prisma.fornecedorInsumo.findUnique({ where: { id: fiId } });
+    if (!vinculo) return res.status(404).json({ error: 'Vínculo não encontrado' });
+    const { preco, data, observacao, usarComoCusto } = req.body ?? {};
+    const precoNum = Number(preco);
+    if (!Number.isFinite(precoNum) || precoNum < 0) return res.status(400).json({ error: 'preço inválido' });
+    const dataCot = data ? new Date(data) : new Date();
+    await prisma.fornecedorInsumoCotacao.create({ data: { fornecedorInsumoId: fiId, preco: precoNum, data: dataCot, observacao: observacao ? String(observacao).trim() : null } });
+    // precoAtual = cotação mais recente por data (a nova pode ser retroativa)
+    const maisRecente = await prisma.fornecedorInsumoCotacao.findFirst({ where: { fornecedorInsumoId: fiId }, orderBy: { data: 'desc' } });
+    await prisma.fornecedorInsumo.update({ where: { id: fiId }, data: { precoAtual: maisRecente.preco, precoAtualEm: maisRecente.data } });
+    if (usarComoCusto) {
+      await prisma.insumo.update({ where: { id: vinculo.insumoId }, data: { custoUnitario: precoNum, custoFornecedorId: vinculo.fornecedorId } });
+      await propagarCustoParaConsumidores(vinculo.insumoId);
+    }
+    res.status(201).json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro ao registrar cotação' }); }
+});
+
+// Histórico de cotações de um vínculo (para a curva de evolução)
+app.get('/api/fornecedor-insumo/:id/cotacoes', async (req, res) => {
+  try {
+    const fiId = Number(req.params.id);
+    if (!Number.isInteger(fiId) || fiId <= 0) return res.status(400).json({ error: 'id inválido' });
+    const cotacoes = await prisma.fornecedorInsumoCotacao.findMany({ where: { fornecedorInsumoId: fiId }, orderBy: { data: 'desc' } });
+    res.json(cotacoes);
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro ao listar cotações' }); }
+});
+
+// Desvincula um fornecedor de um insumo (remove o vínculo e suas cotações)
+app.delete('/api/fornecedor-insumo/:id', async (req, res) => {
+  try {
+    const fiId = Number(req.params.id);
+    if (!Number.isInteger(fiId) || fiId <= 0) return res.status(400).json({ error: 'id inválido' });
+    const vinculo = await prisma.fornecedorInsumo.findUnique({ where: { id: fiId } });
+    if (!vinculo) return res.status(404).json({ error: 'Vínculo não encontrado' });
+    await prisma.fornecedorInsumo.delete({ where: { id: fiId } });
+    res.json({ ok: true });
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erro ao remover vínculo' }); }
+});
 
 app.get('/api/insumos/:id/receita', async (req, res) => {
   try {

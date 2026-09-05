@@ -13,6 +13,7 @@ import BonificacaoEu from './pages/BonificacaoEu'
 import BancoTalentos from './pages/BancoTalentos'
 import TalentosPublico from './pages/TalentosPublico'
 import Insumos from './pages/Insumos'
+import Fornecedores from './pages/Fornecedores'
 import Produtos from './pages/Produtos'
 import FichaTecnica from './pages/FichaTecnica'
 import Custos from './pages/Custos'
@@ -81,6 +82,7 @@ export default function App() {
             {/* Gestão (F2) */}
             <Route path="produtos" element={<Produtos />} />
             <Route path="insumos" element={<Insumos />} />
+            <Route path="fornecedores" element={<Fornecedores />} />
             <Route path="ficha-tecnica" element={<FichaTecnica />} />
             <Route path="ficha-tecnica/:produtoId" element={<FichaTecnica />} />
             <Route path="custos" element={<Custos />} />

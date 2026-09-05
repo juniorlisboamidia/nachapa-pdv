@@ -187,6 +187,7 @@ const grupos = [
     itens: [
       { to: '/produtos', label: 'Ficha técnica', icon: 'ficha' },
       { to: '/insumos', label: 'Insumos', icon: 'insumos' },
+      { to: '/fornecedores', label: 'Fornecedores', icon: 'insumos' },
       { to: '/estoque', label: 'Estoque', icon: 'produtos' },
     ]
   },
