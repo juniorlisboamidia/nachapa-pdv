@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import api from '../services/api'
 import Toast from '../components/Toast'
+import BotaoCopiar from '../components/BotaoCopiar'
 
 const CAMPOS_VAZIOS = { nome: '', whatsapp: '', email: '', endereco: '', logoDataUrl: null, logoPublicaDataUrl: null }
 const TIPOS_LOGO = ['image/png', 'image/jpeg', 'image/webp']
@@ -265,7 +266,6 @@ function AbaAcessos() {
     api.get('/bonificacao/config').then((r) => { const id = r.data?.config?.slugPublico || r.data?.config?.tokenPublico; setColabLink(id ? `${window.location.origin}/colaborador/${id}` : '') }).catch(() => {})
   }
   useEffect(carregar, [])
-  const copiar = (txt) => { try { navigator.clipboard.writeText(txt) } catch { /* noop */ } setToast({ message: 'Link copiado.', type: 'success' }) }
   async function remover(o) {
     if (!window.confirm(`Remover o acesso de ${o.nome}?`)) return
     try { await api.delete(`/acessos/${o.id}`); carregar() } catch (e) { setToast({ message: e?.response?.data?.error ?? 'Erro ao remover.', type: 'error' }) }
@@ -280,7 +280,7 @@ function AbaAcessos() {
         <div style={{ fontSize: 13, color: 'var(--app-text-soft, #777)', marginBottom: 12, lineHeight: 1.55 }}>Um link único para a equipe entrar na Área do Colaborador (login por WhatsApp). O número precisa estar cadastrado no colaborador (menu Colaboradores).</div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           <input className="form-input" style={{ flex: 1, minWidth: 220 }} value={colabLink || 'Defina o endereço do link em Bonificação › Configuração › Link público.'} readOnly />
-          <button type="button" className="btn btn-secondary btn-sm" onClick={() => colabLink && copiar(colabLink)} disabled={!colabLink}>Copiar</button>
+          <BotaoCopiar texto={colabLink} label="Copiar" className="btn btn-secondary btn-sm" disabled={!colabLink} onCopiado={() => setToast({ message: 'Link copiado.', type: 'success' })} />
           <button type="button" className="btn btn-secondary btn-sm" onClick={() => colabLink && window.open(colabLink, '_blank', 'noopener')} disabled={!colabLink}>Abrir</button>
         </div>
       </div>

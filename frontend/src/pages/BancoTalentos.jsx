@@ -8,6 +8,7 @@ import ConfirmDialog from '../components/ConfirmDialog'
 import CandidatoDrawer from '../components/CandidatoDrawer'
 import FormBuilder from '../components/FormBuilder'
 import { mascararTelefone, formatarWhats } from '../utils/telefone'
+import BotaoCopiar from '../components/BotaoCopiar'
 import {
   ORIGENS, ORIGEM_LABEL, FUNCOES, EXPERIENCIAS, VAGA_STATUS, VAGA_STATUS_CLS,
   SITUACAO_LABEL, SITUACAO_CLS, CLASSIF_LABEL, CLASSIF_CLS, fmtData, dispResumo, formularioPadrao, waLink,
@@ -53,7 +54,6 @@ export default function BancoTalentos() {
   const carregarVagas = () => { setVagas(null); api.get('/recrutamento/vagas').then((r) => setVagas(r.data)).catch(() => setVagas([])) }
   useEffect(() => { if (tab === 'vagas') carregarVagas() }, [tab])
 
-  const copiar = (url, msg) => { const ok = () => setToast({ message: msg, type: 'success' }); if (navigator.clipboard?.writeText) navigator.clipboard.writeText(url).then(ok, ok); else ok() }
   const linkPermanente = config ? `${origin}/talentos/${config.slug}` : ''
   const linkVaga = (v) => (config ? `${origin}/talentos/${config.slug}?vaga=${v.id}` : '')
 
@@ -112,7 +112,7 @@ export default function BancoTalentos() {
           <div className="page-header-sub">Deixe um link de “Trabalhe conosco” sempre aberto e crie vagas quando precisar contratar.</div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button className="btn btn-secondary" onClick={() => copiar(linkPermanente, 'Link do banco de talentos copiado!')} disabled={!config}>🔗 Copiar link permanente</button>
+          <BotaoCopiar texto={linkPermanente} label="Copiar link permanente" className="btn btn-secondary" disabled={!config} onCopiado={() => setToast({ message: 'Link do banco de talentos copiado!', type: 'success' })} />
           <button className="btn btn-secondary" onClick={() => editorVaga(null)}>+ Nova vaga</button>
           <button className="btn btn-primary" onClick={novoCandidato}>+ Novo candidato</button>
         </div>
@@ -186,7 +186,7 @@ export default function BancoTalentos() {
                 </div>
                 <div className="ind-linkfield" style={{ marginBottom: 12 }}>
                   <span className="ind-linkfield-url">{linkVaga(v)}</span>
-                  <button type="button" className="ind-linkfield-copy" onClick={() => copiar(linkVaga(v), 'Link da vaga copiado!')}>Copiar</button>
+                  <BotaoCopiar texto={() => linkVaga(v)} label="Copiar" className="ind-linkfield-copy" onCopiado={() => setToast({ message: 'Link da vaga copiado!', type: 'success' })} />
                 </div>
                 <div className="bt-vaga-acoes">
                   <button className="ind-act" onClick={() => verInscritos(v)}>👥 Ver inscritos</button>
@@ -205,7 +205,7 @@ export default function BancoTalentos() {
           <div className="ind-note" style={{ maxWidth: 760, marginBottom: 14 }}>Este é o formulário do <strong>“Trabalhe conosco”</strong> — sempre aberto. Configure abaixo e divulgue o link permanente no Instagram, QR Code, cardápio ou WhatsApp.</div>
           <div className="ind-linkfield" style={{ maxWidth: 520, marginBottom: 16 }}>
             <span className="ind-linkfield-url">{linkPermanente}</span>
-            <button type="button" className="ind-linkfield-copy" onClick={() => copiar(linkPermanente, 'Link copiado!')}>Copiar</button>
+            <BotaoCopiar texto={linkPermanente} label="Copiar" className="ind-linkfield-copy" onCopiado={() => setToast({ message: 'Link copiado!', type: 'success' })} />
           </div>
           <div style={{ maxWidth: 720 }}>
             <FormBuilder value={formPerm} onChange={setFormPerm} />

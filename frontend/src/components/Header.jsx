@@ -8,8 +8,9 @@ const PAPEL_LABEL = { ADMIN: 'Administrador', AGENCIA: 'Agência', CLIENTE: 'Cli
 const iniciais = (nome) => (nome || '?').trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || 'U'
 function saudacao() {
   const h = new Date(Date.now() - 3 * 3600 * 1000).getUTCHours() // fuso BR (UTC-3)
-  if (h >= 5 && h < 12) return 'Bom dia'
-  if (h >= 12 && h < 18) return 'Boa tarde'
+  if (h < 5) return 'Boa madrugada'
+  if (h < 12) return 'Bom dia'
+  if (h < 18) return 'Boa tarde'
   return 'Boa noite'
 }
 
@@ -21,6 +22,26 @@ const IcoAjuda = svg(<><circle cx="12" cy="12" r="9" /><path d="M9.6 9.5a2.4 2.4
 const IcoSol = svg(<><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></>)
 const IcoLua = svg(<path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a6.5 6.5 0 0 0 9.8 9.8z" />)
 const IcoChevron = svg(<path d="M15 5l-7 7 7 7" />, 18)
+// Toggle de tema animado (sol ↔ lua) — CSS puro, a animação vive no global.css.
+const IcoTema = (
+  <svg className="tema-svg" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+    <mask id="tema-moon-mask">
+      <rect x="0" y="0" width="24" height="24" fill="#fff" />
+      <circle className="tema-cut" cx="12" cy="12" r="7" fill="#000" />
+    </mask>
+    <circle className="tema-body" cx="12" cy="12" r="7" fill="currentColor" mask="url(#tema-moon-mask)" />
+    <g className="tema-rays" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round">
+      <line x1="12" y1="1.5" x2="12" y2="3.8" />
+      <line x1="12" y1="20.2" x2="12" y2="22.5" />
+      <line x1="1.5" y1="12" x2="3.8" y2="12" />
+      <line x1="20.2" y1="12" x2="22.5" y2="12" />
+      <line x1="4.4" y1="4.4" x2="6" y2="6" />
+      <line x1="18" y1="18" x2="19.6" y2="19.6" />
+      <line x1="4.4" y1="19.6" x2="6" y2="18" />
+      <line x1="18" y1="6" x2="19.6" y2="4.4" />
+    </g>
+  </svg>
+)
 
 export default function Header({ colapsada, onToggleColapsar }) {
   const { usuario, logout, lojas, empresaAtual } = useAuth()
@@ -83,8 +104,8 @@ export default function Header({ colapsada, onToggleColapsar }) {
           <NavLink to="/central-de-ajuda" className="app-header-btn" title="Central de Ajuda" aria-label="Central de Ajuda">
             {IcoAjuda}
           </NavLink>
-          <button type="button" className="app-header-btn" onClick={() => setDark((d) => !d)} title={dark ? 'Tema claro' : 'Tema escuro'} aria-label="Alternar tema">
-            {dark ? IcoLua : IcoSol}
+          <button type="button" className={'app-header-btn tema-toggle' + (dark ? ' on' : '')} onClick={() => setDark((d) => !d)} title={dark ? 'Tema claro' : 'Tema escuro'} aria-label="Alternar tema">
+            {IcoTema}
           </button>
           <div className="app-header-user" ref={ref}>
             <button type="button" className="app-header-avatar-btn" onClick={() => setMenu((m) => !m)} aria-haspopup="menu" aria-expanded={menu} title="Sua conta">

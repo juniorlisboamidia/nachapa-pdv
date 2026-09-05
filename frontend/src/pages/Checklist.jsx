@@ -9,6 +9,7 @@ import api from '../services/api'
 import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
 import { matrizQr } from '../lib/qr'
+import BotaoCopiar from '../components/BotaoCopiar'
 
 const TABS = [
   { id: 'painel', label: 'Painel', sub: 'Visão geral do dia' },
@@ -1175,24 +1176,6 @@ function ChecklistEditor({ inicial, notify, onClose, onSalvou }) {
 }
 
 // ===================== DETALHE DO CHECKLIST (Task 3) =====================
-// Copiar fora de contexto seguro (http por IP na rede local não tem navigator.clipboard) —
-// mesmo fallback de Etiquetas.jsx (CardDispositivos/copiarFallback): textarea invisível +
-// execCommand('copy'), o que resta pra copiar sem a Clipboard API.
-function chkCopiarFallback(texto) {
-  const ta = document.createElement('textarea')
-  ta.value = texto
-  ta.setAttribute('readonly', '')
-  ta.style.position = 'fixed'
-  ta.style.top = '-1000px'
-  ta.style.opacity = '0'
-  document.body.appendChild(ta)
-  ta.select()
-  let ok = false
-  try { ok = document.execCommand('copy') } catch { ok = false }
-  document.body.removeChild(ta)
-  return ok
-}
-
 // Página de detalhe de um checklist (rota /checklist/detalhe/:id, fora das abas — link
 // vem do 👁 "Ver detalhes" na tabela de Checklists). Cabeçalho com as informações do
 // checklist + Editar/Executar, a lista de itens, e o card do link público (PIN, Task 4)
@@ -1205,7 +1188,6 @@ export function ChecklistDetalhe() {
   const [erro, setErro] = useState(false)
   const [equipe, setEquipe] = useState([]) // só carregada se atribuicaoTipo === COLABORADOR, pra trocar id por nome
   const [elegiveis, setElegiveis] = useState([]) // atribuídos + se já têm PIN (vem do backend, mesma regra de posse)
-  const [copiado, setCopiado] = useState(false)
   const [toast, setToast] = useState(null)
   const canvasRef = useRef(null)
   const notify = (message, type = 'success') => setToast({ message, type })
@@ -1253,17 +1235,6 @@ export function ChecklistDetalhe() {
       }
     }
   }, [linkPublico])
-
-  async function copiarLink() {
-    if (!linkPublico) return
-    let ok = false
-    try {
-      if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(linkPublico); ok = true }
-    } catch { ok = false }
-    if (!ok) ok = chkCopiarFallback(linkPublico)
-    if (ok) { setCopiado(true); setTimeout(() => setCopiado(false), 2000) }
-    else notify('Não foi possível copiar o link neste navegador.', 'error')
-  }
 
   // O token já vem sempre preenchido no GET /:id (o backend gera on-demand se faltar) —
   // aqui não precisa do artifício de abrir a aba em branco antes do fetch (AbaChecklists),
@@ -1343,7 +1314,12 @@ export function ChecklistDetalhe() {
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <input className="form-input" readOnly value={linkPublico} onFocus={(e) => e.target.select()} style={{ flex: 1, minWidth: 0, fontSize: 12.5 }} />
-            <button type="button" className="btn btn-secondary btn-sm" onClick={copiarLink}>{copiado ? '✓ Copiado' : 'Copiar'}</button>
+            <BotaoCopiar
+              texto={() => linkPublico}
+              label="Copiar"
+              className="btn btn-secondary btn-sm"
+              onErro={() => notify('Não foi possível copiar o link neste navegador.', 'error')}
+            />
           </div>
           {/* A tela pública é genérica de propósito (não diz quem tem PIN, pra não virar lista
               de quem dá pra tentar adivinhar). Então o aviso de quem ficaria travado tem que

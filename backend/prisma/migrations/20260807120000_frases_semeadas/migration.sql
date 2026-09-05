@@ -1,0 +1,1 @@
+ALTER TABLE "Empresa" ADD COLUMN "frasesSemeadas" BOOLEAN NOT NULL DEFAULT false;

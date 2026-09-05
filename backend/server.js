@@ -7103,8 +7103,22 @@ app.get('/api/frases/aleatoria', async (req, res) => {
 // CRUD — só o dono (ADMIN).
 app.get('/api/frases', async (req, res) => {
   if (!exigirDono(req, res)) return;
-  try { res.json({ frases: await prisma.frase.findMany({ orderBy: { criadoEm: 'desc' } }) }); }
-  catch (err) { console.error('[frases GET]', err?.message || err); res.status(500).json({ error: 'Erro ao carregar.' }); }
+  try {
+    // 1ª vez que o dono abre a página: materializa as 6 frases padrão no banco desta
+    // loja — assim elas aparecem aqui pra editar/desativar/excluir, em vez de viverem
+    // só no código. O flag na Empresa evita re-semear se ele apagar todas depois.
+    const empresaId = getEmpresaIdAtual();
+    if (empresaId != null) {
+      const emp = await prisma.empresa.findUnique({ where: { id: empresaId }, select: { frasesSemeadas: true } });
+      if (emp && !emp.frasesSemeadas) {
+        if ((await prisma.frase.count()) === 0) {
+          await prisma.frase.createMany({ data: FRASES_PADRAO.map((texto) => ({ texto, empresaId })) });
+        }
+        await prisma.empresa.update({ where: { id: empresaId }, data: { frasesSemeadas: true } });
+      }
+    }
+    res.json({ frases: await prisma.frase.findMany({ orderBy: { criadoEm: 'desc' } }) });
+  } catch (err) { console.error('[frases GET]', err?.message || err); res.status(500).json({ error: 'Erro ao carregar.' }); }
 });
 app.post('/api/frases', async (req, res) => {
   if (!exigirDono(req, res)) return;

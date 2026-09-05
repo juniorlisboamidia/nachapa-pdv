@@ -10,6 +10,7 @@ import Toast from '../components/Toast'
 import { desenharEtiqueta, dadosExemplo, MODELOS, camposDe } from '../lib/etiquetaCanvas'
 import { bluetoothDisponivel, conectar, conectado, imprimir, LARGURA_PX, calibracao, setCalibracao } from '../lib/niimbotB1'
 import { formatarCnpj } from '../lib/cnpj'
+import BotaoCopiar from '../components/BotaoCopiar'
 import { CONS_LABEL } from '../lib/etiquetaLabels'
 
 // Presets de altura do rolo (mm) oferecidos no select — "Personalizar" abre um input livre.
@@ -476,25 +477,6 @@ function CardImpressora({ conn, setConn, notify }) {
   )
 }
 
-// Copiar fora de contexto seguro. navigator.clipboard só existe em https/localhost;
-// se o dono abrir o PDV por IP na rede local (http://192.168.x.x), a API simplesmente
-// não está lá. Sem este fallback ele ficaria sem NENHUM jeito de tirar o link da tela —
-// e o link é o produto desta seção. execCommand está deprecado, mas é o que resta.
-function copiarFallback(texto) {
-  const ta = document.createElement('textarea')
-  ta.value = texto
-  ta.setAttribute('readonly', '')
-  ta.style.position = 'fixed'
-  ta.style.top = '-1000px'
-  ta.style.opacity = '0'
-  document.body.appendChild(ta)
-  ta.select()
-  let ok = false
-  try { ok = document.execCommand('copy') } catch { ok = false }
-  document.body.removeChild(ta)
-  return ok
-}
-
 // ===================== APARELHOS DA COZINHA =====================
 // O quiosque (/etiquetas/:token/imprimir) abre SEM login: o token do Dispositivo É a
 // credencial — quem tem o link imprime etiquetas nesta loja, ponto. Por isso a tela
@@ -526,17 +508,6 @@ function CardDispositivos({ notify }) {
   useEffect(() => { carregar() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const linkDe = (token) => `${window.location.origin}/etiquetas/${token}/imprimir`
-
-  async function copiar(d) {
-    const link = linkDe(d.token)
-    let ok = false
-    try {
-      if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(link); ok = true }
-    } catch { ok = false } // permissão negada / contexto inseguro — cai no fallback
-    if (!ok) ok = copiarFallback(link)
-    if (ok) notify(`Link do "${d.nome}" copiado. Cole no navegador do tablet — é secreto, não repasse.`)
-    else notify('Não foi possível copiar o link neste navegador.', 'error')
-  }
 
   async function criar(e) {
     e.preventDefault()
@@ -617,7 +588,13 @@ function CardDispositivos({ notify }) {
                       imprime etiquetas, nunca sincronizou (quem grava isso é o coletor). */}
                   <td style={{ color: 'var(--app-text-soft, #888)' }}>{d.ultimaSync ? dtAno(d.ultimaSync) : '—'}</td>
                   <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => copiar(d)}>Copiar link</button>{' '}
+                    <BotaoCopiar
+                      texto={() => linkDe(d.token)}
+                      label="Copiar link"
+                      className="btn btn-secondary btn-sm"
+                      onCopiado={() => notify(`Link do "${d.nome}" copiado. Cole no navegador do tablet — é secreto, não repasse.`)}
+                      onErro={() => notify('Não foi possível copiar o link neste navegador.', 'error')}
+                    />{' '}
                     <button
                       type="button"
                       className="btn btn-danger btn-sm"

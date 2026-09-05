@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react'
 import api from '../services/api'
 import Toast from '../components/Toast'
 import { Colaboradores as ColaboradoresTab } from './PontoFacial'
+import BotaoCopiar from '../components/BotaoCopiar'
 
 export default function Colaboradores() {
   const [toast, setToast] = useState(null)
@@ -24,12 +25,6 @@ export default function Colaboradores() {
       .then((r) => { const id = r.data?.config?.slugPublico || r.data?.config?.tokenPublico; setColabLink(id ? `${window.location.origin}/colaborador/${id}` : '') })
       .catch(() => {})
   }, [])
-
-  const copiar = () => {
-    if (!colabLink) return
-    try { navigator.clipboard.writeText(colabLink) } catch { /* noop */ }
-    notify('Link da Área do Colaborador copiado.')
-  }
 
   return (
     <div>
@@ -46,7 +41,7 @@ export default function Colaboradores() {
           {colabLink ? (
             <>
               <code style={{ fontSize: 12, color: 'var(--app-text-soft, #999)', maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{colabLink}</code>
-              <button type="button" className="btn btn-primary btn-sm" onClick={copiar}>Copiar link</button>
+              <BotaoCopiar texto={colabLink} label="Copiar link" className="btn btn-primary btn-sm btn-copiar-inverso" onCopiado={() => notify('Link da Área do Colaborador copiado.')} />
               <button type="button" className="btn btn-secondary btn-sm" onClick={() => window.open(colabLink, '_blank', 'noopener')}>Abrir</button>
             </>
           ) : (

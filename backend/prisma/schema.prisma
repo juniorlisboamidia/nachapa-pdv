@@ -429,6 +429,9 @@ model Empresa {
   // Logo SEM FUNDO (PNG transparente) usada nas páginas públicas de fundo claro
   // (ranking da equipe, Área do Colaborador). Vazio = cai na logoDataUrl.
   logoPublicaDataUrl String?
+  // 1ª vez que o dono abre a página de frases, materializamos as 6 padrão no banco.
+  // Este flag evita re-semear se ele apagar todas depois.
+  frasesSemeadas Boolean @default(false)
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 

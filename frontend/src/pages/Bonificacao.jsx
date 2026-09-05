@@ -6,6 +6,7 @@ import api from '../services/api'
 import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
 import MesSwitcher from '../components/MesSwitcher'
+import BotaoCopiar from '../components/BotaoCopiar'
 
 const brl = (n) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(n) || 0)
 const pct = (n) => `${Number(n) || 0}%`
@@ -1721,7 +1722,6 @@ function AbaConfig({ cfg, setCfg, tipos, setTipos, salvar, salvando, toast }) {
   const linkPublico = identificador ? `${window.location.origin}/bonificacao/${identificador}` : ''
   const origemCurta = window.location.origin.replace(/^https?:\/\//, '')
   const limparSlug = (v) => v.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9-]+/g, '-').replace(/-{2,}/g, '-')
-  const copiar = () => { try { navigator.clipboard.writeText(linkPublico) } catch { /* noop */ } toast?.({ message: 'Link copiado.', type: 'success' }) }
   const abrir = () => { if (linkPublico) window.open(linkPublico, '_blank', 'noopener') }
 
   const somaTetos = Number(cfg.tetoAssiduidade || 0) + Number(cfg.tetoDesempenho || 0) + Number(cfg.tetoColetiva || 0)
@@ -1752,7 +1752,7 @@ function AbaConfig({ cfg, setCfg, tipos, setTipos, salvar, salvando, toast }) {
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <input className="form-input" readOnly value={linkPublico} onFocus={(e) => e.target.select()} style={{ flex: 1, minWidth: 220 }} placeholder="Salve a configuração para gerar o link" />
-            <button type="button" className="btn btn-secondary btn-sm" onClick={copiar} disabled={!linkPublico}>Copiar</button>
+            <BotaoCopiar texto={linkPublico} label="Copiar" className="btn btn-secondary btn-sm" disabled={!linkPublico} onCopiado={() => toast?.({ message: 'Link copiado.', type: 'success' })} />
             <button type="button" className="btn btn-primary btn-sm" onClick={abrir} disabled={!linkPublico}>Abrir</button>
           </div>
         </div>
