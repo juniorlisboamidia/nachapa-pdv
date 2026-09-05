@@ -9343,6 +9343,234 @@ app.get('/api/checklist/notificacoes/lembrete/previa', async (req, res) => {
   } catch (err) { console.error('[checklist/notificacoes lembrete previa]', err); res.status(500).json({ error: 'Erro ao gerar prévia.' }); }
 });
 
+// WhatsApp normalizado = só dígitos (para deduplicar por contato no mesmo dia)
+function normalizarWhatsapp(v) {
+  return String(v ?? '').replace(/\D/g, '');
+}
+
+// ============================================================
+// Avaliação (Marketing) — campanhas (link/QR) + respostas de clientes
+// ============================================================
+async function gerarTokenAvaliacao() {
+  for (let i = 0; i < 6; i++) {
+    const t = randomBytes(9).toString('base64url');
+    const existe = await prisma.avaliacaoCampanha.findUnique({ where: { tokenPublico: t }, select: { id: true } });
+    if (!existe) return t;
+  }
+  return randomBytes(12).toString('base64url');
+}
+
+// Limpa a lista de categorias: trim, remove vazias, deduplica, limita
+function limparCategorias(arr) {
+  if (!Array.isArray(arr)) return [];
+  const vistos = new Set();
+  const out = [];
+  for (const c of arr) {
+    const v = String(c ?? '').trim().slice(0, 40);
+    if (!v) continue;
+    const chave = v.toLowerCase();
+    if (vistos.has(chave)) continue;
+    vistos.add(chave);
+    out.push(v);
+    if (out.length >= 10) break;
+  }
+  return out;
+}
+
+function notaValida(v) {
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 1 && n <= 5;
+}
+
+// Métricas do relatório a partir das respostas e das categorias da campanha
+function metricasAvaliacao(respostas, categorias) {
+  const total = respostas.length;
+  const somaGeral = respostas.reduce((s, r) => s + (Number(r.notaGeral) || 0), 0);
+  const mediaGeral = total > 0 ? Math.round((somaGeral / total) * 10) / 10 : null;
+  const distribuicao = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  for (const r of respostas) {
+    const n = Number(r.notaGeral);
+    if (distribuicao[n] !== undefined) distribuicao[n]++;
+  }
+  const porCategoria = (categorias ?? []).map((cat) => {
+    let soma = 0;
+    let n = 0;
+    for (const r of respostas) {
+      const v = Number(r.notasCategorias?.[cat]);
+      if (Number.isFinite(v) && v >= 1) {
+        soma += v;
+        n++;
+      }
+    }
+    return { categoria: cat, media: n > 0 ? Math.round((soma / n) * 10) / 10 : null, respostas: n };
+  });
+  return { total, mediaGeral, distribuicao, porCategoria };
+}
+
+// ----- Admin -----
+app.get('/api/avaliacao/campanhas', async (req, res) => {
+  try {
+    const campanhas = await prisma.avaliacaoCampanha.findMany({
+      orderBy: { criadoEm: 'desc' },
+      include: { respostas: { select: { notaGeral: true } } }
+    });
+    res.json(
+      campanhas.map((c) => {
+        const total = c.respostas.length;
+        const soma = c.respostas.reduce((s, r) => s + (Number(r.notaGeral) || 0), 0);
+        return {
+          id: c.id,
+          nome: c.nome,
+          tokenPublico: c.tokenPublico,
+          ativa: c.ativa,
+          categorias: c.categorias,
+          criadoEm: c.criadoEm,
+          totalRespostas: total,
+          mediaGeral: total > 0 ? Math.round((soma / total) * 10) / 10 : null
+        };
+      })
+    );
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno ao listar campanhas' });
+  }
+});
+
+app.post('/api/avaliacao/campanhas', async (req, res) => {
+  try {
+    const { nome, categorias } = req.body ?? {};
+    const nomeLimpo = String(nome ?? '').trim();
+    if (!nomeLimpo) return res.status(400).json({ error: 'Informe o nome da campanha.' });
+    const cats = limparCategorias(categorias);
+    const tokenPublico = await gerarTokenAvaliacao();
+    const c = await prisma.avaliacaoCampanha.create({ data: { nome: nomeLimpo, categorias: cats, tokenPublico } });
+    res.status(201).json(c);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno ao criar campanha' });
+  }
+});
+
+app.put('/api/avaliacao/campanhas/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'id inválido' });
+    const existe = await prisma.avaliacaoCampanha.findUnique({ where: { id }, select: { id: true } });
+    if (!existe) return res.status(404).json({ error: 'Campanha não encontrada' });
+    const { nome, categorias, ativa } = req.body ?? {};
+    const data = {};
+    if (nome !== undefined) {
+      const v = String(nome).trim();
+      if (!v) return res.status(400).json({ error: 'O nome não pode ficar vazio.' });
+      data.nome = v;
+    }
+    if (categorias !== undefined) data.categorias = limparCategorias(categorias);
+    if (ativa !== undefined) data.ativa = !!ativa;
+    const c = await prisma.avaliacaoCampanha.update({ where: { id }, data });
+    res.json(c);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno ao atualizar campanha' });
+  }
+});
+
+app.delete('/api/avaliacao/campanhas/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'id inválido' });
+    const existe = await prisma.avaliacaoCampanha.findUnique({ where: { id }, select: { id: true } });
+    if (!existe) return res.status(404).json({ error: 'Campanha não encontrada' });
+    await prisma.avaliacaoCampanha.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno ao excluir campanha' });
+  }
+});
+
+app.get('/api/avaliacao/campanhas/:id/relatorio', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'id inválido' });
+    const campanha = await prisma.avaliacaoCampanha.findUnique({ where: { id } });
+    if (!campanha) return res.status(404).json({ error: 'Campanha não encontrada' });
+    const respostas = await prisma.avaliacaoResposta.findMany({
+      where: { campanhaId: id },
+      orderBy: { criadoEm: 'desc' }
+    });
+    res.json({
+      campanha: { id: campanha.id, nome: campanha.nome, categorias: campanha.categorias, ativa: campanha.ativa, tokenPublico: campanha.tokenPublico },
+      resumo: metricasAvaliacao(respostas, campanha.categorias),
+      respostas
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno ao gerar relatório' });
+  }
+});
+
+// ----- Público (cliente, via token do QR) -----
+app.get('/api/public/avaliacao/:token', async (req, res) => {
+  try {
+    const campanha = await prisma.avaliacaoCampanha.findUnique({
+      where: { tokenPublico: String(req.params.token) },
+      select: { nome: true, categorias: true, ativa: true, empresaId: true }
+    });
+    if (!campanha) return res.status(404).json({ error: 'Avaliação não encontrada' });
+    const empresa = await prisma.empresa.findUnique({ where: { id: campanha.empresaId }, select: { nome: true } }).catch(() => null);
+    res.json({ empresa: { nome: (empresa?.nome ?? '').trim() || 'Hamburgueria' }, campanha });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno ao carregar avaliação' });
+  }
+});
+
+app.post('/api/public/avaliacao/:token', async (req, res) => {
+  try {
+    const campanha = await prisma.avaliacaoCampanha.findUnique({
+      where: { tokenPublico: String(req.params.token) },
+      select: { id: true, ativa: true, categorias: true, empresaId: true }
+    });
+    if (!campanha) return res.status(404).json({ error: 'Avaliação não encontrada' });
+    if (!campanha.ativa) return res.status(409).json({ error: 'Esta avaliação não está mais recebendo respostas.' });
+
+    const { notaGeral, notasCategorias, comentario, nome, whatsapp, email } = req.body ?? {};
+    if (!notaValida(notaGeral)) return res.status(400).json({ error: 'Dê uma nota geral de 1 a 5.' });
+    const nomeLimpo = String(nome ?? '').trim();
+    if (!nomeLimpo) return res.status(400).json({ error: 'Informe seu nome.' });
+    const whatsappLimpo = normalizarWhatsapp(whatsapp);
+    if (!whatsappLimpo) return res.status(400).json({ error: 'Informe um WhatsApp válido.' });
+    const emailLimpo = String(email ?? '').trim();
+    if (emailLimpo && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailLimpo)) {
+      return res.status(400).json({ error: 'E-mail inválido.' });
+    }
+    // Só aceita notas das categorias da campanha, validadas 1..5
+    const notas = {};
+    if (notasCategorias && typeof notasCategorias === 'object') {
+      for (const cat of campanha.categorias) {
+        const v = notasCategorias[cat];
+        if (v !== undefined && v !== null && v !== '' && notaValida(v)) notas[cat] = Number(v);
+      }
+    }
+    const resp = await prisma.avaliacaoResposta.create({
+      data: {
+        empresaId: campanha.empresaId,
+        campanhaId: campanha.id,
+        notaGeral: Number(notaGeral),
+        notasCategorias: notas,
+        comentario: String(comentario ?? '').trim().slice(0, 2000) || null,
+        nome: nomeLimpo,
+        whatsapp: whatsappLimpo,
+        email: emailLimpo || null
+      }
+    });
+    res.status(201).json({ success: true, id: resp.id });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erro interno ao enviar avaliação' });
+  }
+});
+
 app.listen(PORT, () => console.log(`Operação (PDV) API rodando em http://localhost:${PORT}`));
 iniciarAgendadorLembretes();
 iniciarAgendadorGrupoVip();
