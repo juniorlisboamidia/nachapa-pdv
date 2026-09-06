@@ -2652,7 +2652,7 @@ async function dispararGrupoVipLoja(empresaId, cfg) {
           const codigo = gerarCodigoCupom();
           const payload = montarPayloadCupom(m, agoraMs, codigo);
           if (payload) {
-            const r = await criarCupomCW(cfg.hubClienteId, payload);
+            const r = await criarCupomCW(await hubClienteIdGrupoVip(cfg), payload);
             if (r?.conectado === false) erroCupom = 'Loja sem Cardápio Web vinculado';
             else cupomCode = r?.coupon?.code || codigo;
           }
@@ -7985,6 +7985,19 @@ async function garantirGrupoVipConfig() {
   if (!c) c = await prisma.grupoVipConfig.create({ data: {} });
   return c;
 }
+// ID da loja no HUB usado pelas pontes do Grupo VIP (cupom + origens). O manual
+// (cfg.hubClienteId) vence; vazio → cai no vínculo canônico da empresa
+// (Empresa.clienteId — o mesmo que os Relatórios usam), como o H360 deriva da
+// loja. Usa cfg.empresaId (e não o tenant da request) porque o agendador de
+// disparos roda fora de request. "admin" é a loja de teste sem cliente real no HUB.
+async function hubClienteIdGrupoVip(cfg) {
+  if (cfg?.hubClienteId) return cfg.hubClienteId;
+  if (!cfg?.empresaId) return null;
+  const emp = await prisma.empresa.findUnique({ where: { id: cfg.empresaId }, select: { clienteId: true } });
+  const id = emp?.clienteId ? String(emp.clienteId).trim() : "";
+  return id && id !== "admin" ? id : null;
+}
+const configPublicaHub = async (c) => ({ ...grupoVipConfigPublica(c), hubClienteIdEfetivo: await hubClienteIdGrupoVip(c) });
 const grupoVipConfigPublica = (c) => ({
   grupoJid: c.grupoJid || null, grupoNome: c.grupoNome || null,
   hubClienteId: c.hubClienteId || null, ativo: !!c.ativo,
@@ -7993,7 +8006,7 @@ const grupoVipConfigPublica = (c) => ({
 
 app.get('/api/grupo-vip/config', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
-  try { res.json(grupoVipConfigPublica(await garantirGrupoVipConfig())); }
+  try { res.json(await configPublicaHub(await garantirGrupoVipConfig())); }
   catch (err) { console.error('[grupo-vip/config GET]', err); res.status(500).json({ error: 'Erro ao carregar.' }); }
 });
 
@@ -8057,7 +8070,7 @@ app.put('/api/grupo-vip/config', async (req, res) => {
     if (req.body?.hubClienteId !== undefined) data.hubClienteId = req.body.hubClienteId ? String(req.body.hubClienteId).trim().slice(0, 60) : null;
     if (req.body?.ativo !== undefined) data.ativo = !!req.body.ativo;
     await prisma.grupoVipConfig.update({ where: { id: c.id }, data });
-    res.json(grupoVipConfigPublica(await garantirGrupoVipConfig()));
+    res.json(await configPublicaHub(await garantirGrupoVipConfig()));
   } catch (err) { console.error('[grupo-vip/config PUT]', err); res.status(500).json({ error: 'Erro ao salvar.' }); }
 });
 
@@ -8240,8 +8253,9 @@ app.get('/api/grupo-vip/visao-geral', async (req, res) => {
     const cfg = await garantirGrupoVipConfig();
     let origensCW = [];
     let cwOk = true;
-    if (cfg.hubClienteId) {
-      try { origensCW = await buscarOrigensCW(cfg.hubClienteId, inicio.toISOString(), fim.toISOString()); }
+    const hubId = await hubClienteIdGrupoVip(cfg);
+    if (hubId) {
+      try { origensCW = await buscarOrigensCW(hubId, inicio.toISOString(), fim.toISOString()); }
       catch (e) { console.error('[grupo-vip/visao-geral] CW', textoErro(e)); cwOk = false; }
     }
     const norm = (s) => String(s || '').trim().toLowerCase();
@@ -8263,7 +8277,8 @@ app.get('/api/grupo-vip/visao-geral', async (req, res) => {
       porMensagem.push({ rotulo: m.rotulo, origem, pedidos: hit ? hit.pedidos : 0, receita: hit ? hit.receita : 0 });
       if (hit && !jaContou.has(norm(origem))) { conversoes += hit.pedidos; receita += hit.receita; jaContou.add(norm(origem)); }
     }
-    res.json({ dias, mensagensEnviadas, conversoes, receita, porMensagem, cwOk });
+    // origensCW: o que o CW registrou no período — deixa visível um ?s= que não casa (ex.: código ≠ nome).
+    res.json({ dias, mensagensEnviadas, conversoes, receita, porMensagem, cwOk, hubVinculado: !!hubId, origensCW: [...mapaCW.values()].map((o) => o.origem).sort().slice(0, 30) });
   } catch (err) { console.error('[grupo-vip/visao-geral]', err); res.status(500).json({ error: 'Erro ao carregar a visão geral.' }); }
 });
 

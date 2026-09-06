@@ -319,12 +319,15 @@ export default function GrupoVip() {
             <hr className="gv-divider" />
 
             {/* cupom */}
-            <label className="form-label">Cupom do Cardápio Web <span style={{ color: 'var(--app-text-3)', fontWeight: 400 }}>(opcional)</span></label>
+            <label className="form-label">Loja no HUB <span style={{ color: 'var(--app-text-3)', fontWeight: 400 }}>(clienteId)</span></label>
             <div className="gv-inline">
-              <input className="form-input" value={hubId} onChange={(e) => setHubId(e.target.value)} placeholder="ID da loja no HUB (clienteId)" />
+              <input className="form-input" value={hubId} onChange={(e) => setHubId(e.target.value)} placeholder="Vazio = usa o ID da empresa vinculada ao HUB" />
               <button type="button" className="btn btn-secondary btn-sm" onClick={() => salvarConfig({ hubClienteId: hubId.trim() })}>Salvar</button>
             </div>
-            <div className="gv-hint">Só é preciso se alguma mensagem usar <code>{'{cupom}'}</code> para criar um cupom automático no Cardápio Web.</div>
+            <div className="gv-hint">Liga o Grupo VIP ao Cardápio Web pelo HUB: cupons automáticos (<code>{'{cupom}'}</code>) e o <strong>Retorno por mensagem</strong> (Conversões e Receita).</div>
+            {!cfg.hubClienteId && cfg.hubClienteIdEfetivo && (
+              <div className="gv-hint">Usando o ID da empresa vinculada ao HUB (<code>{cfg.hubClienteIdEfetivo}</code>). Preencha só para sobrescrever.</div>
+            )}
           </div>
         </div>
 
@@ -366,12 +369,12 @@ export default function GrupoVip() {
               <button key={d} type="button" className={dias === d ? 'on' : ''} onClick={() => setDias(d)}>{d} dias</button>
             ))}
           </div>
-          {!cfg.hubClienteId && (
+          {!cfg.hubClienteIdEfetivo && (
             <div className="gv-card" style={{ padding: 14 }}>
               <div className="gv-hint" style={{ margin: 0 }}>Para ver Conversões e Receita, vincule o <strong>ID da loja no HUB</strong> nas Configurações (aba Mensagens). Sem isso, mostramos só as mensagens enviadas.</div>
             </div>
           )}
-          {cfg.hubClienteId && visao && visao.cwOk === false && (
+          {cfg.hubClienteIdEfetivo && visao && visao.cwOk === false && (
             <div className="gv-card" style={{ padding: 14 }}>
               <div className="gv-hint" style={{ margin: 0 }}>Não foi possível falar com o HUB agora — Conversões e Receita podem aparecer zeradas. Tente de novo em instantes.</div>
             </div>
@@ -402,6 +405,12 @@ export default function GrupoVip() {
                     </tbody>
                   </table>
                 </div>}
+              {visao && visao.hubVinculado && visao.conversoes === 0 && visao.origensCW?.length > 0 && (
+                <div className="gv-hint" style={{ marginTop: 10 }}>
+                  O Cardápio Web registrou pedidos no período com as origens: {visao.origensCW.map((o, i) => <code key={i} style={{ marginRight: 6 }}>{o}</code>)}
+                  — o <code>?s=</code> do link precisa ser igual a um desses códigos (não ao nome da origem).
+                </div>
+              )}
             </div>
           </div>
         </>
