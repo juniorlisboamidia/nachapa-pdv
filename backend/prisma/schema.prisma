@@ -2248,3 +2248,17 @@ model CmvCompraItem {
 
   @@index([empresaId, compraId])
 }
+
+// Faixas (ideal/atenção/acima) dos Tempos operacionais do Cardápio, configuráveis por loja.
+model TempoFaixaCardapioConfig {
+  id             Int      @id @default(autoincrement())
+  empresaId      Int      @unique
+  preparoIdeal   Int      @default(25)
+  preparoAtencao Int      @default(40)
+  entregaIdeal   Int      @default(20)
+  entregaAtencao Int      @default(35)
+  totalIdeal     Int      @default(45)
+  totalAtencao   Int      @default(70)
+  criadoEm       DateTime @default(now())
+  atualizadoEm   DateTime @updatedAt
+}

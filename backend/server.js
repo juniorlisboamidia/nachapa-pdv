@@ -26,6 +26,7 @@ import { buscarOrigensCW } from './cardapioOrigens.js';
 import { ordemDeRecalculo } from './custos/propagacaoCusto.js';
 import { AREAS_DISPONIVEIS, AREA_PREFIXOS, areaDoPath } from './acessos/areas.js';
 import { calcularCmvGlobal } from './cmv/calculo.js';
+import { normalizarRelatorio, FONTES } from './relatorios/normalizar.js';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 
@@ -66,6 +67,8 @@ const MODELS_TENANT = new Set([
   'fornecedor', 'fornecedorInsumo', 'fornecedorInsumoCotacao',
   // Produtos › Estoque (CMV Global): contagem mensal + compras
   'cmvContagem', 'cmvContagemItem', 'cmvCompra', 'cmvCompraItem',
+  // Dashboard › Faixas dos Tempos operacionais do Cardápio (ideal/atenção), por loja
+  'tempoFaixaCardapioConfig',
 ]);
 const OPS_WHERE = new Set([
   'findMany', 'findFirst', 'findFirstOrThrow', 'findUnique', 'findUniqueOrThrow',
@@ -7354,6 +7357,312 @@ app.delete('/api/cmv/compra/:id', async (req, res) => {
   }
 });
 
+
+// ===== Dashboard (Meta Ads do cliente, via HUB) =====
+// Resolve a loja atual → clienteId → pede ao HUB os insights do Meta Ads da conta
+// vinculada. O token Meta nunca chega ao H360; o HUB devolve KPIs + série prontos.
+// Sem conta vinculada ⇒ { conectado: false } (a tela mostra o estado "conecte").
+app.get('/api/dashboard/meta', async (req, res) => {
+  try {
+    const empresaId = getEmpresaIdAtual();
+    if (!empresaId) return res.status(404).json({ error: 'Loja não resolvida' });
+    const loja = await prisma.empresa.findUnique({ where: { id: empresaId } });
+    if (!loja?.clienteId) return res.json({ conectado: false, conta: null });
+
+    const isYmd = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+    const since = isYmd(req.query.since) ? req.query.since : null;
+    const until = isYmd(req.query.until) ? req.query.until : null;
+    const datePreset = String(req.query.datePreset || 'last_14d');
+    const token = jwt.sign({ svc: 'h360-dashboard' }, JWT_SECRET, { expiresIn: '30s' });
+    const r = await fetch(`${HUB_API_URL}/internal/cliente-meta-insights`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ clienteId: loja.clienteId, since, until, datePreset }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      return res.status(r.status === 401 ? 401 : 502).json({ error: data?.error || 'Erro ao consultar o HUB' });
+    }
+    res.json(data);
+  } catch (err) {
+    console.error('[dashboard/meta]', err?.message || err);
+    res.status(502).json({ error: 'Não foi possível carregar o Meta Ads agora.' });
+  }
+});
+
+// ===== Dashboard (Google Ads do cliente, via HUB) =====
+// Mesmo padrão do Meta acima: resolve a loja atual → clienteId → pede ao HUB os
+// insights do Google Ads da conta vinculada. Sem clienteId ⇒ { conectado: false }.
+app.get('/api/dashboard/google', async (req, res) => {
+  try {
+    const empresaId = getEmpresaIdAtual();
+    if (!empresaId) return res.status(404).json({ error: 'Loja não resolvida' });
+    const loja = await prisma.empresa.findUnique({ where: { id: empresaId } });
+    if (!loja?.clienteId) return res.json({ conectado: false });
+
+    const isYmd = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+    const since = isYmd(req.query.since) ? req.query.since : null;
+    const until = isYmd(req.query.until) ? req.query.until : null;
+    const token = jwt.sign({ svc: 'h360-dashboard' }, JWT_SECRET, { expiresIn: '30s' });
+    const r = await fetch(`${HUB_API_URL}/internal/cliente-google-insights`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ clienteId: loja.clienteId, since, until }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      return res.status(r.status === 401 ? 401 : 502).json({ error: data?.error || 'Erro ao consultar o HUB' });
+    }
+    res.json(data);
+  } catch (err) {
+    console.error('[dashboard/google]', err?.message || err);
+    res.status(502).json({ error: 'Não foi possível carregar o Google Ads agora.' });
+  }
+});
+
+// Instagram do cliente (via HUB). Mesmo isolamento do Meta: resolve a loja → clienteId
+// → o HUB devolve só o perfil VINCULADO àquele cliente. Sem perfil ⇒ { conectado:false }.
+app.get('/api/dashboard/instagram', async (req, res) => {
+  try {
+    const empresaId = getEmpresaIdAtual();
+    if (!empresaId) return res.status(404).json({ error: 'Loja não resolvida' });
+    const loja = await prisma.empresa.findUnique({ where: { id: empresaId } });
+    if (!loja?.clienteId) return res.json({ conectado: false, perfil: null });
+
+    const isYmd = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+    const since = isYmd(req.query.since) ? req.query.since : null;
+    const until = isYmd(req.query.until) ? req.query.until : null;
+    const datePreset = String(req.query.datePreset || 'last_30d');
+    const token = jwt.sign({ svc: 'h360-dashboard' }, JWT_SECRET, { expiresIn: '30s' });
+    const r = await fetch(`${HUB_API_URL}/internal/cliente-instagram-insights`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ clienteId: loja.clienteId, since, until, datePreset }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      return res.status(r.status === 401 ? 401 : 502).json({ error: data?.error || 'Erro ao consultar o HUB' });
+    }
+    res.json(data);
+  } catch (err) {
+    console.error('[dashboard/instagram]', err?.message || err);
+    res.status(502).json({ error: 'Não foi possível carregar o Instagram agora.' });
+  }
+});
+
+// Vendas do Cardápio Web do cliente (via HUB). Mesmo isolamento: resolve a loja →
+// clienteId → o HUB devolve KPIs (faturamento/pedidos/ticket/novos clientes) + série
+// diária, do banco sincronizado. Sem CW vinculado ⇒ { conectado:false } (some a seção).
+app.get('/api/dashboard/cardapio', async (req, res) => {
+  try {
+    const empresaId = getEmpresaIdAtual();
+    if (!empresaId) return res.status(404).json({ error: 'Loja não resolvida' });
+    const loja = await prisma.empresa.findUnique({ where: { id: empresaId } });
+    if (!loja?.clienteId) return res.json({ conectado: false });
+
+    const isYmd = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+    const since = isYmd(req.query.since) ? req.query.since : null;
+    const until = isYmd(req.query.until) ? req.query.until : null;
+    const token = jwt.sign({ svc: 'h360-dashboard' }, JWT_SECRET, { expiresIn: '30s' });
+    const r = await fetch(`${HUB_API_URL}/internal/cliente-cardapio-dashboard`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ clienteId: loja.clienteId, since, until }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) return res.status(r.status === 401 ? 401 : 502).json({ error: data?.error || 'Erro ao consultar o HUB' });
+    if (data && typeof data === 'object') data.faixas = await faixasCardapioAtuais();
+    res.json(data);
+  } catch (err) {
+    console.error('[dashboard/cardapio]', err?.message || err);
+    res.status(502).json({ error: 'Não foi possível carregar as vendas agora.' });
+  }
+});
+
+// Faixas (ideal/atenção) dos Tempos operacionais — configuráveis por loja. Defaults de
+// fábrica quando a loja ainda não configurou. GET lê; PUT salva (upsert por empresa).
+const FAIXAS_CARDAPIO_PADRAO = { preparoIdeal: 25, preparoAtencao: 40, entregaIdeal: 20, entregaAtencao: 35, totalIdeal: 45, totalAtencao: 70 };
+const faixasPublicas = (c) => ({
+  preparoIdeal: c.preparoIdeal, preparoAtencao: c.preparoAtencao,
+  entregaIdeal: c.entregaIdeal, entregaAtencao: c.entregaAtencao,
+  totalIdeal: c.totalIdeal, totalAtencao: c.totalAtencao,
+});
+async function faixasCardapioAtuais() {
+  const c = await prisma.tempoFaixaCardapioConfig.findFirst();
+  return c ? faixasPublicas(c) : { ...FAIXAS_CARDAPIO_PADRAO };
+}
+
+app.get('/api/dashboard/cardapio-faixas', async (req, res) => {
+  try {
+    if (!getEmpresaIdAtual()) return res.status(404).json({ error: 'Loja não resolvida' });
+    res.json(await faixasCardapioAtuais());
+  } catch (err) {
+    console.error('[dashboard/cardapio-faixas GET]', err?.message || err);
+    res.status(500).json({ error: 'Não foi possível carregar as faixas.' });
+  }
+});
+
+app.put('/api/dashboard/cardapio-faixas', async (req, res) => {
+  try {
+    if (!getEmpresaIdAtual()) return res.status(404).json({ error: 'Loja não resolvida' });
+    const b = req.body || {};
+    const num = (v, def) => { const n = Math.round(Number(v)); return Number.isFinite(n) && n >= 0 && n <= 1440 ? n : def; };
+    const dados = {
+      preparoIdeal: num(b.preparoIdeal, 25), preparoAtencao: num(b.preparoAtencao, 40),
+      entregaIdeal: num(b.entregaIdeal, 20), entregaAtencao: num(b.entregaAtencao, 35),
+      totalIdeal: num(b.totalIdeal, 45), totalAtencao: num(b.totalAtencao, 70),
+    };
+    // "atenção" não pode ser menor que "ideal" em cada card.
+    if (dados.preparoAtencao < dados.preparoIdeal) dados.preparoAtencao = dados.preparoIdeal;
+    if (dados.entregaAtencao < dados.entregaIdeal) dados.entregaAtencao = dados.entregaIdeal;
+    if (dados.totalAtencao < dados.totalIdeal) dados.totalAtencao = dados.totalIdeal;
+    const existente = await prisma.tempoFaixaCardapioConfig.findFirst();
+    const c = existente
+      ? await prisma.tempoFaixaCardapioConfig.update({ where: { id: existente.id }, data: dados })
+      : await prisma.tempoFaixaCardapioConfig.create({ data: dados });
+    res.json(faixasPublicas(c));
+  } catch (err) {
+    console.error('[dashboard/cardapio-faixas PUT]', err?.message || err);
+    res.status(500).json({ error: 'Não foi possível salvar as faixas.' });
+  }
+});
+
+// Histórico de faltas (ranking + episódios) do período — via HUB.
+app.get('/api/dashboard/cardapio-faltas-historico', async (req, res) => {
+  try {
+    const empresaId = getEmpresaIdAtual();
+    if (!empresaId) return res.status(404).json({ error: 'Loja não resolvida' });
+    const loja = await prisma.empresa.findUnique({ where: { id: empresaId } });
+    if (!loja?.clienteId) return res.json({ conectado: false });
+    const isYmd = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+    const since = isYmd(req.query.since) ? req.query.since : null;
+    const until = isYmd(req.query.until) ? req.query.until : null;
+    const token = jwt.sign({ svc: 'h360-dashboard' }, JWT_SECRET, { expiresIn: '30s' });
+    const r = await fetch(`${HUB_API_URL}/internal/cardapio-faltas-historico`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ clienteId: loja.clienteId, since, until }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) return res.status(r.status === 401 ? 401 : 502).json({ error: data?.error || 'Erro ao consultar o HUB' });
+    res.json(data);
+  } catch (err) {
+    console.error('[dashboard/cardapio-faltas-historico]', err?.message || err);
+    res.status(502).json({ error: 'Não foi possível carregar o histórico agora.' });
+  }
+});
+
+// ── AnotaAI (proxies p/ o HUB) — fonte alternativa ao Cardápio Web ───────────
+// Qual a fonte de cardápio da loja: 'anotaai' | 'cw' | null. O front usa p/ montar o módulo certo.
+app.get('/api/dashboard/cardapio-fonte', async (req, res) => {
+  try {
+    const empresaId = getEmpresaIdAtual();
+    if (!empresaId) return res.status(404).json({ error: 'Loja não resolvida' });
+    const loja = await prisma.empresa.findUnique({ where: { id: empresaId } });
+    if (!loja?.clienteId) return res.json({ fonte: null });
+    const token = jwt.sign({ svc: 'h360-dashboard' }, JWT_SECRET, { expiresIn: '30s' });
+    const r = await fetch(`${HUB_API_URL}/internal/cliente-cardapio-fonte`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ clienteId: loja.clienteId }),
+    });
+    const data = await r.json().catch(() => ({}));
+    res.status(r.ok ? 200 : 502).json(r.ok ? data : { fonte: null });
+  } catch (err) {
+    console.error('[dashboard/cardapio-fonte]', err?.message || err);
+    res.json({ fonte: null });
+  }
+});
+
+// Dashboard de vendas AnotaAI (mesmo shape do /dashboard/cardapio; injeta faixas locais).
+app.get('/api/dashboard/anotaai', async (req, res) => {
+  try {
+    const empresaId = getEmpresaIdAtual();
+    if (!empresaId) return res.status(404).json({ error: 'Loja não resolvida' });
+    const loja = await prisma.empresa.findUnique({ where: { id: empresaId } });
+    if (!loja?.clienteId) return res.json({ conectado: false });
+    const isYmd = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+    const since = isYmd(req.query.since) ? req.query.since : null;
+    const until = isYmd(req.query.until) ? req.query.until : null;
+    const token = jwt.sign({ svc: 'h360-dashboard' }, JWT_SECRET, { expiresIn: '30s' });
+    const r = await fetch(`${HUB_API_URL}/internal/cliente-anotaai-dashboard`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ clienteId: loja.clienteId, since, until }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) return res.status(r.status === 401 ? 401 : 502).json({ error: data?.error || 'Erro ao consultar o HUB' });
+    if (data && typeof data === 'object') data.faixas = await faixasCardapioAtuais();
+    res.json(data);
+  } catch (err) {
+    console.error('[dashboard/anotaai]', err?.message || err);
+    res.status(502).json({ error: 'Não foi possível carregar as vendas agora.' });
+  }
+});
+
+// Histórico de faltas AnotaAI (mesmo shape do /dashboard/cardapio-faltas-historico).
+app.get('/api/dashboard/anotaai-faltas-historico', async (req, res) => {
+  try {
+    const empresaId = getEmpresaIdAtual();
+    if (!empresaId) return res.status(404).json({ error: 'Loja não resolvida' });
+    const loja = await prisma.empresa.findUnique({ where: { id: empresaId } });
+    if (!loja?.clienteId) return res.json({ conectado: false });
+    const isYmd = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+    const since = isYmd(req.query.since) ? req.query.since : null;
+    const until = isYmd(req.query.until) ? req.query.until : null;
+    const token = jwt.sign({ svc: 'h360-dashboard' }, JWT_SECRET, { expiresIn: '30s' });
+    const r = await fetch(`${HUB_API_URL}/internal/anotaai-faltas-historico`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ clienteId: loja.clienteId, since, until }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) return res.status(r.status === 401 ? 401 : 502).json({ error: data?.error || 'Erro ao consultar o HUB' });
+    res.json(data);
+  } catch (err) {
+    console.error('[dashboard/anotaai-faltas-historico]', err?.message || err);
+    res.status(502).json({ error: 'Não foi possível carregar o histórico agora.' });
+  }
+});
+
+// ===== Relatórios (prestação de contas por fonte, via HUB) =====
+// Proxy fino que resolve a loja → clienteId → pede ao HUB os insights da fonte e
+// devolve o CONTRATO ÚNICO normalizado. Reusa os endpoints internos: meta e cardapio
+// (já existentes) e google (novo). Sem conta ⇒ contrato "desconectado".
+const REL_FONTE_ENDPOINT = {
+  meta: 'cliente-meta-insights',
+  google: 'cliente-google-insights',
+  cardapio: 'cliente-cardapio-dashboard',
+};
+app.get('/api/relatorios/:fonte', async (req, res) => {
+  const fonte = String(req.params.fonte || '').toLowerCase();
+  if (!FONTES.includes(fonte)) return res.status(404).json({ error: 'Fonte de relatório desconhecida' });
+  try {
+    const empresaId = getEmpresaIdAtual();
+    if (!empresaId) return res.status(404).json({ error: 'Loja não resolvida' });
+    const loja = await prisma.empresa.findUnique({ where: { id: empresaId } });
+    if (!loja?.clienteId) return res.json(normalizarRelatorio(fonte, { conectado: false }));
+
+    const isYmd = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+    const since = isYmd(req.query.since) ? req.query.since : null;
+    const until = isYmd(req.query.until) ? req.query.until : null;
+    const datePreset = String(req.query.datePreset || 'last_30d');
+    const token = jwt.sign({ svc: 'h360-dashboard' }, JWT_SECRET, { expiresIn: '30s' });
+    const r = await fetch(`${HUB_API_URL}/internal/${REL_FONTE_ENDPOINT[fonte]}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ clienteId: loja.clienteId, since, until, datePreset }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      return res.status(r.status === 401 ? 401 : 502).json({ error: data?.error || 'Erro ao consultar o HUB' });
+    }
+    res.json(normalizarRelatorio(fonte, data));
+  } catch (err) {
+    console.error('[relatorios]', fonte, err?.message || err);
+    res.status(502).json({ error: 'Não foi possível carregar o relatório agora.' });
+  }
+});
 
 // ===================== Dep. Pessoal: Ponto Facial (Fase 1) =====================
 // Reconhecimento no tablet (face-api.js); aqui só guardamos/comparamos VETORES.
