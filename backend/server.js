@@ -11306,24 +11306,17 @@ app.get('/api/motoboys', async (req, res) => {
   }
 });
 
-// Ferramentas da própria LOJA: qualquer usuário autenticado com acesso à loja usa —
-// o middleware de tenant já resolveu a loja/permissão (não existia no PDV; portado do H360).
-function exigirLoja(req, res) {
-  if (!req.user) { res.status(401).json({ error: 'Não autenticado.' }); return false; }
-  return true;
-}
-
 // ===== Motoboys › Configuração (contato da escala, bloqueado, CNH) — ADMIN =====
 // Definido ANTES de /api/motoboys/:id p/ "config" não cair na rota de id.
 app.get('/api/motoboys/config', async (req, res) => {
-  if (!exigirLoja(req, res)) return;
+  if (!exigirAdmin(req, res)) return;
   try {
     const e = await getEmpresa();
     res.json({ contatoWhatsapp: e.motoboyContatoWhatsapp ?? '', bloqueadoPodeEscalar: !!e.motoboyBloqueadoPodeEscalar, perguntaCnh: !!e.motoboyPerguntaCnh });
   } catch (err) { console.error('[motoboys/config GET]', err); res.status(500).json({ error: 'Erro ao carregar a configuração.' }); }
 });
 app.put('/api/motoboys/config', async (req, res) => {
-  if (!exigirLoja(req, res)) return;
+  if (!exigirAdmin(req, res)) return;
   try {
     const e = await getEmpresa();
     const b = req.body ?? {};
