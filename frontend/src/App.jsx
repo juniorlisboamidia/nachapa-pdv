@@ -4,6 +4,7 @@ import Login from './pages/Login'
 import Layout from './components/Layout'
 import Inicio from './pages/Inicio'
 import EmConstrucao from './pages/EmConstrucao'
+import CmvGlobal from './pages/CmvGlobal'
 import Equipe from './pages/Equipe'
 import PontoFacial from './pages/PontoFacial'
 import Colaboradores from './pages/Colaboradores'
@@ -103,7 +104,7 @@ export default function App() {
             <Route path="ponto-equilibrio" element={<PontoEquilibrio />} />
             <Route path="faturamento" element={<Faturamento />} />
             {/* Produtos › Estoque (vira CMV Global na Fase 3) */}
-            <Route path="estoque" element={<EmConstrucao titulo="Estoque" descricao="Contagem de estoque, compras e CMV real." />} />
+            <Route path="estoque" element={<CmvGlobal />} />
             {/* Relatórios (viram páginas reais na Fase 4) */}
             <Route path="relatorios" element={<Navigate to="/relatorios/meta" replace />} />
             <Route path="relatorios/meta" element={<EmConstrucao titulo="Meta Ads" descricao="Relatório de Meta Ads da loja." />} />
