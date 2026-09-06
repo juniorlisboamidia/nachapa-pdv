@@ -230,7 +230,7 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok', app: 'operacao-pdv
 app.get('/api/auth/me', (req, res) => {
   const u = req.user;
   if (u.tipo === 'operador') {
-    return res.json({ nome: u.nome, papel: 'GERENTE', tipo: 'operador', podePDV: true, areas: u.areas || [] });
+    return res.json({ id: u.operadorId, nome: u.nome, papel: 'GERENTE', tipo: 'operador', podePDV: true, areas: u.areas || [] }); // id: favoritos da Visão Geral por usuário
   }
   res.json({
     id: u.membroId, nome: u.nome, email: u.email, role: u.role,
