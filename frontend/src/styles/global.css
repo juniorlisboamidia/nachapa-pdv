@@ -3231,3 +3231,27 @@ body.theme-dark .ent-hero-bar { background: var(--d-border) !important; }
   .pub-dia-estado { flex-direction: column; gap: 0; min-width: 0; max-width: 100%; }
   .pub-dia-check { position: absolute; top: 3px; right: 5px; font-size: 11px; }
 }
+
+/* ── Visão Geral: painel de atalhos (Inicio.jsx) ───────────────────────────
+   Cards gerados da árvore da sidebar + faixa "Mais usados" fixada pelo usuário. */
+.vg-secao { margin-bottom: 22px; }
+.vg-secao-t { font-size: 13px; font-weight: 700; color: var(--app-text-2); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 12px; }
+.vg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.vg-grid-fav { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+.vg-card { position: relative; display: flex; flex-direction: column; gap: 6px; padding: 16px 16px 18px; border-radius: 14px; border: 1px solid var(--app-border); background: var(--app-surface); color: inherit; text-decoration: none; transition: border-color .14s, box-shadow .14s; }
+.vg-card:hover { border-color: var(--brand-gold); box-shadow: 0 4px 14px rgba(249, 115, 22, .18); }
+.vg-card:hover .vg-seta { transform: translateX(3px); }
+.vg-fav { padding: 20px 20px 22px; }
+.vg-fav .vg-nome { font-size: 16.5px; }
+.vg-fav .vg-ic { width: 46px; height: 46px; }
+.vg-topo { display: flex; align-items: center; justify-content: space-between; }
+.vg-ic { width: 40px; height: 40px; border-radius: 11px; background: var(--app-highlight); color: var(--brand-gold-deep); display: grid; place-items: center; }
+.vg-ic .sidebar-icon { width: 22px; height: 22px; color: inherit; stroke: currentColor; }
+.vg-nome { font-weight: 700; font-size: 15px; color: var(--app-text); padding-right: 22px; }
+.vg-desc { font-size: 12.5px; color: var(--app-text-3); line-height: 1.4; padding-right: 22px; }
+.vg-seta { position: absolute; right: 16px; bottom: 14px; color: var(--brand-gold-deep); font-size: 18px; font-weight: 800; transition: transform .14s; }
+.vg-star { width: 32px; height: 32px; border-radius: 9px; border: 1px solid transparent; background: transparent; color: var(--app-text-3); display: grid; place-items: center; cursor: pointer; padding: 0; transition: color .12s, background .12s, border-color .12s; }
+.vg-star:hover { color: var(--brand-gold-deep); background: var(--app-highlight); border-color: var(--app-border); }
+.vg-star.on { color: var(--brand-gold); }
+.vg-vazio { padding: 14px 16px; border-radius: 12px; border: 1px dashed var(--app-border); color: var(--app-text-2); font-size: 13.5px; background: var(--app-surface); }
+body.theme-dark .vg-card:hover { box-shadow: 0 4px 14px rgba(249, 115, 22, .28); }
