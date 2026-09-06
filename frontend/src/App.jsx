@@ -4,6 +4,10 @@ import Login from './pages/Login'
 import Layout from './components/Layout'
 import Inicio from './pages/Inicio'
 import EmConstrucao from './pages/EmConstrucao'
+import RelatorioMeta from './pages/relatorios/RelatorioMeta'
+import RelatorioInstagram from './pages/relatorios/RelatorioInstagram'
+import RelatorioGoogle from './pages/relatorios/RelatorioGoogle'
+import RelatorioCardapioSwitch from './pages/relatorios/RelatorioCardapioSwitch'
 import CmvGlobal from './pages/CmvGlobal'
 import Equipe from './pages/Equipe'
 import PontoFacial from './pages/PontoFacial'
@@ -107,10 +111,10 @@ export default function App() {
             <Route path="estoque" element={<CmvGlobal />} />
             {/* Relatórios (viram páginas reais na Fase 4) */}
             <Route path="relatorios" element={<Navigate to="/relatorios/meta" replace />} />
-            <Route path="relatorios/meta" element={<EmConstrucao titulo="Meta Ads" descricao="Relatório de Meta Ads da loja." />} />
-            <Route path="relatorios/instagram" element={<EmConstrucao titulo="Instagram" descricao="Relatório do Instagram da loja." />} />
-            <Route path="relatorios/google" element={<EmConstrucao titulo="Google Ads" descricao="Relatório de Google Ads da loja." />} />
-            <Route path="relatorios/cardapio" element={<EmConstrucao titulo="Cardápio" descricao="Relatório de vendas do cardápio." />} />
+            <Route path="relatorios/meta" element={<RelatorioMeta />} />
+            <Route path="relatorios/instagram" element={<RelatorioInstagram />} />
+            <Route path="relatorios/google" element={<RelatorioGoogle />} />
+            <Route path="relatorios/cardapio" element={<RelatorioCardapioSwitch />} />
             <Route path="relatorios/gmn" element={<EmConstrucao titulo="Google Meu Negócio" descricao="Em breve." />} />
             {/* Marketing › Avaliador e Indicação (viram páginas reais na Fase 1) */}
             <Route path="avaliacoes" element={<Avaliacao />} />
