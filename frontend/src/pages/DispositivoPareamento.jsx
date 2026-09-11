@@ -87,30 +87,26 @@ export default function DispositivoPareamento() {
     }
   }
 
-  // Um dígito entra SEMPRE por aqui (teclado da tela ou físico). Duas coisas de propósito:
-  //  · `setCodigo(c => …)`: dois toques no mesmo instante partiriam do mesmo `codigo` velho
-  //    e o segundo apagaria o primeiro — com a forma funcional, cada um vê o anterior;
-  //  · o auto-envio NÃO sai daqui: sai do resultado (a ref), no efeito abaixo. O updater
-  //    tem de ser puro, porque o React pode reexecutá-lo.
+  // Um dígito entra SEMPRE por aqui (teclado da tela ou físico). O valor de partida é a REF,
+  // não o `codigo` do render: dois toques no mesmo instante partiriam do mesmo estado velho e
+  // o segundo apagaria o primeiro. A ref é atualizada aqui, fora de qualquer updater — o
+  // updater do React tem de ser puro, porque ele pode ser reexecutado.
+  // O auto-envio do 6º dígito não sai daqui: sai do efeito abaixo, que lê a ref.
   function digitar(d) {
-    if (enviando) return
+    if (enviando || codigoRef.current.length >= TAMANHO) return
     setErro(null)
-    setCodigo((c) => {
-      const novo = c.length >= TAMANHO ? c : (c + d).slice(0, TAMANHO)
-      codigoRef.current = novo
-      return novo
-    })
+    const novo = (codigoRef.current + d).slice(0, TAMANHO)
+    setCodigo(novo)
+    codigoRef.current = novo
   }
 
   function apagar() {
     if (enviando) return
     setErro(null)
     enviadoRef.current = false
-    setCodigo((c) => {
-      const novo = c.slice(0, -1)
-      codigoRef.current = novo
-      return novo
-    })
+    const novo = codigoRef.current.slice(0, -1)
+    setCodigo(novo)
+    codigoRef.current = novo
   }
 
   function limparCodigo() {

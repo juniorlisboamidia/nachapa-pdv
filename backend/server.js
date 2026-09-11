@@ -8847,17 +8847,19 @@ const pedidoTotemAdmin = (r) => ({
 
 const APARELHO_DA_LINHA = { dispositivo: { select: { id: true, nome: true } } };
 
-// ── O ÚNICO construtor do `data` que leva uma linha a CRIADO ────────────────────────────
-// Um envio chega a CRIADO por quatro caminhos: o desfecho normal do POST, o CRIADO tardio,
-// a reconciliação (job ou botão) e a confirmação manual do admin. Nos quatro, "virar CRIADO"
-// é a MESMA lista de colunas — a identidade do pedido no CW, o total e a LIMPEZA do
-// erroCodigo/erroDetalhe que a linha carregava de quando era AMBIGUA. Esquecer a limpeza
-// deixa na tela do admin um "pedido criado" exibindo um HUB_INDISPONIVEL velho (já aconteceu
-// duas vezes), então nenhum caminho monta esse objeto à mão: todos passam por aqui.
+// ── O construtor único do `data` que leva uma linha a CRIADO DEPOIS do POST ─────────────
+// Três caminhos chegam a CRIADO tarde: o CRIADO tardio (a resposta do HUB venceu a corrida
+// com o job), a reconciliação (job ou botão) e a confirmação manual do admin. Nos três,
+// "virar CRIADO" é a MESMA lista de colunas — a identidade do pedido no CW, o total e a
+// LIMPEZA do erroCodigo/erroDetalhe que a linha carregava de quando era AMBIGUA. Esquecer a
+// limpeza deixa na tela do admin um "pedido criado" exibindo um HUB_INDISPONIVEL velho (já
+// aconteceu duas vezes), então nenhum dos três monta esse objeto à mão: todos passam por aqui.
+// O desfecho DIRETO do POST não entra aqui: ele grava camposDoDesfecho('CRIADO', …), que já
+// traz a mesma limpeza e tem teste próprio travando a lista de campos.
 //   de/evento = a transição, sempre pela máquina de estados (nunca status escrito à mão)
 //   campos    = camposDoDesfecho('CRIADO', …) ou o recorte { cwOrderId, cwDisplayId, … }
-// `reconciliadoEm` entra sozinho quando o CRIADO não veio do desfecho direto: é a marca de
-// que aquele pedido foi ENCONTRADO depois, não confirmado na resposta do POST.
+// `reconciliadoEm` é a marca de que o pedido foi ENCONTRADO depois, não confirmado na
+// resposta do POST — daí entrar em todo evento que não seja o 'criado' do caminho direto.
 function dadosDeCriado(de, evento, campos, em = new Date()) {
   const data = { ...(campos || {}), erroCodigo: null, erroDetalhe: null, status: transicao(de, evento) };
   if (evento !== 'criado') data.reconciliadoEm = em;
@@ -8991,7 +8993,14 @@ app.post('/api/totem/pedidos/:id/confirmar-criado', async (req, res) => {
     const clienteId = await clienteIdDaEmpresaTotem(empresaId);
     if (!clienteId) return res.status(409).json({ erro: 'CLIENTE_SEM_CW' });
     const r = await detalheTotemCW(clienteId, cwOrderId);
-    if (!r.ok) return res.status(503).json({ erro: r.codigo });
+    // Mesma régua da reconciliação: um 4xx do HUB é resposta determinística — o 404
+    // PEDIDO_NAO_ENCONTRADO diz que o cwOrderId digitado não existe no CW, e insistir não
+    // muda isso. Devolver 503 para tudo faria o admin ficar tentando de novo um número
+    // errado. 5xx e rede continuam 503, que é onde tentar de novo faz sentido.
+    if (!r.ok) {
+      const http = Number(r.http);
+      return res.status(http >= 400 && http < 500 ? http : 503).json({ erro: r.codigo });
+    }
     // Fail-closed: sem o external_order_id do CW não se confirma nada.
     const externo = r.data?.externalOrderId ?? r.data?.external_order_id ?? null;
     if (!externo || String(externo) !== envio.orderId) return res.status(409).json({ erro: 'PEDIDO_NAO_CORRESPONDE' });
