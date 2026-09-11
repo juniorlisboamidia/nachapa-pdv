@@ -69,6 +69,8 @@ const MODELS_TENANT = new Set([
   'cmvContagem', 'cmvContagemItem', 'cmvCompra', 'cmvCompraItem',
   // Dashboard › Faixas dos Tempos operacionais do Cardápio (ideal/atenção), por loja
   'tempoFaixaCardapioConfig',
+  // Totem de autoatendimento: outbox/auditoria dos pedidos criados no Cardápio Web
+  'pedidoTotemEnvio',
 ]);
 const OPS_WHERE = new Set([
   'findMany', 'findFirst', 'findFirstOrThrow', 'findUnique', 'findUniqueOrThrow',
