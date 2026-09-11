@@ -96,18 +96,22 @@ test('(b) o bloco público existe e é o que se espera', () => {
   assert.ok(bloco.includes('resolverAparelhoPorCookie'));
 });
 
+// Nenhum campo de identidade pode ser LIDO da requisição — em nenhuma das suas caixas
+// (body, query, params, headers). As rotas do totem trouxeram usos legítimos de
+// `clienteId` (derivado no servidor), `dispositivoId: ap.id` e `req.params.envioId`, então
+// a regra deixou de ser "a palavra não aparece" e passou a ser "a palavra nunca vem do
+// cliente"; o que cada um desses usos pode ser está varrido linha a linha em
+// totem.tenant.test.js.
 test('(b) nenhuma linha do bloco público lê identidade do corpo', () => {
   const codigo = semComentarios(blocoPublico());
   const proibidos = [
-    /req\.body\s*\??\.\s*empresaId/,
-    /req\.body\s*\??\.\s*clienteId/,
-    /req\.body\s*\??\.\s*dispositivoId/,
-    /req\.body\s*\??\.\s*aparelhoId/,
+    /req\.(?:body|query|params|headers)\s*\??\.?\s*\[?\s*['"]?(?:empresaId|clienteId|dispositivoId|aparelhoId)/,
     /\bempresaId\s*:\s*(?:Number|String|parseInt)?\(?\s*req\./,
-    /\bclienteId\b/,
-    /\bdispositivoId\b/,
+    /\bclienteId\s*:\s*(?:Number|String|parseInt)?\(?\s*req\./,
+    /\bdispositivoId\s*:\s*(?:Number|String|parseInt)?\(?\s*req\./,
     /\baparelhoId\b/,
-    /req\.params/,
+    // Desestruturar identidade do corpo também não vale (`const { empresaId } = req.body`).
+    /\{[^}\n]*\b(?:empresaId|clienteId|dispositivoId)\b[^}\n]*\}\s*=\s*req\./,
   ];
   for (const re of proibidos) {
     const m = codigo.match(re);
