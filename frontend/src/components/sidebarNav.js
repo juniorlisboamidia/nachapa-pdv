@@ -120,15 +120,17 @@ export const grupos = [
           { to: '/etiquetas/historico', label: 'Histórico', icon: 'relatorios' },
         ],
       },
-      // Aparelhos e Totem dividem a MESMA área (`aparelhos`, acessos/areas.js): quem
-      // cadastra o tablet é quem audita o que ele mandou ao cardápio.
+    ],
+  },
+  {
+    // Loja Digital: o que a loja expõe ao cliente por tela (totem hoje; TV Indoor entra
+    // entre Totem e Aparelhos quando existir). Totem e Aparelhos dividem a MESMA área
+    // (`aparelhos`, acessos/areas.js): quem cadastra o tablet é quem audita o que ele
+    // mandou ao cardápio. Rotas e permissões não mudam — só o agrupamento.
+    label: 'Loja Digital', icon: 'marketing',
+    itens: [
+      { to: '/totem/pedidos', label: 'Totem', icon: 'relatorios', area: 'aparelhos' },
       { to: '/aparelhos', label: 'Aparelhos', icon: 'gestao', area: 'aparelhos' },
-      {
-        label: 'Totem', icon: 'ficha', area: 'aparelhos',
-        itens: [
-          { to: '/totem/pedidos', label: 'Pedidos', icon: 'relatorios' },
-        ],
-      },
     ],
   },
 ];

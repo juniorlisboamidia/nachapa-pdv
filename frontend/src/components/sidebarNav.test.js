@@ -6,7 +6,7 @@ const labels = (nos) => nos.map((n) => n.label);
 const grupo = (nos, label) => nos.find((n) => n.label === label);
 
 test('ordem raiz é a definida pelo Junior', () => {
-  assert.deepEqual(labels(grupos), ['Relatórios', 'Produtos', 'Gestão', 'Marketing', 'Dep. Pessoal', 'Ferramentas']);
+  assert.deepEqual(labels(grupos), ['Relatórios', 'Produtos', 'Gestão', 'Marketing', 'Dep. Pessoal', 'Ferramentas', 'Loja Digital']);
 });
 
 test('Produtos na ordem Ficha técnica, Insumos, Estoque, Fornecedores', () => {
@@ -36,20 +36,28 @@ test('operador com motoboys vê só o subgrupo Motoboys dentro de Dep. Pessoal',
   assert.deepEqual(labels(grupo(grupo(v, 'Dep. Pessoal').itens, 'Motoboys').itens), ['Escala', 'Entregadores', 'Calc. Frete', 'Configuração']);
 });
 
-test('Ferramentas na ordem Checklist, Etiquetas, Aparelhos, Totem', () => {
-  const f = grupo(grupos, 'Ferramentas').itens;
-  assert.deepEqual(labels(f), ['Checklist', 'Etiquetas', 'Aparelhos', 'Totem']);
-  assert.deepEqual(labels(grupo(f, 'Totem').itens), ['Pedidos']);
+test('Ferramentas volta a ter só Checklist e Etiquetas', () => {
+  assert.deepEqual(labels(grupo(grupos, 'Ferramentas').itens), ['Checklist', 'Etiquetas']);
 });
 
-test('operador com aparelhos vê Aparelhos e Totem, sem Checklist/Etiquetas', () => {
+test('Loja Digital na ordem Totem, Aparelhos — Totem aponta para os pedidos, Aparelhos para /aparelhos', () => {
+  const ld = grupo(grupos, 'Loja Digital').itens;
+  assert.deepEqual(ld.map((n) => [n.label, n.to, n.area]), [
+    ['Totem', '/totem/pedidos', 'aparelhos'],
+    ['Aparelhos', '/aparelhos', 'aparelhos'],
+  ]);
+  assert.ok(ld.every((n) => !n.itens), 'itens de Loja Digital são folhas (sem subgrupo)');
+});
+
+test('operador com aparelhos vê só Loja Digital, com Totem e Aparelhos', () => {
   const v = gruposVisiveis({ tipo: 'operador', areas: ['aparelhos'] });
-  assert.deepEqual(labels(v), ['Ferramentas']);
-  assert.deepEqual(labels(grupo(v, 'Ferramentas').itens), ['Aparelhos', 'Totem']);
+  assert.deepEqual(labels(v), ['Loja Digital']);
+  assert.deepEqual(labels(grupo(v, 'Loja Digital').itens), ['Totem', 'Aparelhos']);
 });
 
-test('operador com etiquetas NÃO vê Aparelhos nem Totem', () => {
+test('operador com etiquetas vê Ferramentas com Etiquetas e NÃO vê Loja Digital', () => {
   const v = gruposVisiveis({ tipo: 'operador', areas: ['etiquetas'] });
+  assert.deepEqual(labels(v), ['Ferramentas']);
   assert.deepEqual(labels(grupo(v, 'Ferramentas').itens), ['Etiquetas']);
 });
 
@@ -63,7 +71,7 @@ test('localizarRota abre o nível certo', () => {
   assert.deepEqual(localizarRota('/estoque'), { grupo: 'Produtos', sub: null });
   assert.deepEqual(localizarRota('/relatorios/meta'), { grupo: 'Relatórios', sub: null });
   assert.deepEqual(localizarRota('/checklist/painel'), { grupo: 'Ferramentas', sub: 'Checklist' });
-  assert.deepEqual(localizarRota('/aparelhos'), { grupo: 'Ferramentas', sub: null });
-  assert.deepEqual(localizarRota('/totem/pedidos'), { grupo: 'Ferramentas', sub: 'Totem' });
+  assert.deepEqual(localizarRota('/aparelhos'), { grupo: 'Loja Digital', sub: null });
+  assert.deepEqual(localizarRota('/totem/pedidos'), { grupo: 'Loja Digital', sub: null });
   assert.deepEqual(localizarRota('/'), { grupo: null, sub: null });
 });

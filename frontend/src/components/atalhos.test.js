@@ -7,7 +7,15 @@ import {
 } from './atalhos.js';
 
 test('seções na ordem da sidebar, uma por grupo raiz com itens', () => {
-  assert.deepEqual(atalhosDaArvore(grupos).map((s) => s.titulo), ['Relatórios', 'Produtos', 'Gestão', 'Marketing', 'Dep. Pessoal', 'Ferramentas']);
+  assert.deepEqual(atalhosDaArvore(grupos).map((s) => s.titulo), ['Relatórios', 'Produtos', 'Gestão', 'Marketing', 'Dep. Pessoal', 'Ferramentas', 'Loja Digital']);
+});
+
+test('Visão Geral herda Loja Digital com Totem (pedidos) e Aparelhos, e Ferramentas sem eles', () => {
+  const s = atalhosDaArvore(grupos);
+  assert.deepEqual(s.find((x) => x.titulo === 'Loja Digital').itens.map((i) => [i.label, i.to]), [
+    ['Totem', '/totem/pedidos'], ['Aparelhos', '/aparelhos'],
+  ]);
+  assert.deepEqual(s.find((x) => x.titulo === 'Ferramentas').itens.map((i) => i.label), ['Checklist', 'Etiquetas']);
 });
 
 test('card por nó de 2º nível; subgrupo aponta pra primeira folha', () => {
