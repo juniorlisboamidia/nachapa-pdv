@@ -4,7 +4,7 @@
 // `area` pode estar em qualquer nível; filho sem `area` herda a do pai.
 export const grupos = [
   {
-    label: 'Relatórios', icon: 'relatorios', area: 'relatorios',
+    label: 'Relatórios', icon: 'chartColumn', area: 'relatorios',
     itens: [
       { to: '/relatorios/meta', label: 'Meta Ads', iconImg: '/meta-ads.svg' },
       { to: '/relatorios/instagram', label: 'Instagram', iconImg: '/instagram.svg' },
@@ -14,7 +14,7 @@ export const grupos = [
     ],
   },
   {
-    label: 'Produtos', icon: 'produtos', area: 'produtos',
+    label: 'Produtos', icon: 'package', area: 'produtos',
     itens: [
       { to: '/produtos', label: 'Ficha técnica', icon: 'ficha' },
       { to: '/insumos', label: 'Insumos', icon: 'insumos' },
@@ -23,14 +23,14 @@ export const grupos = [
     ],
   },
   {
-    label: 'Gestão', icon: 'gestao', area: 'gestao',
+    label: 'Gestão', icon: 'building', area: 'gestao',
     itens: [
       { to: '/faturamento', label: 'Faturamento', icon: 'faturamento' },
       { to: '/custos', label: 'Custos', icon: 'custos' },
     ],
   },
   {
-    label: 'Marketing', icon: 'marketing', area: 'marketing',
+    label: 'Marketing', icon: 'megaphone', area: 'marketing',
     itens: [
       { to: '/marketing/grupo-vip', label: 'Grupo VIP', icon: 'marketing' },
       {
@@ -55,7 +55,7 @@ export const grupos = [
     ],
   },
   {
-    label: 'Dep. Pessoal', icon: 'clientes',
+    label: 'Dep. Pessoal', icon: 'users',
     itens: [
       { to: '/rh/colaboradores', label: 'Colaboradores', icon: 'entregadores', area: 'ponto' },
       {
@@ -100,10 +100,10 @@ export const grupos = [
     ],
   },
   {
-    label: 'Ferramentas', icon: 'gestao',
+    label: 'Ferramentas', icon: 'wrench',
     itens: [
       {
-        label: 'Checklist', icon: 'ficha', area: 'checklist',
+        label: 'Checklist', icon: 'clipboardCheck', area: 'checklist',
         itens: [
           { to: '/checklist/painel', label: 'Painel', icon: 'gestao' },
           { to: '/checklist/checklists', label: 'Checklists', icon: 'ficha' },
@@ -113,7 +113,7 @@ export const grupos = [
         ],
       },
       {
-        label: 'Etiquetas', icon: 'ficha', area: 'etiquetas',
+        label: 'Etiquetas', icon: 'tag', area: 'etiquetas',
         itens: [
           { to: '/etiquetas/config', label: 'Configuração', icon: 'gestao' },
           { to: '/etiquetas/itens', label: 'Itens', icon: 'ficha' },
@@ -127,10 +127,10 @@ export const grupos = [
     // entre Totem e Aparelhos quando existir). Totem e Aparelhos dividem a MESMA área
     // (`aparelhos`, acessos/areas.js): quem cadastra o tablet é quem audita o que ele
     // mandou ao cardápio. Rotas e permissões não mudam — só o agrupamento.
-    label: 'Loja Digital', icon: 'marketing',
+    label: 'Loja Digital', icon: 'monitorSmartphone',
     itens: [
-      { to: '/totem/pedidos', label: 'Totem', icon: 'relatorios', area: 'aparelhos' },
-      { to: '/aparelhos', label: 'Aparelhos', icon: 'gestao', area: 'aparelhos' },
+      { to: '/totem/pedidos', label: 'Totem', icon: 'tablet', area: 'aparelhos' },
+      { to: '/aparelhos', label: 'Aparelhos', icon: 'cpu', area: 'aparelhos' },
     ],
   },
 ];

@@ -83,7 +83,7 @@ export default function Sidebar({ colapsada }) {
               className={itemClass}
               title={colapsada ? 'Visão Geral' : undefined}
             >
-              <Icon name="dashboard" />
+              <Icon name="casa" />
               <span className="sidebar-item-label">Visão Geral</span>
             </NavLink>
             {visiveis.map((g) => {

@@ -9,6 +9,23 @@ test('ordem raiz é a definida pelo Junior', () => {
   assert.deepEqual(labels(grupos), ['Relatórios', 'Produtos', 'Gestão', 'Marketing', 'Dep. Pessoal', 'Ferramentas', 'Loja Digital']);
 });
 
+test('cada categoria principal tem ícone próprio (Lucide) e nenhum se repete', () => {
+  const raiz = Object.fromEntries(grupos.map((g) => [g.label, g.icon]));
+  assert.deepEqual(raiz, {
+    'Relatórios': 'chartColumn', 'Produtos': 'package', 'Gestão': 'building', 'Marketing': 'megaphone',
+    'Dep. Pessoal': 'users', 'Ferramentas': 'wrench', 'Loja Digital': 'monitorSmartphone',
+  });
+  assert.equal(new Set(Object.values(raiz)).size, grupos.length, 'ícone repetido entre categorias principais');
+});
+
+test('subitens de Ferramentas e Loja Digital com identidade própria', () => {
+  const icone = (g, label) => grupo(grupo(grupos, g).itens, label).icon;
+  assert.equal(icone('Ferramentas', 'Checklist'), 'clipboardCheck');
+  assert.equal(icone('Ferramentas', 'Etiquetas'), 'tag');
+  assert.equal(icone('Loja Digital', 'Totem'), 'tablet');
+  assert.equal(icone('Loja Digital', 'Aparelhos'), 'cpu');
+});
+
 test('Produtos na ordem Ficha técnica, Insumos, Estoque, Fornecedores', () => {
   assert.deepEqual(labels(grupo(grupos, 'Produtos').itens), ['Ficha técnica', 'Insumos', 'Estoque', 'Fornecedores']);
 });
