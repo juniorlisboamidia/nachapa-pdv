@@ -22,6 +22,10 @@ export const JANELA_DISPLAY_MS = 24 * 3600_000;        // completar cwDisplayId 
 // ENVIANDO parado mais que isto = o processo caiu entre o INSERT e o desfecho (a ponte
 // desiste em 60 s, então 5 min é folga larga). O job promove a AMBIGUO — nunca a falha.
 export const JANELA_ENVIANDO_MS = 5 * 60_000;
+// Teto de reconciliações por tick. Cada reconciliação é uma ida ao HUB (que vai ao CW):
+// um acúmulo de linhas ambíguas não pode virar uma rajada de chamadas em cima do CW. As
+// que não couberem esperam o próximo tick (60 s) — nada se perde, só espera.
+export const MAX_RECONCILIACOES_POR_TICK = 5;
 
 const LIMITE_CARRINHO = 50;      // linhas por pedido
 const LIMITE_QTD = 99;           // por linha
@@ -103,6 +107,25 @@ export function proximaAcaoJob(envio, agora, tick = 0) {
   return 'NADA';
 }
 
+// Quais envios deste tick vão de fato ser reconciliados (§5.4). Quem decide SE cada linha
+// é reconciliável continua sendo `proximaAcaoJob` — aqui só se escolhe a ORDEM e o TETO:
+// as mais antigas primeiro (quem está esperando há mais tempo é quem mais precisa), no
+// máximo `max` por tick. As demais não mudam de estado: voltam na próxima varredura.
+// Linha sem `tentadoEm` legível vai para o fim (não tem como afirmar que é a mais antiga).
+export function selecionarParaReconciliar(envios, agora, tick = 0, max = MAX_RECONCILIACOES_POR_TICK) {
+  const limite = Number.isInteger(max) && max > 0 ? max : MAX_RECONCILIACOES_POR_TICK;
+  return (Array.isArray(envios) ? envios : [])
+    .filter((e) => proximaAcaoJob(e, agora, tick) === 'RECONCILIAR')
+    .sort((a, b) => {
+      const x = ms(a?.tentadoEm);
+      const y = ms(b?.tentadoEm);
+      if (!Number.isFinite(x)) return Number.isFinite(y) ? 1 : 0;
+      if (!Number.isFinite(y)) return -1;
+      return x - y;
+    })
+    .slice(0, limite);
+}
+
 // Pedido criado cujo número do balcão (cwDisplayId) ficou pendente: o job completa via
 // `detalhe` enquanto estiver no primeiro dia.
 export function precisaDisplay(envio, agora) {
@@ -142,7 +165,22 @@ const terminalNegativo = (envio) => envio?.status === 'REJEITADO' || envio?.stat
 export function corpoDaResposta(envio) {
   const corpo = respostaPublica(envio);
   if (!terminalNegativo(envio)) return corpo;
-  return { ...corpo, erro: envio?.erroCodigo ?? envio?.status ?? 'ERRO_INTERNO', detalhes: envio?.erroDetalhe ?? null };
+  return { ...corpo, erro: envio?.erroCodigo ?? envio?.status ?? 'ERRO_INTERNO', detalhes: detalhesDoErro(envio?.erroDetalhe) };
+}
+
+// `erroDetalhe` é uma coluna de TEXTO, mas o que o HUB manda em `detalhes` quase sempre é
+// uma LISTA ({ itemId, codigo, mensagem }) — e é dela que a tela do totem tira a frase
+// "qual item o servidor recusou". Guardamos o JSON e devolvemos a lista de volta; o que
+// não for lista (texto solto, JSON quebrado) volta exatamente como está: a tela ainda
+// mostra a frase geral do código, nunca um `[object Object]`.
+function detalhesDoErro(erroDetalhe) {
+  if (erroDetalhe == null) return null;
+  if (Array.isArray(erroDetalhe)) return erroDetalhe;
+  if (typeof erroDetalhe !== 'string' || !erroDetalhe.trimStart().startsWith('[')) return erroDetalhe;
+  try {
+    const v = JSON.parse(erroDetalhe);
+    return Array.isArray(v) ? v : erroDetalhe;
+  } catch { return erroDetalhe; }
 }
 
 // Forma do corpo de POST /pedido. Devolve SÓ os 5 campos do pedido: empresaId,

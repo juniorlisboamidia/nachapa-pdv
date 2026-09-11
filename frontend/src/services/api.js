@@ -34,10 +34,14 @@ hubApi.interceptors.request.use(comBearer)
 
 // Cliente do APARELHO (totem / TV — rotas /api/public/aparelho/*). SEM Bearer e SEM
 // X-Empresa-Id de propósito: quem prova quem o aparelho é, e de qual loja, é o cookie
-// HttpOnly `pdv_aparelho` — que o navegador manda sozinho em requisição same-origin
-// (em dev, o proxy `/api` do vite.config.js é o que mantém a origem igual).
-// Anexar Bearer/X-Empresa-Id aqui seria oferecer ao servidor uma identidade vinda do
-// navegador, exatamente o que a spec §3.2/§5.2 proíbe.
+// HttpOnly `pdv_aparelho`. Anexar Bearer/X-Empresa-Id aqui seria oferecer ao servidor uma
+// identidade vinda do navegador, exatamente o que a spec §3.2/§5.2 proíbe.
+// Sobre o cookie viajar: em produção o front e a API dividem o mesmo host, então a chamada
+// é same-origin e o navegador manda o cookie sozinho. Em dev com VITE_API_URL absoluto
+// (http://localhost:4001/api) a chamada é CROSS-ORIGIN — funciona porque é mesmo site
+// (localhost), com CORS liberado e SameSite permitindo; é o `withCredentials` que faz o
+// cookie ir junto. O proxy `/api` do vite.config.js só entra em cena quando a base é
+// RELATIVA (sem VITE_API_URL) — aí sim a origem volta a ser a mesma.
 export const aparelhoApi = axios.create({ baseURL: API_URL, withCredentials: true })
 
 // Cliente da Área do Colaborador — usa SÓ o token de sessão do colaborador (nunca o

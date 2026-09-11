@@ -33,8 +33,8 @@ import {
 // Totem: ponte com o HUB (nunca com o Cardápio Web direto) + outbox puro.
 import { bootstrapTotemCW, cotarTotemCW, criarPedidoTotemCW, detalheTotemCW, reconciliarTotemCW, TIMEOUT_PEDIDO_MS } from './cardapioPedido.js';
 import {
-  ESTADOS as ESTADOS_TOTEM, ORDER_TYPES, JANELA_DISPLAY_MS, JANELA_ENVIANDO_MS, EVENTO_DO_DESFECHO,
-  novaReferencia, classificarResposta, transicao, proximaAcaoJob, precisaDisplay,
+  ESTADOS as ESTADOS_TOTEM, ORDER_TYPES, JANELA_DISPLAY_MS, JANELA_ENVIANDO_MS, JANELA_RECONCILIACAO_MS, EVENTO_DO_DESFECHO,
+  novaReferencia, classificarResposta, transicao, proximaAcaoJob, precisaDisplay, selecionarParaReconciliar,
   respostaPublica, corpoDaResposta, httpDaResposta, validarCorpoPedido, camposDoDesfecho, bootstrapPublico,
 } from './totemEnvio.js';
 import { calcularCmvGlobal } from './cmv/calculo.js';
@@ -8664,6 +8664,11 @@ app.get('/api/public/aparelho/totem/bootstrap', async (req, res) => {
     const clienteId = await clienteIdDoAparelho(ap, req.body);
     if (!clienteId) return res.status(409).json({ erro: 'CLIENTE_SEM_CW', conectado: false });
     const r = await bootstrapTotemCW(clienteId);
+    // O HUB pode responder 200 dizendo que a loja NÃO está ligada ao Cardápio Web. Isso é
+    // estado de configuração, não catálogo: gravar esse corpo no snapshot apagaria o último
+    // menu bom e deixaria a vitrine vazia até alguém religar a loja E o HUB voltar. Responde
+    // o mesmo 409 do caso sem clienteId e não encosta no snapshot.
+    if (r.ok && r.data?.conectado === false) return res.status(409).json({ erro: 'CLIENTE_SEM_CW', conectado: false });
     if (r.ok) {
       const em = new Date();
       snapshotTotem.set(loja, { data: r.data, em });
@@ -8842,6 +8847,23 @@ const pedidoTotemAdmin = (r) => ({
 
 const APARELHO_DA_LINHA = { dispositivo: { select: { id: true, nome: true } } };
 
+// ── O ÚNICO construtor do `data` que leva uma linha a CRIADO ────────────────────────────
+// Um envio chega a CRIADO por quatro caminhos: o desfecho normal do POST, o CRIADO tardio,
+// a reconciliação (job ou botão) e a confirmação manual do admin. Nos quatro, "virar CRIADO"
+// é a MESMA lista de colunas — a identidade do pedido no CW, o total e a LIMPEZA do
+// erroCodigo/erroDetalhe que a linha carregava de quando era AMBIGUA. Esquecer a limpeza
+// deixa na tela do admin um "pedido criado" exibindo um HUB_INDISPONIVEL velho (já aconteceu
+// duas vezes), então nenhum caminho monta esse objeto à mão: todos passam por aqui.
+//   de/evento = a transição, sempre pela máquina de estados (nunca status escrito à mão)
+//   campos    = camposDoDesfecho('CRIADO', …) ou o recorte { cwOrderId, cwDisplayId, … }
+// `reconciliadoEm` entra sozinho quando o CRIADO não veio do desfecho direto: é a marca de
+// que aquele pedido foi ENCONTRADO depois, não confirmado na resposta do POST.
+function dadosDeCriado(de, evento, campos, em = new Date()) {
+  const data = { ...(campos || {}), erroCodigo: null, erroDetalhe: null, status: transicao(de, evento) };
+  if (evento !== 'criado') data.reconciliadoEm = em;
+  return data;
+}
+
 // O HUB confirmou a criação DEPOIS de o job já ter promovido a linha (a resposta demorou
 // mais que a janela). A prova de que o pedido existe no CW não pode se perder: reaplica o
 // desfecho como `reconciliado` — a transição permitida a partir de AMBIGUO/REVISAO_MANUAL.
@@ -8852,14 +8874,13 @@ async function gravarCriadoTardio(envio, campos) {
     if (de !== 'CRIADO') console.error('[totem criado tardio] envio', envio.id, 'cwOrderId', campos?.cwOrderId ?? null, 'estado', de ?? 'sumiu');
     return false;
   }
-  // `campos` é o MESMO objeto do caminho normal (camposDoDesfecho('CRIADO', …)): números do
-  // CW, totalCalculado, respostaJson e a limpeza de erroCodigo/erroDetalhe — que aqui importa
-  // ainda mais, porque a linha carrega o HUB_INDISPONIVEL escrito na promoção a AMBIGUO e não
-  // pode ficar na tela como "pedido criado com erro" nem com total vazio. Uma lista de campos
-  // só, num lugar só: `status` e `reconciliadoEm` vêm depois do spread para sempre vencerem.
+  // `campos` é o MESMO objeto do caminho normal (camposDoDesfecho('CRIADO', …)) e quem monta
+  // o `data` é o construtor único: números do CW, totalCalculado, respostaJson e a limpeza do
+  // erro — que aqui importa ainda mais, porque a linha carrega o HUB_INDISPONIVEL escrito na
+  // promoção a AMBIGUO e não pode ficar na tela como "pedido criado com erro" nem sem total.
   const { count } = await prisma.pedidoTotemEnvio.updateMany({
     where: { id: envio.id, empresaId: envio.empresaId, status: de },
-    data: { ...(campos || {}), status: transicao(de, 'reconciliado'), reconciliadoEm: new Date() },
+    data: dadosDeCriado(de, 'reconciliado', campos),
   });
   if (!count) console.error('[totem criado tardio nao gravado] envio', envio.id, 'cwOrderId', campos?.cwOrderId ?? null);
   return !!count;
@@ -8890,17 +8911,35 @@ async function reconciliarEnvio(envio) {
     tentadoEm: new Date(atual.tentadoEm).toISOString(),
     timeoutMs: TIMEOUT_PEDIDO_MS,
   });
-  if (!r.ok) return { erro: r.codigo, http: 503 };                       // HUB fora: linha intocada
+  // Linha intocada nos dois casos. A diferença é o que o admin lê na tela: um 4xx é resposta
+  // DETERMINÍSTICA do HUB (ex.: 422 JANELA_RECONCILIACAO_EXPIRADA, quando o pedido é velho
+  // demais para o updated_since do CW) e insistir não muda nada — então o código vai inteiro
+  // para o botão, com o HTTP original. 5xx/rede continuam 503: aí vale tentar de novo.
+  if (!r.ok) {
+    const http = Number(r.http);
+    return http >= 400 && http < 500 ? { erro: r.codigo, http } : { erro: r.codigo, http: 503 };
+  }
   if (r.data?.encontrado !== true || !Number.isInteger(r.data?.cwOrderId)) return { encontrado: false };
+  const campos = {
+    cwOrderId: r.data.cwOrderId,
+    cwDisplayId: Number.isInteger(r.data.cwDisplayId) ? r.data.cwDisplayId : null,
+    cwStatusInicial: r.data.cwStatus == null ? null : String(r.data.cwStatus).slice(0, 60),
+  };
+  // UMA consulta a mais, best-effort: o `reconciliar` responde a pergunta que importa
+  // ("existe?"), mas nem sempre traz o total nem o número do balcão — e uma linha CRIADA com
+  // total vazio faz o admin achar que o pedido saiu de graça. Falhar aqui não muda nada: a
+  // criação já está provada e o job completa o display depois.
+  try {
+    const det = await detalheTotemCW(clienteId, r.data.cwOrderId);
+    if (det.ok) {
+      const total = Number(det.data?.total);
+      if (Number.isFinite(total)) campos.totalCalculado = total.toFixed(2);
+      if (campos.cwDisplayId == null && Number.isInteger(det.data?.cwDisplayId)) campos.cwDisplayId = det.data.cwDisplayId;
+    }
+  } catch (e) { console.error('[totem reconciliar detalhe]', e?.code ?? e?.name ?? 'erro'); }
   const { count } = await prisma.pedidoTotemEnvio.updateMany({
     where: { id: atual.id, empresaId: atual.empresaId, status: atual.status },
-    data: {
-      status: transicao(atual.status, 'reconciliado'),
-      cwOrderId: r.data.cwOrderId,
-      cwDisplayId: Number.isInteger(r.data.cwDisplayId) ? r.data.cwDisplayId : null,
-      cwStatusInicial: r.data.cwStatus == null ? null : String(r.data.cwStatus).slice(0, 60),
-      reconciliadoEm: new Date(),
-    },
+    data: dadosDeCriado(atual.status, 'reconciliado', campos),
   });
   return { encontrado: true, atualizado: !!count };
 }
@@ -8957,14 +8996,20 @@ app.post('/api/totem/pedidos/:id/confirmar-criado', async (req, res) => {
     const externo = r.data?.externalOrderId ?? r.data?.external_order_id ?? null;
     if (!externo || String(externo) !== envio.orderId) return res.status(409).json({ erro: 'PEDIDO_NAO_CORRESPONDE' });
     const em = new Date();
+    // O detalhe do CW é a única fonte do valor aqui: a linha ficou AMBIGUA sem total (o POST
+    // nunca respondeu), e um pedido confirmado sem valor na tela é um pedido que ninguém
+    // confere. Sem total legível, mantém o que já havia — nunca apaga.
+    const total = Number(r.data?.total);
+    const campos = {
+      cwOrderId,
+      cwDisplayId: Number.isInteger(r.data?.cwDisplayId) ? r.data.cwDisplayId : null,
+      cwStatusInicial: r.data?.cwStatus == null ? envio.cwStatusInicial : String(r.data.cwStatus).slice(0, 60),
+      totalCalculado: Number.isFinite(total) ? total.toFixed(2) : envio.totalCalculado,
+    };
     const { count } = await prisma.pedidoTotemEnvio.updateMany({
       where: { id, empresaId, status: envio.status },
       data: {
-        status: transicao(envio.status, 'confirmadoManual'),
-        cwOrderId,
-        cwDisplayId: Number.isInteger(r.data?.cwDisplayId) ? r.data.cwDisplayId : null,
-        cwStatusInicial: r.data?.cwStatus == null ? envio.cwStatusInicial : String(r.data.cwStatus).slice(0, 60),
-        reconciliadoEm: em,
+        ...dadosDeCriado(envio.status, 'confirmadoManual', campos, em),
         decisaoJson: { usuarioId: usuarioDoAdmin(req), acao: 'confirmar', em: em.toISOString() },
       },
     });
@@ -9014,12 +9059,26 @@ async function varrerTotemEnvios() {
   const tick = totemJobTick;
   try {
     const agora = new Date();
+    // Só o que o job AINDA pode resolver. REVISAO_MANUAL fora da janela de 24 h não é
+    // reconciliável (o updated_since do CW não alcança) e ficaria para sempre na fila:
+    // bastariam 200 linhas velhas de uma loja para o job nunca mais olhar uma ambiguidade
+    // nova — a fila satura e o dano é invisível. Elas continuam na tela do admin, que é
+    // quem decide dali em diante.
     const pendentes = await prisma.pedidoTotemEnvio.findMany({
-      where: { status: { in: ['ENVIANDO', 'AMBIGUO', 'REVISAO_MANUAL'] } },
+      where: {
+        OR: [
+          { status: { in: ['ENVIANDO', 'AMBIGUO'] } },
+          { status: 'REVISAO_MANUAL', tentadoEm: { gt: new Date(agora.getTime() - JANELA_RECONCILIACAO_MS) } },
+        ],
+      },
       orderBy: { tentadoEm: 'asc' },
       take: 200,
       select: { id: true, empresaId: true, status: true, orderId: true, orderType: true, tentadoEm: true },
     });
+    // Teto de reconciliações por tick (as mais antigas primeiro): cada uma é uma ida ao HUB,
+    // que vai ao CW. Uma fila grande não pode virar rajada — o resto espera 60 s. Promover
+    // ENVIANDO órfão e mandar para revisão são updates locais e não entram nesse teto.
+    const aReconciliar = new Set(selecionarParaReconciliar(pendentes, agora, tick).map((e) => e.id));
     for (const envio of pendentes) {
       try {
         const acao = proximaAcaoJob(envio, agora, tick);
@@ -9031,7 +9090,7 @@ async function varrerTotemEnvios() {
             data: { status: transicao('ENVIANDO', 'ambiguo'), erroCodigo: 'HUB_INDISPONIVEL', erroDetalhe: 'Envio sem resposta registrada (processo interrompido).' },
           });
           if (count) console.log('[totem] envio', envio.id, 'estava parado em ENVIANDO e virou ambiguo');
-        } else if (acao === 'RECONCILIAR') await reconciliarEnvio(envio);
+        } else if (acao === 'RECONCILIAR') { if (aReconciliar.has(envio.id)) await reconciliarEnvio(envio); }
         else if (acao === 'REVISAO') {
           // 30 min sem solução: passa para a mão do humano. NÃO é estado de falha — o job
           // continua procurando por até 24 h.

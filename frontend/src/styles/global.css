@@ -3510,6 +3510,11 @@ body.theme-dark .hb-table tr.ttm-linha-revisao:hover td { background: #3a2612; }
 .ttm-grupo-regra.obrigatorio { color: #b4530c; }
 .ttm-grupo-contagem { font-size: 13.5px; color: #5c564d; font-weight: 700; margin-bottom: 8px; }
 .ttm-grupo-falta { font-size: 14.5px; font-weight: 800; color: #b4530c; margin-top: 10px; }
+/* Grupo em falta: fica visível (sumir faria o cliente achar que o item mudou de receita),
+   apagado no fundo mas com texto de contraste cheio — o aviso precisa ser lido. */
+.ttm-grupo.falta { background: #f2efe7; border-color: #d9d3c4; }
+.ttm-grupo.falta .ttm-grupo-nome { color: #4a453d; }
+.ttm-grupo-indisponivel { margin-top: 4px; font-size: 15px; font-weight: 800; color: #4a453d; }
 
 .ttm-opcoes { display: flex; flex-direction: column; gap: 10px; }
 .ttm-opcao {

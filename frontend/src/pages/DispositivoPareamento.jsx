@@ -8,7 +8,7 @@
 // (e a loja dele) nasce sempre do cookie, nunca de algo que esta tela mande.
 //
 // Fluxo: GET /eu → 200 monta o totem · 401 mostra o teclado do código.
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { aparelhoApi } from '../services/api'
 import { mensagemErro } from '../components/totemCarrinho'
 import TotemQuiosque from './TotemQuiosque'
@@ -26,6 +26,12 @@ export default function DispositivoPareamento() {
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState(null)
   const [falhaRede, setFalhaRede] = useState(false)
+  // Espelho do código digitado. O estado é a verdade da TELA; esta ref é a verdade do
+  // AUTO-ENVIO, que não pode depender de um `codigo` lido antes do último dígito entrar.
+  const codigoRef = useRef('')
+  // Um envio por código digitado: o 6º dígito e o Enter do teclado físico não podem virar
+  // dois pareamentos (o código é de uso único — o segundo POST já falharia).
+  const enviadoRef = useRef(false)
 
   // Quem sou eu? O cookie responde — ou não responde, e então é hora de digitar o código.
   const verificar = useCallback(() => {
@@ -38,7 +44,7 @@ export default function DispositivoPareamento() {
         // adianta pedir código, então a tela diz o que é e oferece tentar de novo.
         if (!e?.response) setFalhaRede(true)
         setSessao(null)
-        setCodigo('')
+        limparCodigo()
         setEstado('codigo')
       })
   }, [])
@@ -54,7 +60,7 @@ export default function DispositivoPareamento() {
     const aoTeclar = (ev) => {
       if (/^[0-9]$/.test(ev.key)) { ev.preventDefault(); digitar(ev.key) }
       else if (ev.key === 'Backspace') { ev.preventDefault(); apagar() }
-      else if (ev.key === 'Enter' && codigo.length === TAMANHO) { ev.preventDefault(); parear(codigo) }
+      else if (ev.key === 'Enter') { ev.preventDefault(); enviarSeCompleto() }
     }
     window.addEventListener('keydown', aoTeclar)
     return () => window.removeEventListener('keydown', aoTeclar)
@@ -68,33 +74,61 @@ export default function DispositivoPareamento() {
       await aparelhoApi.post('/public/aparelho/parear', { codigo: valor })
       // O pareamento já gravou o cookie: releremos a identidade pelo /eu (é ele que o
       // resto da sessão usa) em vez de confiar no corpo desta resposta.
-      setCodigo('')
+      limparCodigo()
       verificar()
     } catch (e) {
       const cod = e?.response?.data?.erro
       setErro(CODIGOS_CONHECIDOS.includes(cod)
         ? mensagemErro(cod)
         : (e?.response ? 'Não foi possível conectar este aparelho. Tente de novo.' : 'Sem conexão com o sistema. Verifique a rede do tablet.'))
-      setCodigo('')
+      limparCodigo()
     } finally {
       setEnviando(false)
     }
   }
 
+  // Um dígito entra SEMPRE por aqui (teclado da tela ou físico). Duas coisas de propósito:
+  //  · `setCodigo(c => …)`: dois toques no mesmo instante partiriam do mesmo `codigo` velho
+  //    e o segundo apagaria o primeiro — com a forma funcional, cada um vê o anterior;
+  //  · o auto-envio NÃO sai daqui: sai do resultado (a ref), no efeito abaixo. O updater
+  //    tem de ser puro, porque o React pode reexecutá-lo.
   function digitar(d) {
-    if (enviando || codigo.length >= TAMANHO) return
+    if (enviando) return
     setErro(null)
-    const novo = (codigo + d).slice(0, TAMANHO)
-    setCodigo(novo)
-    // 6 dígitos = envia sozinho: ninguém precisa procurar um botão depois de digitar.
-    if (novo.length === TAMANHO) parear(novo)
+    setCodigo((c) => {
+      const novo = c.length >= TAMANHO ? c : (c + d).slice(0, TAMANHO)
+      codigoRef.current = novo
+      return novo
+    })
   }
 
   function apagar() {
     if (enviando) return
     setErro(null)
-    setCodigo((c) => c.slice(0, -1))
+    enviadoRef.current = false
+    setCodigo((c) => {
+      const novo = c.slice(0, -1)
+      codigoRef.current = novo
+      return novo
+    })
   }
+
+  function limparCodigo() {
+    enviadoRef.current = false
+    codigoRef.current = ''
+    setCodigo('')
+  }
+
+  // 6 dígitos = envia sozinho: ninguém precisa procurar um botão depois de digitar. É o
+  // ÚNICO caminho de envio automático — o Enter do teclado físico chama a mesma função, e
+  // `enviadoRef` garante uma tentativa por código.
+  function enviarSeCompleto() {
+    if (enviando || enviadoRef.current || codigoRef.current.length !== TAMANHO) return
+    enviadoRef.current = true
+    parear(codigoRef.current)
+  }
+
+  useEffect(() => { enviarSeCompleto() }, [codigo]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function desconectar() {
     try { await aparelhoApi.post('/public/aparelho/sair') } catch { /* o cookie pode já ter morrido */ }

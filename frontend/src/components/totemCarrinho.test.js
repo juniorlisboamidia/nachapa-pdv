@@ -7,7 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  podeAdicionarOpcao, grupoSatisfeito, itemPronto, subtotalLocal,
+  podeAdicionarOpcao, grupoSatisfeito, itemPronto, itemOrdenavel, subtotalLocal,
   montarCarrinho, diffCotacao, chaveNova, mensagemErro, precoEmVigor,
   proximoEstadoAposFalha,
 } from './totemCarrinho.js';
@@ -104,6 +104,24 @@ test('itemPronto: grupo não ACTIVE não trava o item (o HUB também o ignora)',
 
 test('itemPronto: item sem grupos está pronto', () => {
   assert.deepEqual(itemPronto({ id: 1, nome: 'Coca', preco: 7 }, {}), { ok: true, gruposFaltando: [] });
+});
+
+// ── itemOrdenavel ───────────────────────────────────────────────────────────
+test('itemOrdenavel: grupo OBRIGATÓRIO em falta tira o item do cardápio', () => {
+  // Sem opção possível num grupo de min ≥ 1, não existe item montável: deixar o cliente
+  // escolher levaria a uma recusa do HUB só lá na revisão, depois de todo o trabalho.
+  const obrigatorioEmFalta = { ...grupoSingle, status: 'MISSING' };
+  assert.deepEqual(itemOrdenavel({ ...item, grupos: [obrigatorioEmFalta, grupoMultiple] }), { ok: false, motivo: 'GRUPO_EM_FALTA' });
+  // Opcional em falta é só um adicional que acabou: o item continua pedível.
+  assert.deepEqual(itemOrdenavel({ ...item, grupos: [grupoSingle, { ...grupoMultiple, status: 'MISSING' }] }), { ok: true });
+  // Tudo ACTIVE, item sem grupos, ou item sem status: pedível.
+  assert.deepEqual(itemOrdenavel(item), { ok: true });
+  assert.deepEqual(itemOrdenavel({ id: 1, nome: 'Coca', preco: 7 }), { ok: true });
+  assert.deepEqual(itemOrdenavel(null), { ok: true });
+  // O item em falta ele mesmo cai aqui também — um motivo só para a tela tratar.
+  assert.deepEqual(itemOrdenavel({ ...item, status: 'MISSING' }), { ok: false, motivo: 'ITEM_EM_FALTA' });
+  // Grupo INACTIVE obrigatório continua ignorado (o HUB também o ignora, como em itemPronto).
+  assert.deepEqual(itemOrdenavel({ ...item, grupos: [...item.grupos, grupoInativo] }), { ok: true });
 });
 
 // ── precoEmVigor / subtotalLocal ────────────────────────────────────────────

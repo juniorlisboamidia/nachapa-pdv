@@ -19,7 +19,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { aparelhoApi } from '../services/api'
 import {
-  podeAdicionarOpcao, grupoSatisfeito, itemPronto, subtotalLocal,
+  podeAdicionarOpcao, grupoSatisfeito, itemPronto, itemOrdenavel, subtotalLocal,
   montarCarrinho, diffCotacao, chaveNova, mensagemErro, proximoEstadoAposFalha,
 } from '../components/totemCarrinho'
 
@@ -333,7 +333,9 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
   }
 
   function abrirItem(item) {
-    if (item.status === 'MISSING') return
+    // Item em falta, ou com um grupo OBRIGATÓRIO em falta, não abre: não há como montá-lo,
+    // e deixar o cliente tentar só adiaria a recusa para a tela de revisão.
+    if (!itemOrdenavel(item).ok) return
     setAberto({ item, qtd: 1, observacao: '', selecoes: {}, uid: null })
     setTela('item')
   }
@@ -607,7 +609,11 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
             </nav>
             <div className="ttm-tela ttm-grade">
               {(categoria?.itens ?? []).map((item) => {
-                const falta = item.status === 'MISSING'
+                // Dois jeitos de um item não estar disponível: ele mesmo em falta, ou um
+                // grupo obrigatório dele em falta (aí não existe montagem possível). O
+                // cliente vê o card apagado com o motivo, nunca um caminho que dá em erro.
+                const razao = itemOrdenavel(item)
+                const falta = !razao.ok
                 return (
                   <button
                     key={`${categoria.id}-${item.id}`}
@@ -619,7 +625,9 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
                     <FotoItem src={item.imagem} alt={item.nome} />
                     <span className="ttm-card-nome">{item.nome}</span>
                     {item.descricao && <span className="ttm-card-desc">{item.descricao}</span>}
-                    {falta ? <span className="ttm-card-falta">Em falta</span> : <PrecoItem item={item} />}
+                    {falta
+                      ? <span className="ttm-card-falta">{razao.motivo === 'GRUPO_EM_FALTA' ? 'Indisponível no momento' : 'Em falta'}</span>
+                      : <PrecoItem item={item} />}
                   </button>
                 )
               })}
@@ -632,11 +640,21 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
 
   if (tela === 'item' && aberto) {
     const pronto = itemPronto(aberto.item, aberto.selecoes)
+    // Editar uma linha do carrinho pode reabrir um item que ficou indisponível enquanto o
+    // cliente escolhia — por isso a checagem vale aqui também, não só no catálogo.
+    const podePedir = itemOrdenavel(aberto.item)
     conteudo = (
       <>
         <Cabecalho loja={loja} titulo={aberto.item.nome} aoVoltar={() => { setAberto(null); setTela(carrinho.length ? 'carrinho' : 'catalogo') }} />
         {banner}
         <div className="ttm-tela ttm-item">
+          {!podePedir.ok && (
+            <div className="ttm-bloco-erro pequeno">
+              {podePedir.motivo === 'GRUPO_EM_FALTA'
+                ? 'Indisponível no momento: falta um ingrediente obrigatório deste item. Escolha outro ou chame um atendente.'
+                : 'Este item acabou. Escolha outro ou chame um atendente.'}
+            </div>
+          )}
           <FotoItem src={aberto.item.imagem} alt={aberto.item.nome} />
           <div className="ttm-item-cabeca">
             <h1 className="ttm-item-nome">{aberto.item.nome}</h1>
@@ -644,10 +662,24 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
             <PrecoItem item={aberto.item} />
           </div>
 
-          {(aberto.item.grupos ?? []).filter((g) => !g.status || g.status === 'ACTIVE').map((g) => {
+          {(aberto.item.grupos ?? []).filter((g) => !g.status || g.status === 'ACTIVE' || g.status === 'MISSING').map((g) => {
             const sel = aberto.selecoes[g.id] ?? []
             const regra = regraDoGrupo(g)
             const faltando = pronto.gruposFaltando.some((id) => String(id) === String(g.id))
+            // Grupo em falta continua NA TELA, apagado: sumir com ele faria o cliente achar
+            // que o item mudou de receita. Ele não aceita toque, e se for obrigatório o item
+            // inteiro já está travado (itemOrdenavel).
+            if (g.status === 'MISSING') {
+              return (
+                <section key={g.id} className="ttm-grupo falta" aria-disabled="true">
+                  <div className="ttm-grupo-cabeca">
+                    <h2 className="ttm-grupo-nome">{g.nome}</h2>
+                    <span className="ttm-grupo-regra">{regra.obrigatorio ? 'obrigatório · ' : ''}em falta</span>
+                  </div>
+                  <p className="ttm-grupo-indisponivel">Em falta — não dá para escolher agora.</p>
+                </section>
+              )
+            }
             return (
               <section key={g.id} className={'ttm-grupo' + (faltando ? ' faltando' : '')}>
                 <div className="ttm-grupo-cabeca">
@@ -722,8 +754,8 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
             onMenos={() => setAberto((a) => ({ ...a, qtd: Math.max(1, a.qtd - 1) }))}
             onMais={() => setAberto((a) => ({ ...a, qtd: a.qtd + 1 }))}
           />
-          <button type="button" className="ttm-btn ttm-btn-primario ttm-btn-largo" disabled={!pronto.ok} onClick={adicionarAoCarrinho}>
-            {aberto.uid ? 'Salvar item' : 'Adicionar'} · {moeda(subtotalLocal(aberto))}
+          <button type="button" className="ttm-btn ttm-btn-primario ttm-btn-largo" disabled={!pronto.ok || !podePedir.ok} onClick={adicionarAoCarrinho}>
+            {podePedir.ok ? (aberto.uid ? 'Salvar item' : 'Adicionar') : 'Indisponível no momento'} · {moeda(subtotalLocal(aberto))}
           </button>
         </footer>
       </>
@@ -841,7 +873,9 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
                 <ul className="ttm-erro-lista">
                   {erroCotar.detalhes.map((d, i) => {
                     const nome = carrinho.find((l) => String(l.item.id) === String(d.itemId))?.item?.nome
-                    return <li key={`${d.codigo}-${i}`}>{nome ? <strong>{nome}: </strong> : null}{mensagemErro(d.codigo)}</li>
+                    // `mensagem` é a frase que o próprio servidor escreveu para ESTA linha
+                    // (mais específica que a frase geral do código): quando vem, ela manda.
+                    return <li key={`${d.codigo}-${i}`}>{nome ? <strong>{nome}: </strong> : null}{d.mensagem ?? mensagemErro(d.codigo)}</li>
                   })}
                 </ul>
               )}
@@ -935,7 +969,9 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
           <ul className="ttm-erro-lista">
             {detalhes.map((d, i) => {
               const nome = carrinho.find((l) => String(l.item.id) === String(d.itemId))?.item?.nome
-              return <li key={`${d.codigo ?? d.campo ?? 'd'}-${i}`}>{nome ? <strong>{nome}: </strong> : null}{mensagemErro(d.codigo)}</li>
+              // Idem: a frase do servidor (inclusive a de `validarCorpoPedido`, que já vem
+              // pronta por campo) ganha da frase genérica do código.
+              return <li key={`${d.codigo ?? d.campo ?? 'd'}-${i}`}>{nome ? <strong>{nome}: </strong> : null}{d.mensagem ?? mensagemErro(d.codigo)}</li>
             })}
           </ul>
         ) : null}

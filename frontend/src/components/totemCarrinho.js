@@ -85,6 +85,21 @@ export function itemPronto(item, selecoes) {
   return { ok: gruposFaltando.length === 0, gruposFaltando };
 }
 
+// O item pode ser PEDIDO AGORA? Diferente de `itemPronto` (que olha o que o cliente já
+// escolheu), isto olha o CATÁLOGO: um grupo OBRIGATÓRIO (min ≥ 1) que voltou MISSING do CW
+// não tem escolha possível — não há como montar o item, e o HUB recusaria a linha na
+// cotação. O totem então mostra o item como "Indisponível no momento" em vez de deixar o
+// cliente montar um pedido que morre na tela de revisão.
+// Grupo MISSING opcional não impede nada (é só um adicional que acabou), e grupo INACTIVE
+// segue ignorado, como em `itemPronto` — o HUB também o ignora.
+export function itemOrdenavel(item) {
+  if (item?.status && item.status !== 'ACTIVE') return { ok: false, motivo: 'ITEM_EM_FALTA' };
+  for (const g of lista(item?.grupos)) {
+    if (g?.status === 'MISSING' && num(g?.min, 0) >= 1) return { ok: false, motivo: 'GRUPO_EM_FALTA' };
+  }
+  return { ok: true };
+}
+
 // Subtotal da linha — SÓ EXIBIÇÃO (a tela rotula "a confirmar na revisão"). A conta é a
 // mesma do HUB (`(unitPrice + Σ opções×qtd) × qtd`) para que uma divergência signifique
 // preço mudado no CW, e não aritmética diferente.

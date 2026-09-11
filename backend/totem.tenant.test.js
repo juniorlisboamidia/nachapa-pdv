@@ -181,7 +181,7 @@ test('confirmar-criado exige o external_order_id do CW batendo com o orderId', (
   assert.ok(h.includes('detalheTotemCW('), 'confirmar-criado tem de consultar o detalhe no HUB');
   assert.ok(/externalOrderId/.test(h) && /!== envio\.orderId/.test(h), 'tem de comparar o external_order_id com o orderId gravado');
   assert.ok(h.includes("erro: 'PEDIDO_NAO_CORRESPONDE'"), 'sem correspondência, 409 PEDIDO_NAO_CORRESPONDE');
-  assert.ok(/transicao\(envio\.status, 'confirmadoManual'\)/.test(h), 'a confirmação manual passa pela máquina de estados');
+  assert.ok(/dadosDeCriado\(envio\.status, 'confirmadoManual'/.test(h), 'a confirmação manual monta o data pelo construtor único (que chama transicao)');
   // Só de AMBIGUO/REVISAO_MANUAL.
   assert.ok(/status !== 'AMBIGUO' && envio\.status !== 'REVISAO_MANUAL'/.test(h));
 });
@@ -233,9 +233,9 @@ test('CRIADO que chega tarde não se perde', () => {
   const i = codigo.indexOf('async function gravarCriadoTardio(');
   assert.ok(i > 0, 'gravarCriadoTardio não encontrado');
   const fn = codigo.slice(i, codigo.indexOf('\n}\n', i));
-  assert.ok(/transicao\(de, 'reconciliado'\)/.test(fn), 'a reaplicação passa pela máquina de estados');
-  // Uma lista de campos só: o caminho tardio grava o MESMO objeto do caminho normal.
-  assert.ok(/data: \{ \.\.\.\(campos \|\| \{\}\), status: transicao\(de, 'reconciliado'\), reconciliadoEm: new Date\(\) \}/.test(fn), 'o update tardio tem de espalhar `campos`, sem redigitar campo por campo');
+  // Uma lista de campos só, num construtor só: o caminho tardio grava o MESMO objeto do
+  // caminho normal e a transição continua saindo da máquina de estados (dentro do construtor).
+  assert.ok(/data: dadosDeCriado\(de, 'reconciliado', campos\)/.test(fn), 'o update tardio tem de usar o construtor único do CRIADO, sem redigitar campo por campo');
   for (const campo of ['cwOrderId:', 'cwDisplayId:', 'cwStatusInicial:', 'totalCalculado:', 'erroCodigo:']) {
     assert.equal(fn.match(new RegExp(campo + '\\s')), null, `${campo} não pode ser redigitado no caminho tardio (vem de camposDoDesfecho)`);
   }
@@ -248,7 +248,7 @@ test('CRIADO que chega tarde não se perde', () => {
 test('o job promove ENVIANDO parado e nunca o transforma em falha', () => {
   const codigo = semComentarios(fonte());
   const job = codigo.slice(codigo.indexOf('async function varrerTotemEnvios('), codigo.indexOf('\nfunction iniciarAgendadorTotem('));
-  assert.ok(/status: \{ in: \['ENVIANDO', 'AMBIGUO', 'REVISAO_MANUAL'\] \}/.test(job), 'o job precisa enxergar ENVIANDO órfão');
+  assert.ok(/status: \{ in: \['ENVIANDO', 'AMBIGUO'\] \}/.test(job), 'o job precisa enxergar ENVIANDO órfão');
   assert.ok(/acao === 'AMBIGUAR'/.test(job));
   const i = job.indexOf("acao === 'AMBIGUAR'");
   const trecho = job.slice(i, i + 700);
@@ -307,4 +307,60 @@ test('os códigos de erro do totem são os do §7 (nada inventado)', () => {
   for (const velho of ['ENVIO_EM_CURSO', 'ESTADO_NAO_RECONCILIAVEL', 'ESTADO_NAO_PERMITE_CONFIRMAR', 'ESTADO_NAO_PERMITE_ENCERRAR']) {
     assert.ok(!usados.has(velho), `${velho} não está no §7`);
   }
+});
+
+test('o job não satura com REVISAO_MANUAL velha e não dispara rajada de reconciliação', () => {
+  const codigo = semComentarios(fonte());
+  const job = codigo.slice(codigo.indexOf('async function varrerTotemEnvios('), codigo.indexOf('\nfunction iniciarAgendadorTotem('));
+  // REVISAO_MANUAL entra na varredura SÓ dentro da janela de 24 h. Sem esse corte, um punhado
+  // de linhas velhas (que o job não consegue resolver) ocupa as 200 vagas para sempre e as
+  // ambiguidades novas — as que ainda dá para salvar — nunca são olhadas.
+  assert.ok(/OR: \[/.test(job), 'a varredura precisa separar REVISAO_MANUAL do resto');
+  assert.ok(/status: 'REVISAO_MANUAL', tentadoEm: \{ gt: new Date\(agora\.getTime\(\) - JANELA_RECONCILIACAO_MS\) \}/.test(job), 'REVISAO_MANUAL só dentro da janela de reconciliação (24 h)');
+  assert.ok(/orderBy: \{ tentadoEm: 'asc' \}/.test(job) && /take: 200/.test(job), 'a fila continua a mais antiga primeiro, com teto de 200');
+  // E o tick tem teto de reconciliações: cada uma é uma ida ao HUB (que vai ao CW).
+  assert.ok(/selecionarParaReconciliar\(pendentes, agora, tick\)/.test(job), 'o job precisa escolher quem reconcilia neste tick pela função pura');
+  assert.ok(/aReconciliar\.has\(envio\.id\)/.test(job), 'só reconcilia quem foi selecionado para este tick');
+});
+
+test('todo caminho que leva a CRIADO passa pelo construtor único (a limpeza do erro não se esquece)', () => {
+  const codigo = semComentarios(fonte());
+  const i = codigo.indexOf('function dadosDeCriado(');
+  assert.ok(i > 0, 'dadosDeCriado (construtor único do `data` de CRIADO) não encontrado');
+  const helper = codigo.slice(i, codigo.indexOf('\n}\n', i));
+  // Virar CRIADO é sempre a mesma lista: identidade do CW + total + LIMPEZA do erro que a
+  // linha carregava enquanto era AMBIGUA (senão a tela mostra "criado" com HUB_INDISPONIVEL
+  // velho e total vazio). E o status continua saindo da máquina de estados.
+  for (const exigido of [/status: transicao\(de, evento\)/, /erroCodigo: null/, /erroDetalhe: null/, /reconciliadoEm = em/]) {
+    assert.ok(exigido.test(helper), `o construtor do CRIADO precisa de ${exigido}`);
+  }
+  // Nenhum outro caminho monta esse `data` à mão: todo uso de 'reconciliado'/'confirmadoManual'
+  // na seção do totem está dentro de uma chamada ao construtor (ou limpa o erro explicitamente).
+  const secao = secaoTotem();
+  const eventos = [...secao.matchAll(/'(reconciliado|confirmadoManual)'/g)];
+  assert.ok(eventos.length >= 3, `esperava os caminhos de CRIADO tardio/reconciliado/confirmado, achei ${eventos.length}`);
+  for (const m of eventos) {
+    const trecho = secao.slice(Math.max(0, m.index - 300), m.index + 300);
+    assert.ok(/dadosDeCriado\(/.test(trecho) || /erroCodigo: null/.test(trecho), `o caminho com ${m[0]} monta o data à mão e pode esquecer a limpeza do erro:\n${trecho}`);
+  }
+});
+
+test('reconciliação: 4xx do HUB vai inteiro para o admin; o snapshot do bootstrap não é apagado', () => {
+  const codigo = semComentarios(fonte());
+  const i = codigo.indexOf('async function reconciliarEnvio(');
+  const fn = codigo.slice(i, codigo.indexOf('\n}\n', i));
+  // Um 422 JANELA_RECONCILIACAO_EXPIRADA não é "o HUB caiu": insistir não resolve, e o admin
+  // precisa ver isso em vez de um 503 genérico.
+  assert.ok(/http >= 400 && http < 500 \? \{ erro: r\.codigo, http \}/.test(fn), 'o 4xx do HUB tem de passar com o HTTP original');
+  assert.ok(/\{ erro: r\.codigo, http: 503 \}/.test(fn), '5xx/rede continuam 503');
+  // Achou no CW: completa total/#balcão pelo detalhe, best-effort, sem deixar a falha subir.
+  assert.ok(/detalheTotemCW\(clienteId, r\.data\.cwOrderId\)/.test(fn), 'a reconciliação positiva completa o detalhe');
+  assert.ok(/campos\.totalCalculado = total\.toFixed\(2\)/.test(fn), 'a linha CRIADA não pode ficar sem total');
+  assert.ok(/catch \(e\) \{ console\.error\('\[totem reconciliar detalhe\]'/.test(fn), 'o detalhe é best-effort: falhar nele não desfaz a reconciliação');
+  // Bootstrap: "loja sem CW" é configuração, não catálogo — não pode sobrescrever o último
+  // menu bom em memória.
+  const h = handler('/api/public/aparelho/totem/bootstrap', 'get');
+  const guarda = h.indexOf("r.data?.conectado === false");
+  const grava = h.indexOf('snapshotTotem.set(');
+  assert.ok(guarda > 0 && grava > guarda, 'o 409 CLIENTE_SEM_CW tem de vir ANTES de gravar o snapshot');
 });

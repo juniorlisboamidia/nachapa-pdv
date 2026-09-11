@@ -9,6 +9,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ESTADOS, ORDER_TYPES, JANELA_REVISAO_MS, JANELA_RECONCILIACAO_MS, TICKS_REVISAO, JANELA_DISPLAY_MS, JANELA_ENVIANDO_MS,
+  MAX_RECONCILIACOES_POR_TICK, selecionarParaReconciliar,
   EVENTO_DO_DESFECHO, novaReferencia, classificarResposta, transicao, proximaAcaoJob, precisaDisplay,
   respostaPublica, corpoDaResposta, httpDaResposta, validarCorpoPedido, camposDoDesfecho, bootstrapPublico, respostaSegura,
 } from './totemEnvio.js';
@@ -24,6 +25,7 @@ test('constantes: estados, modos e janelas da spec', () => {
   assert.equal(JANELA_DISPLAY_MS, 24 * 3600_000);
   assert.equal(TICKS_REVISAO, 5);
   assert.equal(JANELA_ENVIANDO_MS, 5 * 60_000);
+  assert.equal(MAX_RECONCILIACOES_POR_TICK, 5);
 });
 
 // ── novaReferencia ──────────────────────────────────────────────────────────
@@ -201,6 +203,43 @@ test('proximaAcaoJob: nunca devolve falha e ignora o resto', () => {
   assert.equal(proximaAcaoJob({ status: 'AMBIGUO', tentadoEm: null }, AGORA, 1), 'RECONCILIAR');
 });
 
+// ── selecionarParaReconciliar ───────────────────────────────────────────────
+test('selecionarParaReconciliar: no máximo 5 por tick, as mais antigas primeiro', () => {
+  // Cada reconciliação é uma ida ao HUB (que vai ao CW): uma fila grande não pode virar
+  // rajada. Quem não coube não muda de estado — volta no próximo tick, 60 s depois.
+  const fila = Array.from({ length: 12 }, (_, i) => ({ id: i + 1, status: 'AMBIGUO', tentadoEm: minutosAtras(12 - i) }));
+  const escolhidos = selecionarParaReconciliar(fila, AGORA, 1);
+  assert.equal(escolhidos.length, MAX_RECONCILIACOES_POR_TICK);
+  assert.deepEqual(escolhidos.map((e) => e.id), [1, 2, 3, 4, 5]);
+  // A ordem de entrada não importa: quem espera há mais tempo passa na frente.
+  const embaralhada = [fila[7], fila[0], fila[11], fila[3]];
+  assert.deepEqual(selecionarParaReconciliar(embaralhada, AGORA, 1, 2).map((e) => e.id), [1, 4]);
+  // `max` é respeitado; valor inválido cai no teto padrão.
+  assert.equal(selecionarParaReconciliar(fila, AGORA, 1, 3).length, 3);
+  assert.equal(selecionarParaReconciliar(fila, AGORA, 1, 0).length, MAX_RECONCILIACOES_POR_TICK);
+  assert.equal(selecionarParaReconciliar(fila, AGORA, 1, 99).length, 12);
+});
+
+test('selecionarParaReconciliar: só entra quem proximaAcaoJob manda reconciliar', () => {
+  const envios = [
+    { id: 1, status: 'AMBIGUO', tentadoEm: minutosAtras(10) },               // reconcilia
+    { id: 2, status: 'AMBIGUO', tentadoEm: minutosAtras(45) },               // vai para REVISAO, não reconcilia
+    { id: 3, status: 'ENVIANDO', tentadoEm: minutosAtras(90) },              // vira AMBIGUO (update local)
+    { id: 4, status: 'REVISAO_MANUAL', tentadoEm: horasAtras(25) },          // fora das 24 h: o CW não alcança
+    { id: 5, status: 'REVISAO_MANUAL', tentadoEm: horasAtras(2) },           // dentro da janela, mas só a cada 5 ticks
+    { id: 6, status: 'CRIADO', tentadoEm: minutosAtras(1) },                 // terminal
+  ];
+  // Tick fora do múltiplo de 5: REVISAO_MANUAL não é a vez dela.
+  assert.deepEqual(selecionarParaReconciliar(envios, AGORA, 1).map((e) => e.id), [1]);
+  // Tick múltiplo de 5: a de revisão dentro da janela entra — e a de 25 h continua fora.
+  assert.deepEqual(selecionarParaReconciliar(envios, AGORA, 5).map((e) => e.id).sort(), [1, 5]);
+  // Entrada estranha nunca quebra o job.
+  for (const lixo of [null, undefined, 'lista', 42, {}]) assert.deepEqual(selecionarParaReconciliar(lixo, AGORA, 1), []);
+  // Sem tentadoEm legível ainda reconcilia (lado seguro), mas vai para o fim da fila.
+  const semData = [{ id: 9, status: 'AMBIGUO', tentadoEm: null }, { id: 8, status: 'AMBIGUO', tentadoEm: minutosAtras(3) }];
+  assert.deepEqual(selecionarParaReconciliar(semData, AGORA, 1).map((e) => e.id), [8, 9]);
+});
+
 // ── precisaDisplay ──────────────────────────────────────────────────────────
 test('precisaDisplay: só CRIADO, sem cwDisplayId e dentro de 24 h', () => {
   assert.equal(precisaDisplay({ status: 'CRIADO', cwDisplayId: null, criadoEm: minutosAtras(5) }, AGORA), true);
@@ -251,7 +290,9 @@ test('httpDaResposta: 201 criado, 202 em andamento, 422 quando nada foi criado',
 test('corpoDaResposta: REJEITADO leva erro e detalhes; nada convida a repetir', () => {
   const rejeitado = { id: 5, status: 'REJEITADO', displayIdEnviado: 'T7-BBBBBB', erroCodigo: 'COTACAO_DIVERGENTE', erroDetalhe: '[{"codigo":"PRECO"}]' };
   assert.equal(corpoDaResposta(rejeitado).erro, 'COTACAO_DIVERGENTE');
-  assert.equal(corpoDaResposta(rejeitado).detalhes, '[{"codigo":"PRECO"}]');
+  // `detalhes` volta como LISTA (foi gravado como JSON de lista): é o que a tela usa para
+  // apontar a linha recusada. O teste dedicado logo abaixo cobre os outros formatos.
+  assert.deepEqual(corpoDaResposta(rejeitado).detalhes, [{ codigo: 'PRECO' }]);
   // Sem erroCodigo gravado, o próprio estado é a resposta (não inventamos código).
   assert.equal(corpoDaResposta({ id: 6, status: 'ENCERRADO_MANUAL' }).erro, 'ENCERRADO_MANUAL');
   // CRIADO/202 não ganham campo de erro.
@@ -262,6 +303,21 @@ test('corpoDaResposta: REJEITADO leva erro e detalhes; nada convida a repetir', 
     for (const chave of Object.keys(corpoDaResposta(envio))) assert.ok(!/retry|tentar|repetir/i.test(chave), `chave ${chave}`);
     assert.ok(!/retry|tentar|repetir/i.test(JSON.stringify(Object.keys(corpoDaResposta(envio)))));
   }
+});
+
+test('corpoDaResposta: `detalhes` volta como LISTA quando foi gravado como lista', () => {
+  // O HUB manda `detalhes` como lista de itens recusados ({ itemId, codigo, mensagem }) e a
+  // coluna erroDetalhe é texto. Devolver a string crua faria a tela do totem imprimir o JSON
+  // na cara do cliente em vez de dizer QUAL item tirar do carrinho.
+  const lista = [{ itemId: '7', codigo: 'ITEM_EM_FALTA', mensagem: 'Acabou o X-Tudo.' }];
+  const r = corpoDaResposta({ id: 1, status: 'REJEITADO', erroCodigo: 'CW_RECUSOU', erroDetalhe: JSON.stringify(lista) });
+  assert.deepEqual(r.detalhes, lista);
+  // Texto solto continua texto (a tela cai na frase geral do código).
+  assert.equal(corpoDaResposta({ id: 2, status: 'REJEITADO', erroCodigo: 'CW_RECUSOU', erroDetalhe: 'sem estoque' }).detalhes, 'sem estoque');
+  // JSON que não é lista, ou quebrado, volta como está — nunca [object Object].
+  assert.equal(corpoDaResposta({ id: 3, status: 'REJEITADO', erroDetalhe: '{"a":1}' }).detalhes, '{"a":1}');
+  assert.equal(corpoDaResposta({ id: 4, status: 'REJEITADO', erroDetalhe: '[{"a":1' }).detalhes, '[{"a":1');
+  assert.equal(corpoDaResposta({ id: 5, status: 'REJEITADO' }).detalhes, null);
 });
 
 // ── validarCorpoPedido ──────────────────────────────────────────────────────
