@@ -29,6 +29,8 @@ const DESCRICOES = {
   '/rh/banco-de-talentos/banco': 'Recrutamento e seleção',
   '/checklist/painel': 'Checklists da operação',
   '/etiquetas/config': 'Etiquetas ANVISA e impressão',
+  '/aparelhos': 'Tablets pareados: totem e TV',
+  '/totem/pedidos': 'Pedidos criados pelo totem e revisão manual',
   '/relatorios/meta': 'Resultados dos anúncios no Meta',
   '/relatorios/cardapio': 'Vendas e faltas do cardápio',
 }

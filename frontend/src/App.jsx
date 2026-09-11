@@ -46,6 +46,9 @@ import Entregadores from './pages/Entregadores'
 import CalcFrete from './pages/CalcFrete'
 import MotoboysConfig from './pages/MotoboysConfig'
 import EscalaMotoboysPublica from './pages/EscalaMotoboysPublica'
+import Aparelhos from './pages/Aparelhos'
+import TotemPedidos from './pages/TotemPedidos'
+import DispositivoPareamento from './pages/DispositivoPareamento'
 
 function TelaCarregando() {
   return (
@@ -145,6 +148,11 @@ export default function App() {
             {/* Em construção */}
             <Route path="etiquetas" element={<Etiquetas />} />
             <Route path="etiquetas/:tab" element={<Etiquetas />} />
+            {/* Aparelhos (tablets do totem/TV) e a auditoria do que o totem mandou ao CW.
+                As duas telas vivem na área `aparelhos` (backend/acessos/areas.js). */}
+            <Route path="aparelhos" element={<Aparelhos />} />
+            <Route path="totem" element={<Navigate to="/totem/pedidos" replace />} />
+            <Route path="totem/pedidos" element={<TotemPedidos />} />
             {/* Marketing › Grupo VIP (Automações virou Marketing; rota antiga redireciona) */}
             <Route path="marketing/grupo-vip" element={<GrupoVip />} />
             <Route path="automacoes/grupo-vip" element={<Navigate to="/marketing/grupo-vip" replace />} />
@@ -174,6 +182,11 @@ export default function App() {
           <Route path="checklist/publico/:token" element={<ChecklistPublico />} />
           {/* Escala de Motoboys — inscrição pública por token (sem login) */}
           <Route path="escala/motoboys/:token" element={<EscalaMotoboysPublica />} />
+          {/* Aparelho (totem / TV): rota FIXA, sem token na URL. Quem identifica o
+              aparelho é o cookie HttpOnly nascido do código de 6 dígitos — por isso o
+              mesmo endereço serve todos os tablets, e o link não vale nada sem o código.
+              Standalone de propósito: 100dvh, sem Layout, sem sessão de admin. */}
+          <Route path="dispositivo" element={<DispositivoPareamento />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

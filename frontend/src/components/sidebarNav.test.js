@@ -36,6 +36,23 @@ test('operador com motoboys vê só o subgrupo Motoboys dentro de Dep. Pessoal',
   assert.deepEqual(labels(grupo(grupo(v, 'Dep. Pessoal').itens, 'Motoboys').itens), ['Escala', 'Entregadores', 'Calc. Frete', 'Configuração']);
 });
 
+test('Ferramentas na ordem Checklist, Etiquetas, Aparelhos, Totem', () => {
+  const f = grupo(grupos, 'Ferramentas').itens;
+  assert.deepEqual(labels(f), ['Checklist', 'Etiquetas', 'Aparelhos', 'Totem']);
+  assert.deepEqual(labels(grupo(f, 'Totem').itens), ['Pedidos']);
+});
+
+test('operador com aparelhos vê Aparelhos e Totem, sem Checklist/Etiquetas', () => {
+  const v = gruposVisiveis({ tipo: 'operador', areas: ['aparelhos'] });
+  assert.deepEqual(labels(v), ['Ferramentas']);
+  assert.deepEqual(labels(grupo(v, 'Ferramentas').itens), ['Aparelhos', 'Totem']);
+});
+
+test('operador com etiquetas NÃO vê Aparelhos nem Totem', () => {
+  const v = gruposVisiveis({ tipo: 'operador', areas: ['etiquetas'] });
+  assert.deepEqual(labels(grupo(v, 'Ferramentas').itens), ['Etiquetas']);
+});
+
 test('operador sem nenhuma área não vê grupo algum', () => {
   assert.deepEqual(gruposVisiveis({ tipo: 'operador', areas: [] }), []);
 });
@@ -46,5 +63,7 @@ test('localizarRota abre o nível certo', () => {
   assert.deepEqual(localizarRota('/estoque'), { grupo: 'Produtos', sub: null });
   assert.deepEqual(localizarRota('/relatorios/meta'), { grupo: 'Relatórios', sub: null });
   assert.deepEqual(localizarRota('/checklist/painel'), { grupo: 'Ferramentas', sub: 'Checklist' });
+  assert.deepEqual(localizarRota('/aparelhos'), { grupo: 'Ferramentas', sub: null });
+  assert.deepEqual(localizarRota('/totem/pedidos'), { grupo: 'Ferramentas', sub: 'Totem' });
   assert.deepEqual(localizarRota('/'), { grupo: null, sub: null });
 });

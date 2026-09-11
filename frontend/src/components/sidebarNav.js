@@ -120,6 +120,15 @@ export const grupos = [
           { to: '/etiquetas/historico', label: 'Histórico', icon: 'relatorios' },
         ],
       },
+      // Aparelhos e Totem dividem a MESMA área (`aparelhos`, acessos/areas.js): quem
+      // cadastra o tablet é quem audita o que ele mandou ao cardápio.
+      { to: '/aparelhos', label: 'Aparelhos', icon: 'gestao', area: 'aparelhos' },
+      {
+        label: 'Totem', icon: 'ficha', area: 'aparelhos',
+        itens: [
+          { to: '/totem/pedidos', label: 'Pedidos', icon: 'relatorios' },
+        ],
+      },
     ],
   },
 ];

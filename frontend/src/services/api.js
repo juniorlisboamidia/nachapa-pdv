@@ -32,6 +32,14 @@ api.interceptors.request.use((config) => {
 export const hubApi = axios.create({ baseURL: HUB_API_URL, withCredentials: true })
 hubApi.interceptors.request.use(comBearer)
 
+// Cliente do APARELHO (totem / TV — rotas /api/public/aparelho/*). SEM Bearer e SEM
+// X-Empresa-Id de propósito: quem prova quem o aparelho é, e de qual loja, é o cookie
+// HttpOnly `pdv_aparelho` — que o navegador manda sozinho em requisição same-origin
+// (em dev, o proxy `/api` do vite.config.js é o que mantém a origem igual).
+// Anexar Bearer/X-Empresa-Id aqui seria oferecer ao servidor uma identidade vinda do
+// navegador, exatamente o que a spec §3.2/§5.2 proíbe.
+export const aparelhoApi = axios.create({ baseURL: API_URL, withCredentials: true })
+
 // Cliente da Área do Colaborador — usa SÓ o token de sessão do colaborador (nunca o
 // token de admin). Isolado do `api` para não misturar credenciais no mesmo aparelho.
 export const colabApi = axios.create({ baseURL: API_URL })
