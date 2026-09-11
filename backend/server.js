@@ -8852,15 +8852,14 @@ async function gravarCriadoTardio(envio, campos) {
     if (de !== 'CRIADO') console.error('[totem criado tardio] envio', envio.id, 'cwOrderId', campos?.cwOrderId ?? null, 'estado', de ?? 'sumiu');
     return false;
   }
+  // `campos` é o MESMO objeto do caminho normal (camposDoDesfecho('CRIADO', …)): números do
+  // CW, totalCalculado, respostaJson e a limpeza de erroCodigo/erroDetalhe — que aqui importa
+  // ainda mais, porque a linha carrega o HUB_INDISPONIVEL escrito na promoção a AMBIGUO e não
+  // pode ficar na tela como "pedido criado com erro" nem com total vazio. Uma lista de campos
+  // só, num lugar só: `status` e `reconciliadoEm` vêm depois do spread para sempre vencerem.
   const { count } = await prisma.pedidoTotemEnvio.updateMany({
     where: { id: envio.id, empresaId: envio.empresaId, status: de },
-    data: {
-      status: transicao(de, 'reconciliado'),
-      cwOrderId: campos?.cwOrderId ?? null,
-      cwDisplayId: campos?.cwDisplayId ?? null,
-      cwStatusInicial: campos?.cwStatusInicial ?? null,
-      reconciliadoEm: new Date(),
-    },
+    data: { ...(campos || {}), status: transicao(de, 'reconciliado'), reconciliadoEm: new Date() },
   });
   if (!count) console.error('[totem criado tardio nao gravado] envio', envio.id, 'cwOrderId', campos?.cwOrderId ?? null);
   return !!count;

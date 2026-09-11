@@ -234,6 +234,11 @@ test('CRIADO que chega tarde não se perde', () => {
   assert.ok(i > 0, 'gravarCriadoTardio não encontrado');
   const fn = codigo.slice(i, codigo.indexOf('\n}\n', i));
   assert.ok(/transicao\(de, 'reconciliado'\)/.test(fn), 'a reaplicação passa pela máquina de estados');
+  // Uma lista de campos só: o caminho tardio grava o MESMO objeto do caminho normal.
+  assert.ok(/data: \{ \.\.\.\(campos \|\| \{\}\), status: transicao\(de, 'reconciliado'\), reconciliadoEm: new Date\(\) \}/.test(fn), 'o update tardio tem de espalhar `campos`, sem redigitar campo por campo');
+  for (const campo of ['cwOrderId:', 'cwDisplayId:', 'cwStatusInicial:', 'totalCalculado:', 'erroCodigo:']) {
+    assert.equal(fn.match(new RegExp(campo + '\\s')), null, `${campo} não pode ser redigitado no caminho tardio (vem de camposDoDesfecho)`);
+  }
   assert.ok(/status: de/.test(fn), 'o update é guardado pelo estado lido');
   assert.ok(/empresaId: envio\.empresaId/.test(fn), 'escopo explícito por loja');
   assert.ok(/console\.error\('\[totem criado tardio nao gravado/.test(fn), 'perder a criação tem de deixar rastro no log');

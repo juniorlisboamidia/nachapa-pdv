@@ -339,6 +339,12 @@ test('camposDoDesfecho: CRIADO grava os números do CW', () => {
   assert.equal(d.cwStatusInicial, 'pending');
   assert.equal(Number(d.totalCalculado), 13.5);
   assert.equal(d.erroCodigo, null);
+  // O desfecho CRIADO é a lista COMPLETA do que a linha passa a valer — inclusive a limpeza
+  // do erro. É por isso que o caminho tardio (reconciliado depois da promoção a AMBIGUO)
+  // reusa este mesmo objeto: sem isso a tela mostraria um pedido criado com total vazio e um
+  // HUB_INDISPONIVEL velho do momento da promoção.
+  assert.equal(d.erroDetalhe, null);
+  assert.deepEqual(Object.keys(d).sort(), ['cwDisplayId', 'cwOrderId', 'cwStatusInicial', 'erroCodigo', 'erroDetalhe', 'respostaJson', 'totalCalculado']);
   // cwDisplayId pode vir nulo (o HUB não conseguiu o detalhe) — o pedido ESTÁ criado.
   const semDisplay = camposDoDesfecho('CRIADO', { ok: true, status: 201, data: { criado: true, cwOrderId: 1, cwDisplayId: null, detalheOk: false } });
   assert.equal(semDisplay.cwDisplayId, null);
