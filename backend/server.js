@@ -33,7 +33,7 @@ import {
 // Totem: ponte com o HUB (nunca com o Cardápio Web direto) + outbox puro.
 import { bootstrapTotemCW, cotarTotemCW, criarPedidoTotemCW, detalheTotemCW, reconciliarTotemCW, TIMEOUT_PEDIDO_MS } from './cardapioPedido.js';
 import {
-  ESTADOS as ESTADOS_TOTEM, ORDER_TYPES, JANELA_DISPLAY_MS, EVENTO_DO_DESFECHO,
+  ESTADOS as ESTADOS_TOTEM, ORDER_TYPES, JANELA_DISPLAY_MS, JANELA_ENVIANDO_MS, EVENTO_DO_DESFECHO,
   novaReferencia, classificarResposta, transicao, proximaAcaoJob, precisaDisplay,
   respostaPublica, corpoDaResposta, httpDaResposta, validarCorpoPedido, camposDoDesfecho, bootstrapPublico,
 } from './totemEnvio.js';
@@ -8872,17 +8872,17 @@ async function gravarCriadoTardio(envio, campos) {
 async function reconciliarEnvio(envio) {
   let atual = envio;
   if (atual.status === 'ENVIANDO') {
-    // Envio interrompido (processo reiniciado entre o INSERT e a resposta). Não vira falha
-    // e não é automático: só o admin promove, e só depois de 5 min — aí a linha passa a ser
-    // reconciliável como qualquer outra ambiguidade.
-    if (Date.now() - new Date(atual.tentadoEm).getTime() < 5 * 60_000) return { erro: 'ENVIO_EM_CURSO', http: 409 };
+    // Envio interrompido (processo reiniciado entre o INSERT e a resposta). Não vira falha:
+    // depois da mesma janela do job (5 min) vira AMBIGUO e passa a ser reconciliável como
+    // qualquer outra ambiguidade. Antes disso a chamada pode estar em curso — não se mexe.
+    if (Date.now() - new Date(atual.tentadoEm).getTime() < JANELA_ENVIANDO_MS) return { erro: 'ESTADO_NAO_PERMITE_ACAO', http: 409 };
     await prisma.pedidoTotemEnvio.updateMany({
       where: { id: atual.id, empresaId: atual.empresaId, status: 'ENVIANDO' },
       data: { status: transicao('ENVIANDO', 'ambiguo'), erroCodigo: 'HUB_INDISPONIVEL', erroDetalhe: 'Envio sem resposta registrada (processo interrompido).' },
     });
     atual = { ...atual, status: 'AMBIGUO' };
   }
-  if (atual.status !== 'AMBIGUO' && atual.status !== 'REVISAO_MANUAL') return { erro: 'ESTADO_NAO_RECONCILIAVEL', http: 409 };
+  if (atual.status !== 'AMBIGUO' && atual.status !== 'REVISAO_MANUAL') return { erro: 'ESTADO_NAO_PERMITE_ACAO', http: 409 };
   const clienteId = await clienteIdDaEmpresaTotem(atual.empresaId);
   if (!clienteId) return { erro: 'CLIENTE_SEM_CW', http: 409 };
   const r = await reconciliarTotemCW(clienteId, {
@@ -8949,7 +8949,7 @@ app.post('/api/totem/pedidos/:id/confirmar-criado', async (req, res) => {
     if (!Number.isInteger(cwOrderId) || cwOrderId <= 0) return res.status(400).json({ erro: 'CW_ORDER_ID_OBRIGATORIO' });
     const envio = await prisma.pedidoTotemEnvio.findFirst({ where: { id, empresaId } });
     if (!envio) return res.status(404).json({ erro: 'PEDIDO_NAO_ENCONTRADO' });
-    if (envio.status !== 'AMBIGUO' && envio.status !== 'REVISAO_MANUAL') return res.status(409).json({ erro: 'ESTADO_NAO_PERMITE_CONFIRMAR' });
+    if (envio.status !== 'AMBIGUO' && envio.status !== 'REVISAO_MANUAL') return res.status(409).json({ erro: 'ESTADO_NAO_PERMITE_ACAO' });
     const clienteId = await clienteIdDaEmpresaTotem(empresaId);
     if (!clienteId) return res.status(409).json({ erro: 'CLIENTE_SEM_CW' });
     const r = await detalheTotemCW(clienteId, cwOrderId);
@@ -8987,7 +8987,7 @@ app.post('/api/totem/pedidos/:id/encerrar', async (req, res) => {
     if (motivo.length < 3 || motivo.length > 300) return res.status(400).json({ erro: 'MOTIVO_OBRIGATORIO' });
     const envio = await prisma.pedidoTotemEnvio.findFirst({ where: { id, empresaId } });
     if (!envio) return res.status(404).json({ erro: 'PEDIDO_NAO_ENCONTRADO' });
-    if (envio.status !== 'REVISAO_MANUAL') return res.status(409).json({ erro: 'ESTADO_NAO_PERMITE_ENCERRAR' });
+    if (envio.status !== 'REVISAO_MANUAL') return res.status(409).json({ erro: 'ESTADO_NAO_PERMITE_ACAO' });
     const em = new Date();
     const { count } = await prisma.pedidoTotemEnvio.updateMany({
       where: { id, empresaId, status: 'REVISAO_MANUAL' },

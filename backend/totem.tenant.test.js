@@ -285,3 +285,21 @@ test('as rotas admin com :id validam o id antes do Prisma', () => {
     assert.ok(invalido < prisma, `${rota} valida o :id depois de consultar o banco`);
   }
 });
+
+test('os códigos de erro do totem são os do §7 (nada inventado)', () => {
+  const codigo = semComentarios(blocoPublico()) + secaoTotem();
+  const usados = new Set((codigo.match(/erro: '([A-Z_]+)'/g) || []).map((m) => m.slice(7, -1)));
+  const CONTRATO = new Set([
+    'APARELHO_NAO_PAREADO', 'APARELHO_NAO_E_TOTEM', 'CORPO_INVALIDO', 'MODO_INDISPONIVEL', 'CARRINHO_VAZIO',
+    'PAGAMENTO_INVALIDO', 'CLIENTE_SEM_CW', 'HUB_NAO_CONFIGURADO', 'HUB_INDISPONIVEL', 'CATALOGO_INDISPONIVEL',
+    'PEDIDO_NAO_ENCONTRADO', 'PEDIDO_NAO_CORRESPONDE', 'ID_INVALIDO', 'ESTADO_NAO_PERMITE_ACAO', 'ESTADO_MUDOU',
+    'MOTIVO_OBRIGATORIO', 'CW_ORDER_ID_OBRIGATORIO', 'ERRO_INTERNO',
+    // Do pareamento (P2, §3.2), que divide o mesmo bloco público.
+    'CODIGO_INVALIDO', 'MUITAS_TENTATIVAS',
+  ]);
+  for (const c of usados) assert.ok(CONTRATO.has(c), `código fora do §7: ${c}`);
+  // Os nomes ad-hoc da primeira volta não podem voltar.
+  for (const velho of ['ENVIO_EM_CURSO', 'ESTADO_NAO_RECONCILIAVEL', 'ESTADO_NAO_PERMITE_CONFIRMAR', 'ESTADO_NAO_PERMITE_ENCERRAR']) {
+    assert.ok(!usados.has(velho), `${velho} não está no §7`);
+  }
+});
