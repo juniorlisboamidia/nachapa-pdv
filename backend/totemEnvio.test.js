@@ -8,9 +8,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ESTADOS, ORDER_TYPES, JANELA_REVISAO_MS, JANELA_RECONCILIACAO_MS, TICKS_REVISAO, JANELA_DISPLAY_MS,
+  ESTADOS, ORDER_TYPES, JANELA_REVISAO_MS, JANELA_RECONCILIACAO_MS, TICKS_REVISAO, JANELA_DISPLAY_MS, JANELA_ENVIANDO_MS,
   EVENTO_DO_DESFECHO, novaReferencia, classificarResposta, transicao, proximaAcaoJob, precisaDisplay,
-  respostaPublica, corpoDaResposta, httpDaResposta, validarCorpoPedido, camposDoDesfecho, bootstrapPublico,
+  respostaPublica, corpoDaResposta, httpDaResposta, validarCorpoPedido, camposDoDesfecho, bootstrapPublico, respostaSegura,
 } from './totemEnvio.js';
 
 const UUID = '9f1c2d3e-4a5b-6c7d-8e9f-0a1b2c3d4e5f';
@@ -23,6 +23,7 @@ test('constantes: estados, modos e janelas da spec', () => {
   assert.equal(JANELA_RECONCILIACAO_MS, 24 * 3600_000);
   assert.equal(JANELA_DISPLAY_MS, 24 * 3600_000);
   assert.equal(TICKS_REVISAO, 5);
+  assert.equal(JANELA_ENVIANDO_MS, 5 * 60_000);
 });
 
 // ── novaReferencia ──────────────────────────────────────────────────────────
@@ -170,6 +171,20 @@ test('proximaAcaoJob: REVISAO_MANUAL só a cada 5 ticks e só dentro de 24 h', (
   assert.equal(proximaAcaoJob({ status: 'REVISAO_MANUAL', tentadoEm: horasAtras(23) }, AGORA, 5), 'RECONCILIAR');
 });
 
+test('proximaAcaoJob: ENVIANDO parado há mais de 5 min vira AMBIGUAR', () => {
+  // O processo pode ter caído entre o INSERT e a gravação do desfecho. A linha não pode
+  // ficar ENVIANDO para sempre (o job nem a olharia): passa a AMBIGUO — que é justamente
+  // "não sei se foi criado" — e entra na reconciliação normal. Não é estado de falha.
+  assert.equal(proximaAcaoJob({ status: 'ENVIANDO', tentadoEm: minutosAtras(4) }, AGORA, 1), 'NADA');
+  assert.equal(proximaAcaoJob({ status: 'ENVIANDO', tentadoEm: minutosAtras(6) }, AGORA, 1), 'AMBIGUAR');
+  // Um pedido em curso (a ponte espera até 60 s) nunca é promovido no meio do caminho.
+  assert.equal(proximaAcaoJob({ status: 'ENVIANDO', tentadoEm: minutosAtras(0) }, AGORA, 1), 'NADA');
+  // Sem tentadoEm legível não se promove nada (o lado seguro é não mexer).
+  assert.equal(proximaAcaoJob({ status: 'ENVIANDO', tentadoEm: null }, AGORA, 1), 'NADA');
+  // Vale em todo tick, não a cada 5.
+  for (const tick of [1, 2, 3, 4, 5]) assert.equal(proximaAcaoJob({ status: 'ENVIANDO', tentadoEm: minutosAtras(90) }, AGORA, tick), 'AMBIGUAR');
+});
+
 test('proximaAcaoJob: nunca devolve falha e ignora o resto', () => {
   const acoes = new Set();
   for (const status of ESTADOS) {
@@ -177,8 +192,8 @@ test('proximaAcaoJob: nunca devolve falha e ignora o resto', () => {
       for (const tick of [0, 1, 4, 5, 7, 10]) acoes.add(proximaAcaoJob({ status, tentadoEm }, AGORA, tick));
     }
   }
-  assert.deepEqual([...acoes].sort(), ['NADA', 'RECONCILIAR', 'REVISAO']);
-  for (const status of ['ENVIANDO', 'CRIADO', 'REJEITADO', 'ENCERRADO_MANUAL']) {
+  assert.deepEqual([...acoes].sort(), ['AMBIGUAR', 'NADA', 'RECONCILIAR', 'REVISAO']);
+  for (const status of ['CRIADO', 'REJEITADO', 'ENCERRADO_MANUAL']) {
     assert.equal(proximaAcaoJob({ status, tentadoEm: minutosAtras(45) }, AGORA, 5), 'NADA');
   }
   assert.equal(proximaAcaoJob(null, AGORA, 5), 'NADA');
@@ -220,6 +235,14 @@ test('httpDaResposta: 201 criado, 202 em andamento, 422 quando nada foi criado',
   for (const status of ['ENVIANDO', 'AMBIGUO', 'REVISAO_MANUAL']) assert.equal(httpDaResposta({ status }), 202, status);
   assert.equal(httpDaResposta({ status: 'REJEITADO' }), 422);
   assert.equal(httpDaResposta({ status: 'ENCERRADO_MANUAL' }), 422);
+  // Cotação furada é 409 (§5.2/§7): o totem volta para Revisar com "Preços atualizados",
+  // e isso é diferente de "o CW recusou o pedido" (422).
+  assert.equal(httpDaResposta({ status: 'REJEITADO', erroCodigo: 'COTACAO_DIVERGENTE' }), 409);
+  assert.equal(httpDaResposta({ status: 'REJEITADO', erroCodigo: 'COTACAO_EXPIRADA' }), 409);
+  assert.equal(httpDaResposta({ status: 'REJEITADO', erroCodigo: 'CW_RECUSOU' }), 422);
+  assert.equal(httpDaResposta({ status: 'REJEITADO', erroCodigo: 'COTACAO_INVALIDA' }), 422);
+  // O 409 não muda o corpo: erro e detalhes continuam lá.
+  assert.equal(corpoDaResposta({ status: 'REJEITADO', erroCodigo: 'COTACAO_EXPIRADA' }).erro, 'COTACAO_EXPIRADA');
   // Estado inesperado: 202 (em andamento) — nunca um 5xx que faça o totem repetir.
   assert.equal(httpDaResposta({ status: 'QUALQUER' }), 202);
   assert.equal(httpDaResposta(null), 202);
@@ -284,6 +307,30 @@ test('validarCorpoPedido: recusa o que não dá para gravar nem cotar', () => {
   for (const corpo of [null, undefined, 'texto', [], 42]) assert.equal(validarCorpoPedido(corpo).ok, false);
 });
 
+test('validarCorpoPedido: tetos de tamanho antes de gravar', () => {
+  const linha = (extra = {}) => ({ itemId: '1', qtd: 1, ...extra });
+  const com = (carrinho) => validarCorpoPedido({ ...CORPO_OK, carrinho });
+  // 50 linhas passam; 51 não (o totem é um balcão, não um atacado — e o carrinho vai
+  // inteiro para dentro do carrinhoJson).
+  assert.equal(com(Array.from({ length: 50 }, () => linha())).ok, true);
+  assert.equal(com(Array.from({ length: 51 }, () => linha())).ok, false);
+  assert.equal(com([linha({ qtd: 99 })]).ok, true);
+  assert.equal(com([linha({ qtd: 100 })]).ok, false);
+  assert.equal(com([linha({ qtd: 0 })]).ok, false);
+  assert.equal(com([linha({ qtd: 1.5 })]).ok, false);
+  assert.equal(com(['nao é objeto']).ok, false);
+  const grupos = (n, opcoes = 1) => Array.from({ length: n }, () => ({ grupoId: 'g', opcoes: Array.from({ length: opcoes }, () => ({ opcaoId: 'o', qtd: 1 })) }));
+  assert.equal(com([linha({ grupos: grupos(30) })]).ok, true);
+  assert.equal(com([linha({ grupos: grupos(31) })]).ok, false);
+  assert.equal(com([linha({ grupos: grupos(1, 30) })]).ok, true);
+  assert.equal(com([linha({ grupos: grupos(1, 31) })]).ok, false);
+  assert.equal(com([linha({ grupos: 'nao é lista' })]).ok, false);
+  for (const r of [com(Array.from({ length: 51 }, () => linha())), com([linha({ qtd: 100 })])]) {
+    assert.equal(r.erro, 'CORPO_INVALIDO');
+    assert.ok(r.detalhes.length > 0);
+  }
+});
+
 // ── camposDoDesfecho ────────────────────────────────────────────────────────
 test('camposDoDesfecho: CRIADO grava os números do CW', () => {
   const d = camposDoDesfecho('CRIADO', { ok: true, status: 201, data: { criado: true, cwOrderId: 4242, cwStatus: 'pending', cwDisplayId: 17, total: 13.5 } });
@@ -308,7 +355,23 @@ test('camposDoDesfecho: REJEITADO/AMBIGUO gravam código e detalhe cortado em 20
   // Sem corpo nenhum (timeout) ainda grava o código: o registro nunca fica mudo.
   const mudo = camposDoDesfecho('AMBIGUO', { ok: false, http: 502, codigo: 'HUB_INDISPONIVEL', ambiguo: true, data: null });
   assert.equal(mudo.erroCodigo, 'HUB_INDISPONIVEL');
-  assert.equal(mudo.respostaJson, null);
+  assert.deepEqual(mudo.respostaJson, { status: 502 });
+});
+
+test('respostaSegura: a outbox guarda um recorte, nunca o corpo cru do HUB', () => {
+  const r = respostaSegura({
+    ok: true, status: 201,
+    data: { criado: true, cwOrderId: 4242, cwDisplayId: 17, cwStatus: 'pending', total: 13.5, detalheOk: true, cliente: { nome: 'Fulano', telefone: '11999999999' }, tokenInterno: 'segredo' },
+  });
+  assert.deepEqual(Object.keys(r).sort(), ['cwDisplayId', 'cwOrderId', 'cwStatus', 'status', 'total']);
+  const bruto = JSON.stringify(r);
+  for (const vazamento of ['Fulano', '11999999999', 'segredo']) assert.ok(!bruto.includes(vazamento), `vazou ${vazamento}`);
+  // Erro: guarda erro + detalhes cortados em 2000.
+  const e = respostaSegura({ ok: false, http: 422, codigo: 'CW_RECUSOU', data: { erro: 'CW_RECUSOU', detalhes: 'x'.repeat(5000), corpoDoCw: { pedido: 'inteiro' } } });
+  assert.deepEqual(Object.keys(e).sort(), ['detalhes', 'erro', 'status']);
+  assert.ok(e.detalhes.length <= 2000);
+  assert.equal(respostaSegura(null), null);
+  assert.equal(respostaSegura({ ok: false }), null);
 });
 
 // ── bootstrapPublico ────────────────────────────────────────────────────────

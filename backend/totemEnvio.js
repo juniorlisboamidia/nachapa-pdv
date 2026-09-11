@@ -19,6 +19,16 @@ export const JANELA_REVISAO_MS = 30 * 60_000;          // AMBIGUO sem solução 
 export const JANELA_RECONCILIACAO_MS = 24 * 3600_000;  // updated_since do CW aceita no máximo 24 h
 export const TICKS_REVISAO = 5;                        // REVISAO_MANUAL é reconciliado a cada 5 ticks (5 min)
 export const JANELA_DISPLAY_MS = 24 * 3600_000;        // completar cwDisplayId só no primeiro dia
+// ENVIANDO parado mais que isto = o processo caiu entre o INSERT e o desfecho (a ponte
+// desiste em 60 s, então 5 min é folga larga). O job promove a AMBIGUO — nunca a falha.
+export const JANELA_ENVIANDO_MS = 5 * 60_000;
+
+const LIMITE_CARRINHO = 50;      // linhas por pedido
+const LIMITE_QTD = 99;           // por linha
+const LIMITE_GRUPOS = 30;        // grupos de escolha por item
+const LIMITE_OPCOES = 30;        // opções por grupo
+// Cotação furada não é "o CW recusou": o totem volta para Revisar (§5.2/§7).
+export const CODIGOS_409 = ['COTACAO_DIVERGENTE', 'COTACAO_EXPIRADA'];
 
 const LIMITE_DETALHE = 2000;   // erroDetalhe é para o admin ler, não para guardar o mundo
 const LIMITE_CODIGO = 60;
@@ -77,6 +87,11 @@ export function proximaAcaoJob(envio, agora, tick = 0) {
   const status = envio?.status;
   const t = ms(agora);
   const tentado = ms(envio?.tentadoEm);
+  if (status === 'ENVIANDO') {
+    // Linha órfã (processo reiniciado no meio do envio): vira AMBIGUO e entra na
+    // reconciliação. Sem isto ela ficaria invisível para sempre — o job não olha ENVIANDO.
+    return Number.isFinite(tentado) && tentado < t - JANELA_ENVIANDO_MS ? 'AMBIGUAR' : 'NADA';
+  }
   if (status === 'AMBIGUO') {
     // Sem tentadoEm legível, reconcilia (nunca promove a revisão sozinho por falta de dado).
     return Number.isFinite(tentado) && tentado < t - JANELA_REVISAO_MS ? 'REVISAO' : 'RECONCILIAR';
@@ -114,16 +129,19 @@ export function respostaPublica(envio) {
 // oferecer "tentar de novo" (§5.3/§5.6).
 export function httpDaResposta(envio) {
   if (envio?.status === 'CRIADO') return 201;
-  if (envio?.status === 'REJEITADO' || envio?.status === 'ENCERRADO_MANUAL') return 422;
+  if (envio?.status === 'REJEITADO') return CODIGOS_409.includes(envio?.erroCodigo) ? 409 : 422;
+  if (envio?.status === 'ENCERRADO_MANUAL') return 422;
   return 202;
 }
+
+const terminalNegativo = (envio) => envio?.status === 'REJEITADO' || envio?.status === 'ENCERRADO_MANUAL';
 
 // Corpo da resposta ao aparelho. Nos terminais negativos acrescenta `erro`/`detalhes`
 // (o que o HUB/CW recusou). Sem erroCodigo gravado, o próprio estado é o código — não
 // inventamos nome fora do §7.
 export function corpoDaResposta(envio) {
   const corpo = respostaPublica(envio);
-  if (httpDaResposta(envio) !== 422) return corpo;
+  if (!terminalNegativo(envio)) return corpo;
   return { ...corpo, erro: envio?.erroCodigo ?? envio?.status ?? 'ERRO_INTERNO', detalhes: envio?.erroDetalhe ?? null };
 }
 
@@ -139,6 +157,20 @@ export function validarCorpoPedido(body) {
   if (!ORDER_TYPES.includes(orderType)) detalhes.push({ campo: 'orderType', mensagem: 'Modo inválido.' });
   const carrinho = Array.isArray(b.carrinho) && b.carrinho.length ? b.carrinho : null;
   if (!carrinho) detalhes.push({ campo: 'carrinho', mensagem: 'Carrinho vazio.' });
+  // Tetos ANTES do INSERT: o carrinho inteiro vai para dentro do carrinhoJson e daí para o
+  // HUB. Um payload absurdo não pode virar linha de outbox nem chamada gigante.
+  else if (carrinho.length > LIMITE_CARRINHO) detalhes.push({ campo: 'carrinho', mensagem: `No máximo ${LIMITE_CARRINHO} itens por pedido.` });
+  else carrinho.forEach((linha, i) => {
+    if (!linha || typeof linha !== 'object' || Array.isArray(linha)) { detalhes.push({ campo: `carrinho[${i}]`, mensagem: 'Item inválido.' }); return; }
+    const qtd = Number(linha.qtd);
+    if (!Number.isInteger(qtd) || qtd < 1 || qtd > LIMITE_QTD) detalhes.push({ campo: `carrinho[${i}].qtd`, mensagem: `Quantidade de 1 a ${LIMITE_QTD}.` });
+    if (linha.grupos === undefined) return;
+    if (!Array.isArray(linha.grupos) || linha.grupos.length > LIMITE_GRUPOS) { detalhes.push({ campo: `carrinho[${i}].grupos`, mensagem: `No máximo ${LIMITE_GRUPOS} grupos por item.` }); return; }
+    linha.grupos.forEach((g, j) => {
+      if (g?.opcoes === undefined) return;
+      if (!Array.isArray(g.opcoes) || g.opcoes.length > LIMITE_OPCOES) detalhes.push({ campo: `carrinho[${i}].grupos[${j}].opcoes`, mensagem: `No máximo ${LIMITE_OPCOES} opções por grupo.` });
+    });
+  });
   const metodoId = b.metodoId == null ? '' : String(b.metodoId).trim();
   if (!metodoId) detalhes.push({ campo: 'metodoId', mensagem: 'Escolha a forma de pagamento.' });
   const c = b.cotacao && typeof b.cotacao === 'object' && !Array.isArray(b.cotacao) ? b.cotacao : {};
@@ -163,7 +195,7 @@ export function camposDoDesfecho(desfecho, resultado) {
       cwDisplayId: Number.isInteger(d?.cwDisplayId) ? d.cwDisplayId : null,
       cwStatusInicial: texto(d?.cwStatus, LIMITE_CODIGO),
       totalCalculado: Number.isFinite(total) ? total.toFixed(2) : null,
-      respostaJson: d,
+      respostaJson: respostaSegura(resultado),
       erroCodigo: null,
       erroDetalhe: null,
     };
@@ -171,8 +203,26 @@ export function camposDoDesfecho(desfecho, resultado) {
   return {
     erroCodigo: texto(resultado?.codigo ?? 'HUB_INDISPONIVEL', LIMITE_CODIGO),
     erroDetalhe: detalheLegivel(d),
-    respostaJson: d,
+    respostaJson: respostaSegura(resultado),
   };
+}
+
+// Recorte do que a outbox guarda da resposta do HUB. NUNCA o corpo cru: ele pode trazer
+// dados do pedido/consumidor que não têm por que morar no PDV, e o registro é auditoria,
+// não espelho. Só status, erro, detalhes (cortados) e os números do CW.
+export function respostaSegura(resultado) {
+  if (!resultado || typeof resultado !== 'object') return null;
+  const d = resultado.data && typeof resultado.data === 'object' ? resultado.data : null;
+  const status = Number(resultado.status ?? resultado.http);
+  const seguro = {};
+  if (Number.isFinite(status)) seguro.status = status;
+  if (typeof d?.erro === 'string' && d.erro) seguro.erro = d.erro.slice(0, LIMITE_CODIGO);
+  if (d?.detalhes !== undefined) seguro.detalhes = detalheLegivel({ detalhes: d.detalhes });
+  if (Number.isInteger(d?.cwOrderId)) seguro.cwOrderId = d.cwOrderId;
+  if (Number.isInteger(d?.cwDisplayId)) seguro.cwDisplayId = d.cwDisplayId;
+  if (d?.cwStatus != null) seguro.cwStatus = String(d.cwStatus).slice(0, LIMITE_CODIGO);
+  if (Number.isFinite(Number(d?.total))) seguro.total = Number(d.total);
+  return Object.keys(seguro).length ? seguro : null;
 }
 
 // Detalhe do erro em texto curto para o admin. Nunca inclui token nem cabeçalho: o que

@@ -8644,14 +8644,22 @@ const snapshotTotem = new Map();
 // que recebe o corpo justamente para descartá-lo.
 const clienteIdDoAparelho = (ap, body) => clienteIdDaEmpresaTotem(whereDoAparelho(ap, body).empresaId);
 
-// Resposta de um envio ao aparelho: 201 criado · 202 em andamento/sem confirmação · 422
-// quando está provado que nada foi criado. Nunca 5xx depois do INSERT (§5.2).
+// Resposta de um envio ao aparelho: 201 criado · 202 em andamento/sem confirmação · 409
+// cotação furada · 422 quando está provado que nada foi criado. Nunca 5xx depois do INSERT.
 const responderEnvio = (res, envio) => res.status(httpDaResposta(envio)).json(corpoDaResposta(envio));
+
+// Só TOTEM compra: um cookie de TV_INDOOR (mesmo válido e da mesma loja) não pede nada.
+function exigirTotem(ap, res) {
+  if (ap.tipo === 'TOTEM') return true;
+  res.status(403).json({ erro: 'APARELHO_NAO_E_TOTEM' });
+  return false;
+}
 
 // Bootstrap: loja, catálogo, métodos de pagamento e modos ativos.
 app.get('/api/public/aparelho/totem/bootstrap', async (req, res) => {
   try {
     const ap = await exigirAparelho(req, res); if (!ap) return;
+    if (!exigirTotem(ap, res)) return;
     const loja = whereDoAparelho(ap, req.body).empresaId;
     const clienteId = await clienteIdDoAparelho(ap, req.body);
     if (!clienteId) return res.status(409).json({ erro: 'CLIENTE_SEM_CW', conectado: false });
@@ -8671,6 +8679,7 @@ app.get('/api/public/aparelho/totem/bootstrap', async (req, res) => {
 app.post('/api/public/aparelho/totem/cotar', async (req, res) => {
   try {
     const ap = await exigirAparelho(req, res); if (!ap) return;
+    if (!exigirTotem(ap, res)) return;
     const orderType = String(req.body?.orderType ?? '');
     const carrinho = Array.isArray(req.body?.carrinho) && req.body.carrinho.length ? req.body.carrinho : null;
     const metodoId = req.body?.metodoId == null ? '' : String(req.body.metodoId).trim();
@@ -8695,6 +8704,7 @@ app.post('/api/public/aparelho/totem/cotar', async (req, res) => {
 app.post('/api/public/aparelho/totem/pedido', async (req, res) => {
   try {
     const ap = await exigirAparelho(req, res); if (!ap) return;
+    if (!exigirTotem(ap, res)) return;
     // (1) forma do corpo. Campos de identidade que venham no corpo são descartados aqui.
     const v = validarCorpoPedido(req.body);
     if (!v.ok) return res.status(400).json({ erro: v.erro, detalhes: v.detalhes });
@@ -8717,7 +8727,10 @@ app.post('/api/public/aparelho/totem/pedido', async (req, res) => {
       envio = await prisma.pedidoTotemEnvio.create({
         data: {
           ...whereDoAparelho(ap, req.body), dispositivoId: ap.id, chaveIdempotencia, orderId, displayIdEnviado,
-          orderType, status: 'ENVIANDO', cotacaoHash: cotacao.hash, carrinhoJson: { carrinho, metodoId, cotacao }, tentadoEm: agora,
+          orderType, status: 'ENVIANDO', cotacaoHash: cotacao.hash, tentadoEm: agora,
+          // A assinatura HMAC da cotação NÃO é gravada: ela é credencial de uma chamada, não
+          // dado do pedido. O que a auditoria precisa é do hash e da validade.
+          carrinhoJson: { carrinho, metodoId, cotacao: { hash: cotacao.hash, expiraEm: cotacao.expiraEm } },
         },
       });
     } catch (e) {
@@ -8740,19 +8753,29 @@ app.post('/api/public/aparelho/totem/pedido', async (req, res) => {
       console.error('[public/aparelho totem pedido ponte]', e?.code ?? e?.name ?? 'erro');
       r = { ok: false, http: 502, codigo: 'HUB_INDISPONIVEL', ambiguo: true, data: null };
     }
-    // (7) transição pela máquina de estados (nunca status escrito à mão).
-    const desfecho = classificarResposta(r);
-    const campos = camposDoDesfecho(desfecho, r);
-    if (campos.respostaJson == null) delete campos.respostaJson;   // Json? não aceita null puro no Prisma
-    const { count } = await prisma.pedidoTotemEnvio.updateMany({
-      where: { id: envio.id, ...whereDoAparelho(ap, req.body), status: 'ENVIANDO' },
-      data: { status: transicao('ENVIANDO', EVENTO_DO_DESFECHO[desfecho]), ...campos },
-    });
-    // (8) resposta. Se o UPDATE não pegou (alguém já mexeu), relê antes de responder.
-    const atual = count
-      ? { ...envio, status: desfecho, ...campos }
-      : (await prisma.pedidoTotemEnvio.findFirst({ where: { id: envio.id, ...whereDoAparelho(ap, req.body) } })) ?? { ...envio, status: desfecho, ...campos };
-    responderEnvio(res, atual);
+    // (7) e (8) têm try/catch PRÓPRIO: a linha já existe, então daqui para a frente nenhuma
+    // falha pode virar 5xx. Se a gravação do desfecho falhar, o aparelho recebe 202
+    // ("estamos confirmando") e o job resolve a linha — o pior caso é uma espera.
+    try {
+      // (7) transição pela máquina de estados (nunca status escrito à mão).
+      const desfecho = classificarResposta(r);
+      const campos = camposDoDesfecho(desfecho, r);
+      if (campos.respostaJson == null) delete campos.respostaJson;   // Json? não aceita null puro no Prisma
+      const { count } = await prisma.pedidoTotemEnvio.updateMany({
+        where: { id: envio.id, ...whereDoAparelho(ap, req.body), status: 'ENVIANDO' },
+        data: { status: transicao('ENVIANDO', EVENTO_DO_DESFECHO[desfecho]), ...campos },
+      });
+      // (8) resposta. UPDATE que não pegou = o job já promoveu a linha enquanto o HUB
+      // respondia; se o desfecho foi CRIADO, a prova da criação não pode se perder.
+      if (!count && desfecho === 'CRIADO') await gravarCriadoTardio(envio, campos);
+      const atual = count
+        ? { ...envio, status: desfecho, ...campos }
+        : (await prisma.pedidoTotemEnvio.findFirst({ where: { id: envio.id, ...whereDoAparelho(ap, req.body) } })) ?? { ...envio, status: desfecho, ...campos };
+      responderEnvio(res, atual);
+    } catch (e) {
+      console.error('[public/aparelho totem pedido desfecho]', e?.code ?? e?.name ?? 'erro');
+      res.status(202).json(respostaPublica({ ...envio, status: 'ENVIANDO' }));
+    }
   } catch (err) { console.error('[public/aparelho totem pedido]', err?.code ?? err?.name ?? 'erro'); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
 });
 
@@ -8760,6 +8783,7 @@ app.post('/api/public/aparelho/totem/pedido', async (req, res) => {
 app.get('/api/public/aparelho/totem/pedido/:envioId', async (req, res) => {
   try {
     const ap = await exigirAparelho(req, res); if (!ap) return;
+    if (!exigirTotem(ap, res)) return;
     const envioIdNum = parseInt(req.params.envioId, 10);
     if (!Number.isInteger(envioIdNum)) return res.status(404).json({ erro: 'PEDIDO_NAO_ENCONTRADO' });
     const envio = await prisma.pedidoTotemEnvio.findFirst({
@@ -8783,6 +8807,12 @@ async function clienteIdDaEmpresaTotem(empresaId) {
   const emp = await prisma.empresa.findUnique({ where: { id: empresaId }, select: { clienteId: true } });
   const id = emp?.clienteId ? String(emp.clienteId).trim() : '';
   return id && id !== 'admin' ? id : null;
+}
+
+// O :id da rota admin — inteiro positivo ou nada (nunca chega NaN no Prisma).
+function idDaRota(req) {
+  const id = parseInt(req.params.id, 10);
+  return Number.isInteger(id) && id > 0 ? id : null;
 }
 
 // Quem decidiu (para o decisaoJson). O PDV tem dois tipos de sessão: dono (JWT do HUB,
@@ -8811,6 +8841,30 @@ const pedidoTotemAdmin = (r) => ({
 });
 
 const APARELHO_DA_LINHA = { dispositivo: { select: { id: true, nome: true } } };
+
+// O HUB confirmou a criação DEPOIS de o job já ter promovido a linha (a resposta demorou
+// mais que a janela). A prova de que o pedido existe no CW não pode se perder: reaplica o
+// desfecho como `reconciliado` — a transição permitida a partir de AMBIGUO/REVISAO_MANUAL.
+async function gravarCriadoTardio(envio, campos) {
+  const linha = await prisma.pedidoTotemEnvio.findFirst({ where: { id: envio.id, empresaId: envio.empresaId }, select: { status: true } });
+  const de = linha?.status;
+  if (de !== 'AMBIGUO' && de !== 'REVISAO_MANUAL') {
+    if (de !== 'CRIADO') console.error('[totem criado tardio] envio', envio.id, 'cwOrderId', campos?.cwOrderId ?? null, 'estado', de ?? 'sumiu');
+    return false;
+  }
+  const { count } = await prisma.pedidoTotemEnvio.updateMany({
+    where: { id: envio.id, empresaId: envio.empresaId, status: de },
+    data: {
+      status: transicao(de, 'reconciliado'),
+      cwOrderId: campos?.cwOrderId ?? null,
+      cwDisplayId: campos?.cwDisplayId ?? null,
+      cwStatusInicial: campos?.cwStatusInicial ?? null,
+      reconciliadoEm: new Date(),
+    },
+  });
+  if (!count) console.error('[totem criado tardio nao gravado] envio', envio.id, 'cwOrderId', campos?.cwOrderId ?? null);
+  return !!count;
+}
 
 // Reconciliação de UM envio — a MESMA função do job e do botão do admin.
 // Procura no CW um pedido com external_order_id === orderId. Só isso vira CRIADO.
@@ -8871,7 +8925,8 @@ app.post('/api/totem/pedidos/:id/reconciliar', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
   const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = idDaRota(req);
+    if (!id) return res.status(400).json({ erro: 'ID_INVALIDO' });
     const envio = await prisma.pedidoTotemEnvio.findFirst({ where: { id, empresaId } });
     if (!envio) return res.status(404).json({ erro: 'PEDIDO_NAO_ENCONTRADO' });
     const r = await reconciliarEnvio(envio);
@@ -8888,7 +8943,8 @@ app.post('/api/totem/pedidos/:id/confirmar-criado', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
   const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = idDaRota(req);
+    if (!id) return res.status(400).json({ erro: 'ID_INVALIDO' });
     const cwOrderId = Math.trunc(Number(req.body?.cwOrderId));
     if (!Number.isInteger(cwOrderId) || cwOrderId <= 0) return res.status(400).json({ erro: 'CW_ORDER_ID_OBRIGATORIO' });
     const envio = await prisma.pedidoTotemEnvio.findFirst({ where: { id, empresaId } });
@@ -8925,7 +8981,8 @@ app.post('/api/totem/pedidos/:id/encerrar', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
   const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
   try {
-    const id = parseInt(req.params.id, 10);
+    const id = idDaRota(req);
+    if (!id) return res.status(400).json({ erro: 'ID_INVALIDO' });
     const motivo = String(req.body?.motivo ?? '').trim();
     if (motivo.length < 3 || motivo.length > 300) return res.status(400).json({ erro: 'MOTIVO_OBRIGATORIO' });
     const envio = await prisma.pedidoTotemEnvio.findFirst({ where: { id, empresaId } });
@@ -8959,7 +9016,7 @@ async function varrerTotemEnvios() {
   try {
     const agora = new Date();
     const pendentes = await prisma.pedidoTotemEnvio.findMany({
-      where: { status: { in: ['AMBIGUO', 'REVISAO_MANUAL'] } },
+      where: { status: { in: ['ENVIANDO', 'AMBIGUO', 'REVISAO_MANUAL'] } },
       orderBy: { tentadoEm: 'asc' },
       take: 200,
       select: { id: true, empresaId: true, status: true, orderId: true, orderType: true, tentadoEm: true },
@@ -8967,7 +9024,15 @@ async function varrerTotemEnvios() {
     for (const envio of pendentes) {
       try {
         const acao = proximaAcaoJob(envio, agora, tick);
-        if (acao === 'RECONCILIAR') await reconciliarEnvio(envio);
+        if (acao === 'AMBIGUAR') {
+          // Linha órfã: o processo caiu entre o INSERT e a gravação do desfecho. Vira
+          // AMBIGUO (transição permitida) e entra na reconciliação — nunca vira falha.
+          const { count } = await prisma.pedidoTotemEnvio.updateMany({
+            where: { id: envio.id, empresaId: envio.empresaId, status: 'ENVIANDO' },
+            data: { status: transicao('ENVIANDO', 'ambiguo'), erroCodigo: 'HUB_INDISPONIVEL', erroDetalhe: 'Envio sem resposta registrada (processo interrompido).' },
+          });
+          if (count) console.log('[totem] envio', envio.id, 'estava parado em ENVIANDO e virou ambiguo');
+        } else if (acao === 'RECONCILIAR') await reconciliarEnvio(envio);
         else if (acao === 'REVISAO') {
           // 30 min sem solução: passa para a mão do humano. NÃO é estado de falha — o job
           // continua procurando por até 24 h.

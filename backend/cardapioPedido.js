@@ -28,6 +28,20 @@ export const TIMEOUT_PEDIDO_MS = 60_000;
 // então são determinísticos e o pedido pode ser REJEITADO com segurança.
 const CODIGOS_5XX_DETERMINISTICOS = ['CW_RATE_LIMIT', 'HUB_SEM_PARTNER_KEY', 'HUB_CONFIG_INVALIDA'];
 
+// Códigos 4xx do contrato §7. Um 4xx com um destes é caminho PREVISTO: o HUB recusou antes
+// de criar, então é determinístico. Um 4xx com código desconhecido (ou sem código) é
+// caminho que ninguém desenhou — no pedido, prudência: ambíguo (§4.7 c).
+const CODIGOS_4XX_CONHECIDOS = new Set([
+  'LOJA_INATIVA', 'LOJA_FECHADA', 'MODO_INDISPONIVEL',
+  'CARRINHO_VAZIO', 'CARRINHO_GRANDE', 'QTD_INVALIDA',
+  'ITEM_INDISPONIVEL', 'ITEM_EM_FALTA', 'ITEM_FORA_DE_HORARIO', 'ITEM_NAO_SUPORTADO', 'ESTOQUE_INSUFICIENTE',
+  'GRUPO_OBRIGATORIO', 'GRUPO_LIMITE', 'GRUPO_CALCULO_NAO_SUPORTADO', 'OPCAO_INDISPONIVEL', 'OPCAO_EM_FALTA',
+  'PAGAMENTO_INVALIDO', 'COTACAO_INVALIDA', 'COTACAO_DIVERGENTE', 'COTACAO_EXPIRADA', 'CW_RECUSOU',
+  'CLIENTE_SEM_CW', 'PEDIDO_NAO_CORRESPONDE', 'PEDIDO_NAO_ENCONTRADO', 'JANELA_RECONCILIACAO_EXPIRADA',
+  'CLIENTE_ID_OBRIGATORIO', 'REFERENCIA_OBRIGATORIA', 'CW_ORDER_ID_OBRIGATORIO', 'TENTADO_EM_INVALIDO', 'ORDER_TYPE_INVALIDO',
+  'SVC_TOKEN_AUSENTE', 'SVC_TOKEN_INVALIDO', 'SVC_NAO_AUTORIZADO',
+]);
+
 const OPERACAO_AMBIGUA = 'pedido';   // só a criação do pedido pode deixar dúvida no CW
 
 // Tradutor PURO status/corpo → resultado. Fica exportado para o teste de contrato rodar a
@@ -42,8 +56,12 @@ export function interpretarRespostaHub({ status, data, falha, timeout, operacao 
   const corpo = data && typeof data === 'object' ? data : null;
   if (s >= 200 && s < 300) return { ok: true, status: s, data: corpo ?? {} };
   const erro = typeof corpo?.erro === 'string' && corpo.erro ? corpo.erro : null;
-  // 4xx: o HUB recusou antes de criar (validação, cotação, auth). Repassa o corpo.
-  if (s >= 400 && s < 500) return { ok: false, http: s, codigo: erro ?? 'HUB_RECUSOU', ambiguo: false, data: corpo };
+  // 4xx: o HUB recusou antes de criar (validação, cotação, auth). Repassa o corpo — e só é
+  // determinístico se o código for do contrato.
+  if (s >= 400 && s < 500) {
+    const previsto = !!erro && CODIGOS_4XX_CONHECIDOS.has(erro);
+    return { ok: false, http: s, codigo: erro ?? 'HUB_RECUSOU', ambiguo: previsto ? false : ambiguoNaFalha, data: corpo };
+  }
   if (erro && CODIGOS_5XX_DETERMINISTICOS.includes(erro)) return { ok: false, http: s, codigo: erro, ambiguo: false, data: corpo };
   if (s === 502 && erro === 'CW_INDISPONIVEL') {
     // Quem sabe onde a chamada parou é o HUB. Se ele não disser (bug), no pedido a gente

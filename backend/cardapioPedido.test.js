@@ -22,7 +22,13 @@ const CASOS = [
   ['422 CW_RECUSOU', { status: 422, data: { erro: 'CW_RECUSOU', cwStatus: 422 }, operacao: 'pedido' }, { ok: false, http: 422, codigo: 'CW_RECUSOU', ambiguo: false }],
   ['409 COTACAO_DIVERGENTE', { status: 409, data: { erro: 'COTACAO_DIVERGENTE' }, operacao: 'pedido' }, { ok: false, http: 409, codigo: 'COTACAO_DIVERGENTE', ambiguo: false }],
   ['409 COTACAO_EXPIRADA', { status: 409, data: { erro: 'COTACAO_EXPIRADA' }, operacao: 'pedido' }, { ok: false, http: 409, codigo: 'COTACAO_EXPIRADA', ambiguo: false }],
-  ['400 sem corpo conhecido', { status: 400, data: {}, operacao: 'pedido' }, { ok: false, http: 400, codigo: 'HUB_RECUSOU', ambiguo: false }],
+  // 4xx INESPERADO no pedido (sem código conhecido) é ambíguo por prudência (§4.7 c).
+  ['400 sem corpo conhecido (pedido)', { status: 400, data: {}, operacao: 'pedido' }, { ok: false, http: 400, codigo: 'HUB_RECUSOU', ambiguo: true }],
+  ['403 inesperado (pedido)', { status: 403, data: { erro: 'ALGO_NOVO' }, operacao: 'pedido' }, { ok: false, http: 403, codigo: 'ALGO_NOVO', ambiguo: true }],
+  ['409 inesperado (pedido)', { status: 409, data: { erro: 'CONFLITO_DESCONHECIDO' }, operacao: 'pedido' }, { ok: false, http: 409, codigo: 'CONFLITO_DESCONHECIDO', ambiguo: true }],
+  ['400 sem corpo no cotar', { status: 400, data: {}, operacao: 'cotar' }, { ok: false, http: 400, codigo: 'HUB_RECUSOU', ambiguo: false }],
+  ['422 COTACAO_INVALIDA com detalhes do §7', { status: 422, data: { erro: 'COTACAO_INVALIDA', detalhes: [{ codigo: 'ITEM_EM_FALTA' }] }, operacao: 'pedido' }, { ok: false, http: 422, codigo: 'COTACAO_INVALIDA', ambiguo: false }],
+  ['422 ITEM_EM_FALTA direto', { status: 422, data: { erro: 'ITEM_EM_FALTA' }, operacao: 'pedido' }, { ok: false, http: 422, codigo: 'ITEM_EM_FALTA', ambiguo: false }],
   ['401 do serviço', { status: 401, data: { erro: 'SVC_TOKEN_INVALIDO' }, operacao: 'pedido' }, { ok: false, http: 401, codigo: 'SVC_TOKEN_INVALIDO', ambiguo: false }],
   ['404 do HUB', { status: 404, data: { erro: 'PEDIDO_NAO_ENCONTRADO' }, operacao: 'detalhe' }, { ok: false, http: 404, codigo: 'PEDIDO_NAO_ENCONTRADO', ambiguo: false }],
   // 5xx com código determinístico: o HUB garante que nada saiu para o CW (§5.1).
@@ -60,6 +66,21 @@ test('interpretarRespostaHub: 2xx devolve o corpo; erro devolve o corpo do HUB',
   assert.deepEqual(interpretarRespostaHub({ status: 201, data: null, operacao: 'pedido' }), { ok: true, status: 201, data: {} });
   const rej = interpretarRespostaHub({ status: 422, data: { erro: 'CW_RECUSOU', detalhes: [{ codigo: 'ITEM_EM_FALTA' }] }, operacao: 'pedido' });
   assert.deepEqual(rej.data.detalhes, [{ codigo: 'ITEM_EM_FALTA' }]);
+});
+
+test('interpretarRespostaHub: no pedido, 4xx só é determinístico com código conhecido', () => {
+  // A diferença importa: código conhecido = o HUB sabe onde parou e nada foi criado; código
+  // desconhecido num 4xx é caminho que ninguém previu — e aí não se afirma nada.
+  for (const erro of ['COTACAO_DIVERGENTE', 'COTACAO_EXPIRADA', 'COTACAO_INVALIDA', 'CW_RECUSOU', 'CLIENTE_SEM_CW', 'REFERENCIA_OBRIGATORIA', 'CLIENTE_ID_OBRIGATORIO', 'ORDER_TYPE_INVALIDO', 'SVC_TOKEN_INVALIDO', 'SVC_NAO_AUTORIZADO', 'MODO_INDISPONIVEL', 'ITEM_EM_FALTA', 'GRUPO_OBRIGATORIO', 'PAGAMENTO_INVALIDO']) {
+    const r = interpretarRespostaHub({ status: 422, data: { erro }, operacao: 'pedido' });
+    assert.equal(r.ambiguo, false, `${erro} deveria ser determinístico`);
+    assert.equal(r.codigo, erro);
+  }
+  for (const data of [{}, null, { erro: '' }, { erro: 'CODIGO_QUE_NAO_EXISTE' }, { mensagem: 'sem erro' }]) {
+    assert.equal(interpretarRespostaHub({ status: 400, data, operacao: 'pedido' }).ambiguo, true, JSON.stringify(data));
+    // Fora do pedido não há o que ficar ambíguo: nada é criado em bootstrap/cotar/detalhe.
+    assert.equal(interpretarRespostaHub({ status: 400, data, operacao: 'cotar' }).ambiguo, false);
+  }
 });
 
 test('interpretarRespostaHub: 502 CW_INDISPONIVEL sem o campo ambiguo é ambíguo NO PEDIDO', () => {

@@ -209,3 +209,79 @@ test('nenhuma rota do totem chama o Cardápio Web direto: só a ponte do HUB', (
   assert.equal(ponte.match(/HUB_API_URL\s*\|\|/), null, 'a ponte do totem não pode ter URL padrão');
   assert.ok(/svc: 'pdv-operacao'/.test(ponte));
 });
+
+// ── Correções da revisão (2026-09-11) ───────────────────────────────────────
+test('depois do INSERT o /pedido NUNCA responde 5xx', () => {
+  const h = handler('/api/public/aparelho/totem/pedido');
+  const insert = h.indexOf('prisma.pedidoTotemEnvio.create(');
+  const catchExterno = h.indexOf("} catch (err) { console.error('[public/aparelho totem pedido]'");
+  assert.ok(insert > 0 && catchExterno > insert);
+  const depois = h.slice(insert, catchExterno);
+  const cincoxx = depois.match(/res\.status\(5\d\d\)/g) || [];
+  assert.deepEqual(cincoxx, [], `resposta 5xx depois do INSERT: ${cincoxx.join(', ')}`);
+  // A gravação do desfecho tem rede de segurança própria: falhou, responde 202.
+  assert.ok(/catch \(e\) \{\s*console\.error\('\[public\/aparelho totem pedido desfecho\]'/.test(depois), 'os passos 7-8 precisam de try/catch próprio');
+  assert.ok(/res\.status\(202\)\.json\(respostaPublica\(\{ \.\.\.envio, status: 'ENVIANDO' \}\)\)/.test(depois), 'a falha na gravação do desfecho responde 202 ENVIANDO');
+  // E o 500 do catch externo só alcança o que acontece ANTES do INSERT.
+  assert.ok(h.slice(catchExterno).includes("res.status(500)"));
+});
+
+test('CRIADO que chega tarde não se perde', () => {
+  const h = handler('/api/public/aparelho/totem/pedido');
+  assert.ok(/if \(!count && desfecho === 'CRIADO'\) await gravarCriadoTardio\(envio, campos\);/.test(h), 'update que não pegou + CRIADO tem de reaplicar o desfecho');
+  const codigo = semComentarios(fonte());
+  const i = codigo.indexOf('async function gravarCriadoTardio(');
+  assert.ok(i > 0, 'gravarCriadoTardio não encontrado');
+  const fn = codigo.slice(i, codigo.indexOf('\n}\n', i));
+  assert.ok(/transicao\(de, 'reconciliado'\)/.test(fn), 'a reaplicação passa pela máquina de estados');
+  assert.ok(/status: de/.test(fn), 'o update é guardado pelo estado lido');
+  assert.ok(/empresaId: envio\.empresaId/.test(fn), 'escopo explícito por loja');
+  assert.ok(/console\.error\('\[totem criado tardio nao gravado/.test(fn), 'perder a criação tem de deixar rastro no log');
+  assert.equal(fn.match(/token|secret|assinatura/i), null, 'nada de segredo no log');
+});
+
+test('o job promove ENVIANDO parado e nunca o transforma em falha', () => {
+  const codigo = semComentarios(fonte());
+  const job = codigo.slice(codigo.indexOf('async function varrerTotemEnvios('), codigo.indexOf('\nfunction iniciarAgendadorTotem('));
+  assert.ok(/status: \{ in: \['ENVIANDO', 'AMBIGUO', 'REVISAO_MANUAL'\] \}/.test(job), 'o job precisa enxergar ENVIANDO órfão');
+  assert.ok(/acao === 'AMBIGUAR'/.test(job));
+  const i = job.indexOf("acao === 'AMBIGUAR'");
+  const trecho = job.slice(i, i + 700);
+  assert.ok(/transicao\('ENVIANDO', 'ambiguo'\)/.test(trecho), 'promoção só pela transição permitida');
+  assert.ok(/status: 'ENVIANDO'/.test(trecho), 'o update é guardado por status ENVIANDO (não atropela quem respondeu)');
+  // Nenhum estado de falha automático em lugar nenhum do job.
+  assert.equal(job.match(/'REJEITADO'/), null, 'o job nunca rejeita nada sozinho');
+});
+
+test('só TOTEM pede: as 4 rotas públicas checam o tipo do aparelho', () => {
+  for (const [rota, verbo] of ROTAS_TOTEM) {
+    assert.ok(handler(rota, verbo).includes('if (!exigirTotem(ap, res)) return;'), `${rota} sem a checagem de tipo`);
+  }
+  const codigo = semComentarios(fonte());
+  const i = codigo.indexOf('function exigirTotem(');
+  const fn = codigo.slice(i, codigo.indexOf('\n}\n', i));
+  assert.ok(/ap\.tipo === 'TOTEM'/.test(fn));
+  assert.ok(/erro: 'APARELHO_NAO_E_TOTEM'/.test(fn));
+  assert.ok(/res\.status\(403\)/.test(fn));
+});
+
+test('a assinatura da cotação não vai para a outbox', () => {
+  const h = handler('/api/public/aparelho/totem/pedido');
+  const i = h.indexOf('prisma.pedidoTotemEnvio.create(');
+  const create = h.slice(i, h.indexOf('});', i));
+  assert.ok(/carrinhoJson: \{ carrinho, metodoId, cotacao: \{ hash: cotacao\.hash, expiraEm: cotacao\.expiraEm \} \}/.test(create), 'o carrinhoJson tem de ser remontado sem a assinatura');
+  assert.equal(create.match(/assinatura/), null, 'a assinatura HMAC não pode ser gravada');
+});
+
+test('as rotas admin com :id validam o id antes do Prisma', () => {
+  const codigo = semComentarios(fonte());
+  for (const rota of ['/api/totem/pedidos/:id/reconciliar', '/api/totem/pedidos/:id/confirmar-criado', '/api/totem/pedidos/:id/encerrar']) {
+    const i = codigo.indexOf(`'${rota}'`);
+    const h = codigo.slice(i, codigo.indexOf('\n});', i));
+    const id = h.indexOf('idDaRota(req)');
+    const invalido = h.indexOf("erro: 'ID_INVALIDO'");
+    const prisma = h.indexOf('prisma.');
+    assert.ok(id > 0 && invalido > id, `${rota} sem validação de :id`);
+    assert.ok(invalido < prisma, `${rota} valida o :id depois de consultar o banco`);
+  }
+});
