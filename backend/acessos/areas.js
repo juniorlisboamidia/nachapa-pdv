@@ -2,7 +2,7 @@
 // FAIL-CLOSED: rota não mapeada = negada (o middleware em server.js trata). Resolve pelo
 // prefixo MAIS LONGO que casar, pra um prefixo curto nunca engolir um mais específico.
 // Chaves (fonte de verdade da sanitização em /api/acessos): ver spec §2.
-export const AREAS_DISPONIVEIS = ['relatorios', 'produtos', 'gestao', 'marketing', 'ponto', 'motoboys', 'bonificacao', 'talentos', 'checklist', 'etiquetas'];
+export const AREAS_DISPONIVEIS = ['relatorios', 'produtos', 'gestao', 'marketing', 'ponto', 'motoboys', 'bonificacao', 'talentos', 'checklist', 'etiquetas', 'aparelhos'];
 
 export const AREA_PREFIXOS = [
   ['/relatorios', 'relatorios'], ['/dashboard', 'relatorios'],
@@ -15,6 +15,8 @@ export const AREA_PREFIXOS = [
   ['/bonificacao', 'bonificacao'],
   ['/candidatos', 'talentos'], ['/vagas', 'talentos'], ['/recrutamento', 'talentos'], ['/talentos', 'talentos'], ['/banco-talentos', 'talentos'],
   ['/checklist', 'checklist'], ['/etiquetas', 'etiquetas'],
+  // Aparelhos (tablets do totem/TV): a área cobre o cadastro e as telas do Totem.
+  ['/aparelhos', 'aparelhos'], ['/totem', 'aparelhos'],
 ];
 
 // Mais longo primeiro (mesma ideia de acessos/modulos.js do H360).

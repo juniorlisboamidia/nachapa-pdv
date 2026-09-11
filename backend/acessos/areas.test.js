@@ -31,3 +31,15 @@ test('fail-closed: rota desconhecida e áreas extintas não resolvem', () => {
 test('prefixo não casa por substring: /pontoX não é ponto', () => {
   assert.equal(areaDoPath('/pontoX'), null);
 });
+
+test('area aparelhos: cadastro e telas do totem', () => {
+  assert.equal(areaDoPath('/aparelhos'), 'aparelhos');
+  assert.equal(areaDoPath('/aparelhos/3/parear'), 'aparelhos');
+  assert.equal(areaDoPath('/aparelhos/3/revogar'), 'aparelhos');
+  assert.equal(areaDoPath('/totem'), 'aparelhos');
+  assert.equal(areaDoPath('/totem/pedidos'), 'aparelhos');
+  assert.ok(AREAS_DISPONIVEIS.includes('aparelhos'));
+  // Fail-closed: nada de substring nem de rota parecida.
+  assert.equal(areaDoPath('/aparelhosX'), null);
+  assert.equal(areaDoPath('/totens'), null);
+});

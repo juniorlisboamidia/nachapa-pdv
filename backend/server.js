@@ -25,6 +25,11 @@ import { extrairOrigem } from './grupoVipOrigem.js';
 import { buscarOrigensCW } from './cardapioOrigens.js';
 import { ordemDeRecalculo } from './custos/propagacaoCusto.js';
 import { AREAS_DISPONIVEIS, AREA_PREFIXOS, areaDoPath } from './acessos/areas.js';
+import {
+  TIPOS_APARELHO, PAREAMENTO_VALIDADE_MS, gerarCodigoPareamento, gerarCredencial, hashCredencial,
+  cookieAparelho, cookieAparelhoLimpar, lerCookieAparelho, avaliarTentativa,
+  aparelhoPublico, aparelhoAdmin, filtroAparelhoDoCookie, escopoEmpresa, LimitadorIp,
+} from './aparelhos.js';
 import { calcularCmvGlobal } from './cmv/calculo.js';
 import { normalizarRelatorio, FONTES } from './relatorios/normalizar.js';
 
@@ -8359,6 +8364,239 @@ app.delete('/api/etiquetas/dispositivos/:id', async (req, res) => {
     if (!count) return res.status(404).json({ error: 'Dispositivo não encontrado.' });
     res.json({ ok: true });
   } catch (err) { console.error('[etiquetas/dispositivos DELETE]', err); res.status(500).json({ error: 'Erro ao excluir.' }); }
+});
+
+// ===================== Aparelhos: TOTEM / TV_INDOOR (ADMIN) =====================
+// Área `aparelhos` (acessos/areas.js). Espelha o CRUD de dispositivos acima, com uma
+// diferença central: estes aparelhos NÃO se autenticam pelo `token` na URL — quem prova
+// quem eles são é a credencial do cookie HttpOnly, nascida de um código de 6 dígitos
+// (spec §3.2). O `token` continua sendo gerado no POST (coluna NOT NULL, e os legados
+// PONTO/ETIQUETA seguem dependendo dele) — só não é credencial destes tipos.
+// As regras puras (código, credencial, online, o que a resposta expõe) vivem em
+// backend/aparelhos.js; aqui só tem orquestração e banco.
+
+// Freio de força bruta do pareamento: 10 tentativas por IP a cada 10 min (§3.2).
+const limitadorPareamento = new LimitadorIp();
+
+// Loja da request. O tenantStore é a fonte (ADMIN do HUB não traz empresaId no JWT:
+// a loja é resolvida por X-Empresa-Id no gate de tenant). Fail-closed se não houver.
+function empresaDoAdmin(req, res) {
+  const empresaId = getEmpresaIdAtual() ?? req.user?.empresaId ?? null;
+  if (empresaId == null) { res.status(400).json({ error: 'Loja não resolvida.' }); return null; }
+  return empresaId;
+}
+
+// Origem pública do PDV (o tablet abre <origem>/dispositivo para digitar o código).
+function origemPublicaPdv(req) {
+  return String(process.env.PDV_PUBLIC_URL || `${req.protocol}://${req.get('host')}`).replace(/\/+$/, '');
+}
+
+app.get('/api/aparelhos', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const tipo = req.query.tipo ? String(req.query.tipo) : null;
+    if (tipo && !TIPOS_APARELHO.includes(tipo)) return res.status(400).json({ error: 'tipo inválido' });
+    // PONTO/ETIQUETA nunca aparecem aqui: esta tela é só dos aparelhos do totem/TV.
+    const ds = await prisma.dispositivo.findMany({
+      where: { empresaId, tipo: tipo || { in: TIPOS_APARELHO } },
+      orderBy: { criadoEm: 'asc' },
+    });
+    const agora = new Date();
+    res.json({ aparelhos: ds.map((d) => aparelhoAdmin(d, agora)) });
+  } catch (err) { console.error('[aparelhos GET]', err); res.status(500).json({ error: 'Erro ao carregar os aparelhos.' }); }
+});
+
+app.post('/api/aparelhos', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const nome = typeof req.body?.nome === 'string' ? req.body.nome.trim().slice(0, 60) : '';
+    if (!nome) return res.status(400).json({ error: 'Informe o nome do aparelho.' });
+    const tipo = String(req.body?.tipo ?? '');
+    if (!TIPOS_APARELHO.includes(tipo)) return res.status(400).json({ error: 'tipo inválido' });
+    const d = await prisma.dispositivo.create({
+      data: { empresaId, nome, tipo, ativo: true, token: randomBytes(12).toString('base64url') },
+    });
+    res.status(201).json({ aparelho: aparelhoAdmin(d, new Date()) });
+  } catch (err) { console.error('[aparelhos POST]', err); res.status(500).json({ error: 'Erro ao criar o aparelho.' }); }
+});
+
+app.patch('/api/aparelhos/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const id = parseInt(req.params.id, 10);
+    const data = {};
+    if (req.body?.nome !== undefined) {
+      const v = String(req.body.nome).trim().slice(0, 60);
+      if (!v) return res.status(400).json({ error: 'Informe o nome do aparelho.' });
+      data.nome = v;
+    }
+    // Desativar já derruba o aparelho: resolverAparelhoPorCookie exige ativo: true.
+    if (req.body?.ativo !== undefined) data.ativo = !!req.body.ativo;
+    if (!Object.keys(data).length) return res.status(400).json({ error: 'Nada para atualizar.' });
+    const { count } = await prisma.dispositivo.updateMany({ where: { id, empresaId, tipo: { in: TIPOS_APARELHO } }, data });
+    if (!count) return res.status(404).json({ error: 'Aparelho não encontrado.' });
+    const d = await prisma.dispositivo.findFirst({ where: { id, empresaId } });
+    res.json({ aparelho: aparelhoAdmin(d, new Date()) });
+  } catch (err) { console.error('[aparelhos PATCH]', err); res.status(500).json({ error: 'Erro ao atualizar o aparelho.' }); }
+});
+
+app.delete('/api/aparelhos/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const id = parseInt(req.params.id, 10);
+    // Aparelho com pedido no outbox não some: o histórico do que ele mandou ao CW
+    // é auditoria, e a FK de PedidoTotemEnvio aponta para ele.
+    const envios = await prisma.pedidoTotemEnvio.count({ where: { empresaId, dispositivoId: id } });
+    if (envios > 0) return res.status(409).json({ erro: 'APARELHO_COM_PEDIDOS' });
+    const { count } = await prisma.dispositivo.deleteMany({ where: { id, empresaId, tipo: { in: TIPOS_APARELHO } } });
+    if (!count) return res.status(404).json({ error: 'Aparelho não encontrado.' });
+    res.json({ ok: true });
+  } catch (err) { console.error('[aparelhos DELETE]', err); res.status(500).json({ error: 'Erro ao excluir o aparelho.' }); }
+});
+
+// Gera o código de pareamento (6 dígitos, 10 min, tentativas zeradas).
+app.post('/api/aparelhos/:id/parear', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const id = parseInt(req.params.id, 10);
+    const alvo = await prisma.dispositivo.findFirst({ where: { id, empresaId, tipo: { in: TIPOS_APARELHO } }, select: { id: true } });
+    if (!alvo) return res.status(404).json({ error: 'Aparelho não encontrado.' });
+    const agora = new Date();
+    const expiraEm = new Date(agora.getTime() + PAREAMENTO_VALIDADE_MS);
+    // pareamentoCodigo é @unique no banco inteiro: quem garante "único entre os códigos
+    // vivos" é o índice, não a sorte — se colidir (P2002), sorteia outro.
+    for (let tentativa = 0; tentativa < 12; tentativa++) {
+      const codigo = gerarCodigoPareamento();
+      try {
+        await prisma.dispositivo.update({
+          where: { id: alvo.id },
+          data: { pareamentoCodigo: codigo, pareamentoExpiraEm: expiraEm, pareamentoTentativas: 0 },
+        });
+        return res.json({ codigo, expiraEm, urlDispositivo: `${origemPublicaPdv(req)}/dispositivo` });
+      } catch (e) { if (e?.code !== 'P2002') throw e; }
+    }
+    res.status(503).json({ error: 'Não foi possível gerar um código agora. Tente de novo.' });
+  } catch (err) { console.error('[aparelhos parear]', err?.code ?? err?.name ?? 'erro'); res.status(500).json({ error: 'Erro ao gerar o código.' }); }
+});
+
+// Revoga a credencial: o tablet cai para "não pareado" no próximo request.
+app.post('/api/aparelhos/:id/revogar', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const id = parseInt(req.params.id, 10);
+    const { count } = await prisma.dispositivo.updateMany({
+      where: { id, empresaId, tipo: { in: TIPOS_APARELHO } },
+      data: { credencialHash: null, pareamentoCodigo: null, pareamentoExpiraEm: null, pareamentoTentativas: 0 },
+    });
+    if (!count) return res.status(404).json({ error: 'Aparelho não encontrado.' });
+    res.json({ ok: true });
+  } catch (err) { console.error('[aparelhos revogar]', err); res.status(500).json({ error: 'Erro ao revogar.' }); }
+});
+
+// ===== Aparelhos (PÚBLICO — o tablet, sem login) =====
+// Estas rotas rodam FORA dos 3 gates e FORA do tenantStore (ver o app.use('/api') do
+// topo: tudo sob /public/ passa direto). Sem tenantStore a extension do Prisma NÃO
+// injeta empresaId: aqui todo where/update leva empresaId EXPLÍCITO — e ele vem do
+// APARELHO que o cookie resolveu, nunca do corpo da requisição. Nenhuma destas rotas
+// lê empresaId/clienteId/dispositivoId do body (aparelhos.js: filtroAparelhoDoCookie
+// e escopoEmpresa são as únicas fontes desses where; aparelhos.tenant.test.js).
+
+// Em dev (http://localhost) o cookie não pode ir com Secure, senão o navegador descarta.
+function cookieAparelhoSeguro(req) {
+  return process.env.NODE_ENV === 'production' || req.secure || req.get('x-forwarded-proto') === 'https';
+}
+
+// Identidade do aparelho: SÓ o cookie (hash da credencial), ativo e do tipo do totem.
+async function resolverAparelhoPorCookie(req) {
+  const credencial = lerCookieAparelho(req.headers.cookie);
+  if (!credencial) return null;
+  return prisma.dispositivo.findFirst({ where: filtroAparelhoDoCookie(hashCredencial(credencial)) });
+}
+
+// Resolve ou responde 401. Devolve null quando já respondeu (padrão do exigirAdmin).
+async function exigirAparelho(req, res) {
+  const ap = await resolverAparelhoPorCookie(req);
+  if (!ap) { res.status(401).json({ erro: 'APARELHO_NAO_PAREADO' }); return null; }
+  return ap;
+}
+
+// Loja do aparelho (nome + logo para a tela). O id vem do aparelho, ponto.
+function lojaDoAparelho(ap) {
+  return prisma.empresa.findUnique({ where: { id: escopoEmpresa(ap).empresaId }, select: { nome: true, logoDataUrl: true } });
+}
+const lojaPublica = (loja) => ({ nome: loja?.nome ?? null, logoDataUrl: loja?.logoDataUrl ?? null });
+
+// ⚠️ Nos catch destas rotas logamos só code/name: a mensagem crua do Prisma pode
+// carregar o where (código de pareamento, hash da credencial) para dentro do log.
+app.post('/api/public/aparelho/parear', async (req, res) => {
+  try {
+    const agora = new Date();
+    if (limitadorPareamento.registrar(req.ip, agora).bloqueado) return res.status(429).json({ erro: 'MUITAS_TENTATIVAS' });
+    const codigo = String(req.body?.codigo ?? '').trim();
+    if (!/^\d{6}$/.test(codigo)) return res.status(401).json({ erro: 'CODIGO_INVALIDO' });
+    const disp = await prisma.dispositivo.findFirst({ where: { pareamentoCodigo: codigo, tipo: { in: TIPOS_APARELHO } } });
+    const veredito = avaliarTentativa(disp, codigo, agora);
+    if (!veredito.ok) {
+      // Mesma resposta para todos os casos (inexistente, expirado, inativo): o aparelho
+      // não descobre por qual motivo falhou. Só conta a tentativa quando o código existe.
+      if (disp) {
+        const data = veredito.invalidar
+          ? { pareamentoCodigo: null, pareamentoExpiraEm: null, pareamentoTentativas: 0 }
+          : { pareamentoTentativas: { increment: 1 } };
+        await prisma.dispositivo.updateMany({ where: { id: disp.id, ...escopoEmpresa(disp) }, data });
+      }
+      return res.status(401).json({ erro: 'CODIGO_INVALIDO' });
+    }
+    const { credencial, hash } = gerarCredencial();
+    // O update é condicionado ao código ainda estar lá: se dois tablets digitarem o
+    // mesmo código ao mesmo tempo, só o primeiro pareia; o segundo leva CODIGO_INVALIDO.
+    const { count } = await prisma.dispositivo.updateMany({
+      where: { id: disp.id, ...escopoEmpresa(disp), pareamentoCodigo: codigo },
+      data: { credencialHash: hash, pareadoEm: agora, pareamentoCodigo: null, pareamentoExpiraEm: null, pareamentoTentativas: 0 },
+    });
+    if (!count) return res.status(401).json({ erro: 'CODIGO_INVALIDO' });
+    const loja = await lojaDoAparelho(disp);
+    res.setHeader('Set-Cookie', cookieAparelho(credencial, { secure: cookieAparelhoSeguro(req) }));
+    res.json({ ok: true, aparelho: aparelhoPublico(disp), loja: lojaPublica(loja) });
+  } catch (err) { console.error('[public/aparelho parear]', err?.code ?? err?.name ?? 'erro'); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// Quem sou eu (o front decide a UI pelo tipo).
+app.get('/api/public/aparelho/eu', async (req, res) => {
+  try {
+    const ap = await exigirAparelho(req, res); if (!ap) return;
+    const loja = await lojaDoAparelho(ap);
+    res.json({ aparelho: aparelhoPublico(ap), loja: lojaPublica(loja) });
+  } catch (err) { console.error('[public/aparelho eu]', err?.code ?? err?.name ?? 'erro'); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// Sinal de vida a cada 60 s: alimenta o "online" (< 150 s) da tela admin.
+app.post('/api/public/aparelho/heartbeat', async (req, res) => {
+  try {
+    const ap = await exigirAparelho(req, res); if (!ap) return;
+    const agora = new Date();
+    const dim = (v) => { const n = Math.trunc(Number(v)); return Number.isFinite(n) && n > 0 && n <= 20000 ? n : null; };
+    const heartbeatJson = {
+      versao: String(req.body?.versao ?? '').slice(0, 40),
+      tela: { w: dim(req.body?.tela?.w), h: dim(req.body?.tela?.h) },
+      userAgent: (req.get('user-agent') || '').slice(0, 200),
+      ip: req.ip,
+    };
+    await prisma.dispositivo.updateMany({ where: { id: ap.id, ...escopoEmpresa(ap) }, data: { ultimoHeartbeatEm: agora, heartbeatJson } });
+    res.json({ ok: true, agora });
+  } catch (err) { console.error('[public/aparelho heartbeat]', err?.code ?? err?.name ?? 'erro'); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// Esquece o aparelho neste tablet (só apaga o cookie; a credencial do banco morre no revogar).
+app.post('/api/public/aparelho/sair', (req, res) => {
+  res.setHeader('Set-Cookie', cookieAparelhoLimpar());
+  res.json({ ok: true });
 });
 
 // ===== Marcações + Painel (ADMIN) =====

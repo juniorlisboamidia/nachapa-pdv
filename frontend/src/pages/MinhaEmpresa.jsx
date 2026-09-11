@@ -13,6 +13,7 @@ const AREA_LABEL = {
   gestao: 'Gestão (faturamento, custos)', marketing: 'Marketing (Grupo VIP, Avaliador, Indicação)',
   ponto: 'Ponto Facial e Colaboradores', motoboys: 'Motoboys', bonificacao: 'Bonificação',
   talentos: 'Banco de talentos', checklist: 'Checklist', etiquetas: 'Etiquetas',
+  aparelhos: 'Aparelhos e Totem',
 }
 const inicial = (nome) => { const s = String(nome ?? '').trim(); return s ? s.charAt(0).toUpperCase() : 'H' }
 const foneMask = (v) => {
