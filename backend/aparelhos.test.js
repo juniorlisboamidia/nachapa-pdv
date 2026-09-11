@@ -6,8 +6,8 @@ import {
   TIPOS_APARELHO, PAREAMENTO_VALIDADE_MS, PAREAMENTO_MAX_TENTATIVAS, HEARTBEAT_ONLINE_MS,
   COOKIE_NOME, COOKIE_PATH,
   gerarCodigoPareamento, gerarCredencial, hashCredencial, estaOnline,
-  cookieAparelho, cookieAparelhoLimpar, lerCookieAparelho, avaliarTentativa,
-  aparelhoPublico, aparelhoAdmin, filtroAparelhoDoCookie, escopoEmpresa, LimitadorIp,
+  cookieAparelho, cookieAparelhoLimpar, cookieDeveSerSecure, lerCookieAparelho, avaliarTentativa,
+  aparelhoPublico, aparelhoAdmin, filtroAparelhoDoCookie, escopoEmpresa, whereDoAparelho, LimitadorIp,
 } from './aparelhos.js';
 
 test('constantes do contrato (§3.1/§3.2)', () => {
@@ -72,6 +72,28 @@ test('cookieAparelho: atributos da spec §3.2 e Secure opcional', () => {
   assert.ok(limpa.startsWith('pdv_aparelho='));
   assert.ok(limpa.includes('Path=/api/public/aparelho'));
   assert.ok(limpa.includes('Max-Age=0'));
+});
+
+test('cookieDeveSerSecure: Secure é o padrão, localhost em http é a única exceção', () => {
+  // Conexão https: sempre Secure, qualquer host.
+  assert.equal(cookieDeveSerSecure({ secure: true, hostname: 'pdv.nachapahub.com.br' }), true);
+  assert.equal(cookieDeveSerSecure({ secure: true, hostname: 'localhost' }), true);
+  // Conexão http num host de verdade: Secure MESMO ASSIM (era o bug: cookie sem Secure
+  // em produção, porque não há NODE_ENV nem X-Forwarded-Proto).
+  assert.equal(cookieDeveSerSecure({ secure: false, hostname: 'pdv.nachapahub.com.br' }), true);
+  assert.equal(cookieDeveSerSecure({ secure: false, hostname: '10.0.0.5' }), true);
+  assert.equal(cookieDeveSerSecure({ secure: false, hostname: 'localhost.evil.com' }), true);
+  assert.equal(cookieDeveSerSecure({ secure: false, hostname: '' }), true);
+  assert.equal(cookieDeveSerSecure({ secure: false, hostname: undefined }), true);
+  assert.equal(cookieDeveSerSecure({}), true);
+  assert.equal(cookieDeveSerSecure(), true);
+  // Única exceção: dev em http://localhost (ou 127.0.0.1), onde Secure mataria o cookie.
+  assert.equal(cookieDeveSerSecure({ secure: false, hostname: 'localhost' }), false);
+  assert.equal(cookieDeveSerSecure({ secure: false, hostname: 'LOCALHOST' }), false);
+  assert.equal(cookieDeveSerSecure({ secure: false, hostname: '127.0.0.1' }), false);
+  // E o cookie montado com a decisão bate com ela.
+  assert.ok(cookieAparelho('C', { secure: cookieDeveSerSecure({ secure: false, hostname: 'pdv.nachapahub.com.br' }) }).includes('Secure'));
+  assert.ok(!cookieAparelho('C', { secure: cookieDeveSerSecure({ secure: false, hostname: 'localhost' }) }).includes('Secure'));
 });
 
 test('lerCookieAparelho: acha o cookie entre outros', () => {

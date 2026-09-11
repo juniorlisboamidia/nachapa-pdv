@@ -61,7 +61,10 @@ server {
   server_name pdv.nachapahub.com.br;
   root /var/www/nachapa-pdv/frontend/dist;
   index index.html;
-  location /api/ { proxy_pass http://localhost:4001; proxy_set_header Host $host; proxy_set_header X-Forwarded-For $remote_addr; proxy_set_header Cookie $http_cookie; }
+  # X-Forwarded-Proto é OBRIGATÓRIO: com `app.set('trust proxy', 1)` é ele que faz o
+  # backend saber que a conexão é https — e o cookie do aparelho (pdv_aparelho) sair
+  # com Secure. X-Forwarded-For sobrescrito com $remote_addr = o IP real do cliente.
+  location /api/ { proxy_pass http://localhost:4001; proxy_set_header Host $host; proxy_set_header X-Forwarded-For $remote_addr; proxy_set_header X-Forwarded-Proto $scheme; proxy_set_header Cookie $http_cookie; }
   location / { try_files $uri $uri/ /index.html; }
 }
 ```

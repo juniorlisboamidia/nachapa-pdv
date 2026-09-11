@@ -47,8 +47,19 @@ export function estaOnline(ultimoHeartbeatEm, agora) {
   return ms(agora) - t < HEARTBEAT_ONLINE_MS;
 }
 
-// Set-Cookie do pareamento (§3.2). `secure: false` só em dev por http (localhost):
-// sem isso o navegador descarta o cookie e o totem nunca pareia.
+// `Secure` é o PADRÃO; a decisão de tirá-lo existe só para o dev em http://localhost
+// (sem isso o navegador descarta o cookie e o totem nunca pareia no laptop).
+// ⚠️ Esta conta NÃO pode depender de NODE_ENV nem de X-Forwarded-Proto: em produção o
+// PDV roda sem NODE_ENV e o Nginx não mandava esse header — o resultado dava "http" e a
+// credencial ia num cookie SEM Secure, o pior erro possível aqui. Então: conexão https
+// → Secure; conexão http → Secure de qualquer jeito, exceto em localhost/127.0.0.1.
+export function cookieDeveSerSecure({ secure, hostname } = {}) {
+  if (secure) return true;
+  const host = String(hostname ?? '').toLowerCase();
+  return !(host === 'localhost' || host === '127.0.0.1');
+}
+
+// Set-Cookie do pareamento (§3.2).
 export function cookieAparelho(credencial, { secure = true } = {}) {
   const attrs = ['HttpOnly'];
   if (secure) attrs.push('Secure');
@@ -117,6 +128,15 @@ export function filtroAparelhoDoCookie(hash) {
 
 export function escopoEmpresa(aparelho) {
   return { empresaId: aparelho.empresaId };
+}
+
+// Builder do `where` das rotas públicas. Recebe o CORPO da requisição de propósito:
+// é a prova executável de que ele não entra na conta. Nada de empresaId, clienteId,
+// dispositivoId ou aparelhoId do navegador chega ao Prisma — o escopo é função
+// exclusiva do aparelho que o cookie resolveu. Se algum dia alguém quiser "só ler o
+// empresaId do body", tem de mexer AQUI, e o teste quebra na cara dele.
+export function whereDoAparelho(aparelho, _body) {
+  return escopoEmpresa(aparelho);
 }
 
 // Limite de força bruta no código: 10 tentativas por IP em 10 min (§3.2). Em

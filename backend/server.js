@@ -27,8 +27,8 @@ import { ordemDeRecalculo } from './custos/propagacaoCusto.js';
 import { AREAS_DISPONIVEIS, AREA_PREFIXOS, areaDoPath } from './acessos/areas.js';
 import {
   TIPOS_APARELHO, PAREAMENTO_VALIDADE_MS, gerarCodigoPareamento, gerarCredencial, hashCredencial,
-  cookieAparelho, cookieAparelhoLimpar, lerCookieAparelho, avaliarTentativa,
-  aparelhoPublico, aparelhoAdmin, filtroAparelhoDoCookie, escopoEmpresa, LimitadorIp,
+  cookieAparelho, cookieAparelhoLimpar, cookieDeveSerSecure, lerCookieAparelho, avaliarTentativa,
+  aparelhoPublico, aparelhoAdmin, filtroAparelhoDoCookie, whereDoAparelho, LimitadorIp,
 } from './aparelhos.js';
 import { calcularCmvGlobal } from './cmv/calculo.js';
 import { normalizarRelatorio, FONTES } from './relatorios/normalizar.js';
@@ -108,6 +108,12 @@ const prisma = new PrismaClient({ adapter }).$extends({
 });
 
 const app = express();
+// Atrás do Nginx: ele SOBRESCREVE X-Forwarded-For com $remote_addr, então o 1º salto
+// é sempre o cliente de verdade (ninguém injeta IP por header). Sem isto req.ip seria
+// 127.0.0.1 para todo mundo — o freio por IP do pareamento viraria global e o
+// heartbeatJson.ip gravaria o proxy. Também é o que faz req.secure/req.protocol
+// respeitarem o X-Forwarded-Proto do Nginx (ver o snippet no README).
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 4001;
 
 // ── Identidade compartilhada com o NaChapa HUB ────────────
@@ -8448,14 +8454,23 @@ app.delete('/api/aparelhos/:id', async (req, res) => {
   const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
   try {
     const id = parseInt(req.params.id, 10);
-    // Aparelho com pedido no outbox não some: o histórico do que ele mandou ao CW
-    // é auditoria, e a FK de PedidoTotemEnvio aponta para ele.
-    const envios = await prisma.pedidoTotemEnvio.count({ where: { empresaId, dispositivoId: id } });
-    if (envios > 0) return res.status(409).json({ erro: 'APARELHO_COM_PEDIDOS' });
-    const { count } = await prisma.dispositivo.deleteMany({ where: { id, empresaId, tipo: { in: TIPOS_APARELHO } } });
-    if (!count) return res.status(404).json({ error: 'Aparelho não encontrado.' });
-    res.json({ ok: true });
-  } catch (err) { console.error('[aparelhos DELETE]', err); res.status(500).json({ error: 'Erro ao excluir o aparelho.' }); }
+    // Aparelho com pedido no outbox não some: o histórico do que ele mandou ao CW é
+    // auditoria, e a FK de PedidoTotemEnvio aponta para ele. Conferir e apagar dentro
+    // da MESMA transação: senão um pedido entrando no meio transformaria o 409 honesto
+    // num 500 de violação de FK.
+    const fora = await prisma.$transaction(async (tx) => {
+      const envios = await tx.pedidoTotemEnvio.count({ where: { empresaId, dispositivoId: id } });
+      if (envios > 0) return { http: 409, corpo: { erro: 'APARELHO_COM_PEDIDOS' } };
+      const { count } = await tx.dispositivo.deleteMany({ where: { id, empresaId, tipo: { in: TIPOS_APARELHO } } });
+      if (!count) return { http: 404, corpo: { error: 'Aparelho não encontrado.' } };
+      return { http: 200, corpo: { ok: true } };
+    });
+    res.status(fora.http).json(fora.corpo);
+  } catch (err) {
+    // P2003 = a FK barrou o delete (pedido inserido na corrida): é o mesmo 409, não um 500.
+    if (err?.code === 'P2003') return res.status(409).json({ erro: 'APARELHO_COM_PEDIDOS' });
+    console.error('[aparelhos DELETE]', err); res.status(500).json({ error: 'Erro ao excluir o aparelho.' });
+  }
 });
 
 // Gera o código de pareamento (6 dígitos, 10 min, tentativas zeradas).
@@ -8499,18 +8514,17 @@ app.post('/api/aparelhos/:id/revogar', async (req, res) => {
   } catch (err) { console.error('[aparelhos revogar]', err); res.status(500).json({ error: 'Erro ao revogar.' }); }
 });
 
-// ===== Aparelhos (PÚBLICO — o tablet, sem login) =====
-// Estas rotas rodam FORA dos 3 gates e FORA do tenantStore (ver o app.use('/api') do
-// topo: tudo sob /public/ passa direto). Sem tenantStore a extension do Prisma NÃO
-// injeta empresaId: aqui todo where/update leva empresaId EXPLÍCITO — e ele vem do
-// APARELHO que o cookie resolveu, nunca do corpo da requisição. Nenhuma destas rotas
-// lê empresaId/clienteId/dispositivoId do body (aparelhos.js: filtroAparelhoDoCookie
-// e escopoEmpresa são as únicas fontes desses where; aparelhos.tenant.test.js).
-
-// Em dev (http://localhost) o cookie não pode ir com Secure, senão o navegador descarta.
-function cookieAparelhoSeguro(req) {
-  return process.env.NODE_ENV === 'production' || req.secure || req.get('x-forwarded-proto') === 'https';
-}
+// ===== INICIO ROTAS PUBLICAS DO APARELHO =====
+// (marcador fixo: aparelhos.tenant.test.js VARRE o código entre este comentário e o
+// FIM lá embaixo para provar que nenhuma linha daqui lê identidade do corpo da
+// requisição. Não renomeie nem apague os dois marcadores.)
+// Aparelhos (PÚBLICO — o tablet, sem login): estas rotas rodam FORA dos 3 gates e FORA
+// do tenantStore (ver o app.use('/api') do topo: tudo sob /public/ passa direto). Sem
+// tenantStore a extension do Prisma NÃO injeta empresaId: aqui todo where/update leva
+// empresaId EXPLÍCITO — e ele vem do APARELHO que o cookie resolveu, nunca do corpo da
+// requisição. O único construtor de where permitido é whereDoAparelho(aparelho, body)
+// (aparelhos.js), que recebe o corpo justamente para ignorá-lo; a identidade do próprio
+// aparelho vem de filtroAparelhoDoCookie.
 
 // Identidade do aparelho: SÓ o cookie (hash da credencial), ativo e do tipo do totem.
 async function resolverAparelhoPorCookie(req) {
@@ -8526,9 +8540,10 @@ async function exigirAparelho(req, res) {
   return ap;
 }
 
-// Loja do aparelho (nome + logo para a tela). O id vem do aparelho, ponto.
-function lojaDoAparelho(ap) {
-  return prisma.empresa.findUnique({ where: { id: escopoEmpresa(ap).empresaId }, select: { nome: true, logoDataUrl: true } });
+// Loja do aparelho (nome + logo para a tela). O id vem do aparelho, ponto — o corpo
+// entra na chamada só para atravessar o whereDoAparelho, que o descarta.
+function lojaDoAparelho(ap, body) {
+  return prisma.empresa.findUnique({ where: { id: whereDoAparelho(ap, body).empresaId }, select: { nome: true, logoDataUrl: true } });
 }
 const lojaPublica = (loja) => ({ nome: loja?.nome ?? null, logoDataUrl: loja?.logoDataUrl ?? null });
 
@@ -8549,7 +8564,7 @@ app.post('/api/public/aparelho/parear', async (req, res) => {
         const data = veredito.invalidar
           ? { pareamentoCodigo: null, pareamentoExpiraEm: null, pareamentoTentativas: 0 }
           : { pareamentoTentativas: { increment: 1 } };
-        await prisma.dispositivo.updateMany({ where: { id: disp.id, ...escopoEmpresa(disp) }, data });
+        await prisma.dispositivo.updateMany({ where: { id: disp.id, ...whereDoAparelho(disp, req.body) }, data });
       }
       return res.status(401).json({ erro: 'CODIGO_INVALIDO' });
     }
@@ -8557,13 +8572,18 @@ app.post('/api/public/aparelho/parear', async (req, res) => {
     // O update é condicionado ao código ainda estar lá: se dois tablets digitarem o
     // mesmo código ao mesmo tempo, só o primeiro pareia; o segundo leva CODIGO_INVALIDO.
     const { count } = await prisma.dispositivo.updateMany({
-      where: { id: disp.id, ...escopoEmpresa(disp), pareamentoCodigo: codigo },
+      where: { id: disp.id, ...whereDoAparelho(disp, req.body), pareamentoCodigo: codigo },
       data: { credencialHash: hash, pareadoEm: agora, pareamentoCodigo: null, pareamentoExpiraEm: null, pareamentoTentativas: 0 },
     });
     if (!count) return res.status(401).json({ erro: 'CODIGO_INVALIDO' });
-    const loja = await lojaDoAparelho(disp);
-    res.setHeader('Set-Cookie', cookieAparelho(credencial, { secure: cookieAparelhoSeguro(req) }));
-    res.json({ ok: true, aparelho: aparelhoPublico(disp), loja: lojaPublica(loja) });
+    // O pareamento JÁ está gravado: o cookie vai no header AGORA, antes de qualquer
+    // outra consulta. Se a busca da loja falhar, o aparelho sai pareado com loja: null
+    // (o /eu completa depois) — perder o pareamento por causa do nome da loja, não.
+    res.setHeader('Set-Cookie', cookieAparelho(credencial, { secure: cookieDeveSerSecure(req) }));
+    let loja = null;
+    try { loja = await lojaDoAparelho(disp, req.body); }
+    catch (e) { console.error('[public/aparelho parear loja]', e?.code ?? e?.name ?? 'erro'); }
+    res.json({ ok: true, aparelho: aparelhoPublico(disp), loja: loja ? lojaPublica(loja) : null });
   } catch (err) { console.error('[public/aparelho parear]', err?.code ?? err?.name ?? 'erro'); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
 });
 
@@ -8571,7 +8591,7 @@ app.post('/api/public/aparelho/parear', async (req, res) => {
 app.get('/api/public/aparelho/eu', async (req, res) => {
   try {
     const ap = await exigirAparelho(req, res); if (!ap) return;
-    const loja = await lojaDoAparelho(ap);
+    const loja = await lojaDoAparelho(ap, req.body);
     res.json({ aparelho: aparelhoPublico(ap), loja: lojaPublica(loja) });
   } catch (err) { console.error('[public/aparelho eu]', err?.code ?? err?.name ?? 'erro'); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
 });
@@ -8588,16 +8608,22 @@ app.post('/api/public/aparelho/heartbeat', async (req, res) => {
       userAgent: (req.get('user-agent') || '').slice(0, 200),
       ip: req.ip,
     };
-    await prisma.dispositivo.updateMany({ where: { id: ap.id, ...escopoEmpresa(ap) }, data: { ultimoHeartbeatEm: agora, heartbeatJson } });
+    await prisma.dispositivo.updateMany({ where: { id: ap.id, ...whereDoAparelho(ap, req.body) }, data: { ultimoHeartbeatEm: agora, heartbeatJson } });
     res.json({ ok: true, agora });
   } catch (err) { console.error('[public/aparelho heartbeat]', err?.code ?? err?.name ?? 'erro'); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
 });
 
-// Esquece o aparelho neste tablet (só apaga o cookie; a credencial do banco morre no revogar).
-app.post('/api/public/aparelho/sair', (req, res) => {
-  res.setHeader('Set-Cookie', cookieAparelhoLimpar());
-  res.json({ ok: true });
+// Esquece o aparelho neste tablet (só apaga o cookie; a credencial do banco morre no
+// revogar). Exige o cookie: quem não está pareado não tem nada para encerrar, e assim
+// esta rota também não serve de ponto de sondagem sem credencial.
+app.post('/api/public/aparelho/sair', async (req, res) => {
+  try {
+    const ap = await exigirAparelho(req, res); if (!ap) return;
+    res.setHeader('Set-Cookie', cookieAparelhoLimpar());
+    res.json({ ok: true });
+  } catch (err) { console.error('[public/aparelho sair]', err?.code ?? err?.name ?? 'erro'); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
 });
+// ===== FIM ROTAS PUBLICAS DO APARELHO =====
 
 // ===== Marcações + Painel (ADMIN) =====
 app.get('/api/ponto/marcacoes', async (req, res) => {
