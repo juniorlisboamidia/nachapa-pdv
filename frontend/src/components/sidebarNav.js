@@ -16,10 +16,10 @@ export const grupos = [
   {
     label: 'Produtos', icon: 'package', area: 'produtos',
     itens: [
-      { to: '/produtos', label: 'Ficha técnica', icon: 'ficha' },
-      { to: '/insumos', label: 'Insumos', icon: 'insumos' },
-      { to: '/estoque', label: 'Estoque', icon: 'analise' },
-      { to: '/fornecedores', label: 'Fornecedores', icon: 'empresa' },
+      { to: '/produtos', label: 'Ficha técnica', icon: 'clipboardList' },
+      { to: '/insumos', label: 'Insumos', icon: 'boxes' },
+      { to: '/estoque', label: 'Estoque', icon: 'warehouse' },
+      { to: '/fornecedores', label: 'Fornecedores', icon: 'truck' },
     ],
   },
   {
@@ -32,9 +32,9 @@ export const grupos = [
   {
     label: 'Marketing', icon: 'megaphone', area: 'marketing',
     itens: [
-      { to: '/marketing/grupo-vip', label: 'Grupo VIP', icon: 'marketing' },
+      { to: '/marketing/grupo-vip', label: 'Grupo VIP', icon: 'crown' },
       {
-        label: 'Avaliador', icon: 'avaliacao',
+        label: 'Avaliador', icon: 'star',
         itens: [
           { to: '/avaliacoes', label: 'Avaliação', icon: 'avaliacao' },
           { to: '/clientes', label: 'Clientes', icon: 'clientes' },
@@ -42,7 +42,7 @@ export const grupos = [
         ],
       },
       {
-        label: 'Indicação', icon: 'marketing',
+        label: 'Indicação', icon: 'userRoundPlus',
         itens: [
           { to: '/indicacao', label: 'Painel Geral', icon: 'dashboard', end: true },
           { to: '/indicacao/personalizacao', label: 'Personalização', icon: 'gestao' },
@@ -57,9 +57,9 @@ export const grupos = [
   {
     label: 'Dep. Pessoal', icon: 'users',
     itens: [
-      { to: '/rh/colaboradores', label: 'Colaboradores', icon: 'entregadores', area: 'ponto' },
+      { to: '/rh/colaboradores', label: 'Colaboradores', icon: 'usersRound', area: 'ponto' },
       {
-        label: 'Ponto Facial', icon: 'ponto', area: 'ponto',
+        label: 'Ponto Facial', icon: 'scanFace', area: 'ponto',
         itens: [
           { to: '/rh/ponto-facial/painel', label: 'Painel', icon: 'ponto' },
           { to: '/rh/ponto-facial/jornadas', label: 'Jornadas e Escalas', icon: 'calendario' },
@@ -71,7 +71,7 @@ export const grupos = [
         ],
       },
       {
-        label: 'Motoboys', icon: 'moto', area: 'motoboys',
+        label: 'Motoboys', icon: 'bike', area: 'motoboys',
         itens: [
           { to: '/escala-motoboys', label: 'Escala', icon: 'calendario' },
           { to: '/entregadores', label: 'Entregadores', icon: 'entregadores' },
@@ -80,7 +80,7 @@ export const grupos = [
         ],
       },
       {
-        label: 'Bonificação', icon: 'faturamento', area: 'bonificacao',
+        label: 'Bonificação', icon: 'trophy', area: 'bonificacao',
         itens: [
           { to: '/rh/bonificacao/mes', label: 'Mês atual', icon: 'calendario' },
           { to: '/rh/bonificacao/equipe', label: 'Equipe & Coins', icon: 'clientes' },
@@ -90,7 +90,7 @@ export const grupos = [
         ],
       },
       {
-        label: 'Banco de talentos', icon: 'clientes', area: 'talentos',
+        label: 'Banco de talentos', icon: 'userSearch', area: 'talentos',
         itens: [
           { to: '/rh/banco-de-talentos/banco', label: 'Cadastros', icon: 'clientes' },
           { to: '/rh/banco-de-talentos/vagas', label: 'Vagas abertas', icon: 'ficha' },

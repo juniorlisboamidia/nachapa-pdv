@@ -26,6 +26,22 @@ test('subitens de Ferramentas e Loja Digital com identidade própria', () => {
   assert.equal(icone('Loja Digital', 'Aparelhos'), 'cpu');
 });
 
+test('subitens de Marketing, Produtos e Dep. Pessoal com ícone semântico (Lucide)', () => {
+  const icones = (g) => Object.fromEntries(grupo(grupos, g).itens.map((n) => [n.label, n.icon]));
+  assert.deepEqual(icones('Marketing'), { 'Grupo VIP': 'crown', 'Avaliador': 'star', 'Indicação': 'userRoundPlus' });
+  assert.deepEqual(icones('Produtos'), { 'Ficha técnica': 'clipboardList', 'Insumos': 'boxes', 'Estoque': 'warehouse', 'Fornecedores': 'truck' });
+  assert.deepEqual(icones('Dep. Pessoal'), {
+    'Colaboradores': 'usersRound', 'Ponto Facial': 'scanFace', 'Motoboys': 'bike', 'Bonificação': 'trophy', 'Banco de talentos': 'userSearch',
+  });
+});
+
+test('nenhum ícone se repete entre os subitens de uma mesma categoria', () => {
+  for (const g of grupos) {
+    const usados = g.itens.map((n) => n.icon ?? n.iconImg).filter(Boolean);
+    assert.equal(new Set(usados).size, usados.length, `ícone repetido em "${g.label}": ${usados.join(', ')}`);
+  }
+});
+
 test('Produtos na ordem Ficha técnica, Insumos, Estoque, Fornecedores', () => {
   assert.deepEqual(labels(grupo(grupos, 'Produtos').itens), ['Ficha técnica', 'Insumos', 'Estoque', 'Fornecedores']);
 });
