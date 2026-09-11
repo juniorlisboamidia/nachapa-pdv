@@ -10,15 +10,14 @@
 // Fluxo: GET /eu → 200 monta o totem · 401 mostra o teclado do código.
 import { useCallback, useEffect, useState } from 'react'
 import { aparelhoApi } from '../services/api'
+import { mensagemErro } from '../components/totemCarrinho'
 import TotemQuiosque from './TotemQuiosque'
 
 const TECLAS = ['1', '2', '3', '4', '5', '6', '7', '8', '9']
 const TAMANHO = 6
-
-const MENSAGENS = {
-  CODIGO_INVALIDO: 'Código inválido ou expirado. Peça um novo código no PDV.',
-  MUITAS_TENTATIVAS: 'Muitas tentativas. Aguarde 10 minutos.',
-}
+// As frases dos códigos do §7 moram em UM lugar só (totemCarrinho.js): duas cópias do mesmo
+// texto viram duas frases diferentes na primeira vez que alguém melhorar uma delas.
+const CODIGOS_CONHECIDOS = ['CODIGO_INVALIDO', 'MUITAS_TENTATIVAS']
 
 export default function DispositivoPareamento() {
   const [estado, setEstado] = useState('carregando') // carregando | pareado | codigo
@@ -46,16 +45,20 @@ export default function DispositivoPareamento() {
 
   useEffect(() => { verificar() }, [verificar])
 
-  // Teclado físico também funciona (alguns tablets ficam com teclado bluetooth no balcão).
+  // Teclado físico (alguns tablets ficam com teclado bluetooth no balcão) tem de se comportar
+  // igual ao teclado da tela: dígito entra, o 6º ENVIA sozinho, Backspace apaga e Enter envia
+  // quando já há 6 dígitos. Por isso o handler chama `digitar`/`apagar` em vez de mexer no
+  // estado por conta própria — um caminho só, um comportamento só.
   useEffect(() => {
-    if (estado !== 'codigo') return undefined
+    if (estado !== 'codigo' || enviando) return undefined
     const aoTeclar = (ev) => {
-      if (/^[0-9]$/.test(ev.key)) setCodigo((c) => (c.length < TAMANHO ? c + ev.key : c))
-      else if (ev.key === 'Backspace') setCodigo((c) => c.slice(0, -1))
+      if (/^[0-9]$/.test(ev.key)) { ev.preventDefault(); digitar(ev.key) }
+      else if (ev.key === 'Backspace') { ev.preventDefault(); apagar() }
+      else if (ev.key === 'Enter' && codigo.length === TAMANHO) { ev.preventDefault(); parear(codigo) }
     }
     window.addEventListener('keydown', aoTeclar)
     return () => window.removeEventListener('keydown', aoTeclar)
-  }, [estado])
+  }, [estado, enviando, codigo]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function parear(valor) {
     if (enviando) return
@@ -69,7 +72,9 @@ export default function DispositivoPareamento() {
       verificar()
     } catch (e) {
       const cod = e?.response?.data?.erro
-      setErro(MENSAGENS[cod] ?? (e?.response ? 'Não foi possível conectar este aparelho. Tente de novo.' : 'Sem conexão com o sistema. Verifique a rede do tablet.'))
+      setErro(CODIGOS_CONHECIDOS.includes(cod)
+        ? mensagemErro(cod)
+        : (e?.response ? 'Não foi possível conectar este aparelho. Tente de novo.' : 'Sem conexão com o sistema. Verifique a rede do tablet.'))
       setCodigo('')
     } finally {
       setEnviando(false)
@@ -77,11 +82,18 @@ export default function DispositivoPareamento() {
   }
 
   function digitar(d) {
+    if (enviando || codigo.length >= TAMANHO) return
     setErro(null)
     const novo = (codigo + d).slice(0, TAMANHO)
     setCodigo(novo)
     // 6 dígitos = envia sozinho: ninguém precisa procurar um botão depois de digitar.
     if (novo.length === TAMANHO) parear(novo)
+  }
+
+  function apagar() {
+    if (enviando) return
+    setErro(null)
+    setCodigo((c) => c.slice(0, -1))
   }
 
   async function desconectar() {
@@ -155,7 +167,7 @@ export default function DispositivoPareamento() {
             type="button"
             className="ttm-tecla ttm-tecla-apagar"
             disabled={enviando || codigo.length === 0}
-            onClick={() => { setErro(null); setCodigo((c) => c.slice(0, -1)) }}
+            onClick={apagar}
           >
             Apagar
           </button>

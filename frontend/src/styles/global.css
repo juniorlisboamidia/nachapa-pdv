@@ -3434,7 +3434,9 @@ body.theme-dark .hb-table tr.ttm-linha-revisao:hover td { background: #3a2612; }
 .ttm-modo-emoji { font-size: 46px; line-height: 1; }
 .ttm-modo-titulo { font-size: 24px; font-weight: 850; }
 .ttm-modo-sub { font-size: 15.5px; color: #5c564d; }
-.ttm-rodape-aparelho { flex: 0 0 auto; text-align: center; font-size: 12px; color: #a09889; padding: 6px 0 10px; }
+/* Cores medidas sobre o creme #f4f1ea (não sobre branco): #5a534a = 6,6:1 e #4a443c = 8,4:1.
+   O cinza claro de antes ficava perto de 2:1 — some no fundo. */
+.ttm-rodape-aparelho { flex: 0 0 auto; text-align: center; font-size: 12px; color: #5a534a; padding: 6px 0 10px; }
 
 /* -- Avisos de tela cheia (fechada, sem catálogo, erro) ------------------- */
 .ttm-aviso-tela { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 14px; padding: 40px 24px; }
@@ -3590,6 +3592,7 @@ body.theme-dark .hb-table tr.ttm-linha-revisao:hover td { background: #3a2612; }
 
 .ttm-retry { display: flex; flex-direction: column; gap: 10px; }
 .ttm-retry-texto { font-size: 16px; color: #7c2d12; background: #fff7ed; border-radius: 12px; padding: 12px 14px; line-height: 1.5; }
+.ttm-retry-nota { font-size: 15px; color: #4a443c; text-align: center; }
 
 /* Sobreposição do "Confirmar": o cliente não pode tocar em mais nada enquanto o pedido
    está sendo criado — um segundo toque em outro lugar, no meio da chamada, é o começo
@@ -3629,7 +3632,7 @@ body.theme-dark .hb-table tr.ttm-linha-revisao:hover td { background: #3a2612; }
 .ttm-numero-ref { font-size: 40px; letter-spacing: 0.04em; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .ttm-resultado-texto { font-size: 18px; color: #4a453d; max-width: 520px; line-height: 1.55; }
 .ttm-resultado-total { font-size: 17px; font-weight: 700; color: #5c564d; margin-top: 4px; }
-.ttm-resultado-espera { font-size: 15.5px; color: #7a7268; margin-top: 10px; }
+.ttm-resultado-espera { font-size: 15.5px; color: #4a443c; margin-top: 10px; }
 .ttm-codigo-balcao {
   display: flex; flex-direction: column; gap: 4px; align-items: center; margin-top: 6px;
   background: #fff; border: 1.5px solid #e6e0d2; border-radius: 14px; padding: 12px 20px; font-size: 15.5px; color: #4a453d;

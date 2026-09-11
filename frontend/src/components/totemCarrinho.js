@@ -156,6 +156,39 @@ export function diffCotacao(linhasUI, linhasHub, totalLocal, totalHub) {
   return { alteradas, totalMudou: difere(totalLocal, totalHub) };
 }
 
+// Desfecho de um POST /pedido que NÃO deu 201/202 → o que a tela faz com ele.
+//
+// Esta é a regra mais caríssima do totem, e por isso vive aqui, testada: a pergunta é se o
+// pedido PODE ter sido criado no Cardápio Web. Quando pode, duas coisas têm de valer ao
+// mesmo tempo — a chave de idempotência SOBREVIVE (`novaChave:false`) e a tela TRAVA
+// (`travar:true`) num único botão de "tentar de novo". Qualquer caminho que gere chave nova
+// nesse estado vira um SEGUNDO pedido, cobrado do mesmo cliente.
+//
+// Determinístico (nada criado, §5.2/§7): todo 4xx, e os 503 de configuração/limite que o HUB
+// garante terem falhado ANTES de qualquer chamada ao CW. Ambíguo: rede, timeout e qualquer
+// outro 5xx — inclusive um 500 inesperado, porque "não sei" tem de resolver para o lado que
+// não cobra duas vezes.
+const DETERMINISTICOS_5XX = ['HUB_NAO_CONFIGURADO', 'HUB_SEM_PARTNER_KEY', 'HUB_CONFIG_INVALIDA', 'CW_RATE_LIMIT'];
+const COTACAO_409 = ['COTACAO_DIVERGENTE', 'COTACAO_EXPIRADA'];
+
+export function proximoEstadoAposFalha(erro) {
+  const e = erro && typeof erro === 'object' ? erro : {};
+  const codigo = String(e.codigo ?? '') || null;
+  const http = Number(e.http);
+  const ambiguo = { travar: true, novaChave: false, tela: 'revisar', codigo: codigo ?? 'HUB_INDISPONIVEL' };
+
+  // Sem resposta = rede/timeout: o POST pode ter chegado e o pedido pode existir.
+  if (!e.temResposta || !Number.isFinite(http)) return ambiguo;
+
+  // Cotação furada: o servidor gravou REJEITADO, então a chave morreu com ele — e o cliente
+  // volta para Revisar com o valor novo, não para uma tela de erro.
+  if (http === 409 && COTACAO_409.includes(codigo)) return { travar: false, novaChave: true, tela: 'revisar', codigo };
+
+  if (http >= 400 && http < 500) return { travar: false, novaChave: true, tela: 'erro', codigo: codigo ?? 'CORPO_INVALIDO' };
+  if (DETERMINISTICOS_5XX.includes(codigo)) return { travar: false, novaChave: true, tela: 'erro', codigo };
+  return ambiguo;
+}
+
 // Chave de idempotência de UMA confirmação (o backend exige /^[A-Za-z0-9_-]{8,64}$/).
 // Gerada uma vez por tentativa de confirmar e reenviada igual num retry manual: é ela
 // que impede que dois toques no botão criem dois pedidos no CW.
@@ -183,8 +216,8 @@ const MENSAGENS = {
   // Aparelho / pareamento
   APARELHO_NAO_PAREADO: 'Este aparelho não está mais conectado à loja. Chame um atendente.',
   APARELHO_NAO_E_TOTEM: 'Este aparelho não faz pedidos. Chame um atendente.',
-  CODIGO_INVALIDO: 'Código inválido ou expirado. Peça um novo código no balcão.',
-  MUITAS_TENTATIVAS: 'Muitas tentativas. Aguarde 10 minutos e tente de novo.',
+  CODIGO_INVALIDO: 'Código inválido ou expirado. Peça um novo código no PDV.',
+  MUITAS_TENTATIVAS: 'Muitas tentativas. Aguarde 10 minutos.',
   // Loja e modo
   LOJA_INATIVA: 'A loja não está atendendo pelo totem agora. Chame um atendente.',
   LOJA_FECHADA: 'A loja está fechada neste momento. Chame um atendente.',

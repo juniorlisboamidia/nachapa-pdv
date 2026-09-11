@@ -20,7 +20,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { aparelhoApi } from '../services/api'
 import {
   podeAdicionarOpcao, grupoSatisfeito, itemPronto, subtotalLocal,
-  montarCarrinho, diffCotacao, chaveNova, mensagemErro,
+  montarCarrinho, diffCotacao, chaveNova, mensagemErro, proximoEstadoAposFalha,
 } from '../components/totemCarrinho'
 
 const VERSAO = 'totem-1.0'
@@ -75,12 +75,13 @@ function Cabecalho({ loja, titulo, aoVoltar, direita }) {
   )
 }
 
-function TelaAviso({ emoji, titulo, texto, acao }) {
+function TelaAviso({ emoji, titulo, texto, lista, acao }) {
   return (
     <div className="ttm-tela ttm-aviso-tela">
       <div className="ttm-aviso-emoji" aria-hidden="true">{emoji}</div>
       <h1 className="ttm-aviso-titulo">{titulo}</h1>
       <p className="ttm-aviso-texto">{texto}</p>
+      {lista}
       {acao}
     </div>
   )
@@ -143,7 +144,21 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
   // A chave de idempotência da confirmação em curso. Ref, não state: ela não desenha nada
   // e não pode ser perdida num re-render no meio da chamada.
   const chaveRef = useRef(null)
+  // Espelho em ref do "confirmação em dúvida": `revisar` e `invalidarCotacao` são as duas
+  // portas que zeram a chave, e as duas precisam recusar-se a rodar nesse estado — sem
+  // depender de state, que chega tarde dentro de um callback já em voo.
+  const travadoRef = useRef(false)
+  // Cotação: `cotandoRef` guarda o corpo em voo (mata o duplo toque) e `cotarSeqRef` numera
+  // as chamadas para que só a ÚLTIMA resposta pinte a tela — sem isso, uma cotação antiga
+  // chegando atrasada sobrescreveria o preço novo (last-write-wins com o valor errado).
+  const cotandoRef = useRef(null)
+  const cotarSeqRef = useRef(0)
   const inatividadeRef = useRef(null)
+  // Confirmação em DÚVIDA (timeout/rede/5xx inesperado): o pedido pode existir no Cardápio
+  // Web. Enquanto isto for verdade a tela fica travada num único botão e a chave sobrevive.
+  const travado = !!erroEnvio?.podeRepetir
+  const cotacaoTotal = cotacao?.total ?? null
+
   // Fatias do resultado usadas como dependência de efeito (ver os dois efeitos abaixo).
   const statusResultado = resultado?.status ?? null
   const displayResultado = resultado?.cwDisplayId ?? null
@@ -152,7 +167,14 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
   const telaRef = useRef('inicio')
   useEffect(() => { telaRef.current = tela }, [tela])
 
-  const loja = boot?.loja ?? lojaInicial ?? null
+  // MESCLA, não substitui: o bootstrap manda `logo` e o /eu manda `logoDataUrl`. Trocar um
+  // objeto pelo outro perderia a logo (ou o nome) que só a outra rota conhece.
+  const loja = useMemo(() => {
+    const a = lojaInicial ?? {}
+    const b = boot?.loja ?? {}
+    if (!lojaInicial && !boot?.loja) return null
+    return { ...a, ...b, nome: b.nome ?? a.nome ?? null, logo: b.logo ?? a.logo ?? null, logoDataUrl: a.logoDataUrl ?? b.logoDataUrl ?? null }
+  }, [lojaInicial, boot])
   const metodos = useMemo(() => (Array.isArray(boot?.metodos) ? boot.metodos : []), [boot])
   const orderTypes = useMemo(() => (Array.isArray(boot?.orderTypes) ? boot.orderTypes.filter((t) => MODOS[t]) : []), [boot])
   const categorias = useMemo(() => (Array.isArray(boot?.catalogo?.categorias) ? boot.catalogo.categorias : []), [boot])
@@ -202,6 +224,8 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
   // nunca herda a confirmação do anterior.
   const reiniciar = useCallback((recarregar = false) => {
     chaveRef.current = null
+    travadoRef.current = false
+    cotandoRef.current = null
     setCarrinho([])
     setAberto(null)
     setMetodoId(null)
@@ -220,6 +244,9 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
   // Qualquer mudança de carrinho / modo / método invalida a cotação assinada E a chave:
   // a partir daí é OUTRO pedido, e reusar a chave devolveria o registro do anterior.
   const invalidarCotacao = useCallback(() => {
+    // Confirmação em dúvida: NADA invalida a chave. É ela que garante que o "tentar de novo"
+    // devolva o pedido que talvez já exista, em vez de criar um segundo.
+    if (travadoRef.current) return
     chaveRef.current = null
     setCotacao(null)
     setErroCotar(null)
@@ -228,10 +255,14 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
   }, [])
 
   // ── Inatividade: 90 s em qualquer tela que não seja o Início → reset ──────
+  // Os 90 s são folgados de propósito em relação aos 65 s de timeout do axios no POST
+  // /pedido: nenhuma confirmação em voo pode ser interrompida por este relógio. E enquanto
+  // `enviando` ou `travado` (confirmação em dúvida) o reset NÃO é armado — ele zera a chave
+  // de idempotência, e zerar a chave de um pedido que talvez exista é como se cria o segundo.
   useEffect(() => {
     const armar = () => {
       clearTimeout(inatividadeRef.current)
-      if (tela === 'inicio') return
+      if (tela === 'inicio' || enviando || travado) return
       inatividadeRef.current = setTimeout(() => reiniciar(true), MS_INATIVIDADE)
     }
     armar()
@@ -241,7 +272,24 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
       clearTimeout(inatividadeRef.current)
       eventos.forEach((ev) => window.removeEventListener(ev, armar))
     }
-  }, [tela, reiniciar])
+  }, [tela, enviando, travado, reiniciar])
+
+  // Confirmação em dúvida e o cliente foi embora: em vez de voltar ao Início (que apagaria a
+  // dúvida em silêncio), a tela vira RESULTADO com o texto de "estamos confirmando" e manda
+  // procurar o balcão. Nenhuma confirmação em dúvida desaparece sem alguém ser avisado.
+  useEffect(() => {
+    if (!travado) return undefined
+    const t = setTimeout(() => {
+      setResultado({ status: 'AMBIGUO', envioId: null, cwDisplayId: null, referencia: null, total: cotacaoTotal })
+      setTela('resultado')
+      // A dúvida foi ENTREGUE (a tela manda procurar o balcão, e a linha ambígua já está no
+      // Totem › Pedidos do admin): a trava sai, e daí o reset normal de 90 s pode devolver o
+      // totem ao Início em vez de deixá-lo parado nesta tela para sempre.
+      travadoRef.current = false
+      setErroEnvio(null)
+    }, MS_INATIVIDADE)
+    return () => clearTimeout(t)
+  }, [travado, cotacaoTotal])
 
   // No 202 o botão "Novo pedido" só aparece depois de 20 s: dá tempo de o cliente LER que
   // o pedido está sendo confirmado e anotar o código, em vez de apagar a tela num toque.
@@ -355,6 +403,15 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
 
   // ── Revisar: a cotação do HUB ─────────────────────────────────────────────
   const revisar = useCallback(async () => {
+    // Confirmação em dúvida: recotar geraria chave nova, e chave nova vira um SEGUNDO pedido.
+    // A tela travada só oferece "tentar confirmar de novo"; esta porta fica fechada.
+    if (travadoRef.current) return
+    const corpo = { orderType, carrinho: montarCarrinho(carrinho), metodoId }
+    const assinatura = JSON.stringify(corpo)
+    if (cotandoRef.current === assinatura) return // duplo toque no mesmo botão
+    cotandoRef.current = assinatura
+    const seq = cotarSeqRef.current + 1
+    cotarSeqRef.current = seq
     setTela('revisar')
     setCotando(true)
     setErroCotar(null)
@@ -362,20 +419,21 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
     setErroEnvio(null)
     // Cotação nova = confirmação nova: a chave antiga não vale mais.
     chaveRef.current = null
-    const corpo = { orderType, carrinho: montarCarrinho(carrinho), metodoId }
     try {
       const { data } = await aparelhoApi.post('/public/aparelho/totem/cotar', corpo)
+      if (seq !== cotarSeqRef.current) return // resposta velha: quem manda é a última cotação
       setCotacao(data)
       const totalLocal = carrinho.reduce((s, l) => s + subtotalLocal(l), 0)
       const d = diffCotacao(carrinho, data?.linhas, totalLocal, data?.total)
       setAvisoPrecos(d.alteradas.length || d.totalMudou ? d : null)
     } catch (e) {
+      if (seq !== cotarSeqRef.current) return
       const cod = codigoDe(e)
       if (cod === 'APARELHO_NAO_PAREADO') { onNaoPareado?.(); return }
       setCotacao(null)
       setErroCotar({ codigo: cod, detalhes: Array.isArray(e?.response?.data?.detalhes) ? e.response.data.detalhes : [] })
     } finally {
-      setCotando(false)
+      if (seq === cotarSeqRef.current) { cotandoRef.current = null; setCotando(false) }
     }
   }, [orderType, carrinho, metodoId, onNaoPareado])
 
@@ -386,6 +444,8 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
     // falha de rede), é reenviada IGUAL: é ela que faz o servidor devolver o mesmo
     // registro em vez de criar um segundo pedido no Cardápio Web.
     if (!chaveRef.current) chaveRef.current = chaveNova()
+    // A tentativa está em voo: sai do estado travado (o desfecho abaixo decide se volta).
+    travadoRef.current = false
     setEnviando(true)
     setErroEnvio(null)
     try {
@@ -396,6 +456,8 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
         metodoId,
         cotacao: cotacao.cotacao,
       }, { timeout: 65_000 })
+      // Desfecho definitivo (201/202): a dúvida acabou, a tela destrava.
+      travadoRef.current = false
       setResultado({
         status: data?.status ?? 'ENVIANDO',
         envioId: data?.envioId,
@@ -408,28 +470,34 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
       const resp = e?.response
       const cod = resp?.data?.erro ?? null
       if (cod === 'APARELHO_NAO_PAREADO') { onNaoPareado?.(); return }
-      // 409 de cotação: o preço mudou no cardápio entre revisar e confirmar. Recota e
-      // volta para Revisar com o aviso — e com chave NOVA, porque o registro anterior
-      // já ficou gravado como recusado.
-      if (resp?.status === 409 && (cod === 'COTACAO_DIVERGENTE' || cod === 'COTACAO_EXPIRADA')) {
-        chaveRef.current = null
+      // Quem decide se o pedido PODE existir é a regra pura (testada), não esta função:
+      // proximoEstadoAposFalha devolve { travar, novaChave, tela, codigo }.
+      const r = proximoEstadoAposFalha({ temResposta: !!resp, http: resp?.status, codigo: cod })
+      travadoRef.current = r.travar
+      if (r.novaChave) chaveRef.current = null
+      const detalhes = Array.isArray(resp?.data?.detalhes) ? resp.data.detalhes : []
+
+      // 409 de cotação: o preço mudou entre revisar e confirmar. Recota (a chave já foi
+      // zerada acima, porque o registro anterior ficou gravado como recusado) e volta para
+      // Revisar com o aviso de preços.
+      if (r.tela === 'revisar' && r.novaChave) {
         setEnviando(false)
         await revisar()
         setAvisoPrecos((a) => a ?? { alteradas: [], totalMudou: true })
-        setErroEnvio({ codigo: cod, podeRepetir: false })
+        setErroEnvio({ codigo: r.codigo, podeRepetir: false, detalhes })
         return
       }
-      if (resp && resp.status >= 400 && resp.status < 500) {
-        // Recusa determinística (nada foi criado): a chave morreu com o registro.
-        chaveRef.current = null
-        setErroEnvio({ codigo: cod ?? 'CORPO_INVALIDO', podeRepetir: false, detalhes: Array.isArray(resp.data?.detalhes) ? resp.data.detalhes : [] })
+      if (r.tela === 'erro') {
+        // Recusa determinística (está provado que nada foi criado): a chave morreu com o
+        // registro e o cliente pode refazer do zero, sem risco de pedido em dobro.
+        setErroEnvio({ codigo: r.codigo, podeRepetir: false, detalhes })
         setTela('erro')
         return
       }
-      // Sem resposta (rede/timeout): o pedido PODE ter sido criado. A única coisa que a
-      // tela oferece é reenviar a MESMA chave — o servidor devolve o registro existente
-      // em vez de criar outro pedido.
-      setErroEnvio({ codigo: cod ?? 'HUB_INDISPONIVEL', podeRepetir: true })
+      // AMBÍGUO — rede, timeout ou 5xx inesperado: o pedido PODE ter sido criado. A tela
+      // fica travada em Revisar, com um único botão que reenvia a MESMA chave; o servidor
+      // devolve o registro existente em vez de criar outro pedido.
+      setErroEnvio({ codigo: r.codigo, podeRepetir: true, detalhes })
     } finally {
       setEnviando(false)
     }
@@ -567,6 +635,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
     conteudo = (
       <>
         <Cabecalho loja={loja} titulo={aberto.item.nome} aoVoltar={() => { setAberto(null); setTela(carrinho.length ? 'carrinho' : 'catalogo') }} />
+        {banner}
         <div className="ttm-tela ttm-item">
           <FotoItem src={aberto.item.imagem} alt={aberto.item.nome} />
           <div className="ttm-item-cabeca">
@@ -712,6 +781,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
     conteudo = (
       <>
         <Cabecalho loja={loja} titulo="Forma de pagamento" aoVoltar={() => setTela('carrinho')} />
+        {banner}
         <div className="ttm-tela ttm-pagamento">
           <p className="ttm-pagamento-aviso">
             <strong>Você paga no balcão ao retirar.</strong> Nada é cobrado aqui no totem — escolha só como vai pagar,
@@ -756,7 +826,10 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
     const alteradas = avisoPrecos?.alteradas ?? []
     conteudo = (
       <>
-        <Cabecalho loja={loja} titulo="Confira seu pedido" aoVoltar={enviando ? undefined : () => setTela('carrinho')} />
+        {/* Travada (confirmação em dúvida): sem Voltar. Voltar levaria a uma nova cotação,
+            nova cotação gera chave nova, e chave nova cria um SEGUNDO pedido. */}
+        <Cabecalho loja={loja} titulo="Confira seu pedido" aoVoltar={(enviando || travado) ? undefined : () => setTela('carrinho')} />
+        {banner}
         <div className="ttm-tela ttm-revisar">
           {cotando ? (
             <div className="ttm-centrado"><Spinner /><div className="ttm-carregando-txt">Calculando o valor do seu pedido…</div></div>
@@ -789,7 +862,9 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
               )}
               <div className="ttm-revisar-modo">
                 {MODOS[orderType]?.titulo} · {metodoEscolhido ? nomeMetodo(metodoEscolhido) : '—'}
-                <button type="button" className="ttm-btn-link" disabled={enviando} onClick={() => setTela('pagamento')}>trocar pagamento</button>
+                {!travado && (
+                  <button type="button" className="ttm-btn-link" disabled={enviando} onClick={() => setTela('pagamento')}>trocar pagamento</button>
+                )}
               </div>
               {linhas.map((l, i) => {
                 const mudou = alteradas.some((id) => String(id) === String(l.itemId))
@@ -818,15 +893,16 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
               <span>Total</span>
               <strong className={avisoPrecos?.totalMudou ? 'mudou' : undefined}>{moeda(cotacao?.total)}</strong>
             </div>
-            {erroEnvio?.podeRepetir ? (
+            {travado ? (
               <div className="ttm-retry">
                 <p className="ttm-retry-texto">
                   Não conseguimos falar com o sistema. <strong>Seu pedido pode já ter sido registrado.</strong>{' '}
-                  Toque em “Tentar de novo” — não vai sair pedido em dobro.
+                  Toque no botão abaixo — não vai sair pedido em dobro.
                 </p>
                 <button type="button" className="ttm-btn ttm-btn-primario ttm-btn-largo" disabled={enviando} onClick={confirmar}>
-                  {enviando ? <><Spinner claro /> Enviando…</> : 'Tentar de novo'}
+                  {enviando ? <><Spinner claro /> Enviando…</> : 'Tentar confirmar de novo'}
                 </button>
+                <p className="ttm-retry-nota">Se preferir, chame um atendente.</p>
               </div>
             ) : (
               <button type="button" className="ttm-btn ttm-btn-primario ttm-btn-largo" disabled={enviando || !cotacao?.cotacao} onClick={confirmar}>
@@ -847,11 +923,22 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
   }
 
   if (tela === 'erro') {
+    // O `detalhes` do 422 diz QUAL linha o servidor recusou. Repetir só a frase geral deixaria
+    // o cliente adivinhando qual item tirar do carrinho.
+    const detalhes = Array.isArray(erroEnvio?.detalhes) ? erroEnvio.detalhes : []
     conteudo = (
       <TelaAviso
         emoji="⚠️"
         titulo="Não foi possível registrar o pedido"
         texto={mensagemErro(erroEnvio?.codigo)}
+        lista={detalhes.length > 0 ? (
+          <ul className="ttm-erro-lista">
+            {detalhes.map((d, i) => {
+              const nome = carrinho.find((l) => String(l.item.id) === String(d.itemId))?.item?.nome
+              return <li key={`${d.codigo ?? d.campo ?? 'd'}-${i}`}>{nome ? <strong>{nome}: </strong> : null}{mensagemErro(d.codigo)}</li>
+            })}
+          </ul>
+        ) : null}
         acao={
           <div className="ttm-rodape-botoes">
             <button type="button" className="ttm-btn ttm-btn-secundario" onClick={() => { setErroEnvio(null); setTela('carrinho') }}>Voltar</button>
@@ -891,13 +978,23 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
             <p className="ttm-resultado-texto">Apresente este código no balcão:</p>
             <div className="ttm-numero ttm-numero-ref">{resultado.referencia}</div>
           </>
-        ) : (
+        ) : resultado.referencia ? (
           <>
             <div className="ttm-resultado-rotulo">Estamos confirmando seu pedido</div>
             <p className="ttm-resultado-texto">
               Apresente este código no balcão e o atendente confirma para você. <strong>Não faça o pedido de novo.</strong>
             </p>
             <div className="ttm-numero ttm-numero-ref">{resultado.referencia}</div>
+          </>
+        ) : (
+          // Sem código: a confirmação ficou em dúvida antes de o servidor devolver a
+          // referência. Não há o que apresentar — o que existe é o balcão.
+          <>
+            <div className="ttm-resultado-rotulo">Estamos confirmando seu pedido</div>
+            <p className="ttm-resultado-texto">
+              <strong>Procure o balcão.</strong> O atendente confirma o seu pedido.{' '}
+              <strong>Não faça o pedido de novo.</strong>
+            </p>
           </>
         )}
         <div className="ttm-resultado-total">Total {moeda(resultado.total)} · pague no balcão</div>

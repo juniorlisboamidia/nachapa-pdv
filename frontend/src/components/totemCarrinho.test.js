@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import {
   podeAdicionarOpcao, grupoSatisfeito, itemPronto, subtotalLocal,
   montarCarrinho, diffCotacao, chaveNova, mensagemErro, precoEmVigor,
+  proximoEstadoAposFalha,
 } from './totemCarrinho.js';
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
@@ -215,6 +216,84 @@ test('diffCotacao: alteradas não repete o mesmo itemId', () => {
 test('diffCotacao aguenta entrada vazia/inválida sem quebrar', () => {
   assert.deepEqual(diffCotacao([], [], 0, 0), { alteradas: [], totalMudou: false });
   assert.deepEqual(diffCotacao(null, null, null, null), { alteradas: [], totalMudou: false });
+});
+
+// ── proximoEstadoAposFalha ──────────────────────────────────────────────────
+// A regra mais caríssima da tela: decidir, depois de um POST /pedido que não deu 201/202,
+// se o pedido PODE existir no Cardápio Web. Se puder, a chave de idempotência tem de
+// sobreviver (`novaChave:false`) e a tela tem de travar (`travar:true`) — porque qualquer
+// caminho que gere chave nova vira um SEGUNDO pedido para o mesmo cliente.
+test('timeout / rede: trava a tela e PRESERVA a chave (o pedido pode existir)', () => {
+  assert.deepEqual(proximoEstadoAposFalha({ temResposta: false }), {
+    travar: true, novaChave: false, tela: 'revisar', codigo: 'HUB_INDISPONIVEL',
+  });
+  assert.deepEqual(proximoEstadoAposFalha({}), {
+    travar: true, novaChave: false, tela: 'revisar', codigo: 'HUB_INDISPONIVEL',
+  });
+});
+
+test('503 HUB_NAO_CONFIGURADO é determinístico: nada criado, chave nova, tela de erro', () => {
+  assert.deepEqual(proximoEstadoAposFalha({ temResposta: true, http: 503, codigo: 'HUB_NAO_CONFIGURADO' }), {
+    travar: false, novaChave: true, tela: 'erro', codigo: 'HUB_NAO_CONFIGURADO',
+  });
+});
+
+test('503 HUB_SEM_PARTNER_KEY / HUB_CONFIG_INVALIDA / CW_RATE_LIMIT também são determinísticos', () => {
+  for (const codigo of ['HUB_SEM_PARTNER_KEY', 'HUB_CONFIG_INVALIDA', 'CW_RATE_LIMIT']) {
+    assert.deepEqual(proximoEstadoAposFalha({ temResposta: true, http: 503, codigo }), {
+      travar: false, novaChave: true, tela: 'erro', codigo,
+    }, codigo);
+  }
+});
+
+test('409 COTACAO_* volta para Revisar com chave nova (o registro anterior ficou recusado)', () => {
+  for (const codigo of ['COTACAO_DIVERGENTE', 'COTACAO_EXPIRADA']) {
+    assert.deepEqual(proximoEstadoAposFalha({ temResposta: true, http: 409, codigo }), {
+      travar: false, novaChave: true, tela: 'revisar', codigo,
+    }, codigo);
+  }
+});
+
+test('422 determinístico: chave nova e tela de erro', () => {
+  assert.deepEqual(proximoEstadoAposFalha({ temResposta: true, http: 422, codigo: 'CW_RECUSOU' }), {
+    travar: false, novaChave: true, tela: 'erro', codigo: 'CW_RECUSOU',
+  });
+  // 4xx sem código no corpo continua determinístico (o servidor recusou a forma do pedido).
+  assert.deepEqual(proximoEstadoAposFalha({ temResposta: true, http: 400 }), {
+    travar: false, novaChave: true, tela: 'erro', codigo: 'CORPO_INVALIDO',
+  });
+});
+
+test('409 que NÃO é de cotação segue determinístico, mas em tela de erro', () => {
+  assert.deepEqual(proximoEstadoAposFalha({ temResposta: true, http: 409, codigo: 'CLIENTE_SEM_CW' }), {
+    travar: false, novaChave: true, tela: 'erro', codigo: 'CLIENTE_SEM_CW',
+  });
+});
+
+test('5xx desconhecido (500 ERRO_INTERNO, 502) é AMBÍGUO: trava e preserva a chave', () => {
+  assert.deepEqual(proximoEstadoAposFalha({ temResposta: true, http: 500, codigo: 'ERRO_INTERNO' }), {
+    travar: true, novaChave: false, tela: 'revisar', codigo: 'ERRO_INTERNO',
+  });
+  assert.deepEqual(proximoEstadoAposFalha({ temResposta: true, http: 502 }), {
+    travar: true, novaChave: false, tela: 'revisar', codigo: 'HUB_INDISPONIVEL',
+  });
+});
+
+test('nenhum desfecho que trava pede chave nova (invariante: travar ⇒ !novaChave)', () => {
+  const casos = [
+    { temResposta: false },
+    { temResposta: true, http: 500, codigo: 'ERRO_INTERNO' },
+    { temResposta: true, http: 503, codigo: 'HUB_INDISPONIVEL' },
+    { temResposta: true, http: 503, codigo: 'HUB_NAO_CONFIGURADO' },
+    { temResposta: true, http: 422, codigo: 'CW_RECUSOU' },
+    { temResposta: true, http: 409, codigo: 'COTACAO_EXPIRADA' },
+  ];
+  for (const c of casos) {
+    const r = proximoEstadoAposFalha(c);
+    assert.ok(!(r.travar && r.novaChave), JSON.stringify(c));
+    assert.ok(['revisar', 'erro'].includes(r.tela), JSON.stringify(c));
+    assert.equal(typeof mensagemErro(r.codigo), 'string');
+  }
 });
 
 // ── chaveNova ───────────────────────────────────────────────────────────────
