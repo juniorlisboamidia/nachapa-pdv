@@ -9,7 +9,11 @@ import { Ico } from './icones'
 //
 // Sem foto ambiente (spec §6.A): o bootstrap entrega `loja = { nome, logo }` e
 // nada mais. O que preenche o preto é textura de listra e a própria marca.
-export default function TelaInicio({ loja, aparelho, modos, aoEscolher }) {
+//
+// O nome do aparelho NÃO aparece: quem está na frente do totem é cliente, e
+// "Totem de teste" no vidro é informação de bastidor. Quem precisa saber de qual
+// tablet se trata tem a tela Aparelhos, no admin.
+export default function TelaInicio({ loja, modos, aoEscolher }) {
   const um = modos.length === 1
   const logo = loja?.logo || loja?.logoDataUrl || null
   const inicial = String(loja?.nome ?? '').trim().charAt(0).toUpperCase() || '•'
@@ -47,9 +51,6 @@ export default function TelaInicio({ loja, aparelho, modos, aoEscolher }) {
 
       <div className="tq-inicio-rodape">
         <span className="tq-inicio-balcao">Pagamento no balcão, na retirada.</span>
-        {/* Nome do aparelho só aqui: ajuda a equipe a saber de qual tablet se fala
-            e não polui a tela enquanto o cliente escolhe. */}
-        {aparelho?.nome ? <span className="tq-inicio-pe">{aparelho.nome}</span> : null}
       </div>
     </div>
   )

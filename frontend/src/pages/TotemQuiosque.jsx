@@ -77,7 +77,7 @@ const gruposVisiveisDe = (linha) => (
 // ── Blocos de UI pequenos ───────────────────────────────────────────────────
 
 // ════════════════════════════════════════════════════════════════════════════
-export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoPareado }) {
+export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
   // Bootstrap
   const [boot, setBoot] = useState(null)
   const [bootErro, setBootErro] = useState(null)
@@ -621,7 +621,6 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
     conteudo = (
       <TelaInicio
         loja={loja}
-        aparelho={aparelho}
         modos={orderTypes.map((t) => ({ id: t, ...MODOS[t] }))}
         aoEscolher={escolherModo}
       />

@@ -107,11 +107,18 @@
    ocupar o espaço que o alvo de produção tem de sobra. */
 @media (min-width: 900px) { .tq-raiz { --tq-lado-l: clamp(210px, 21vw, 240px); } }
 
-.tq-raiz *,
-.tq-raiz *::before,
-.tq-raiz *::after { box-sizing: border-box; }
+/* RESET COM ESPECIFICIDADE ZERO.
+   `:where()` existe aqui por um motivo caro: `.tq-raiz button` tem
+   especificidade (0,1,1) e vencia TODA classe de componente (0,1,0). Na prática
+   `background: none` e `color: inherit` anulavam o amarelo de todo CTA, a borda
+   do botão secundário, o branco do card de produto e o fundo do card de opção —
+   sobrava só a sombra, que nenhum reset toca. Era esse o motivo de "os botões
+   não parecem botões". Pelo mesmo caminho, `p` e `ul` zeravam as margens que os
+   componentes pediam.
+   Dentro de `:where()` o seletor pesa zero, então qualquer classe abaixo vence. */
+:where(.tq-raiz *, .tq-raiz *::before, .tq-raiz *::after) { box-sizing: border-box; }
 
-.tq-raiz button {
+:where(.tq-raiz button) {
   font: inherit;
   color: inherit;
   background: none;
@@ -119,9 +126,9 @@
   cursor: pointer;
 }
 .tq-raiz :focus-visible { outline: 3px solid var(--tq-preto); outline-offset: 3px; }
-.tq-raiz ul { list-style: none; margin: 0; padding: 0; }
-.tq-raiz h1, .tq-raiz h2, .tq-raiz h3 { margin: 0; }
-.tq-raiz p { margin: 0; }
+:where(.tq-raiz ul) { list-style: none; margin: 0; padding: 0; }
+:where(.tq-raiz h1, .tq-raiz h2, .tq-raiz h3) { margin: 0; }
+:where(.tq-raiz p) { margin: 0; }
 
 /* -- Papéis de tipografia (spec §5.2) --------------------------------------
    Archivo só nos papéis de display; corpo na pilha do sistema. */
@@ -294,11 +301,8 @@
 .tq-modo-t { font-size: clamp(26px, 3.6vw, 48px); letter-spacing: 0.01em; text-transform: uppercase; line-height: 1; }
 .tq-modo-s { font-size: clamp(15px, 1.7vw, 21px); opacity: 0.66; }
 
-.tq-inicio-rodape {
-  display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap;
-}
+.tq-inicio-rodape { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
 .tq-inicio-balcao { color: var(--tq-texto-claro); font-size: clamp(15px, 1.7vw, 20px); }
-.tq-inicio-pe { color: #8b8574; font-size: 13px; }
 
 /* ═══ V3 — catálogo: sidebar de categorias e grade de produtos ═════════════ */
 

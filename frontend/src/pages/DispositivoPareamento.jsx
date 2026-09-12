@@ -150,7 +150,7 @@ export default function DispositivoPareamento() {
 
   if (estado === 'pareado' && sessao?.aparelho) {
     if (sessao.aparelho.tipo === 'TOTEM') {
-      return <TotemQuiosque aparelho={sessao.aparelho} loja={sessao.loja} onNaoPareado={verificar} />
+      return <TotemQuiosque loja={sessao.loja} onNaoPareado={verificar} />
     }
     // TV_INDOOR: o aparelho está conectado, mas a tela dele é de outra fase.
     return (
