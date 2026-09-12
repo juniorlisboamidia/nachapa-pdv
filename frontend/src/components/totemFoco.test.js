@@ -5,7 +5,7 @@
 // que mais incomoda num totem: a tela se mexer sozinha na hora errada.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { atingiuMax, proximoFoco } from './totemFoco.js';
+import { atingiuMax, proximoFoco, destinoDeRolagem } from './totemFoco.js';
 
 const g = (id, extra = {}) => ({ id, nome: `Grupo ${id}`, min: 0, max: null, status: 'ACTIVE', opcoes: [], ...extra });
 const sel = (...ids) => ids.map((id) => ({ opcaoId: id, qtd: 1 }));
@@ -56,7 +56,7 @@ test('SUMMABLE conta quantidade, não número de linhas', () => {
   assert.equal(atingiuMax(grupo, [{ opcaoId: 10, qtd: 1 }], [{ opcaoId: 10, qtd: 2 }]), false);
 });
 
-test('max 0 é teto de verdade e não dispara nada', () => {
+test('grupo com teto 0 nunca avança', () => {
   assert.equal(atingiuMax(g(1, { min: 0, max: 0 }), [], []), false);
 });
 
@@ -95,7 +95,43 @@ test('id em string casa com id numérico do catálogo', () => {
   assert.deepEqual(proximoFoco(COMBO, '964820'), { tipo: 'GRUPO', id: 964821 });
 });
 
-test('grupo que não está na lista não move a tela para lugar nenhum', () => {
+test('grupo fora da lista manda o foco para o botão, não para outro grupo', () => {
   assert.deepEqual(proximoFoco(COMBO, 999), { tipo: 'CTA' });
   assert.deepEqual(proximoFoco(null, 1), { tipo: 'CTA' });
+});
+
+// ── destinoDeRolagem ────────────────────────────────────────────────────────
+// O defeito que estes testes fecham: a conta antiga somava a altura do cabeçalho
+// (o offsetParent dos blocos é a raiz, não o container rolável) e parava ~96px
+// abaixo do grupo, escondendo o nome e a regra dele.
+test('alvo abaixo da dobra: rola até ele, com a margem', () => {
+  const d = destinoDeRolagem({ topoRelativo: 800, alturaAlvo: 300, scrollAtual: 0, alturaVisivel: 900 });
+  assert.equal(d, 784);
+});
+
+test('alvo inteiro visível: não rola', () => {
+  assert.equal(destinoDeRolagem({ topoRelativo: 100, alturaAlvo: 200, scrollAtual: 400, alturaVisivel: 900 }), null);
+});
+
+test('alvo acima (rolar para trás): o avanço automático recusa', () => {
+  assert.equal(destinoDeRolagem({ topoRelativo: -300, alturaAlvo: 200, scrollAtual: 900, alturaVisivel: 600 }), null);
+});
+
+test('alvo acima: um toque explícito do cliente pode voltar', () => {
+  const d = destinoDeRolagem({ topoRelativo: -300, alturaAlvo: 200, scrollAtual: 900, alturaVisivel: 600, permitirVoltar: true });
+  assert.equal(d, 584);
+});
+
+test('nunca devolve destino negativo', () => {
+  assert.equal(destinoDeRolagem({ topoRelativo: -5, alturaAlvo: 50, scrollAtual: 0, alturaVisivel: 600, permitirVoltar: true }), 0);
+});
+
+test('alvo cortado embaixo conta como não visível', () => {
+  const d = destinoDeRolagem({ topoRelativo: 500, alturaAlvo: 300, scrollAtual: 200, alturaVisivel: 600 });
+  assert.equal(d, 684);
+});
+
+test('entrada inválida não move a tela', () => {
+  assert.equal(destinoDeRolagem({ topoRelativo: undefined }), null);
+  assert.equal(destinoDeRolagem(), null);
 });

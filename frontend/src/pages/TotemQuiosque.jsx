@@ -261,8 +261,13 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
   //
   // As guardas são as mesmas do reset — enviando ou confirmação em dúvida não têm
   // aviso, porque nesses estados o totem também não volta sozinho ao Início.
+  //
+  // A tela de RESULTADO também fica de fora: ali o relógio de 90 s continua
+  // correndo (é assim que o totem volta ao Início depois do pedido), mas cobrir
+  // o número do pedido com "o seu pedido é apagado" seria mentir para quem está
+  // justamente anotando esse número.
   useEffect(() => {
-    if (tela === 'inicio' || enviando || travado) return undefined
+    if (tela === 'inicio' || tela === 'resultado' || enviando || travado) return undefined
     let t = null
     let iv = null
     const parar = () => { clearTimeout(t); clearInterval(iv); t = null; iv = null }
@@ -626,7 +631,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
   if (tela === 'catalogo') {
     conteudo = (
       <>
-        <Cabecalho loja={loja} modo={MODOS[orderType]?.titulo ?? 'Menu'} aoCancelar={() => reiniciar()} />
+        <Cabecalho key="cab-catalogo" loja={loja} modo={MODOS[orderType]?.titulo ?? 'Menu'} aoCancelar={() => reiniciar()} />
         {banner}
         <TelaCatalogo
           categorias={categorias}
@@ -670,6 +675,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
     conteudo = (
       <>
         <Cabecalho
+          key="cab-item"
           loja={loja}
           titulo={nomeNaTela}
           aoVoltar={() => { setAberto(null); setTela(carrinho.length ? 'carrinho' : 'catalogo') }}
@@ -704,7 +710,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
   if (tela === 'carrinho') {
     conteudo = (
       <>
-        <Cabecalho loja={loja} titulo="Seu pedido" aoVoltar={() => setTela('catalogo')} aoCancelar={() => reiniciar()} />
+        <Cabecalho key="cab-carrinho" loja={loja} titulo="Seu pedido" aoVoltar={() => setTela('catalogo')} aoCancelar={() => reiniciar()} />
         {banner}
         <TelaCarrinho
           linhas={carrinho}
@@ -722,7 +728,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
   if (tela === 'pagamento') {
     conteudo = (
       <>
-        <Cabecalho loja={loja} titulo="Como você vai pagar?" aoVoltar={() => setTela('carrinho')} aoCancelar={() => reiniciar()} />
+        <Cabecalho key="cab-pagamento" loja={loja} titulo="Como você vai pagar?" aoVoltar={() => setTela('carrinho')} aoCancelar={() => reiniciar()} />
         {banner}
         <TelaPagamento
           metodos={metodos}
@@ -743,6 +749,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
             a uma nova cotação, nova cotação gera chave nova, e chave nova cria um
             SEGUNDO pedido. */}
         <Cabecalho
+          key="cab-revisar"
           loja={loja}
           titulo="Confira seu pedido"
           aoVoltar={(enviando || travado) ? undefined : () => setTela('carrinho')}
@@ -811,7 +818,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
   return (
     <Casca>
       {conteudo}
-      {alertaInatividade !== null && tela !== 'inicio' && !enviando && !travado ? (
+      {alertaInatividade !== null && tela !== 'inicio' && tela !== 'resultado' && !enviando && !travado ? (
         <SheetInatividade segundos={Math.max(0, alertaInatividade)} aoContinuar={() => setAlertaInatividade(null)} />
       ) : null}
       {aviso && (

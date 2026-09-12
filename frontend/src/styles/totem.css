@@ -433,7 +433,7 @@
 
 /* -- Bloco de grupo -------------------------------------------------------- */
 .tq-grupo {
-  margin-top: 22px; scroll-margin-top: 16px;
+  margin-top: 22px;
   background: var(--tq-superficie); border: 1px solid var(--tq-borda); border-radius: var(--tq-raio);
   padding: 20px 22px;
 }
@@ -458,7 +458,6 @@
 }
 .tq-op:active:not(:disabled) { transform: scale(0.99); }
 .tq-op[aria-pressed='true'] { border-color: var(--tq-amarelo); border-width: 3px; padding: 11px 15px; }
-.tq-op.falta { opacity: 0.55; }
 .tq-op:disabled { cursor: not-allowed; }
 .tq-op-txt { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .tq-op-nome { font-size: clamp(16px, 1.7vw, 19px); font-weight: 700; overflow-wrap: anywhere; }
@@ -628,7 +627,7 @@
   color: var(--tq-texto-3); margin-bottom: 4px;
 }
 .tq-link {
-  background: none; border: none; padding: 12px 8px; min-height: 48px;
+  background: none; border: none; padding: 12px 10px; min-height: 56px;
   color: #8a3b00; font-weight: 800; text-decoration: underline; font-size: clamp(15px, 1.5vw, 17px);
 }
 .tq-link:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -789,3 +788,6 @@
   padding: 10px 16px; text-align: center; color: var(--tq-aviso-tinta);
   font-weight: 600; font-size: clamp(14px, 1.5vw, 17px);
 }
+
+/* Cancelar pedido pede confirmação: o segundo toque é que apaga. */
+.tq-topo-btn.perigo.confirmando { background: var(--tq-perigo); border-color: var(--tq-perigo); color: var(--tq-branco); }

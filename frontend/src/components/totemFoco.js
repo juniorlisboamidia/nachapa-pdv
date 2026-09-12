@@ -47,3 +47,33 @@ export function proximoFoco(grupos, grupoId) {
   }
   return { tipo: 'CTA' }
 }
+
+// ── Aritmética da rolagem ───────────────────────────────────────────────────
+// Fica aqui, pura e testada, porque foi exatamente ela que errou: a primeira
+// versão usava `offsetTop` como se fosse coordenada interna do container
+// rolável. Não é — o `offsetParent` dos blocos é `.tq-raiz`, o único ancestral
+// posicionado, então o valor já vinha somado à altura do cabeçalho e a tela
+// parava ~96px abaixo do grupo, cortando justamente o nome dele.
+//
+// Agora quem lê o DOM entrega a posição do alvo JÁ RELATIVA ao topo visível do
+// container (`rect do alvo − rect da caixa`), e esta função decide o resto.
+// Devolve `null` quando não se deve rolar.
+//
+//   topoRelativo   distância do topo do alvo até o topo visível da caixa (pode ser < 0)
+//   alturaAlvo     altura do bloco de destino
+//   scrollAtual    scrollTop da caixa
+//   alturaVisivel  clientHeight da caixa
+//   permitirVoltar o avanço automático nunca volta; um toque explícito do
+//                  cliente (chip "falta escolher") pode.
+export function destinoDeRolagem({
+  topoRelativo, alturaAlvo = 0, scrollAtual = 0, alturaVisivel = 0, margem = 16, permitirVoltar = false,
+} = {}) {
+  const rel = Number(topoRelativo)
+  if (!Number.isFinite(rel)) return null
+  // Alvo inteiro à vista: mexer na tela seria movimento gratuito.
+  const jaVisivel = rel >= 0 && rel + Number(alturaAlvo || 0) <= Number(alturaVisivel || 0)
+  if (jaVisivel) return null
+  const destino = Math.max(0, Number(scrollAtual || 0) + rel - Number(margem || 0))
+  if (!permitirVoltar && destino <= Number(scrollAtual || 0)) return null
+  return destino
+}
