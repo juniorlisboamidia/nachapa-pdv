@@ -1020,9 +1020,15 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
                 const mudou = local
                   ? alteradasIdx.includes(i)
                   : alteradas.some((id) => String(id) === String(l.itemId))
-                const opcoes = local
-                  ? opcoesVisiveisDaLinha(local).map((o) => ({ opcaoId: o.opcaoId, nome: o.nome, qtd: o.qtd }))
-                  : (l.opcoes ?? [])
+                // A lista de opções continua sendo a DO HUB: é ela que traz a ordem do
+                // Cardápio Web e as quantidades já consolidadas do que foi realmente cotado.
+                // Da linha local sai só uma coisa — qual opção é a PRINCIPAL, para escondê-la
+                // (ela já é o nome da linha). Reconstruir a lista aqui seria trocar o que o
+                // servidor cobrou pelo que a tela achava.
+                const principal = local?.apresentado?.opcaoId
+                const opcoes = (l.opcoes ?? []).filter((o) => (
+                  principal === null || principal === undefined || String(o.opcaoId) !== String(principal)
+                ))
                 return (
                   <div key={`${l.itemId}-${i}`} className={'ttm-linha' + (mudou ? ' mudou' : '')}>
                     <div className="ttm-linha-corpo">

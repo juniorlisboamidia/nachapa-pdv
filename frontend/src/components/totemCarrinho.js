@@ -238,22 +238,41 @@ export function opcoesVisiveisDaLinha(linha) {
 // "X BURGUER: essa opção acabou" quando quem acabou foi o X BACON. Mentir sobre qual produto
 // deu problema é pior do que não nomear nenhum.
 //
-// A régua, em ordem: (1) alguma linha tem esta opção como PRINCIPAL? é ela — a identidade
-// apresentada é justamente essa opção; (2) uma única linha tem o itemId? é ela; (3) várias
-// linhas do mesmo item base e nenhuma pista de qual → `null`, e quem chama cai para o nome
-// do ITEM BASE, que é verdadeiro para todas. Nunca um nome apresentado específico no palpite.
+// A régua, nesta ordem, sempre DENTRO das linhas do `itemId` acusado (quando ele vem):
+//  (1) alguma linha tem esta opção como PRINCIPAL? é ela — a identidade apresentada é
+//      justamente essa opção;
+//  (2) a opção aparece nas escolhas (qualquer grupo) de UMA linha só? é ela — o complemento
+//      que acabou está numa das duas, e essa distinção é observável;
+//  (3) uma única linha tem o itemId? é ela;
+//  (4) senão → `null`, e quem chama cai para o nome do ITEM BASE, que é verdadeiro para
+//      todas. Nunca um nome apresentado específico no palpite.
+const objetoDe = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+const escolheuOpcao = (linha, opcaoId) => {
+  for (const sel of Object.values(objetoDe(linha?.selecoes))) {
+    if (lista(sel).some((e) => mesmoId(e?.opcaoId, opcaoId))) return true;
+  }
+  return false;
+};
+
 export function linhaDoDetalhe(linhas, detalhe) {
   const carrinho = lista(linhas);
+  const itemId = detalhe?.itemId;
+  const temItem = itemId !== null && itemId !== undefined;
+  // O recorte por item vem PRIMEIRO: sem ele, uma opção de outro item com o mesmo id
+  // (ou um detalhe de item A carregando a opção de B) escolheria a linha errada.
+  const candidatas = temItem ? carrinho.filter((l) => mesmoId(l?.item?.id, itemId)) : carrinho;
+
   const opcaoId = detalhe?.opcaoId;
   if (opcaoId !== null && opcaoId !== undefined) {
     // Duas linhas com a MESMA opção principal têm o mesmo nome apresentado: a primeira serve.
-    const porOpcao = carrinho.find((l) => mesmoId(l?.apresentado?.opcaoId, opcaoId));
-    if (porOpcao) return porOpcao;
+    const porPrincipal = candidatas.find((l) => mesmoId(l?.apresentado?.opcaoId, opcaoId));
+    if (porPrincipal) return porPrincipal;
+    const porEscolha = candidatas.filter((l) => escolheuOpcao(l, opcaoId));
+    if (porEscolha.length === 1) return porEscolha[0];
   }
-  const itemId = detalhe?.itemId;
-  if (itemId === null || itemId === undefined) return null;
-  const porItem = carrinho.filter((l) => mesmoId(l?.item?.id, itemId));
-  return porItem.length === 1 ? porItem[0] : null;
+
+  if (!temItem) return null;
+  return candidatas.length === 1 ? candidatas[0] : null;
 }
 
 // Troca a linha de mesmo `uid` (edição) ou acrescenta ao fim (item novo). Puro, e por isso

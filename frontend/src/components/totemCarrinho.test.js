@@ -656,3 +656,26 @@ test('linhaDoDetalhe: nome exibido — a linha certa, ou o do item BASE (verdade
   assert.equal(nomeDoDetalhe({ itemId: '2979325' }), 'TRADICIONAIS 🍔');
   assert.equal(nomeDoDetalhe({ codigo: 'PAGAMENTO_INVALIDO' }), null);
 });
+
+test('linhaDoDetalhe: a opção principal só vale DENTRO do item acusado', () => {
+  const burguer = { ...linhaDeProduto(produtoXBurguer, indice), uid: 'u1' };
+  const coca = { ...linhaDeProduto(produtoCoca, indice), uid: 'u2' };
+  const carrinho = [burguer, coca];
+  // O detalhe acusa a COCA (item 111) e traz, por engano ou coincidência, o id da opção
+  // principal do burguer. Recortar por item primeiro impede a linha errada de ser nomeada.
+  assert.equal(linhaDoDetalhe(carrinho, { itemId: '111', opcaoId: '3633259' }), coca);
+  assert.equal(linhaDoDetalhe(carrinho, { itemId: '2979325', opcaoId: '3633259' }), burguer);
+});
+
+test('linhaDoDetalhe: o COMPLEMENTO escolhido por uma linha só desempata', () => {
+  const comMaionese = { ...linhaDeProduto(produtoXBurguer, indice), uid: 'u1' };
+  comMaionese.selecoes[G_MAIONESE] = [{ opcaoId: 2796650, qtd: 1 }];
+  const semNada = { ...linhaDeProduto(produtoXBacon, indice), uid: 'u2' };
+  const carrinho = [comMaionese, semNada];
+  // "MAIONESE TRADICIONAL acabou": as duas linhas são o item 2979325, mas só uma pediu.
+  assert.equal(linhaDoDetalhe(carrinho, { codigo: 'OPCAO_EM_FALTA', itemId: '2979325', opcaoId: '2796650' }), comMaionese);
+  assert.equal(nomeApresentado(linhaDoDetalhe(carrinho, { itemId: '2979325', opcaoId: 2796650 })), 'X BURGUER');
+  // Se as DUAS pediram, volta a ser ambíguo — e o nome exibido é o do item base.
+  const ambas = [comMaionese, { ...semNada, selecoes: { ...semNada.selecoes, [G_MAIONESE]: [{ opcaoId: 2796650, qtd: 1 }] } }];
+  assert.equal(linhaDoDetalhe(ambas, { itemId: '2979325', opcaoId: '2796650' }), null);
+});

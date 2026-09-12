@@ -122,7 +122,13 @@ export default function TotemApresentacao() {
 
   function salvarLinha(item) {
     const f = form[String(item.cwItemId)] ?? { modo: 'NORMAL', grupoId: '' }
-    if (f.modo === 'NORMAL') { setConfirmNormal({ cwItemId: item.cwItemId, nome: item.nome }); return }
+    if (f.modo === 'NORMAL') {
+      // Sem configuração salva não há o que apagar: pedir confirmação para um PUT que
+      // devolveria `removida: false` só ensinaria o operador a clicar em "sim" no vazio.
+      if (!item.config) { notify(`“${item.nome}” já está em Normal.`, 'info'); return }
+      setConfirmNormal({ cwItemId: item.cwItemId, nome: item.nome })
+      return
+    }
     if (!f.grupoId) { notify(ERROS_SALVAR.GRUPO_OBRIGATORIO, 'error'); return }
     salvar(item.cwItemId, { modo: 'EXPANDIDO', cwGrupoPrincipalId: Number(f.grupoId) }, `“${item.nome}” agora aparece como vitrine no totem.`)
   }
@@ -213,10 +219,22 @@ export default function TotemApresentacao() {
                     const emVitrine = item.config?.modo === 'EXPANDIDO'
                     const problema = item.config && !item.validacao?.ok
                     const grupoAtual = item.grupos.find((g) => String(g.id) === String(item.config?.cwGrupoPrincipalId))
+                    // Nenhum grupo serve? O modo Vitrine continua ESCOLHÍVEL — é escolhendo
+                    // que o operador vê a lista de grupos com cada recusa escrita (o caso
+                    // COMBO - TRADICIONAIS, `OUTRO_GRUPO_OBRIGATORIO`, é justamente esse).
+                    // Bloquear a opção esconderia o motivo e deixaria o item mudo.
                     const semGrupoUtil = item.grupos.every((g) => !g.selecionavel?.ok)
+                    const razaoSemVitrine = !semGrupoUtil ? null : (item.grupos.length === 0
+                      ? 'este item não tem grupos de escolha'
+                      : (motivo(item.grupos.find((g) => g.selecionavel?.codigo)?.selecionavel?.codigo) || 'nenhum grupo serve'))
                     return (
                       <tr key={chave} className={problema ? 'ttm-linha-revisao' : undefined}>
-                        <td><strong>{item.nome ?? '—'}</strong></td>
+                        <td>
+                          <strong>{item.nome ?? '—'}</strong>
+                          {/* Dois itens do mesmo cardápio podem se chamar "TRADICIONAIS 🍔":
+                              o id é o que o humano usa para escolher o certo. */}
+                          <div className="ttm-meta-txt">#{item.cwItemId}</div>
+                        </td>
                         <td>{item.categoria ?? '—'}</td>
                         <td style={{ textAlign: 'right' }}>{moeda(item.precoBase)}</td>
                         <td>
@@ -235,8 +253,13 @@ export default function TotemApresentacao() {
                               onChange={(e) => mudarForm(item.cwItemId, 'modo', e.target.value)}
                             >
                               <option value="NORMAL">Normal (um card do item)</option>
-                              <option value="EXPANDIDO" disabled={semGrupoUtil}>Vitrine (um card por opção)</option>
+                              <option value="EXPANDIDO">Vitrine (um card por opção)</option>
                             </select>
+                            {razaoSemVitrine && (
+                              <div className="ttm-erro" style={{ marginTop: 0, maxWidth: 'none' }}>
+                                Vitrine não é possível: {razaoSemVitrine}.
+                              </div>
+                            )}
                             {f.modo === 'EXPANDIDO' && (
                               <select
                                 className="form-input"
@@ -255,9 +278,6 @@ export default function TotemApresentacao() {
                                   </option>
                                 ))}
                               </select>
-                            )}
-                            {f.modo === 'EXPANDIDO' && semGrupoUtil && (
-                              <div className="ttm-dica">Nenhum grupo deste item pode ser a vitrine.</div>
                             )}
                           </div>
                         </td>
