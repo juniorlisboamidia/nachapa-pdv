@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import CategoriaNome from './CategoriaNome'
 
 // Categorias fixas à esquerda. É o espelho de `catalogo.categorias` do bootstrap,
 // na ordem do `index` do Cardápio Web — nada é reordenado, agrupado nem inventado
@@ -7,6 +8,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 //
 // Sem ícone e sem miniatura na V1 (spec §9.1): o CW não fornece imagem de
 // categoria, e adivinhar uma a partir do primeiro produto engana mais do que ajuda.
+//
+// O NOME, porém, a loja controla: `nomeExibido` vem de Totem › Apresentação e é
+// o que resolve o emoji cadastrado para o cardápio digital, que aqui só rouba
+// caractere de uma coluna estreita.
 export default function SidebarCategorias({ categorias, categoriaId, aoTrocar }) {
   const rolagemRef = useRef(null)
   const [temMais, setTemMais] = useState(false)
@@ -39,9 +44,9 @@ export default function SidebarCategorias({ categorias, categoriaId, aoTrocar })
             aria-current={String(c.id) === String(categoriaId) ? 'true' : undefined}
             onClick={() => aoTrocar(c.id)}
           >
-            {/* O nome vai num span para o recorte de duas linhas valer sobre o
-                texto, e não sobre a caixa do botão. */}
-            <span>{c.nome}</span>
+            {/* `nomeExibido` é o apelido que a loja deu à categoria no admin;
+                sem ele vale o nome do Cardápio Web, como sempre valeu. */}
+            <CategoriaNome nome={c.nomeExibido || c.nome} ativa={String(c.id) === String(categoriaId)} />
           </button>
         ))}
       </div>

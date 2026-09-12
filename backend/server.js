@@ -39,6 +39,10 @@ import {
 } from './totemEnvio.js';
 // Totem › Apresentação: projeção pura do catálogo (sem Prisma, sem rede) — spec §4.1.
 import { MODOS, validarConfiguracao, projetarCatalogo, mesclarAdmin, sugerirCandidatos } from './totemApresentacao.js';
+import {
+  aplicarNomes as aplicarNomesDeCategoria,
+  mesclarAdmin as mesclarAdminCategorias,
+} from './totemCategoria.js';
 import { calcularCmvGlobal } from './cmv/calculo.js';
 import { normalizarRelatorio, FONTES } from './relatorios/normalizar.js';
 
@@ -8675,9 +8679,16 @@ function exigirTotem(ap, res) {
 //    não conhece `res`: daqui não sai 5xx nenhum depois de o catálogo estar em mãos.
 async function comApresentacao(ap, body, resposta) {
   try {
-    const configuracoes = await prisma.totemApresentacao.findMany({ where: whereDoAparelho(ap, body) });
+    const escopo = whereDoAparelho(ap, body);
+    const [configuracoes, categorias] = await Promise.all([
+      prisma.totemApresentacao.findMany({ where: escopo }),
+      prisma.totemCategoria.findMany({ where: escopo }),
+    ]);
     const { catalogo, avisos } = projetarCatalogo(resposta.catalogo, configuracoes);
-    return { ...resposta, catalogo, avisosApresentacao: avisos };
+    // Nome de exibição por categoria: ADITIVO (`nomeExibido` ao lado de `nome`) e
+    // depois da projeção, porque a vitrine mexe em itens e este passo só na string
+    // que o cliente lê.
+    return { ...resposta, catalogo: aplicarNomesDeCategoria(catalogo, categorias), avisosApresentacao: avisos };
   } catch (err) {
     console.error('[public/aparelho totem apresentacao]', err?.code ?? err?.name ?? 'erro');
     return { ...resposta, avisosApresentacao: [] };
@@ -9165,6 +9176,45 @@ app.put('/api/totem/apresentacao/:cwItemId', async (req, res) => {
     });
     res.json({ ok: true, config: { id: cfg.id, cwItemId: cfg.cwItemId, modo: cfg.modo, cwGrupoPrincipalId: cfg.cwGrupoPrincipalId } });
   } catch (err) { console.error('[totem/apresentacao PUT]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// Lista da tela: uma linha por categoria do catálogo VIVO, com o nome do CW, o
+// apelido salvo e a sugestão sem emoji. A sugestão é oferecida, nunca aplicada:
+// quem decide como a categoria se chama no totem é a loja.
+app.get('/api/totem/categorias', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const catalogo = await catalogoVivoDoAdmin(empresaId, res); if (!catalogo) return;
+    const configuracoes = await prisma.totemCategoria.findMany({ where: { empresaId }, orderBy: { cwCategoriaId: 'asc' } });
+    res.json({ categorias: mesclarAdminCategorias(catalogo, configuracoes) });
+  } catch (err) { console.error('[totem/categorias]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// Salvar o apelido de UMA categoria. Nome vazio APAGA a linha — é o estado
+// padrão (mostrar o nome do CW) e o único jeito de remover uma órfã, cuja
+// categoria sumiu do cardápio e nunca voltaria numa validação viva. Por isso
+// este caminho não consulta o CW.
+app.put('/api/totem/categorias/:cwCategoriaId', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    // Inteiro SEGURO e positivo: arredondar `12.7` gravaria o apelido em cima de
+    // OUTRA categoria sem ninguém perceber.
+    const cwCategoriaId = Number(req.params.cwCategoriaId);
+    if (!Number.isSafeInteger(cwCategoriaId) || cwCategoriaId <= 0) return res.status(400).json({ erro: 'ID_INVALIDO' });
+    const nomeExibido = String(req.body?.nomeExibido ?? '').trim().slice(0, 60);
+    if (!nomeExibido) {
+      const { count } = await prisma.totemCategoria.deleteMany({ where: { empresaId, cwCategoriaId } });
+      return res.json({ ok: true, removida: count > 0 });
+    }
+    const cfg = await prisma.totemCategoria.upsert({
+      where: { empresaId_cwCategoriaId: { empresaId, cwCategoriaId } },
+      create: { empresaId, cwCategoriaId, nomeExibido },
+      update: { nomeExibido },
+    });
+    res.json({ ok: true, config: { cwCategoriaId: cfg.cwCategoriaId, nomeExibido: cfg.nomeExibido } });
+  } catch (err) { console.error('[totem/categorias PUT]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
 });
 
 // ── Job do totem (§5.4): 60 s, in-process, com lock ─────────────────────────

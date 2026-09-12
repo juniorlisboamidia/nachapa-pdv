@@ -843,6 +843,27 @@ model PedidoTotemEnvio {
 // Explícita (nunca automática) e só com ids do CW; o produto apresentado é projetado do catálogo
 // vivo a cada bootstrap — nada de opção/produto persistido. A tabela só guarda EXCEÇÕES: voltar
 // a NORMAL apaga a linha (por isso não há `ativo` — não existe "desligado mas guardado").
+// Totem › Apresentação — nome de exibição por CATEGORIA do Cardápio Web.
+// O nome que vem do CW é cadastrado para o cardápio digital, onde emoji ajuda a
+// varrer a lista com o polegar. Num totem em pé, na coluna estreita da esquerda,
+// o mesmo emoji rouba caractere de um nome que já é curto. Aqui a loja diz como
+// aquela categoria se chama NO TOTEM — e só isso: ordem, itens e disponibilidade
+// continuam vindo do CW.
+//
+// Guarda exceção, como TotemApresentacao: categoria sem linha mostra o nome do
+// CW como ele vem. Apagar o apelido é apagar a linha.
+model TotemCategoria {
+  id            Int      @id @default(autoincrement())
+  empresaId     Int
+  cwCategoriaId Int                          // Category.id do CW
+  nomeExibido   String
+  criadoEm      DateTime @default(now())
+  atualizadoEm  DateTime @updatedAt
+
+  @@unique([empresaId, cwCategoriaId])
+  @@index([empresaId])
+}
+
 model TotemApresentacao {
   id                 Int      @id @default(autoincrement())
   empresaId          Int

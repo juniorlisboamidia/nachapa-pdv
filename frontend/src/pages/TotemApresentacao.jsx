@@ -25,6 +25,7 @@ import api from '../services/api'
 import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
 import { mensagemApresentacao } from '../components/totemCarrinho'
+import NomesDeCategoria from './NomesDeCategoria'
 
 // Erros de CARREGAMENTO (409/503 do §7). Todos falam do mesmo problema por ângulos
 // diferentes: sem o catálogo vivo não há o que validar nem o que listar.
@@ -183,6 +184,10 @@ export default function TotemApresentacao() {
         </div>
       ) : (
         <>
+          {/* Nome da categoria e vitrine do item são as duas decisões de
+              APRESENTAÇÃO do totem: moram na mesma tela, em blocos separados. */}
+          <NomesDeCategoria aoAvisar={setToast} />
+
           <div className="ttm-filtros">
             <span className="ttm-meta-txt">
               {itens.length} {itens.length === 1 ? 'item no cardápio' : 'itens no cardápio'} ·{' '}
