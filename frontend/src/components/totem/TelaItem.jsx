@@ -72,7 +72,24 @@ export default function TelaItem({
   return (
     <>
       <div className="tq-conteudo" ref={conteudoRef}>
-        <Foto src={imagem} alt="" className="tq-hero" tamIcone={72} />
+        {/* Foto e faixa formam uma peça só: a identidade do produto e o preço
+            ficam sobre o preto, logo abaixo da imagem, com o peso de placa de
+            cardápio — em vez de título e preço soltos sobre o fundo claro. */}
+        <div className="tq-det-capa">
+          <Foto src={imagem} alt="" className="tq-hero" tamIcone={72} />
+          <div className="tq-det-faixa">
+            <div className="tq-det-faixa-txt">
+              <h1 className="tq-det-nome tq-disp tq-disp-forte">{nome}</h1>
+              {descricao ? <p className="tq-det-desc">{descricao}</p> : null}
+            </div>
+            <Preco
+              className="tq-det-preco"
+              valor={preco.valor}
+              valorPromocional={preco.valorPromocional}
+              aPartirDe={preco.aPartirDe}
+            />
+          </div>
+        </div>
 
         <div className="tq-det">
           {!podePedir.ok ? (
@@ -82,15 +99,6 @@ export default function TelaItem({
                 : 'Este item acabou. Escolha outro ou chame um atendente.'}
             </div>
           ) : null}
-
-          <h1 className="tq-det-nome tq-disp tq-disp-forte">{nome}</h1>
-          {descricao ? <p className="tq-det-desc">{descricao}</p> : null}
-          <Preco
-            className="tq-det-preco"
-            valor={preco.valor}
-            valorPromocional={preco.valorPromocional}
-            aPartirDe={preco.aPartirDe}
-          />
 
           <ChipsPendentes pendentes={pendentes} temObrigatorio={temObrigatorio} aoFocar={rolarParaGrupo} />
 

@@ -473,19 +473,28 @@
 
 /* ═══ V5 — detalhe do produto ══════════════════════════════════════════════ */
 
-.tq-hero { display: block; width: 100%; aspect-ratio: 16 / 9; max-height: 42vh; object-fit: cover; background: #eae5db; }
+.tq-hero { display: block; width: 100%; aspect-ratio: 4 / 3; max-height: 46vh; object-fit: cover; background: #eae5db; }
+/* Foto + faixa = uma peca so. A faixa preta e a placa do cardapio: nome em
+   branco a esquerda, preco em amarelo a direita, encostada na imagem. */
+.tq-det-capa { position: relative; }
+.tq-det-faixa {
+  display: flex; align-items: flex-end; justify-content: space-between; gap: 20px;
+  background: var(--tq-preto); color: var(--tq-branco);
+  padding: clamp(18px, 2.4vw, 28px) clamp(20px, 4vw, 40px);
+  border-bottom: 8px solid var(--tq-amarelo);
+}
+.tq-det-faixa-txt { min-width: 0; }
+.tq-det-nome { font-size: clamp(28px, 4vw, 52px); line-height: 1.02; letter-spacing: -0.015em; }
+.tq-det-desc { font-size: clamp(16px, 1.8vw, 21px); color: var(--tq-texto-claro); margin-top: 8px; }
+.tq-det-preco { flex: 0 0 auto; align-items: flex-end; text-align: right; }
+.tq-det-preco .tq-preco-valor { font-size: clamp(28px, 3.6vw, 46px); color: var(--tq-amarelo); }
+.tq-det-preco .tq-preco-de { color: var(--tq-texto-claro); }
+.tq-det-preco .tq-preco-por { color: var(--tq-amarelo); }
 .tq-det { width: min(920px, 92%); margin: 0 auto; padding: 26px 0 40px; }
-.tq-det-nome { font-size: clamp(28px, 3.6vw, 42px); line-height: 1.06; }
-.tq-det-desc { font-size: clamp(17px, 1.8vw, 20px); color: var(--tq-texto-2); margin-top: 8px; }
-.tq-det-preco { margin-top: 14px; }
-.tq-det-preco .tq-preco-valor { font-size: clamp(24px, 2.6vw, 32px); }
 
 /* Chips do que falta: atalho e diagnóstico ao mesmo tempo. Em combo, é o que
    responde "por que o botão não libera?" sem o cliente ter de rolar a página. */
-.tq-pendencias {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--tq-borda);
-}
+.tq-pendencias { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .tq-pend-rot { color: var(--tq-texto-3); }
 .tq-pend {
   min-height: 56px; padding: 0 20px; border-radius: 999px;
@@ -498,18 +507,24 @@
 
 /* -- Bloco de grupo -------------------------------------------------------- */
 .tq-grupo {
-  margin-top: 22px;
+  margin-top: 22px; overflow: hidden;
   background: var(--tq-superficie); border: 1px solid var(--tq-borda); border-radius: var(--tq-raio);
-  padding: 20px 22px;
 }
-/* Obrigatório se anuncia pela FORMA, não só pelo texto: barra amarela na borda. */
-.tq-grupo.obrigatorio { border-left: 6px solid var(--tq-amarelo); }
 .tq-grupo.falta { background: #f2efe7; border-color: #ded8c9; }
-.tq-grupo-cab { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
-.tq-grupo-nome { font-size: clamp(19px, 2vw, 24px); }
+/* O cabecalho do grupo e a regua da tela: obrigatorio vem em BARRA AMARELA com
+   texto preto, opcional em barra clara. A diferenca tem de ser lida de relance,
+   porque e ela que explica por que o botao nao libera. */
+.tq-grupo-cab {
+  display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  padding: 16px clamp(18px, 2.4vw, 24px); background: var(--tq-fundo);
+  border-bottom: 1px solid var(--tq-borda);
+}
+.tq-grupo.obrigatorio .tq-grupo-cab { background: var(--tq-amarelo); border-bottom-color: var(--tq-amarelo-3); }
+.tq-grupo-nome { font-size: clamp(20px, 2.1vw, 26px); }
 .tq-grupo-regra { margin-left: auto; color: var(--tq-texto-3); }
-.tq-grupo.obrigatorio .tq-grupo-regra { color: #8a6a00; }
-.tq-grupo-contagem { margin: -6px 0 12px; color: var(--tq-texto-3); font-weight: 700; font-size: clamp(14px, 1.4vw, 16px); }
+.tq-grupo.obrigatorio .tq-grupo-regra { color: var(--tq-tinta); opacity: 0.72; }
+.tq-grupo-corpo { padding: clamp(16px, 2.2vw, 22px); }
+.tq-grupo-contagem { margin-bottom: 12px; color: var(--tq-texto-3); font-weight: 700; font-size: clamp(14px, 1.4vw, 16px); }
 .tq-grupo-indisponivel { font-size: clamp(16px, 1.6vw, 18px); font-weight: 700; color: var(--tq-texto-2); }
 .tq-grupo-falta { margin-top: 14px; font-weight: 800; color: #8a3b00; font-size: clamp(15px, 1.5vw, 17px); }
 
@@ -522,17 +537,24 @@
   transition: border-color 0.14s ease, background 0.14s ease, transform 0.1s ease;
 }
 .tq-op:active:not(:disabled) { transform: scale(0.99); }
-.tq-op[aria-pressed='true'] { border-color: var(--tq-amarelo); border-width: 3px; padding: 11px 15px; }
+/* Selecionada = FUNDO AMARELO com texto preto. A versao anterior marcava so a
+   borda em amarelo sobre branco, que da ~1,1:1 de contraste: a escolha do
+   cliente praticamente nao aparecia. */
+.tq-op[aria-pressed='true'] {
+  background: var(--tq-amarelo); border-color: var(--tq-amarelo-3); border-width: 3px; padding: 11px 15px;
+}
+.tq-op[aria-pressed='true'] .tq-op-preco { color: var(--tq-tinta); opacity: 0.75; }
+.tq-op[aria-pressed='true'] .tq-op-desc { color: var(--tq-tinta); opacity: 0.7; }
 .tq-op:disabled { cursor: not-allowed; }
 .tq-op-txt { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .tq-op-nome { font-size: clamp(16px, 1.7vw, 19px); font-weight: 700; overflow-wrap: anywhere; }
 .tq-op-preco { color: var(--tq-texto-2); font-size: clamp(15px, 1.6vw, 17px); }
 .tq-op-marca {
-  flex: 0 0 auto; width: 34px; height: 34px; border-radius: 10px;
+  flex: 0 0 auto; width: 40px; height: 40px; border-radius: 12px;
   border: 2px solid var(--tq-borda-forte); background: var(--tq-superficie);
   display: grid; place-items: center; color: transparent;
 }
-.tq-op[aria-pressed='true'] .tq-op-marca { background: var(--tq-amarelo); border-color: var(--tq-amarelo); color: var(--tq-tinta); }
+.tq-op[aria-pressed='true'] .tq-op-marca { background: var(--tq-preto); border-color: var(--tq-preto); color: var(--tq-amarelo); }
 .tq-op-falta {
   flex: 0 0 auto; padding: 5px 12px; border-radius: 999px; background: #e0dbd0; color: var(--tq-texto-2);
   font-family: 'Archivo Totem', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
@@ -590,7 +612,9 @@
 }
 .tq-op-add:active:not(:disabled) { transform: scale(0.98); }
 .tq-op-add:disabled { opacity: 0.4; cursor: not-allowed; }
-.tq-op.on { border-color: var(--tq-amarelo); border-width: 3px; padding: 11px 15px; }
+.tq-op.on { background: var(--tq-amarelo); border-color: var(--tq-amarelo-3); border-width: 3px; padding: 11px 15px; }
+.tq-op.on .tq-op-preco, .tq-op.on .tq-op-desc { color: var(--tq-tinta); opacity: 0.75; }
+.tq-op.on .tq-step { border-color: var(--tq-amarelo-3); }
 /* Bloco de recado dentro de uma tela (item indisponível, recusa de cotação). */
 .tq-aviso-bloco {
   background: var(--tq-perigo-fraco); border: 2px solid #e8b4b0; border-radius: var(--tq-raio-2);
@@ -603,11 +627,11 @@
 /* Grade só quando o grupo TEM foto (ver modoDeOpcoes): grupo inteiro sem imagem
    fica em lista de texto bem resolvida, sem espaço reservado para um vazio. */
 .tq-opcoes.grade { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.tq-opcoes.grade .tq-op { align-items: flex-start; min-height: 120px; }
+.tq-opcoes.grade .tq-op { align-items: flex-start; min-height: clamp(120px, 14vw, 152px); }
 @media (max-width: 599px) { .tq-opcoes.grade { grid-template-columns: minmax(0, 1fr); } }
 
 .tq-op-foto {
-  flex: 0 0 auto; width: 96px; height: 96px; aspect-ratio: auto;
+  flex: 0 0 auto; width: clamp(96px, 11vw, 128px); height: clamp(96px, 11vw, 128px); aspect-ratio: auto;
   border-radius: var(--tq-raio-2); object-fit: cover; background: #eae5db;
 }
 /* Em falta: a foto apaga, o TEXTO não. O aviso precisa continuar legível. */
@@ -622,7 +646,7 @@
 .tq-op-lado { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
 /* Limite do grupo atingido: as não escolhidas apagam, mas nenhuma some da tela. */
 .tq-op.bloqueada { opacity: 0.45; }
-.tq-grupo-limite { margin: -6px 0 12px; color: #8a6a00; font-weight: 700; font-size: clamp(14px, 1.4vw, 16px); }
+.tq-grupo-limite { margin-bottom: 12px; color: #8a6a00; font-weight: 700; font-size: clamp(14px, 1.4vw, 16px); }
 
 /* ═══ V7 — avanço automático ═══════════════════════════════════════════════ */
 /* Último grupo concluído: além de rolar até o rodapé, o botão pisca uma vez.

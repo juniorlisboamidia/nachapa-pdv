@@ -5,9 +5,9 @@ import CardOpcao from './CardOpcao'
 // Um grupo de complementos. Toda a régua de o que pode ser tocado continua vindo
 // de totemCarrinho (`podeAdicionarOpcao`, `grupoSatisfeito`): aqui só se desenha.
 //
-// Obrigatório × opcional deixa de ser uma diferença de palavra e passa a ser de
-// forma — barra amarela na borda do bloco —, porque num combo o cliente precisa
-// enxergar de relance o que trava o pedido.
+// O cabeçalho é a régua da tela: obrigatório vem em barra amarela com texto
+// preto, opcional em barra clara. A diferença tem de ser lida de relance, porque
+// é ela que explica por que o botão de adicionar não libera.
 //
 // Grupo MISSING continua NA TELA, apagado: sumir com ele faria o cliente achar
 // que o item mudou de receita. Não aceita toque, e se for obrigatório o item
@@ -22,7 +22,9 @@ export default function BlocoGrupo({ grupo, selecao, aoTocar, aoMenos }) {
           <h2 className="tq-grupo-nome tq-disp">{grupo.nome}</h2>
           <span className="tq-grupo-regra tq-rotulo">{regra.obrigatorio ? 'obrigatório · ' : ''}em falta</span>
         </div>
-        <p className="tq-grupo-indisponivel">Em falta — não dá para escolher agora.</p>
+        <div className="tq-grupo-corpo">
+          <p className="tq-grupo-indisponivel">Em falta — não dá para escolher agora.</p>
+        </div>
       </section>
     )
   }
@@ -45,39 +47,41 @@ export default function BlocoGrupo({ grupo, selecao, aoTocar, aoMenos }) {
         </span>
       </div>
 
-      {somavel && grupo.max ? (
-        <div className="tq-grupo-contagem tq-num">{escolhidas} de {grupo.max}</div>
-      ) : null}
-      {/* Limite atingido se explica no cabeçalho do grupo. As opções que sobraram
-          apagam, mas nenhuma desaparece: sumir daria a impressão de cardápio
-          diferente a cada toque. */}
-      {noLimite && !somavel && Number(grupo.max) > 1
-        ? <div className="tq-grupo-limite">Limite de {grupo.max} escolhas atingido.</div>
-        : null}
+      <div className="tq-grupo-corpo">
+        {somavel && grupo.max ? (
+          <div className="tq-grupo-contagem tq-num">{escolhidas} de {grupo.max}</div>
+        ) : null}
+        {/* Limite atingido se explica no cabeçalho do grupo. As opções que sobraram
+            apagam, mas nenhuma desaparece: sumir daria a impressão de cardápio
+            diferente a cada toque. */}
+        {noLimite && !somavel && Number(grupo.max) > 1
+          ? <div className="tq-grupo-limite">Limite de {grupo.max} escolhas atingido.</div>
+          : null}
 
-      <div className={'tq-opcoes' + (grade ? ' grade' : '')}>
-        {(grupo.opcoes ?? []).map((op) => {
-          const qtd = qtdDaOpcao(sel, op.id)
-          return (
-            <CardOpcao
-              key={op.id}
-              opcao={op}
-              comFoto={grade}
-              somavel={somavel}
-              emFalta={!!(op.status && op.status !== 'ACTIVE')}
-              marcado={qtd > 0}
-              qtd={qtd}
-              podeMais={podeAdicionarOpcao(grupo, sel, op).ok}
-              aoTocar={() => aoTocar(grupo, op)}
-              aoMenos={() => aoMenos(grupo, op)}
-            />
-          )
-        })}
+        <div className={'tq-opcoes' + (grade ? ' grade' : '')}>
+          {(grupo.opcoes ?? []).map((op) => {
+            const qtd = qtdDaOpcao(sel, op.id)
+            return (
+              <CardOpcao
+                key={op.id}
+                opcao={op}
+                comFoto={grade}
+                somavel={somavel}
+                emFalta={!!(op.status && op.status !== 'ACTIVE')}
+                marcado={qtd > 0}
+                qtd={qtd}
+                podeMais={podeAdicionarOpcao(grupo, sel, op).ok}
+                aoTocar={() => aoTocar(grupo, op)}
+                aoMenos={() => aoMenos(grupo, op)}
+              />
+            )
+          })}
+        </div>
+
+        {!grupoSatisfeito(grupo, sel) && regra.obrigatorio
+          ? <div className="tq-grupo-falta">Escolha para continuar</div>
+          : null}
       </div>
-
-      {!grupoSatisfeito(grupo, sel) && regra.obrigatorio
-        ? <div className="tq-grupo-falta">Escolha para continuar</div>
-        : null}
     </section>
   )
 }
