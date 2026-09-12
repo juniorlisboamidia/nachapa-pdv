@@ -1,8 +1,6 @@
 import { podeAdicionarOpcao, grupoSatisfeito } from '../totemCarrinho'
-import { regraDoGrupo, qtdDaOpcao, somaDaSelecao } from '../totemLayout'
-import { moeda } from './formato'
-import { Ico } from './icones'
-import Stepper from './Stepper'
+import { regraDoGrupo, qtdDaOpcao, somaDaSelecao, modoDeOpcoes } from '../totemLayout'
+import CardOpcao from './CardOpcao'
 
 // Um grupo de complementos. Toda a régua de o que pode ser tocado continua vindo
 // de totemCarrinho (`podeAdicionarOpcao`, `grupoSatisfeito`): aqui só se desenha.
@@ -31,6 +29,9 @@ export default function BlocoGrupo({ grupo, selecao, aoTocar, aoMenos }) {
 
   const sel = selecao ?? []
   const somavel = grupo.choiceType === 'SUMMABLE'
+  const grade = modoDeOpcoes(grupo) === 'GRADE'
+  const escolhidas = somaDaSelecao(sel)
+  const noLimite = grupo.max !== null && grupo.max !== undefined && escolhidas >= Number(grupo.max)
 
   return (
     <section
@@ -45,62 +46,31 @@ export default function BlocoGrupo({ grupo, selecao, aoTocar, aoMenos }) {
       </div>
 
       {somavel && grupo.max ? (
-        <div className="tq-grupo-contagem tq-num">{somaDaSelecao(sel)} de {grupo.max}</div>
+        <div className="tq-grupo-contagem tq-num">{escolhidas} de {grupo.max}</div>
       ) : null}
+      {/* Limite atingido se explica no cabeçalho do grupo. As opções que sobraram
+          apagam, mas nenhuma desaparece: sumir daria a impressão de cardápio
+          diferente a cada toque. */}
+      {noLimite && !somavel && Number(grupo.max) > 1
+        ? <div className="tq-grupo-limite">Limite de {grupo.max} escolhas atingido.</div>
+        : null}
 
-      <div className="tq-opcoes">
+      <div className={'tq-opcoes' + (grade ? ' grade' : '')}>
         {(grupo.opcoes ?? []).map((op) => {
-          const emFalta = op.status && op.status !== 'ACTIVE'
           const qtd = qtdDaOpcao(sel, op.id)
-          const marcado = qtd > 0
-          const podeMais = podeAdicionarOpcao(grupo, sel, op).ok
-
-          if (somavel) {
-            return (
-              <div key={op.id} className={'tq-op' + (marcado ? ' on' : '') + (emFalta ? ' falta' : '')}>
-                <span className="tq-op-txt">
-                  <span className="tq-op-nome">{op.nome}</span>
-                  {op.preco > 0 ? <span className="tq-op-preco tq-num">+ {moeda(op.preco)}</span> : null}
-                </span>
-                {emFalta ? <span className="tq-op-falta">Em falta</span> : (
-                  qtd > 0
-                    ? (
-                      <Stepper
-                        valor={qtd}
-                        minimo={0}
-                        rotulo={op.nome}
-                        aoMenos={() => aoMenos(grupo, op)}
-                        aoMais={() => aoTocar(grupo, op)}
-                        maximoAtingido={!podeMais}
-                      />
-                    )
-                    : (
-                      <button type="button" className="tq-op-add" disabled={!podeMais} onClick={() => aoTocar(grupo, op)}>
-                        Adicionar
-                      </button>
-                    )
-                )}
-              </div>
-            )
-          }
-
           return (
-            <button
+            <CardOpcao
               key={op.id}
-              type="button"
-              className={'tq-op' + (emFalta ? ' falta' : '')}
-              disabled={!!emFalta || (!marcado && !podeMais)}
-              aria-pressed={marcado}
-              onClick={() => aoTocar(grupo, op)}
-            >
-              <span className="tq-op-txt">
-                <span className="tq-op-nome">{op.nome}</span>
-                {op.preco > 0 ? <span className="tq-op-preco tq-num">+ {moeda(op.preco)}</span> : null}
-              </span>
-              {emFalta
-                ? <span className="tq-op-falta">Em falta</span>
-                : <span className="tq-op-marca" aria-hidden="true"><Ico nome="check" tam={18} traco={3} /></span>}
-            </button>
+              opcao={op}
+              comFoto={grade}
+              somavel={somavel}
+              emFalta={!!(op.status && op.status !== 'ACTIVE')}
+              marcado={qtd > 0}
+              qtd={qtd}
+              podeMais={podeAdicionarOpcao(grupo, sel, op).ok}
+              aoTocar={() => aoTocar(grupo, op)}
+              aoMenos={() => aoMenos(grupo, op)}
+            />
           )
         })}
       </div>

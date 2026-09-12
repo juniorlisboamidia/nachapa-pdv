@@ -532,3 +532,29 @@
   padding: 14px 16px; margin-bottom: 18px; color: #7f1d1d;
   font-size: clamp(16px, 1.6vw, 18px); line-height: 1.45;
 }
+
+/* ═══ V6 — cards de opção (complementos) ═══════════════════════════════════ */
+
+/* Grade só quando o grupo TEM foto (ver modoDeOpcoes): grupo inteiro sem imagem
+   fica em lista de texto bem resolvida, sem espaço reservado para um vazio. */
+.tq-opcoes.grade { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.tq-opcoes.grade .tq-op { align-items: flex-start; min-height: 120px; }
+@media (max-width: 599px) { .tq-opcoes.grade { grid-template-columns: minmax(0, 1fr); } }
+
+.tq-op-foto {
+  flex: 0 0 auto; width: 96px; height: 96px; aspect-ratio: auto;
+  border-radius: var(--tq-raio-2); object-fit: cover; background: #eae5db;
+}
+/* Em falta: a foto apaga, o TEXTO não. O aviso precisa continuar legível. */
+.tq-op.falta .tq-op-foto { filter: grayscale(1); opacity: 0.7; }
+.tq-op.falta .tq-op-nome, .tq-op.falta .tq-op-preco { opacity: 1; }
+.tq-op.falta { opacity: 1; background: #f4f1e9; border-color: #ded8c9; }
+.tq-op.falta .tq-op-desc { color: var(--tq-texto-3); }
+.tq-op-desc {
+  font-size: clamp(14px, 1.4vw, 16px); color: var(--tq-texto-3); line-height: 1.3;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.tq-op-lado { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+/* Limite do grupo atingido: as não escolhidas apagam, mas nenhuma some da tela. */
+.tq-op.bloqueada { opacity: 0.45; }
+.tq-grupo-limite { margin: -6px 0 12px; color: #8a6a00; font-weight: 700; font-size: clamp(14px, 1.4vw, 16px); }

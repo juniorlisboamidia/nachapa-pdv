@@ -62,3 +62,16 @@ export function obrigatoriosPendentes(grupos, selecoes) {
   }
   return out
 }
+
+// Grade com foto ou lista de texto? A decisão é do GRUPO inteiro, não de cada
+// opção: se uma tem imagem e a outra não, as duas entram na grade (a sem foto
+// recebe o marcador desenhado) para a coluna de nomes ficar alinhada. Grupo em
+// que NENHUMA opção tem imagem vira lista de texto — reservar um quadrado vazio
+// ao lado de cada linha só produziria buraco.
+//
+// String vazia não é foto: o Cardápio Web devolve '' quando o campo existe e não
+// foi preenchido.
+export function modoDeOpcoes(grupo) {
+  const temFoto = lista(grupo?.opcoes).some((o) => typeof o?.imagem === 'string' && o.imagem.trim() !== '')
+  return temFoto ? 'GRADE' : 'LISTA'
+}

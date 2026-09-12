@@ -6,7 +6,7 @@
 // grupos que estão segurando o botão — na ordem do Cardápio Web.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { somaDaSelecao, qtdDaOpcao, regraDoGrupo, obrigatoriosPendentes } from './totemLayout.js';
+import { somaDaSelecao, qtdDaOpcao, regraDoGrupo, obrigatoriosPendentes, modoDeOpcoes } from './totemLayout.js';
 
 const grupo = (id, extra = {}) => ({ id, nome: `Grupo ${id}`, min: 0, max: null, status: 'ACTIVE', opcoes: [], ...extra });
 
@@ -92,4 +92,25 @@ test('chave da seleção em string e em número dão o mesmo resultado', () => {
 test('lista vazia ou inválida não quebra', () => {
   assert.deepEqual(obrigatoriosPendentes(null, null), []);
   assert.deepEqual(obrigatoriosPendentes([], {}), []);
+});
+
+// ── modoDeOpcoes ────────────────────────────────────────────────────────────
+const comFoto = { id: 1, nome: 'Batata frita', imagem: 'https://cdn/x.jpg' };
+const semFoto = { id: 2, nome: 'Polenta frita', imagem: null };
+
+test('grupo sem nenhuma foto vira lista de texto', () => {
+  assert.equal(modoDeOpcoes(grupo(1, { opcoes: [semFoto, { id: 3, nome: 'X' }] })), 'LISTA');
+});
+
+test('basta UMA opção com foto para o grupo inteiro virar grade', () => {
+  assert.equal(modoDeOpcoes(grupo(1, { opcoes: [semFoto, comFoto] })), 'GRADE');
+});
+
+test('string vazia não conta como foto', () => {
+  assert.equal(modoDeOpcoes(grupo(1, { opcoes: [{ id: 4, nome: 'Y', imagem: '   ' }] })), 'LISTA');
+});
+
+test('grupo sem opções não quebra', () => {
+  assert.equal(modoDeOpcoes(grupo(1)), 'LISTA');
+  assert.equal(modoDeOpcoes(null), 'LISTA');
 });
