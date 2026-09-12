@@ -29,9 +29,11 @@ import Cabecalho from '../components/totem/Cabecalho'
 import TelaInicio from '../components/totem/TelaInicio'
 import TelaCatalogo from '../components/totem/TelaCatalogo'
 import BarraPedido from '../components/totem/BarraPedido'
+import TelaItem from '../components/totem/TelaItem'
 import { Ico } from '../components/totem/icones'
+import { obrigatoriosPendentes } from '../components/totemLayout'
 import {
-  podeAdicionarOpcao, grupoSatisfeito, itemPronto, itemOrdenavel, subtotalLocal,
+  podeAdicionarOpcao, itemPronto, itemOrdenavel, subtotalLocal,
   montarCarrinho, diffCotacao, chaveNova, mensagemErro, proximoEstadoAposFalha,
   indicePorItemId, linhaDeProduto, gruposRenderizaveis, nomeApresentado,
   imagemApresentada, descricaoApresentada, opcoesVisiveisDaLinha, substituirLinha,
@@ -55,18 +57,6 @@ const KIND_LABEL = { money: 'Dinheiro', debit_card: 'Cartão de débito', credit
 const moeda = (v) => Number(v ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 const codigoDe = (e) => e?.response?.data?.erro ?? (e?.response ? 'ERRO_INTERNO' : 'HUB_INDISPONIVEL')
 
-// Rótulo do grupo: o que o cliente precisa saber é quantas escolhas ele deve/pode fazer.
-function regraDoGrupo(g) {
-  const min = Number(g?.min) || 0
-  const max = g?.max === null || g?.max === undefined ? null : Number(g.max)
-  if (min > 0 && max !== null && max === min) return { texto: `escolha ${min}`, obrigatorio: true }
-  if (min > 0 && max !== null) return { texto: `escolha de ${min} a ${max}`, obrigatorio: true }
-  if (min > 0) return { texto: `escolha ao menos ${min}`, obrigatorio: true }
-  if (max !== null) return { texto: `escolha até ${max}`, obrigatorio: false }
-  return { texto: 'opcional', obrigatorio: false }
-}
-
-const somaSelecao = (sel) => (Array.isArray(sel) ? sel : []).reduce((s, e) => s + (Number(e?.qtd) || 1), 0)
 const qtdSelecionada = (sel, opcaoId) => {
   const e = (Array.isArray(sel) ? sel : []).find((x) => String(x.opcaoId) === String(opcaoId))
   return e ? (Number(e.qtd) || 1) : 0
@@ -84,31 +74,6 @@ function TelaAviso({ emoji, titulo, texto, lista, acao }) {
       {lista}
       {acao}
     </div>
-  )
-}
-
-// Imagem do item: placeholder desenhado em CSS quando o cardápio não tem foto (é comum),
-// para o card não desabar e a grade não ficar torta.
-function FotoItem({ src, alt }) {
-  const [quebrou, setQuebrou] = useState(false)
-  if (!src || quebrou) return <div className="ttm-foto ttm-foto-vazia" aria-hidden="true">🍔</div>
-  return <img className="ttm-foto" src={src} alt={alt} loading="lazy" onError={() => setQuebrou(true)} />
-}
-
-// `aPartirDe` (§6 rev. 3): o valor mostrado é o MÍNIMO da jornada obrigatória que ainda
-// falta — o cliente pode terminar pagando mais (bebida mais cara, acompanhamento com
-// adicional). O rótulo é pequeno e vem ANTES do número, para o preço continuar sendo a
-// primeira coisa que se lê no card.
-function PrecoItem({ item, aPartirDe }) {
-  const promo = item?.precoPromocional !== null && item?.precoPromocional !== undefined
-  const rotulo = aPartirDe ? <span className="ttm-apartir">a partir de</span> : null
-  if (!promo) return <span className="ttm-preco">{rotulo}{moeda(item?.preco)}</span>
-  return (
-    <span className="ttm-preco">
-      {rotulo}
-      <span className="ttm-preco-de">de {moeda(item.preco)}</span>
-      <span className="ttm-preco-por">por {moeda(item.precoPromocional)}</span>
-    </span>
   )
 }
 
@@ -663,24 +628,24 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
     // é a OPÇÃO escolhida no card, não o item base (que costuma se chamar "TRADICIONAIS 🍔"
     // e custar R$ 0,00). O cliente nunca vê o item base nem um id.
     const nomeNaTela = nomeApresentado(aberto)
-    // Preço do cabeçalho (§6 rev. 3): o SUBTOTAL CORRENTE da linha — a identidade (base + a
-    // opção principal já escolhida no card) mais tudo que o cliente foi marcando. É a mesma
-    // conta de `subtotalLocal`, então o número do cabeçalho e o do botão nunca divergem, e
-    // ele SOBE na hora em que uma escolha custa a mais.
-    // Enquanto faltar obrigatório num produto "a partir de", o rótulo continua ao lado;
+    // Preço do cabeçalho (§6 rev. 3): o MAIOR entre o subtotal corrente e o piso que o card
+    // prometeu. Enquanto faltar obrigatório o rótulo "a partir de" continua ao lado;
     // completado o item, o valor é exato e o rótulo some.
-    const subtotalAberto = subtotalLocal(aberto)
-    const cabecalho = precoDoCabecalho({ subtotal: subtotalAberto, qtd: aberto.qtd, precoCard: aberto.precoCard, pronto })
+    const cabecalho = precoDoCabecalho({ subtotal: subtotalLocal(aberto), qtd: aberto.qtd, precoCard: aberto.precoCard, pronto })
     // Linha sem o preço do card (bootstrap antigo, ou uma linha do carrinho que nasceu antes
     // deste campo): o "de/por" ainda sai do item base, exatamente como antes.
     const promoDaBase = aberto.item?.precoPromocional
     const temPromoBase = promoDaBase !== null && promoDaBase !== undefined
     const descontoDaBase = temPromoBase ? (Number(aberto.item?.preco ?? 0) - Number(promoDaBase)) * Math.max(1, Number(aberto.qtd) || 1) : 0
     const precoCabecalho = cabecalho.valorPromocional !== undefined
-      ? { preco: cabecalho.valor, precoPromocional: cabecalho.valorPromocional }
+      ? { valor: cabecalho.valor, valorPromocional: cabecalho.valorPromocional }
       : (temPromoBase && !aberto.precoCard
-        ? { preco: Math.round((cabecalho.valor + descontoDaBase) * 100) / 100, precoPromocional: cabecalho.valor }
-        : { preco: cabecalho.valor })
+        ? { valor: Math.round((cabecalho.valor + descontoDaBase) * 100) / 100, valorPromocional: cabecalho.valor }
+        : { valor: cabecalho.valor })
+    // Só os grupos que a tela desenha: o principal da vitrine fica de fora (é a
+    // identidade do produto) e INACTIVE também, como o HUB faz na cotação.
+    const gruposVisiveis = gruposRenderizaveis(aberto).filter((g) => !g.status || g.status === 'ACTIVE' || g.status === 'MISSING')
+    const pendentes = obrigatoriosPendentes(gruposVisiveis, aberto.selecoes)
     conteudo = (
       <>
         <Cabecalho
@@ -690,121 +655,26 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
           aoCancelar={() => reiniciar()}
         />
         {banner}
-        <div className="ttm-tela ttm-item">
-          {!podePedir.ok && (
-            <div className="ttm-bloco-erro pequeno">
-              {podePedir.motivo === 'GRUPO_EM_FALTA'
-                ? 'Indisponível no momento: falta um ingrediente obrigatório deste item. Escolha outro ou chame um atendente.'
-                : 'Este item acabou. Escolha outro ou chame um atendente.'}
-            </div>
-          )}
-          <FotoItem src={imagemApresentada(aberto)} alt={nomeNaTela} />
-          <div className="ttm-item-cabeca">
-            <h1 className="ttm-item-nome">{nomeNaTela}</h1>
-            {descricaoApresentada(aberto) && <p className="ttm-item-desc">{descricaoApresentada(aberto)}</p>}
-            <PrecoItem item={precoCabecalho} aPartirDe={cabecalho.aPartirDe} />
-          </div>
-
-          {/* O grupo principal NÃO é desenhado: ele é a identidade do produto, já escolhida
-              no card. Trocar de produto é voltar ao grid — não existe "trocar" aqui. */}
-          {gruposRenderizaveis(aberto).filter((g) => !g.status || g.status === 'ACTIVE' || g.status === 'MISSING').map((g) => {
-            const sel = aberto.selecoes[g.id] ?? []
-            const regra = regraDoGrupo(g)
-            const faltando = pronto.gruposFaltando.some((id) => String(id) === String(g.id))
-            // Grupo em falta continua NA TELA, apagado: sumir com ele faria o cliente achar
-            // que o item mudou de receita. Ele não aceita toque, e se for obrigatório o item
-            // inteiro já está travado (itemOrdenavel).
-            if (g.status === 'MISSING') {
-              return (
-                <section key={g.id} className="ttm-grupo falta" aria-disabled="true">
-                  <div className="ttm-grupo-cabeca">
-                    <h2 className="ttm-grupo-nome">{g.nome}</h2>
-                    <span className="ttm-grupo-regra">{regra.obrigatorio ? 'obrigatório · ' : ''}em falta</span>
-                  </div>
-                  <p className="ttm-grupo-indisponivel">Em falta — não dá para escolher agora.</p>
-                </section>
-              )
-            }
-            return (
-              <section key={g.id} className={'ttm-grupo' + (faltando ? ' faltando' : '')}>
-                <div className="ttm-grupo-cabeca">
-                  <h2 className="ttm-grupo-nome">{g.nome}</h2>
-                  <span className={'ttm-grupo-regra' + (regra.obrigatorio ? ' obrigatorio' : '')}>
-                    {regra.obrigatorio ? 'obrigatório · ' : ''}{regra.texto}
-                  </span>
-                </div>
-                {g.choiceType === 'SUMMABLE' && g.max ? (
-                  <div className="ttm-grupo-contagem">{somaSelecao(sel)} de {g.max}</div>
-                ) : null}
-                <div className="ttm-opcoes">
-                  {(g.opcoes ?? []).map((op) => {
-                    const emFalta = op.status && op.status !== 'ACTIVE'
-                    const qtd = qtdSelecionada(sel, op.id)
-                    const marcado = qtd > 0
-                    const podeMais = podeAdicionarOpcao(g, sel, op).ok
-                    if (g.choiceType === 'SUMMABLE') {
-                      return (
-                        <div key={op.id} className={'ttm-opcao' + (marcado ? ' on' : '') + (emFalta ? ' falta' : '')}>
-                          <span className="ttm-opcao-nome">{op.nome}{emFalta ? ' · em falta' : ''}</span>
-                          {op.preco > 0 && <span className="ttm-opcao-preco">+ {moeda(op.preco)}</span>}
-                          {emFalta ? <span className="ttm-opcao-falta">—</span> : (
-                            qtd > 0
-                              ? <Stepper valor={qtd} minimo={0} rotulo={op.nome} onMenos={() => menosOpcao(g, op)} onMais={() => tocarOpcao(g, op)} maximoAtingido={!podeMais} />
-                              : <button type="button" className="ttm-opcao-add" disabled={!podeMais} onClick={() => tocarOpcao(g, op)}>Adicionar</button>
-                          )}
-                        </div>
-                      )
-                    }
-                    return (
-                      <button
-                        key={op.id}
-                        type="button"
-                        className={'ttm-opcao ttm-opcao-btn' + (marcado ? ' on' : '') + (emFalta ? ' falta' : '')}
-                        disabled={emFalta || (!marcado && !podeMais)}
-                        aria-pressed={marcado}
-                        onClick={() => tocarOpcao(g, op)}
-                      >
-                        <span className={'ttm-check' + (marcado ? ' on' : '')} aria-hidden="true">{marcado ? '✓' : ''}</span>
-                        <span className="ttm-opcao-nome">{op.nome}{emFalta ? ' · em falta' : ''}</span>
-                        {op.preco > 0 && <span className="ttm-opcao-preco">+ {moeda(op.preco)}</span>}
-                      </button>
-                    )
-                  })}
-                </div>
-                {!grupoSatisfeito(g, sel) && regra.obrigatorio && <div className="ttm-grupo-falta">Escolha para continuar</div>}
-              </section>
-            )
-          })}
-
-          <section className="ttm-grupo">
-            <div className="ttm-grupo-cabeca">
-              <h2 className="ttm-grupo-nome">Alguma observação?</h2>
-              <span className="ttm-grupo-regra">opcional</span>
-            </div>
-            <textarea
-              className="ttm-obs"
-              rows={2}
-              maxLength={200}
-              placeholder="Ex.: sem cebola"
-              value={aberto.observacao}
-              onChange={(e) => setAberto((a) => ({ ...a, observacao: e.target.value }))}
-            />
-          </section>
-        </div>
-
-        <footer className="ttm-rodape">
-          <Stepper
-            valor={aberto.qtd}
-            rotulo="Quantidade"
-            onMenos={() => setAberto((a) => ({ ...a, qtd: Math.max(1, a.qtd - 1) }))}
-            onMais={() => setAberto((a) => ({ ...a, qtd: a.qtd + 1 }))}
-          />
-          <button type="button" className="ttm-btn ttm-btn-primario ttm-btn-largo" disabled={!pronto.ok || !podePedir.ok} onClick={adicionarAoCarrinho}>
-            {/* Mesmo número do cabeçalho: enquanto faltar obrigatório, é o piso do card ("a partir de"),
-                nunca um subtotal parcial abaixo do menor preço pagável. */}
-            {podePedir.ok ? (aberto.uid ? 'Salvar item' : 'Adicionar') : 'Indisponível no momento'} · {cabecalho.aPartirDe ? 'a partir de ' : ''}{moeda(cabecalho.valorPromocional ?? cabecalho.valor)}
-          </button>
-        </footer>
+        <TelaItem
+          nome={nomeNaTela}
+          descricao={descricaoApresentada(aberto)}
+          imagem={imagemApresentada(aberto)}
+          grupos={gruposVisiveis}
+          selecoes={aberto.selecoes}
+          pendentes={pendentes}
+          temObrigatorio={gruposVisiveis.some((g) => (!g.status || g.status === 'ACTIVE') && Number(g.min) > 0)}
+          preco={{ ...precoCabecalho, aPartirDe: cabecalho.aPartirDe }}
+          pronto={pronto}
+          podePedir={podePedir}
+          qtd={aberto.qtd}
+          observacao={aberto.observacao}
+          ehEdicao={!!aberto.uid}
+          aoTocarOpcao={tocarOpcao}
+          aoMenosOpcao={menosOpcao}
+          aoMudarQtd={(d) => setAberto((a) => ({ ...a, qtd: Math.max(1, a.qtd + d) }))}
+          aoMudarObservacao={(txt) => setAberto((a) => ({ ...a, observacao: txt }))}
+          aoAdicionar={adicionarAoCarrinho}
+        />
       </>
     )
   }

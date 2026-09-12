@@ -404,3 +404,131 @@
 }
 .tq-toast.erro { background: #7f1d1d; }
 .tq-toast.erro .tq-toast-ico { background: var(--tq-branco); color: #7f1d1d; }
+
+/* ═══ V5 — detalhe do produto ══════════════════════════════════════════════ */
+
+.tq-hero { display: block; width: 100%; aspect-ratio: 16 / 9; max-height: 42vh; object-fit: cover; background: #eae5db; }
+.tq-det { width: min(920px, 92%); margin: 0 auto; padding: 26px 0 40px; }
+.tq-det-nome { font-size: clamp(28px, 3.6vw, 42px); line-height: 1.06; }
+.tq-det-desc { font-size: clamp(17px, 1.8vw, 20px); color: var(--tq-texto-2); margin-top: 8px; }
+.tq-det-preco { margin-top: 14px; }
+.tq-det-preco .tq-preco-valor { font-size: clamp(24px, 2.6vw, 32px); }
+
+/* Chips do que falta: atalho e diagnóstico ao mesmo tempo. Em combo, é o que
+   responde "por que o botão não libera?" sem o cliente ter de rolar a página. */
+.tq-pendencias {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--tq-borda);
+}
+.tq-pend-rot { color: var(--tq-texto-3); }
+.tq-pend {
+  min-height: 48px; padding: 0 18px; border-radius: 999px;
+  background: var(--tq-amarelo); color: var(--tq-tinta);
+  font-family: 'Archivo Totem', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
+  font-weight: 800; font-size: clamp(13px, 1.4vw, 15px); letter-spacing: 0.05em; text-transform: uppercase;
+}
+.tq-pend:active { background: var(--tq-amarelo-2); }
+.tq-pend.ok { background: #e5efe6; color: var(--tq-ok); }
+
+/* -- Bloco de grupo -------------------------------------------------------- */
+.tq-grupo {
+  margin-top: 22px; scroll-margin-top: 16px;
+  background: var(--tq-superficie); border: 1px solid var(--tq-borda); border-radius: var(--tq-raio);
+  padding: 20px 22px;
+}
+/* Obrigatório se anuncia pela FORMA, não só pelo texto: barra amarela na borda. */
+.tq-grupo.obrigatorio { border-left: 6px solid var(--tq-amarelo); }
+.tq-grupo.falta { background: #f2efe7; border-color: #ded8c9; }
+.tq-grupo-cab { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+.tq-grupo-nome { font-size: clamp(19px, 2vw, 24px); }
+.tq-grupo-regra { margin-left: auto; color: var(--tq-texto-3); }
+.tq-grupo.obrigatorio .tq-grupo-regra { color: #8a6a00; }
+.tq-grupo-contagem { margin: -6px 0 12px; color: var(--tq-texto-3); font-weight: 700; font-size: clamp(14px, 1.4vw, 16px); }
+.tq-grupo-indisponivel { font-size: clamp(16px, 1.6vw, 18px); font-weight: 700; color: var(--tq-texto-2); }
+.tq-grupo-falta { margin-top: 14px; font-weight: 800; color: #8a3b00; font-size: clamp(15px, 1.5vw, 17px); }
+
+/* -- Opção (V5: lista de texto; V6 acrescenta a grade com foto) ------------ */
+.tq-opcoes { display: grid; gap: 12px; }
+.tq-op {
+  display: flex; align-items: center; gap: 14px; width: 100%; min-height: 72px;
+  padding: 12px 16px; text-align: left;
+  background: var(--tq-superficie); border: 2px solid var(--tq-borda); border-radius: 14px;
+  transition: border-color 0.14s ease, background 0.14s ease, transform 0.1s ease;
+}
+.tq-op:active:not(:disabled) { transform: scale(0.99); }
+.tq-op[aria-pressed='true'] { border-color: var(--tq-amarelo); border-width: 3px; padding: 11px 15px; }
+.tq-op.falta { opacity: 0.55; }
+.tq-op:disabled { cursor: not-allowed; }
+.tq-op-txt { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.tq-op-nome { font-size: clamp(16px, 1.7vw, 19px); font-weight: 700; overflow-wrap: anywhere; }
+.tq-op-preco { color: var(--tq-texto-2); font-size: clamp(15px, 1.6vw, 17px); }
+.tq-op-marca {
+  flex: 0 0 auto; width: 34px; height: 34px; border-radius: 10px;
+  border: 2px solid var(--tq-borda-forte); background: var(--tq-superficie);
+  display: grid; place-items: center; color: transparent;
+}
+.tq-op[aria-pressed='true'] .tq-op-marca { background: var(--tq-amarelo); border-color: var(--tq-amarelo); color: var(--tq-tinta); }
+.tq-op-falta {
+  flex: 0 0 auto; padding: 5px 12px; border-radius: 999px; background: #e0dbd0; color: var(--tq-texto-2);
+  font-family: 'Archivo Totem', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
+  font-weight: 800; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
+}
+
+/* -- Observação (spec §4.3) ------------------------------------------------ */
+/* Ação fechada por padrão: o recurso continua inteiro, mas deixa de gastar a
+   altura de um formulário no fim de toda tela de produto. */
+.tq-obs-abrir {
+  display: inline-flex; align-items: center; gap: 10px; margin-top: 22px;
+  min-height: 56px; padding: 0 20px; border-radius: 14px;
+  border: 2px dashed var(--tq-borda-forte); background: transparent; color: var(--tq-texto-2);
+  font-weight: 700; font-size: clamp(15px, 1.6vw, 18px);
+}
+.tq-obs-abrir:active { background: var(--tq-superficie); }
+.tq-obs-bloco {
+  margin-top: 22px; background: var(--tq-superficie); border: 1px solid var(--tq-borda);
+  border-radius: var(--tq-raio); padding: 18px 20px;
+}
+.tq-obs-cab { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; }
+.tq-obs-cab .tq-rotulo { color: var(--tq-texto-3); }
+.tq-obs-contador { margin-left: auto; color: var(--tq-texto-3); font-size: clamp(13px, 1.3vw, 15px); font-weight: 700; }
+.tq-obs {
+  width: 100%; min-height: 96px; padding: 12px 14px; resize: none;
+  border: 2px solid var(--tq-borda); border-radius: var(--tq-raio-2);
+  background: var(--tq-superficie); color: var(--tq-texto);
+  font: inherit; font-size: clamp(16px, 1.7vw, 19px);
+  /* Único ponto de digitação livre do quiosque: aqui a seleção volta a valer. */
+  user-select: text; -webkit-user-select: text;
+}
+.tq-obs:focus { outline: none; border-color: var(--tq-preto); }
+
+/* -- Rodapé de ação do item ------------------------------------------------ */
+.tq-rodape {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 16px;
+  padding: 16px 24px calc(20px + env(safe-area-inset-bottom, 0px));
+  background: var(--tq-superficie); border-top: 1px solid var(--tq-borda);
+  box-shadow: 0 -8px 24px rgba(14, 19, 25, 0.07);
+}
+.tq-stepper { display: inline-flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+.tq-step {
+  width: 56px; height: 56px; border-radius: 14px;
+  border: 2px solid var(--tq-borda); background: var(--tq-superficie);
+  display: grid; place-items: center;
+}
+.tq-step:active:not(:disabled) { transform: scale(0.97); }
+.tq-step:disabled { opacity: 0.35; cursor: not-allowed; }
+.tq-step-v { min-width: 48px; text-align: center; font-size: clamp(20px, 2.2vw, 26px); }
+/* Opção somável: o "Adicionar" vira contador assim que entra a primeira unidade. */
+.tq-op-add {
+  flex: 0 0 auto; min-height: 56px; min-width: 116px; padding: 0 18px; border-radius: 12px;
+  border: 2px solid var(--tq-borda-forte); background: var(--tq-superficie); color: var(--tq-texto);
+  font-weight: 800; font-size: clamp(15px, 1.5vw, 17px);
+}
+.tq-op-add:active:not(:disabled) { transform: scale(0.98); }
+.tq-op-add:disabled { opacity: 0.4; cursor: not-allowed; }
+.tq-op.on { border-color: var(--tq-amarelo); border-width: 3px; padding: 11px 15px; }
+/* Bloco de recado dentro de uma tela (item indisponível, recusa de cotação). */
+.tq-aviso-bloco {
+  background: var(--tq-perigo-fraco); border: 2px solid #e8b4b0; border-radius: var(--tq-raio-2);
+  padding: 14px 16px; margin-bottom: 18px; color: #7f1d1d;
+  font-size: clamp(16px, 1.6vw, 18px); line-height: 1.45;
+}
