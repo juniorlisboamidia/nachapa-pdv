@@ -600,3 +600,77 @@
 .tq-mini:active { transform: scale(0.98); }
 .tq-mini.perigo { border-color: #e8cfcd; color: var(--tq-perigo); }
 .tq-mini.confirmando { background: var(--tq-perigo); border-color: var(--tq-perigo); color: var(--tq-branco); }
+
+/* ═══ V9 — pagamento e revisão ═════════════════════════════════════════════ */
+
+.tq-metodo {
+  display: flex; align-items: center; gap: 16px; min-height: 88px; padding: 18px 20px; text-align: left;
+  background: var(--tq-superficie); border: 2px solid var(--tq-borda); border-radius: 15px;
+  transition: border-color 0.14s ease, transform 0.1s ease;
+}
+.tq-metodo:active { transform: scale(0.99); }
+.tq-metodo[aria-pressed='true'] { border-color: var(--tq-amarelo); border-width: 3px; padding: 17px 19px; }
+.tq-metodo[aria-pressed='true'] .tq-op-marca { background: var(--tq-amarelo); border-color: var(--tq-amarelo); color: var(--tq-tinta); }
+.tq-metodo-nome { flex: 1 1 auto; font-size: clamp(19px, 2vw, 23px); }
+
+/* O recado de que nada é cobrado aqui deixa de ser rodapé e vira a primeira
+   coisa da tela: é a dúvida número um de quem usa um totem pela primeira vez. */
+.tq-aviso-forte {
+  background: var(--tq-aviso-fundo); border: 2px solid #e8cf6a; border-radius: var(--tq-raio);
+  padding: 18px 20px; color: var(--tq-aviso-tinta); font-size: clamp(16px, 1.7vw, 19px); line-height: 1.45;
+  display: flex; gap: 14px; align-items: flex-start;
+}
+.tq-aviso-forte b { display: block; font-size: clamp(15px, 1.6vw, 17px); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 4px; }
+
+.tq-resumo-modo {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  color: var(--tq-texto-3); margin-bottom: 4px;
+}
+.tq-link {
+  background: none; border: none; padding: 12px 8px; min-height: 48px;
+  color: #8a3b00; font-weight: 800; text-decoration: underline; font-size: clamp(15px, 1.5vw, 17px);
+}
+.tq-link:disabled { opacity: 0.5; cursor: not-allowed; }
+.tq-precos-mudaram {
+  background: var(--tq-aviso-fundo); border: 2px solid var(--tq-amarelo); border-radius: var(--tq-raio);
+  padding: 16px 18px; color: var(--tq-aviso-tinta); font-size: clamp(16px, 1.7vw, 19px); line-height: 1.45;
+}
+.tq-pagar-balcao { color: var(--tq-texto-3); font-weight: 700; font-size: clamp(15px, 1.6vw, 18px); }
+
+/* Faixa preta de fechamento: marca o ponto sem volta. Só a revisão tem. */
+.tq-fechamento {
+  flex: 0 0 auto; background: var(--tq-preto); color: var(--tq-branco);
+  padding: 20px 24px calc(22px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; gap: 14px;
+}
+.tq-fechamento-l { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.tq-fechamento-l span { letter-spacing: 0.14em; color: var(--tq-texto-claro); font-size: clamp(15px, 1.6vw, 18px); }
+.tq-fechamento-l strong { font-size: clamp(32px, 4vw, 46px); }
+.tq-fechamento-l strong.mudou { color: var(--tq-amarelo); }
+
+/* Confirmação em dúvida: um único caminho na tela, e um texto que diz por que
+   tocar de novo é seguro. */
+.tq-travado {
+  background: #2a1d0b; border: 2px solid var(--tq-amarelo); border-radius: var(--tq-raio);
+  padding: 18px 20px; color: #f6e6b8; font-size: clamp(16px, 1.7vw, 19px); line-height: 1.45;
+}
+.tq-travado b { color: var(--tq-branco); }
+.tq-travado-nota { text-align: center; color: var(--tq-texto-claro); font-size: clamp(14px, 1.5vw, 16px); }
+
+.tq-erro-bloco {
+  background: var(--tq-superficie); border: 2px solid #e8b4b0; border-radius: var(--tq-raio); padding: 20px;
+}
+.tq-erro-titulo { font-size: clamp(20px, 2.2vw, 26px); margin-bottom: 8px; }
+.tq-erro-texto { font-size: clamp(16px, 1.7vw, 19px); color: var(--tq-texto-2); line-height: 1.5; }
+.tq-erro-lista { margin: 14px 0 18px; padding-left: 22px; font-size: clamp(15px, 1.6vw, 18px); color: var(--tq-texto-2); line-height: 1.6; }
+.tq-erro-lista li { list-style: disc; }
+
+/* Enquanto o pedido está sendo criado, NADA mais é tocável: um segundo toque em
+   outro lugar no meio da chamada é o começo de um pedido duplicado. */
+.tq-enviando {
+  position: absolute; inset: 0; z-index: 60; background: rgba(14, 19, 25, 0.94); color: var(--tq-branco);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+  text-align: center; padding: 32px;
+}
+.tq-enviando-t { font-size: clamp(24px, 3vw, 34px); }
+.tq-enviando-p { font-size: clamp(16px, 1.7vw, 20px); color: var(--tq-texto-claro); max-width: 460px; }

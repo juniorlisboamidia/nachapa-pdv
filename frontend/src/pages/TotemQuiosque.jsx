@@ -31,6 +31,9 @@ import TelaCatalogo from '../components/totem/TelaCatalogo'
 import BarraPedido from '../components/totem/BarraPedido'
 import TelaItem from '../components/totem/TelaItem'
 import TelaCarrinho from '../components/totem/TelaCarrinho'
+import TelaPagamento from '../components/totem/TelaPagamento'
+import TelaRevisar from '../components/totem/TelaRevisar'
+import Spinner from '../components/totem/Spinner'
 import { Ico } from '../components/totem/icones'
 import { obrigatoriosPendentes, aplicarToque, aplicarMenos } from '../components/totemLayout'
 import { atingiuMax, proximoFoco } from '../components/totemFoco'
@@ -69,7 +72,6 @@ const gruposVisiveisDe = (linha) => (
 
 
 // ── Blocos de UI pequenos ───────────────────────────────────────────────────
-const Spinner = ({ claro }) => <span className={'tq-spinner' + (claro ? ' claro' : '')} aria-hidden="true" />
 
 function TelaAviso({ emoji, titulo, texto, lista, acao }) {
   return (
@@ -693,62 +695,26 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
   if (tela === 'pagamento') {
     conteudo = (
       <>
-        <Cabecalho loja={loja} titulo="Forma de pagamento" aoVoltar={() => setTela('carrinho')} aoCancelar={() => reiniciar()} />
+        <Cabecalho loja={loja} titulo="Como você vai pagar?" aoVoltar={() => setTela('carrinho')} aoCancelar={() => reiniciar()} />
         {banner}
-        <div className="ttm-tela ttm-pagamento">
-          <p className="ttm-pagamento-aviso">
-            <strong>Você paga no balcão ao retirar.</strong> Nada é cobrado aqui no totem — escolha só como vai pagar,
-            para o caixa já saber.
-          </p>
-          {metodos.length === 0 ? (
-            <p className="ttm-aviso-texto">Nenhuma forma de pagamento disponível agora. Fale com um atendente no balcão.</p>
-          ) : (
-            <div className="ttm-metodos">
-              {metodos.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  className={'ttm-metodo' + (String(m.id) === String(metodoId) ? ' on' : '')}
-                  aria-pressed={String(m.id) === String(metodoId)}
-                  onClick={() => escolherMetodo(m.id)}
-                >
-                  <span className={'ttm-check' + (String(m.id) === String(metodoId) ? ' on' : '')} aria-hidden="true">
-                    {String(m.id) === String(metodoId) ? '✓' : ''}
-                  </span>
-                  <span className="ttm-metodo-nome">{nomeMetodo(m)}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        <footer className="ttm-rodape ttm-rodape-coluna">
-          <div className="ttm-subtotal">
-            <span>Subtotal <span className="ttm-subtotal-nota">(a confirmar na revisão)</span></span>
-            <strong>{moeda(totalLocal)}</strong>
-          </div>
-          <button type="button" className="ttm-btn ttm-btn-primario ttm-btn-largo" disabled={!metodoId} onClick={revisar}>
-            Revisar o pedido
-          </button>
-        </footer>
+        <TelaPagamento
+          metodos={metodos}
+          metodoId={metodoId}
+          nomeDoMetodo={nomeMetodo}
+          total={totalLocal}
+          aoEscolher={escolherMetodo}
+          aoRevisar={revisar}
+        />
       </>
     )
   }
 
   if (tela === 'revisar') {
-    const linhas = Array.isArray(cotacao?.linhas) ? cotacao.linhas : []
-    const alteradas = avisoPrecos?.alteradas ?? []
-    const alteradasIdx = avisoPrecos?.alteradasIdx ?? []
-    // O HUB devolve as linhas NA ORDEM do carrinho. Quando a contagem bate, cada linha
-    // cotada tem a sua linha local — e é dela que saem o nome apresentado e os
-    // complementos, para o cliente ver "X BURGUER" aqui como viu no card (o HUB só
-    // conhece o item base). Se a contagem não bater (linha recusada), a tela volta ao
-    // que o servidor mandou e o destaque cai para o casamento por itemId.
-    const porIndice = linhas.length === carrinho.length
-    const localDa = (l, i) => (porIndice && String(carrinho[i]?.item?.id) === String(l?.itemId) ? carrinho[i] : null)
     conteudo = (
       <>
-        {/* Travada (confirmação em dúvida): sem Voltar. Voltar levaria a uma nova cotação,
-            nova cotação gera chave nova, e chave nova cria um SEGUNDO pedido. */}
+        {/* Travada (confirmação em dúvida): sem Voltar e sem Cancelar. Os dois levariam
+            a uma nova cotação, nova cotação gera chave nova, e chave nova cria um
+            SEGUNDO pedido. */}
         <Cabecalho
           loja={loja}
           titulo="Confira seu pedido"
@@ -756,110 +722,26 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
           aoCancelar={(enviando || travado) ? undefined : () => reiniciar()}
         />
         {banner}
-        <div className="ttm-tela ttm-revisar">
-          {cotando ? (
-            <div className="ttm-centrado"><Spinner /><div className="ttm-carregando-txt">Calculando o valor do seu pedido…</div></div>
-          ) : erroCotar ? (
-            <div className="ttm-bloco-erro">
-              <div className="ttm-bloco-erro-titulo">Não foi possível fechar o valor</div>
-              <p className="ttm-bloco-erro-texto">{mensagemErro(erroCotar.codigo)}</p>
-              {erroCotar.detalhes.length > 0 && (
-                <ul className="ttm-erro-lista">
-                  {erroCotar.detalhes.map((d, i) => {
-                    const nome = nomeDoDetalhe(d)
-                    // `mensagem` é a frase que o próprio servidor escreveu para ESTA linha
-                    // (mais específica que a frase geral do código): quando vem, ela manda.
-                    return <li key={`${d.codigo}-${i}`}>{nome ? <strong>{nome}: </strong> : null}{d.mensagem ?? mensagemErro(d.codigo)}</li>
-                  })}
-                </ul>
-              )}
-              <div className="ttm-rodape-botoes">
-                <button type="button" className="ttm-btn ttm-btn-secundario" onClick={() => setTela('carrinho')}>Voltar ao carrinho</button>
-                <button type="button" className="ttm-btn ttm-btn-primario" onClick={revisar}>Tentar de novo</button>
-              </div>
-            </div>
-          ) : (
-            <>
-              {avisoPrecos && (
-                <div className="ttm-precos-mudaram" role="status">
-                  <strong>Preços atualizados.</strong> O cardápio mudou enquanto você escolhia. Confira o novo valor antes de confirmar.
-                </div>
-              )}
-              {erroEnvio && !erroEnvio.podeRepetir && (
-                <div className="ttm-bloco-erro pequeno">{mensagemErro(erroEnvio.codigo)}</div>
-              )}
-              <div className="ttm-revisar-modo">
-                {MODOS[orderType]?.titulo} · {metodoEscolhido ? nomeMetodo(metodoEscolhido) : '—'}
-                {!travado && (
-                  <button type="button" className="ttm-btn-link" disabled={enviando} onClick={() => setTela('pagamento')}>trocar pagamento</button>
-                )}
-              </div>
-              {linhas.map((l, i) => {
-                const local = localDa(l, i)
-                // Destaque por ÍNDICE (§6, ajuste 5): duas linhas podem ser do mesmo item
-                // base, e marcar por itemId acenderia as duas quando só uma mudou.
-                const mudou = local
-                  ? alteradasIdx.includes(i)
-                  : alteradas.some((id) => String(id) === String(l.itemId))
-                // A lista de opções continua sendo a DO HUB: é ela que traz a ordem do
-                // Cardápio Web e as quantidades já consolidadas do que foi realmente cotado.
-                // Da linha local sai só uma coisa — qual opção é a PRINCIPAL, para escondê-la
-                // (ela já é o nome da linha). Reconstruir a lista aqui seria trocar o que o
-                // servidor cobrou pelo que a tela achava.
-                const principal = local?.apresentado?.opcaoId
-                const opcoes = (l.opcoes ?? []).filter((o) => (
-                  principal === null || principal === undefined || String(o.opcaoId) !== String(principal)
-                ))
-                return (
-                  <div key={`${l.itemId}-${i}`} className={'ttm-linha' + (mudou ? ' mudou' : '')}>
-                    <div className="ttm-linha-corpo">
-                      <div className="ttm-linha-nome">{l.qtd}× {local ? nomeApresentado(local) : l.nome}</div>
-                      <ul className="ttm-linha-opcoes">
-                        {opcoes.map((o, j) => (
-                          <li key={`${o.opcaoId}-${j}`}>{(Number(o.qtd) || 1) > 1 ? `${o.qtd}× ` : ''}{o.nome}</li>
-                        ))}
-                      </ul>
-                      {mudou && <div className="ttm-linha-mudou">preço atualizado</div>}
-                    </div>
-                    <div className="ttm-linha-valor">{moeda(l.totalPrice)}</div>
-                  </div>
-                )
-              })}
-              <div className="ttm-pagar-no-balcao">Pagamento no balcão, na retirada.</div>
-            </>
-          )}
-        </div>
-        {!cotando && !erroCotar && (
-          <footer className="ttm-rodape ttm-rodape-coluna">
-            <div className="ttm-total">
-              <span>Total</span>
-              <strong className={avisoPrecos?.totalMudou ? 'mudou' : undefined}>{moeda(cotacao?.total)}</strong>
-            </div>
-            {travado ? (
-              <div className="ttm-retry">
-                <p className="ttm-retry-texto">
-                  Não conseguimos falar com o sistema. <strong>Seu pedido pode já ter sido registrado.</strong>{' '}
-                  Toque no botão abaixo — não vai sair pedido em dobro.
-                </p>
-                <button type="button" className="ttm-btn ttm-btn-primario ttm-btn-largo" disabled={enviando} onClick={confirmar}>
-                  {enviando ? <><Spinner claro /> Enviando…</> : 'Tentar confirmar de novo'}
-                </button>
-                <p className="ttm-retry-nota">Se preferir, chame um atendente.</p>
-              </div>
-            ) : (
-              <button type="button" className="ttm-btn ttm-btn-primario ttm-btn-largo" disabled={enviando || !cotacao?.cotacao} onClick={confirmar}>
-                {enviando ? <><Spinner claro /> Enviando seu pedido…</> : 'Confirmar pedido'}
-              </button>
-            )}
-          </footer>
-        )}
-        {enviando && (
-          <div className="ttm-enviando" role="status" aria-live="assertive">
-            <Spinner />
-            <div className="ttm-enviando-titulo">Enviando seu pedido</div>
-            <div className="ttm-enviando-texto">Não feche esta tela. Isso pode levar até um minuto.</div>
-          </div>
-        )}
+        <TelaRevisar
+          cotando={cotando}
+          erroCotar={erroCotar}
+          linhas={Array.isArray(cotacao?.linhas) ? cotacao.linhas : []}
+          carrinho={carrinho}
+          avisoPrecos={avisoPrecos}
+          erroEnvio={erroEnvio}
+          travado={travado}
+          enviando={enviando}
+          modo={MODOS[orderType]?.titulo}
+          metodo={metodoEscolhido ? nomeMetodo(metodoEscolhido) : null}
+          total={cotacao?.total}
+          podeConfirmar={!!cotacao?.cotacao}
+          nomeDoDetalhe={nomeDoDetalhe}
+          mensagem={mensagemErro}
+          aoVoltarCarrinho={() => setTela('carrinho')}
+          aoTrocarPagamento={() => setTela('pagamento')}
+          aoRecotar={revisar}
+          aoConfirmar={confirmar}
+        />
       </>
     )
   }
