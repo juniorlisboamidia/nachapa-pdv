@@ -174,3 +174,82 @@
   }
   .tq-spinner { animation: none !important; }
 }
+
+/* ═══ V2 — cabeçalho, casca e Início ═══════════════════════════════════════ */
+
+/* -- Botões base ----------------------------------------------------------- */
+.tq-btn {
+  min-height: 72px; padding: 0 28px; border-radius: 14px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 12px;
+  font-family: 'Archivo Totem', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
+  font-weight: 900; font-size: clamp(18px, 1.9vw, 22px); letter-spacing: 0.05em; text-transform: uppercase;
+  transition: background 0.14s ease, transform 0.1s ease, border-color 0.14s ease;
+}
+.tq-btn-primario { background: var(--tq-amarelo); color: var(--tq-tinta); }
+.tq-btn-primario:active:not(:disabled) { background: var(--tq-amarelo-2); transform: scale(0.99); }
+.tq-btn-claro { background: var(--tq-superficie); color: var(--tq-texto); border: 2px solid var(--tq-borda); }
+.tq-btn-claro:active:not(:disabled) { border-color: var(--tq-borda-forte); transform: scale(0.99); }
+.tq-btn-largo { width: 100%; }
+.tq-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+/* Sobre o preto (barra do pedido, faixa de fechamento) o desabilitado não pode
+   virar um borrão: fundo próprio em vez de opacidade sobre amarelo. */
+.tq-sobre-preto .tq-btn:disabled { opacity: 1; background: #333a43; color: #8d8674; border-color: transparent; }
+
+/* -- Cabeçalho ------------------------------------------------------------- */
+.tq-topo {
+  flex: 0 0 auto; height: var(--tq-topo-h);
+  display: flex; align-items: center; gap: 20px; padding: 0 24px;
+  background: var(--tq-superficie); border-bottom: 1px solid var(--tq-borda);
+}
+.tq-topo-btn {
+  min-height: 56px; min-width: 56px; padding: 0 20px; border-radius: 14px;
+  border: 2px solid var(--tq-borda); background: var(--tq-superficie);
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font-weight: 700; font-size: clamp(15px, 1.5vw, 17px);
+}
+.tq-topo-btn:active { transform: scale(0.98); }
+.tq-topo-btn.perigo { border-color: #e8cfcd; color: var(--tq-perigo); }
+.tq-topo-logo { max-height: 56px; max-width: 132px; object-fit: contain; display: block; }
+.tq-marca {
+  width: 56px; height: 56px; border-radius: 14px; background: var(--tq-preto); color: var(--tq-amarelo);
+  display: grid; place-items: center; font-size: 26px; flex: 0 0 auto;
+}
+.tq-topo-meio { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.tq-topo-tit {
+  font-size: clamp(20px, 2.2vw, 27px); line-height: 1.15;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tq-topo-modo { font-size: clamp(15px, 1.5vw, 19px); color: var(--tq-texto-3); }
+.tq-topo-vaga { flex: 0 0 auto; width: 56px; }
+
+/* -- Início ---------------------------------------------------------------- */
+.tq-inicio {
+  flex: 1 1 auto; background: var(--tq-preto); color: var(--tq-branco);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px; padding: clamp(32px, 5vw, 64px); text-align: center;
+  position: relative; /* âncora do nome do aparelho, no rodapé */
+}
+.tq-inicio-logo { max-width: min(58%, 340px); max-height: 22vh; object-fit: contain; margin-bottom: 18px; }
+.tq-inicio-marca {
+  width: clamp(110px, 14vw, 160px); aspect-ratio: 1; border-radius: 28%;
+  background: var(--tq-amarelo); color: var(--tq-tinta);
+  display: grid; place-items: center; margin-bottom: 18px;
+  font-size: clamp(56px, 7vw, 82px); line-height: 1;
+}
+.tq-inicio-loja { font-size: clamp(15px, 1.6vw, 19px); letter-spacing: 0.22em; color: var(--tq-amarelo); }
+.tq-inicio-tit {
+  font-size: clamp(40px, 6vw, 68px); line-height: 1.02; margin-top: 6px; text-wrap: balance;
+}
+.tq-inicio-sub { font-size: clamp(18px, 1.9vw, 23px); color: var(--tq-texto-claro); margin-bottom: clamp(24px, 4vh, 44px); }
+.tq-modos { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(14px, 2vw, 24px); width: 100%; max-width: 860px; }
+.tq-modos.um { grid-template-columns: minmax(0, 1fr); max-width: 480px; }
+.tq-modo {
+  background: var(--tq-amarelo); color: var(--tq-tinta); border-radius: 22px;
+  padding: clamp(24px, 3vw, 40px) 20px; min-height: clamp(180px, 22vh, 260px);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  transition: background 0.14s ease, transform 0.1s ease;
+}
+.tq-modo:active { background: var(--tq-amarelo-2); transform: scale(0.985); }
+.tq-modo-t { font-size: clamp(22px, 2.6vw, 32px); letter-spacing: 0.02em; text-transform: uppercase; }
+.tq-modo-s { font-size: clamp(15px, 1.5vw, 18px); opacity: 0.72; }
+.tq-inicio-pe { position: absolute; left: 0; right: 0; bottom: 14px; text-align: center; font-size: 13px; color: #5f5a50; }

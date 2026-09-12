@@ -24,6 +24,9 @@
 //     ou falha de banco), o grid volta a ser o de `itens`.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { aparelhoApi } from '../services/api'
+import Casca from '../components/totem/Casca'
+import Cabecalho from '../components/totem/Cabecalho'
+import TelaInicio from '../components/totem/TelaInicio'
 import {
   podeAdicionarOpcao, grupoSatisfeito, itemPronto, itemOrdenavel, subtotalLocal,
   montarCarrinho, diffCotacao, chaveNova, mensagemErro, proximoEstadoAposFalha,
@@ -41,8 +44,8 @@ const MAX_POLL_DISPLAY = 20        // 20 × 3 s = 60 s
 const MS_LIBERAR_NOVO = 20_000     // no 202, "Novo pedido" só aparece depois disso
 
 const MODOS = {
-  onsite: { titulo: 'Comer aqui', sub: 'Vou comer na loja', emoji: '🍽️' },
-  takeout: { titulo: 'Levar', sub: 'Vou levar para viagem', emoji: '🛍️' },
+  onsite: { titulo: 'Comer aqui', sub: 'Vou comer na loja', ico: 'mesa' },
+  takeout: { titulo: 'Levar', sub: 'Vou levar para viagem', ico: 'sacola' },
 }
 const KIND_LABEL = { money: 'Dinheiro', debit_card: 'Cartão de débito', credit_card: 'Cartão de crédito' }
 
@@ -67,22 +70,7 @@ const qtdSelecionada = (sel, opcaoId) => {
 }
 
 // ── Blocos de UI pequenos ───────────────────────────────────────────────────
-const Spinner = ({ claro }) => <span className={'ttm-spinner' + (claro ? ' claro' : '')} aria-hidden="true" />
-
-function Cabecalho({ loja, titulo, aoVoltar, direita }) {
-  return (
-    <header className="ttm-topo">
-      {aoVoltar
-        ? <button type="button" className="ttm-voltar" onClick={aoVoltar}>‹ Voltar</button>
-        : <span className="ttm-topo-vazio" />}
-      <div className="ttm-topo-meio">
-        <div className="ttm-topo-titulo">{titulo}</div>
-        {loja?.nome && <div className="ttm-topo-loja">{loja.nome}</div>}
-      </div>
-      <div className="ttm-topo-dir">{direita}</div>
-    </header>
-  )
-}
+const Spinner = ({ claro }) => <span className={'tq-spinner' + (claro ? ' claro' : '')} aria-hidden="true" />
 
 function TelaAviso({ emoji, titulo, texto, lista, acao }) {
   return (
@@ -568,9 +556,9 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
   // ── Estados de bloqueio (nada de pedido) ─────────────────────────────────
   if (carregandoBoot && !boot) {
     return (
-      <div className="ttm-raiz">
-        <div className="ttm-tela ttm-centrado"><Spinner /><div className="ttm-carregando-txt">Carregando o menu…</div></div>
-      </div>
+      <Casca>
+        <div className="tq-centrado"><Spinner /><div className="tq-carregando-txt">Carregando o menu…</div></div>
+      </Casca>
     )
   }
 
@@ -580,9 +568,9 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
   if (bootErro && tela !== 'resultado') {
     const recarregar = <button type="button" className="ttm-btn ttm-btn-primario" onClick={() => { setBootErro(null); carregarBoot() }}>Tentar de novo</button>
     return (
-      <div className="ttm-raiz">
+      <Casca>
         <TelaAviso emoji="🔌" titulo="Totem indisponível" texto={mensagemErro(bootErro)} acao={recarregar} />
-      </div>
+      </Casca>
     )
   }
 
@@ -593,7 +581,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
   const fechada = boot?.operacional?.abertaAgora === false
   if ((fechada || orderTypes.length === 0) && tela === 'inicio') {
     return (
-      <div className="ttm-raiz">
+      <Casca>
         <TelaAviso
           emoji={fechada ? '🌙' : '⏸️'}
           titulo={fechada ? 'Estamos fechados' : 'Pedidos pausados'}
@@ -601,7 +589,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
             ? 'A loja não está aceitando pedidos neste momento. Fale com um atendente no balcão.'
             : 'Nenhuma forma de retirada está disponível agora. Fale com um atendente no balcão.'}
         />
-      </div>
+      </Casca>
     )
   }
 
@@ -628,34 +616,20 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
   let conteudo = null
 
   if (tela === 'inicio') {
-    const umModo = orderTypes.length === 1
     conteudo = (
-      <div className="ttm-tela ttm-inicio">
-        {(loja?.logo || loja?.logoDataUrl) && <img className="ttm-logo" src={loja.logo || loja.logoDataUrl} alt="" />}
-        <div className="ttm-inicio-loja">{loja?.nome ?? 'Bem-vindo'}</div>
-        <h1 className="ttm-inicio-titulo">Faça seu pedido aqui</h1>
-        <p className="ttm-inicio-sub">Toque para começar. O pagamento é feito no balcão.</p>
-        <div className={'ttm-modos' + (umModo ? ' um' : '')}>
-          {orderTypes.map((t) => (
-            <button key={t} type="button" className="ttm-modo" onClick={() => escolherModo(t)}>
-              <span className="ttm-modo-emoji" aria-hidden="true">{MODOS[t].emoji}</span>
-              <span className="ttm-modo-titulo">{umModo ? 'Começar meu pedido' : MODOS[t].titulo}</span>
-              <span className="ttm-modo-sub">{umModo ? MODOS[t].titulo : MODOS[t].sub}</span>
-            </button>
-          ))}
-        </div>
-      </div>
+      <TelaInicio
+        loja={loja}
+        aparelho={aparelho}
+        modos={orderTypes.map((t) => ({ id: t, ...MODOS[t] }))}
+        aoEscolher={escolherModo}
+      />
     )
   }
 
   if (tela === 'catalogo') {
     conteudo = (
       <>
-        <Cabecalho
-          loja={loja}
-          titulo={MODOS[orderType]?.titulo ?? 'Menu'}
-          direita={<button type="button" className="ttm-btn-topo" onClick={() => reiniciar()}>Cancelar pedido</button>}
-        />
+        <Cabecalho loja={loja} modo={MODOS[orderType]?.titulo ?? 'Menu'} aoCancelar={() => reiniciar()} />
         {banner}
         {categorias.length === 0 ? (
           <div className="ttm-tela ttm-centrado">
@@ -764,7 +738,12 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
         : { preco: cabecalho.valor })
     conteudo = (
       <>
-        <Cabecalho loja={loja} titulo={nomeNaTela} aoVoltar={() => { setAberto(null); setTela(carrinho.length ? 'carrinho' : 'catalogo') }} />
+        <Cabecalho
+          loja={loja}
+          titulo={nomeNaTela}
+          aoVoltar={() => { setAberto(null); setTela(carrinho.length ? 'carrinho' : 'catalogo') }}
+          aoCancelar={() => reiniciar()}
+        />
         {banner}
         <div className="ttm-tela ttm-item">
           {!podePedir.ok && (
@@ -888,7 +867,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
   if (tela === 'carrinho') {
     conteudo = (
       <>
-        <Cabecalho loja={loja} titulo="Seu pedido" aoVoltar={() => setTela('catalogo')} />
+        <Cabecalho loja={loja} titulo="Seu pedido" aoVoltar={() => setTela('catalogo')} aoCancelar={() => reiniciar()} />
         {banner}
         <div className="ttm-tela ttm-carrinho">
           {carrinho.length === 0 ? (
@@ -936,7 +915,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
   if (tela === 'pagamento') {
     conteudo = (
       <>
-        <Cabecalho loja={loja} titulo="Forma de pagamento" aoVoltar={() => setTela('carrinho')} />
+        <Cabecalho loja={loja} titulo="Forma de pagamento" aoVoltar={() => setTela('carrinho')} aoCancelar={() => reiniciar()} />
         {banner}
         <div className="ttm-tela ttm-pagamento">
           <p className="ttm-pagamento-aviso">
@@ -992,7 +971,12 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
       <>
         {/* Travada (confirmação em dúvida): sem Voltar. Voltar levaria a uma nova cotação,
             nova cotação gera chave nova, e chave nova cria um SEGUNDO pedido. */}
-        <Cabecalho loja={loja} titulo="Confira seu pedido" aoVoltar={(enviando || travado) ? undefined : () => setTela('carrinho')} />
+        <Cabecalho
+          loja={loja}
+          titulo="Confira seu pedido"
+          aoVoltar={(enviando || travado) ? undefined : () => setTela('carrinho')}
+          aoCancelar={(enviando || travado) ? undefined : () => reiniciar()}
+        />
         {banner}
         <div className="ttm-tela ttm-revisar">
           {cotando ? (
@@ -1188,7 +1172,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
   }
 
   return (
-    <div className="ttm-raiz">
+    <Casca>
       {conteudo}
       {aviso && <div className="ttm-aviso-passageiro" role="status" aria-live="polite">{aviso}</div>}
       {itensNoCarrinho > 0 && tela === 'catalogo' && (
@@ -1197,9 +1181,6 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
           Ver meu pedido · {moeda(totalLocal)}
         </button>
       )}
-      {/* Nome do aparelho só no Início: ajuda a equipe a saber de qual tablet se fala,
-          e não polui a tela enquanto o cliente escolhe. */}
-      {tela === 'inicio' && aparelho?.nome ? <div className="ttm-rodape-aparelho">{aparelho.nome}</div> : null}
-    </div>
+    </Casca>
   )
 }
