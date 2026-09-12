@@ -155,6 +155,11 @@ export function projetarProduto(item, grupo, opcao) {
   const it = objeto(item);
   const g = objeto(grupo);
   const op = objeto(opcao);
+  // Sem grupo principal (ou grupo sem `id`) NÃO HÁ o que projetar: sem id para excluir, o
+  // próprio principal entraria em `obrigatoriosRestantes` e o card somaria o mínimo dele DUAS
+  // vezes — um preço a mais no vidro do totem, que é o pior defeito possível aqui. Cai para o
+  // card de item normal, o mesmo fallback do §7: nunca lança e nunca mente o preço.
+  if (g.id === null || g.id === undefined) return produtoDeItem(it);
   const jornada = jornadaObrigatoria(obrigatoriosRestantes(it, g.id));
   const base = ordenavelDoItem(it);
   // Sem seleção válida num obrigatório restante o produto cai — mas o item em falta ganha,
@@ -332,17 +337,23 @@ export function mesclarAdmin(catalogo, configuracoes) {
       const cfg = configs.get(chave) || null;
       const grupos = arranjo(item.grupos);
       const elegiveis = grupos.filter((g) => grupoElegivel(g).ok);
-      // Referência para a nota "a partir de" (spec §8): o grupo JÁ CONFIGURADO quando existe,
-      // senão o primeiro que serviria de vitrine. Sem candidato nenhum, conta todos os
-      // obrigatórios — é informação neutra, a tela nem mostra o select nesse caso.
-      const referencia = cfg ? cfg.cwGrupoPrincipalId : (elegiveis.length ? objeto(elegiveis[0]).id : null);
+      const validacao = cfg ? resumo(validarConfiguracao(cfg, item)) : { ok: true };
+      // Referência para a nota "a partir de" (spec §8): o grupo configurado só serve quando a
+      // configuração AINDA VALE. Um id que não casa com grupo nenhum (grupo apagado no CW) não
+      // excluiria ninguém e a conta inflaria — o admin diria "tem outras 3 escolhas
+      // obrigatórias" para um item que tem 2. Configuração quebrada cai no mesmo palpite de
+      // quem não tem configuração: o primeiro grupo que serviria de vitrine. Sem candidato
+      // nenhum, conta todos os obrigatórios — informação neutra, a tela nem mostra o select.
+      const referencia = cfg && validacao.ok && cfg.cwGrupoPrincipalId !== null && cfg.cwGrupoPrincipalId !== undefined
+        ? cfg.cwGrupoPrincipalId
+        : (elegiveis.length ? objeto(elegiveis[0]).id : null);
       itens.push({
         cwItemId: item.id,
         nome: item.nome ?? null,
         categoria: categoria.nome ?? null,
         precoBase: round2(numero(item.preco, 0)),
         config: cfg ? { id: cfg.id, modo: cfg.modo, cwGrupoPrincipalId: cfg.cwGrupoPrincipalId } : null,
-        validacao: cfg ? resumo(validarConfiguracao(cfg, item)) : { ok: true },
+        validacao,
         // Dá para virar vitrine? É o que separa o estado NEUTRO ("sem grupo de escolha única
         // com duas ou mais opções") do convite "pode virar vitrine".
         candidato: elegiveis.length > 0,

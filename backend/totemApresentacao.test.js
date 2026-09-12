@@ -871,6 +871,23 @@ test('projetarProduto: grupo obrigatório em falta derruba a ordenabilidade do p
   assert.equal(produto.motivo, 'GRUPO_EM_FALTA');
 });
 
+test('projetarProduto: sem grupo principal cai para o card de ITEM (não conta o mínimo em dobro)', () => {
+  // Chamada defeituosa (grupo nulo, ou grupo sem `id`): não dá para excluir o principal da
+  // jornada obrigatória, então ele entraria na soma junto com a opção já escolhida e o card
+  // mostraria 12,00 + 12,00 + 6,00 + 9,90. Em vez disso devolve o card do item, como o §7.
+  const item = itemDe(catalogo(), CAT_COMBOS, IT_COMBO_TRAD);
+  const grupo = grupoDe(item, G_BURGUER_COMBO_T);
+  const opcao = opcaoDe(grupo, OP_X_BURGUER_COMBO);
+  const esperado = produtoDeItem(item);
+  for (const semGrupo of [null, undefined, {}, { nome: 'sem id' }]) {
+    assert.deepEqual(projetarProduto(item, semGrupo, opcao), esperado);
+  }
+  // O card de item do combo é o mínimo da jornada INTEIRA, contado uma vez só.
+  assert.equal(esperado.tipo, 'ITEM');
+  assert.equal(esperado.precoMinimo, 27.9);
+  assert.equal('grupoPrincipalId' in esperado, false);
+});
+
 test('projetarProduto: mesmo nome, ids diferentes — cada produto aponta para o SEU', () => {
   const cat = catalogo();
   const trad = itemDe(cat, CAT_TRADICIONAIS, IT_TRADICIONAIS);
@@ -1207,6 +1224,25 @@ test('mesclarAdmin: candidato e obrigatoriosAlem guiam a tela (spec §8)', () =>
   // Com configuração salva, a conta é feita a partir do grupo CONFIGURADO.
   const comConfig = mesclarAdmin(catalogo(), [cfg(IT_COMBO_TRAD, G_BEBIDA_COMBO, 7)]).itens.find((i) => i.cwItemId === IT_COMBO_TRAD);
   assert.equal(comConfig.obrigatoriosAlem, 2); // burguer e acompanhamento
+});
+
+test('mesclarAdmin: configuração que deixou de valer NÃO infla o obrigatoriosAlem', () => {
+  // O grupo salvo sumiu do CW: o id não casa com ninguém, então não exclui nada. Se a conta
+  // partisse dele, o admin diria "tem outras 3 escolhas obrigatórias" num item que tem 2.
+  const orfa = mesclarAdmin(catalogo(), [cfg(IT_COMBO_TRAD, 999999, 9)]).itens.find((i) => i.cwItemId === IT_COMBO_TRAD);
+  assert.deepEqual(orfa.validacao, { ok: false, codigo: 'GRUPO_AUSENTE' });
+  assert.equal(orfa.obrigatoriosAlem, 2); // volta ao palpite: o primeiro grupo elegível
+  assert.equal(orfa.candidato, true);     // e o item continua podendo virar vitrine
+  // Grupo que existe mas deixou de ser escolha única: mesma história (a maionese nem é
+  // obrigatória, então parti-la de referência daria os 3 obrigatórios do combo).
+  const invalida = mesclarAdmin(catalogo(), [cfg(IT_COMBO_TRAD, G_MAIONESE, 10)]).itens.find((i) => i.cwItemId === IT_COMBO_TRAD);
+  assert.deepEqual(invalida.validacao, { ok: false, codigo: 'GRUPO_NAO_E_ESCOLHA_UNICA' });
+  assert.equal(invalida.obrigatoriosAlem, 2);
+  // NORMAL persistido (sem grupo nenhum) também cai no palpite, não em "todos".
+  const normal = mesclarAdmin(catalogo(), [{ id: 11, empresaId: 9, cwItemId: IT_COMBO_TRAD, modo: 'NORMAL', cwGrupoPrincipalId: null }])
+    .itens.find((i) => i.cwItemId === IT_COMBO_TRAD);
+  assert.deepEqual(normal.validacao, { ok: true });
+  assert.equal(normal.obrigatoriosAlem, 2);
 });
 
 test('mesclarAdmin: TRADICIONAIS tem exatamente um grupo selecionável', () => {
