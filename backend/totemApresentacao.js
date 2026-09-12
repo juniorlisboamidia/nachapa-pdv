@@ -1,4 +1,4 @@
-// Apresentação do totem — projeção pura do catálogo do CW (spec §4.1/§5/§7).
+// Apresentação do totem — projeção pura do catálogo do CW (spec §4.1/§5/§7, rev. 3).
 //
 // O CW modela "TRADICIONAIS 🍔" como um item base a R$ 0,00 com um grupo obrigatório de
 // escolha única cujas opções são os produtos reais (X BURGUER, DELICIA…). No totem o
@@ -10,14 +10,34 @@
 //    vivo a cada bootstrap; nada dele é persistido. Só a ESCOLHA da loja (item X é
 //    EXPANDIDO pelo grupo Y) mora no banco, e ela é revalidada a cada projeção.
 //  · O CATÁLOGO PÚBLICO NUNCA QUEBRA. Configuração que deixou de valer (grupo removido,
-//    grupo virou 2–2, apareceu outro obrigatório, item saiu do cardápio) cai para NORMAL
+//    grupo virou 2–2, grupo ficou com uma opção só, item saiu do cardápio) cai para NORMAL
 //    com aviso — nunca some da vitrine, nunca lança.
 //
 // Vínculo SEMPRE por id do CW, jamais por nome: no cardápio real "X BURGUER" existe com
 // quatro ids diferentes (um por grupo/promoção) e "TRADICIONAIS 🍔" é o nome de dois itens
 // distintos. Comparar por nome trocaria o produto do cliente por outro.
+//
+// PRICING NÃO MORA AQUI (rev. 3). Quem sabe quanto custa a escolha mais barata de um grupo é o
+// HUB (`resumoPrecoDoGrupo`, spec §3), que manda por grupo `custoMinimo`, `custoMaximo` e
+// `precoVariavel` no bootstrap. O PDV só SOMA esses números. Uma segunda régua de preço aqui
+// divergiria da cotação do CW no primeiro grupo esquisito — e o cliente veria um valor no card
+// e outro no carrinho.
 
 export const MODOS = ['NORMAL', 'EXPANDIDO'];
+
+// Frase humana por código, para o admin (spec §8): a tela mostra a frase e o código discreto ao
+// lado, nunca o código sozinho. Minúscula e sem ponto final porque entra emendada na sentença.
+// ⚠️ O frontend tem o seu espelho (`frontend/src/pages/TotemApresentacao.jsx`, task B3): este
+// módulo é backend puro e não é importado pela tela; mudou aqui, muda lá.
+export const MENSAGENS_ADMIN = {
+  MODO_INVALIDO: 'modo inválido',
+  ITEM_AUSENTE: 'este item não está mais no cardápio do balcão',
+  GRUPO_AUSENTE: 'o grupo escolhido não existe mais neste item',
+  GRUPO_NAO_E_ESCOLHA_UNICA: 'o grupo passou a aceitar mais de uma escolha',
+  GRUPO_SEM_OPCOES: 'o grupo ficou sem opções',
+  GRUPO_COM_UMA_OPCAO: 'o grupo tem uma opção só',
+  GRUPO_INDISPONIVEL: 'o grupo está oculto no cardápio',
+};
 
 const arranjo = (v) => (Array.isArray(v) ? v : []);
 const objeto = (v) => (v && typeof v === 'object' ? v : {});
@@ -30,33 +50,43 @@ const tetoDoGrupo = (g) => (objeto(g).max === null || objeto(g).max === undefine
 // Só `{ ok, codigo? }`: o admin recebe o veredito, não o grupo inteiro.
 const resumo = (r) => (r.ok ? { ok: true } : { ok: false, codigo: r.codigo });
 
+// APRESENTÁVEL = vira card. MISSING entra (card "Em falta", que volta sozinho quando a loja
+// repõe); INACTIVE não, porque o CW nem a oferece. Exigir duas ACTIVE desmontaria a vitrine no
+// meio do expediente por causa de estoque.
+const apresentavel = (op) => objeto(op).status === 'ACTIVE' || objeto(op).status === 'MISSING';
+const opcoesApresentaveis = (g) => arranjo(objeto(g).opcoes).filter(apresentavel);
+
 // Um grupo pode ser o principal? Olha SÓ o grupo (o item inteiro é `validarConfiguracao`).
 // `min 1 e max 1` INDEPENDE de `choiceType`: no cardápio real "ESCOLHA SEU FAVORITO" é
 // SUMMABLE 1–1 e é escolha única de verdade — recusá-la por causa do rótulo deixaria de
 // fora um caso legítimo. Grupo MISSING não serve de principal: seus produtos nasceriam
-// todos em falta. Sem opção visível também não: expandir daria zero produtos e o item
-// sumiria da vitrine.
+// todos em falta. Sem opção apresentável também não: expandir daria zero produtos e o item
+// sumiria da vitrine. E com UMA opção só (rev. 3, "PEGUE SUA BATATA 🍟" da QUINTA) a vitrine
+// seria um card só — o mesmo produto com outro nome, e a jornada continuaria no detalhe.
+// A ordem dos códigos é contrato: é o que o admin mostra à loja como "o que resolver".
 export function grupoElegivel(grupo) {
   const g = objeto(grupo);
   if (g.status !== 'ACTIVE') return { ok: false, codigo: 'GRUPO_INDISPONIVEL' };
   if (!(numero(g.min, 0) === 1 && tetoDoGrupo(g) === 1)) return { ok: false, codigo: 'GRUPO_NAO_E_ESCOLHA_UNICA' };
-  if (arranjo(g.opcoes).length === 0) return { ok: false, codigo: 'GRUPO_SEM_OPCOES' };
+  const apresentaveis = opcoesApresentaveis(g);
+  if (apresentaveis.length === 0) return { ok: false, codigo: 'GRUPO_SEM_OPCOES' };
+  if (apresentaveis.length === 1) return { ok: false, codigo: 'GRUPO_COM_UMA_OPCAO' };
   return { ok: true };
 }
 
-// Um grupo obrigatório que NÃO é o principal impede a expansão: o card do totem seria uma
-// mentira (o cliente escolheria "X BURGUER" e ainda teria de escolher bebida e
-// acompanhamento). É o que barra COMBO - TRADICIONAIS, cujo "BURGUER DO COMBO" é 1–1 e
-// passa em `grupoElegivel` sozinho.
-// ⚠️ MISSING com `min ≥ 1` TAMBÉM conta como obrigatório: o grupo continua visível e
-// exigido no CW (só está em falta agora, e volta a qualquer momento). Ignorá-lo faria a
-// configuração alternar entre válida e inválida ao sabor do estoque.
+// Grupo que o cliente É OBRIGADO a resolver, e que continua visível na tela.
+// ⚠️ MISSING com `min ≥ 1` TAMBÉM conta: o grupo continua exigido no CW (só está em falta
+// agora, e volta a qualquer momento). Ignorá-lo faria a conta do card piscar com o estoque.
 const obrigatorio = (g) => (objeto(g).status === 'ACTIVE' || objeto(g).status === 'MISSING') && numero(objeto(g).min, 0) >= 1;
 
-// A ÚNICA regra de "pode ser principal" (spec §4.1, ajuste 4): o bootstrap usa para
-// projetar, o admin usa para habilitar o select (`selecionavel`) e o PUT usa para aceitar.
-// Ordem dos códigos é contrato: modo → item → grupo → elegibilidade → outro obrigatório.
+// A ÚNICA regra de "pode ser principal" (spec §4.1, rev. 3): o bootstrap usa para projetar, o
+// admin usa para habilitar o select (`selecionavel`) e o PUT usa para aceitar.
+// Ordem dos códigos é contrato: modo → item → grupo → elegibilidade.
 // NORMAL é modo válido e não olha o catálogo (é o que permite apagar uma órfã).
+// ⚠️ Rev. 3 APAGOU `OUTRO_GRUPO_OBRIGATORIO`. A rev. 2 recusava o combo porque bebida e
+// acompanhamento também eram obrigatórios — e isso estava errado: num combo o burguer é a
+// IDENTIDADE (o que vira card) e as outras escolhas são etapas legítimas da jornada, que
+// seguem visíveis no detalhe. O que o card faz é mostrar o preço mínimo da jornada inteira.
 export function validarConfiguracao(config, item) {
   const c = objeto(config);
   if (!MODOS.includes(c.modo)) return { ok: false, codigo: 'MODO_INVALIDO' };
@@ -67,16 +97,14 @@ export function validarConfiguracao(config, item) {
   if (!grupo) return { ok: false, codigo: 'GRUPO_AUSENTE' };
   const elegivel = grupoElegivel(grupo);
   if (!elegivel.ok) return elegivel;
-  for (const outro of grupos) {
-    if (mesmoId(objeto(outro).id, c.cwGrupoPrincipalId)) continue;
-    if (obrigatorio(outro)) return { ok: false, codigo: 'OUTRO_GRUPO_OBRIGATORIO' };
-  }
   return { ok: true, grupo };
 }
 
 // Espelha `itemOrdenavel` do frontend (frontend/src/components/totemCarrinho.js): o produto
 // apresentado herda a ordenabilidade do ITEM BASE, porque é o item base que vai ao CW.
 // Uma opção ACTIVE de um item com outro grupo obrigatório em falta não pode ser pedida.
+// (O caso "obrigatório sem seleção válida" é da projeção, logo abaixo — aqui só o que a tela
+// também sabe olhar, senão o card diria uma coisa e o detalhe outra.)
 export function ordenavelDoItem(item) {
   const it = objeto(item);
   if (it.status && it.status !== 'ACTIVE') return { ok: false, motivo: 'ITEM_EM_FALTA' };
@@ -86,14 +114,55 @@ export function ordenavelDoItem(item) {
   return { ok: true };
 }
 
+// Os grupos obrigatórios que SOBRAM depois do principal, na ordem do CW — a jornada que o
+// cliente ainda vai percorrer no detalhe. Passe `null` como principal (modo NORMAL) para ter
+// todos os obrigatórios do item.
+export function obrigatoriosRestantes(item, grupoPrincipalId) {
+  return arranjo(objeto(item).grupos).filter((g) => obrigatorio(g) && !mesmoId(objeto(g).id, grupoPrincipalId));
+}
+
+// Soma o piso da jornada obrigatória a partir do que o HUB mandou. NÃO calcula preço nenhum:
+// só soma `custoMinimo`. Três estados por grupo, e os três importam:
+//  · número  → entra na soma; `precoVariavel` liga o "a partir de".
+//  · null    → o HUB não achou seleção válida (grupo obrigatório sem opção escolhível): não dá
+//              para prometer preço nem deixar pedir → `precoMinimo: null` e produto não ordenável.
+//  · ausente → bootstrap ANTIGO (spec §10, HUB ainda sem a rev. 3). DESCONHECIDO não é zero:
+//              contribui 0, não liga o "a partir de" e NUNCA derruba a ordenabilidade — o card
+//              volta ao comportamento da rev. 2 em vez de mentir "R$ 0,00" ou "Indisponível".
+function jornadaObrigatoria(grupos) {
+  let soma = 0;
+  let semSelecao = false;
+  let variavel = false;
+  for (const bruto of grupos) {
+    const g = objeto(bruto);
+    if (g.custoMinimo === undefined) continue;
+    if (g.custoMinimo === null) { semSelecao = true; continue; }
+    soma += numero(g.custoMinimo, 0);
+    if (g.precoVariavel === true) variavel = true;
+  }
+  return { soma, semSelecao, variavel };
+}
+
 // Produto = card do totem (spec §5). LEVE de propósito (ajuste 1): NÃO carrega o item
 // completo — o frontend indexa `categorias[].itens` por `origem.itemId` e resolve na hora
 // de abrir. Duplicar a árvore técnica por opção multiplicaria o bootstrap por nove.
+//
+// Dois preços, e a diferença é o coração da rev. 3:
+//  · `preco` é a IDENTIDADE (base + opção principal) — é o que o cliente já escolheu.
+//  · `precoMinimo` é o que ele vai pagar NO MÍNIMO ao terminar a jornada obrigatória. É esse
+//    que o card mostra, com "a partir de" quando alguma etapa restante pode mudar o valor.
 export function projetarProduto(item, grupo, opcao) {
   const it = objeto(item);
   const g = objeto(grupo);
   const op = objeto(opcao);
-  const ordem = ordenavelDoItem(it);
+  const jornada = jornadaObrigatoria(obrigatoriosRestantes(it, g.id));
+  const base = ordenavelDoItem(it);
+  // Sem seleção válida num obrigatório restante o produto cai — mas o item em falta ganha,
+  // que é o motivo mais alto na cadeia (e o que a loja tem de resolver primeiro).
+  const ordem = base.ok && jornada.semSelecao ? { ok: false, motivo: 'GRUPO_EM_FALTA' } : base;
+  const preco = round2(numero(it.preco, 0) + numero(op.preco, 0));
+  const temPromo = typeof it.precoPromocional === 'number';
+  const precoPromocional = temPromo ? round2(it.precoPromocional + numero(op.preco, 0)) : null;
   return {
     id: `opcao:${it.id}:${g.id}:${op.id}`,
     tipo: 'OPCAO_PRINCIPAL',
@@ -102,9 +171,12 @@ export function projetarProduto(item, grupo, opcao) {
     // opção não tem (é o caso de "HMB DOG") e para `null` quando nem o item tem.
     descricao: op.descricao ?? it.descricao ?? null,
     imagem: op.imagem ?? it.imagem ?? null,
-    preco: round2(numero(it.preco, 0) + numero(op.preco, 0)),
+    preco,
     // A promoção é do ITEM BASE (o CW não promove opção): a opção soma por cima dela.
-    ...(typeof it.precoPromocional === 'number' ? { precoPromocional: round2(it.precoPromocional + numero(op.preco, 0)) } : {}),
+    ...(temPromo ? { precoPromocional } : {}),
+    precoMinimo: jornada.semSelecao ? null : round2(preco + jornada.soma),
+    ...(temPromo ? { precoMinimoPromocional: jornada.semSelecao ? null : round2(precoPromocional + jornada.soma) } : {}),
+    precoEhAPartirDe: jornada.variavel,
     // Item em falta derruba TODOS os produtos dele, mesmo os de opção ACTIVE.
     status: it.status === 'MISSING' ? 'MISSING' : op.status,
     ordenavel: ordem.ok,
@@ -114,18 +186,29 @@ export function projetarProduto(item, grupo, opcao) {
   };
 }
 
-// Produto do item sem expansão (modo NORMAL) — o card de hoje, só com o contrato novo.
+// Produto do item sem expansão (modo NORMAL) — o card de hoje, com o contrato da rev. 3.
+// Aqui NÃO há principal: a jornada obrigatória é a do item inteiro. É o que faz o card de um
+// combo em modo normal deixar de anunciar R$ 0,00 (o preço da base) e passar a dizer
+// "a partir de R$ 27,90".
 export function produtoDeItem(item) {
   const it = objeto(item);
-  const ordem = ordenavelDoItem(it);
+  const jornada = jornadaObrigatoria(obrigatoriosRestantes(it, null));
+  const base = ordenavelDoItem(it);
+  const ordem = base.ok && jornada.semSelecao ? { ok: false, motivo: 'GRUPO_EM_FALTA' } : base;
+  const preco = round2(numero(it.preco, 0));
+  const temPromo = typeof it.precoPromocional === 'number';
+  const precoPromocional = temPromo ? round2(it.precoPromocional) : null;
   return {
     id: `item:${it.id}`,
     tipo: 'ITEM',
     nome: it.nome ?? null,
     descricao: it.descricao ?? null,
     imagem: it.imagem ?? null,
-    preco: round2(numero(it.preco, 0)),
-    ...(typeof it.precoPromocional === 'number' ? { precoPromocional: round2(it.precoPromocional) } : {}),
+    preco,
+    ...(temPromo ? { precoPromocional } : {}),
+    precoMinimo: jornada.semSelecao ? null : round2(preco + jornada.soma),
+    ...(temPromo ? { precoMinimoPromocional: jornada.semSelecao ? null : round2(precoPromocional + jornada.soma) } : {}),
+    precoEhAPartirDe: jornada.variavel,
     status: it.status,
     ordenavel: ordem.ok,
     ...(ordem.ok ? {} : { motivo: ordem.motivo }),
@@ -193,10 +276,13 @@ export function projetarCatalogo(catalogo, configuracoes) {
 }
 
 // Heurística de SUGESTÃO (spec §4.1, ajuste 3) — nunca ativa nada, só preenche o formulário
-// do admin. Regra: preço base 0 + exatamente UM grupo visível obrigatório + esse grupo 1–1,
-// sem olhar `choiceType` nem `index`. No cardápio real de 2026-09-11 sugere TRADICIONAIS 🍔,
+// do admin. INALTERADA na rev. 3 e conservadora de propósito: preço base 0 + exatamente UM
+// grupo visível obrigatório + esse grupo elegível (agora incluindo "duas apresentáveis"), sem
+// olhar `choiceType` nem `index`. No cardápio real de 2026-09-11 sugere TRADICIONAIS 🍔,
 // ARTESANAIS 🍔, NOSSOS DOGS 🌭 e ESCOLHA SEU ACOMPANHAMENTO 🍟; deixa de fora os COMBOS
-// (três obrigatórios), QUINTA DA BATATA (2–2) e itens com preço próprio.
+// (três obrigatórios) e a QUINTA DA BATATA (dois obrigatórios, e a batata tem uma opção só).
+// Combo agora PODE ser configurado à mão — só não é adivinhado: quem decide que o burguer é a
+// identidade do combo é a loja, não a heurística.
 export function sugerirCandidatos(catalogo) {
   const sugeridos = new Set();
   const saida = [];
@@ -226,9 +312,11 @@ export function sugerirCandidatos(catalogo) {
   return saida;
 }
 
-// Lista do GET admin (spec §4.3, ajuste 2): catálogo vivo + configurações persistidas.
-// `elegivel` olha só o grupo e `selecionavel` olha o item inteiro — é a diferença que faz
-// o combo mostrar o grupo 1–1 na lista com o select desabilitado e o motivo à vista.
+// Lista do GET admin (spec §4.3/§8): catálogo vivo + configurações persistidas.
+// `elegivel` olha só o grupo e `selecionavel` olha o item inteiro. Na rev. 3 os dois COINCIDEM
+// por construção (a regra do item virou "a regra do grupo" quando `OUTRO_GRUPO_OBRIGATORIO`
+// morreu) — o par fica no contrato porque a tela já o consome e porque uma futura regra de item
+// (sem tocar no frontend) volta a separá-los.
 export function mesclarAdmin(catalogo, configuracoes) {
   const configs = porItemId(configuracoes);
   const vistos = new Set();
@@ -242,6 +330,12 @@ export function mesclarAdmin(catalogo, configuracoes) {
       if (vistos.has(chave)) continue; // uma linha por item; vale a primeira categoria
       vistos.add(chave);
       const cfg = configs.get(chave) || null;
+      const grupos = arranjo(item.grupos);
+      const elegiveis = grupos.filter((g) => grupoElegivel(g).ok);
+      // Referência para a nota "a partir de" (spec §8): o grupo JÁ CONFIGURADO quando existe,
+      // senão o primeiro que serviria de vitrine. Sem candidato nenhum, conta todos os
+      // obrigatórios — é informação neutra, a tela nem mostra o select nesse caso.
+      const referencia = cfg ? cfg.cwGrupoPrincipalId : (elegiveis.length ? objeto(elegiveis[0]).id : null);
       itens.push({
         cwItemId: item.id,
         nome: item.nome ?? null,
@@ -249,7 +343,12 @@ export function mesclarAdmin(catalogo, configuracoes) {
         precoBase: round2(numero(item.preco, 0)),
         config: cfg ? { id: cfg.id, modo: cfg.modo, cwGrupoPrincipalId: cfg.cwGrupoPrincipalId } : null,
         validacao: cfg ? resumo(validarConfiguracao(cfg, item)) : { ok: true },
-        grupos: arranjo(item.grupos).map((bruto) => {
+        // Dá para virar vitrine? É o que separa o estado NEUTRO ("sem grupo de escolha única
+        // com duas ou mais opções") do convite "pode virar vitrine".
+        candidato: elegiveis.length > 0,
+        // Quantas OUTRAS escolhas obrigatórias sobram — quando > 0 o card dirá "a partir de".
+        obrigatoriosAlem: obrigatoriosRestantes(item, referencia).length,
+        grupos: grupos.map((bruto) => {
           const g = objeto(bruto);
           return {
             id: g.id,

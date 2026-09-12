@@ -14,7 +14,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  MODOS, grupoElegivel, validarConfiguracao, ordenavelDoItem,
+  MODOS, MENSAGENS_ADMIN, grupoElegivel, validarConfiguracao, ordenavelDoItem, obrigatoriosRestantes,
   projetarProduto, produtoDeItem, projetarCatalogo, sugerirCandidatos, mesclarAdmin,
 } from './totemApresentacao.js';
 // Espelho vivo: `ordenavelDoItem` TEM de responder igual ao `itemOrdenavel` da tela, senão
@@ -314,6 +314,39 @@ const CW_BRUTO = [
 // ao que importa aqui: ordena por `index`, descarta INACTIVE (MISSING FICA, marcado) e
 // renomeia os campos para o formato do bootstrap. Janela de horário, `kind`, `available_for`
 // e `price_calculation_type` já foram filtrados lá — este recorte só tem item que passa.
+// ⚠️ ANDAIME DE TESTE — NÃO É REGRA DE PRODUÇÃO. Em produção quem calcula isto é o HUB
+// (`resumoPrecoDoGrupo` em `backend/cardapioPedidoTotem.js`, spec §3); o PDV só SOMA o que
+// recebe. Aqui a fixture precisa dos três campos para que o bootstrap de teste seja igual ao
+// real, então reproduzimos a régua NO RECORTE que este cardápio usa: só opção ACTIVE conta,
+// SINGLE/MULTIPLE escolhem opções DISTINTAS e SUMMABLE pode repetir a mesma opção. Se algum dia
+// isto divergir do HUB, quem manda é o HUB — o teste de equivalência mora lá.
+const r2 = (n) => Math.round(n * 100) / 100;
+function resumoDeGrupoFixture(gr) {
+  const precos = (gr.options ?? []).filter((op) => op.status === 'ACTIVE').map((op) => op.price);
+  const min = gr.minimum_quantity ?? 0;
+  const max = gr.maximum_quantity ?? null;
+  const semSelecao = { custoMinimo: null, custoMaximo: null, precoVariavel: false };
+  if (precos.length === 0) return min > 0 ? semSelecao : { custoMinimo: 0, custoMaximo: 0, precoVariavel: false };
+  if (gr.choice_type === 'SUMMABLE') {
+    const barato = Math.min(...precos);
+    const caro = Math.max(...precos);
+    // Sem teto de grupo o custo máximo é infinito; o contrato serializa isso como `null`.
+    if (max === null) return { custoMinimo: r2(min * barato), custoMaximo: null, precoVariavel: caro > 0 };
+    if (min > max) return semSelecao;
+    const custoMinimo = r2(min * barato);
+    const custoMaximo = r2(max * caro);
+    return { custoMinimo, custoMaximo, precoVariavel: custoMaximo > custoMinimo };
+  }
+  const kMax = Math.min(precos.length, max === null ? precos.length : max);
+  if (min > kMax) return semSelecao;
+  const asc = [...precos].sort((a, b) => a - b);
+  const desc = [...precos].sort((a, b) => b - a);
+  const soma = (xs, k) => xs.slice(0, k).reduce((t, v) => t + v, 0);
+  const custoMinimo = r2(soma(asc, min));
+  const custoMaximo = r2(soma(desc, kMax));
+  return { custoMinimo, custoMaximo, precoVariavel: custoMaximo > custoMinimo };
+}
+
 function bootstrapDoCw(categorias) {
   const porIndex = (a, b) => (a?.index ?? 0) - (b?.index ?? 0);
   const imagemDe = (x) => x?.image?.image_url || x?.image?.thumbnail_url || null;
@@ -339,6 +372,8 @@ function bootstrapDoCw(categorias) {
           max: gr.maximum_quantity ?? null,
           status: gr.status,
           index: gr.index,
+          // Rev. 3: aditivos do HUB por grupo — é o único insumo de pricing que o PDV consome.
+          ...resumoDeGrupoFixture(gr),
           opcoes: [...(gr.options ?? [])].sort(porIndex).filter(visivel).map((op) => ({
             id: op.id,
             nome: op.name,
@@ -364,6 +399,12 @@ const opcaoDe = (grupo, id) => grupo.opcoes.find((op) => op.id === id);
 // Variante derivada do dado real (o snapshot não tem todo estado possível: nele nenhum
 // grupo está MISSING e nenhum item expansível está em promoção). Sempre em cópia.
 const variando = (fn) => { const c = catalogo(); fn(c); return c; };
+// Variante no CRU: clona o CW, mexe no dado bruto e RECONVERTE — assim `custoMinimo`/
+// `precoVariavel` saem do conversor, e não escritos à mão (que é como se mente num teste).
+const variandoCw = (fn) => { const bruto = JSON.parse(JSON.stringify(CW_BRUTO)); fn(bruto); return bootstrapDoCw(bruto); };
+const catCw = (bruto, id) => bruto.find((c) => c.id === id);
+const itCw = (bruto, idCategoria, idItem) => catCw(bruto, idCategoria).items.find((i) => i.id === idItem);
+const gCw = (item, id) => item.option_groups.find((gr) => gr.id === id);
 
 const CAT_QUINTA = 349627;
 const CAT_MAIS_PEDIDOS = 413357;
@@ -393,6 +434,8 @@ const G_BURGUER_COMBO_T = 964783;  // 1–1, mas o combo tem outros três obriga
 const G_BURGUER_COMBO_A = 964784;
 const G_ESCOLHA_DOIS = 820734;     // SUMMABLE 2–2
 const G_BATATA_GRATIS = 820735;    // 1–1 dentro da QUINTA (outro obrigatório manda nele)
+const G_BEBIDA_COMBO = 964820;     // obrigatório 1–1 do combo (rev. 3: legítimo, não impeditivo)
+const G_ACOMP_COMBO = 964821;      // obrigatório 1–1 do combo, e o VARIÁVEL (9,90 vs 15,90)
 const G_MAIONESE = 745977;         // MULTIPLE 0–1
 const G_TURBINE_LANCHE = 795200;   // SUMMABLE 0–4
 
@@ -420,6 +463,28 @@ test('fixture: o conversor entrega o bootstrap na ordem do CW e sem INACTIVE', (
   assert.deepEqual(grupo.opcoes.map((op) => op.nome), [
     'X BURGUER', 'DELICIA', 'X SALADA', 'X CALA BURGUER', 'X BACON', 'CHEDDAR BACON', 'X DUPLO', 'HAMBURGÃO', 'ESPECIAL',
   ]);
+});
+
+test('fixture: o bootstrap traz os aditivos de preço por grupo (rev. 3, vindos do HUB)', () => {
+  const combo = itemDe(catalogo(), CAT_COMBOS, IT_COMBO_TRAD);
+  // ACOMPANHAMENTO é o grupo que liga o "a partir de": 9,90 (batata) contra 15,90 (cheddar).
+  const acomp = grupoDe(combo, G_ACOMP_COMBO);
+  assert.deepEqual(
+    { custoMinimo: acomp.custoMinimo, custoMaximo: acomp.custoMaximo, precoVariavel: acomp.precoVariavel },
+    { custoMinimo: 9.9, custoMaximo: 15.9, precoVariavel: true },
+  );
+  // BEBIDA custa 6 escolha o que escolher (a MISSING nem conta): não varia nada.
+  const bebida = grupoDe(combo, G_BEBIDA_COMBO);
+  assert.deepEqual(
+    { custoMinimo: bebida.custoMinimo, custoMaximo: bebida.custoMaximo, precoVariavel: bebida.precoVariavel },
+    { custoMinimo: 6, custoMaximo: 6, precoVariavel: false },
+  );
+  // Opcional: custo mínimo 0 (não escolher é uma seleção válida).
+  assert.equal(grupoDe(combo, G_MAIONESE).custoMinimo, 0);
+  // O 2–2 da QUINTA custa duas vezes o mais barato.
+  const dois = grupoDe(itemDe(catalogo(), CAT_QUINTA, IT_QUINTA), G_ESCOLHA_DOIS);
+  assert.equal(dois.custoMinimo, 24);
+  assert.equal(dois.precoVariavel, true);
 });
 
 // ── MODOS ───────────────────────────────────────────────────────────────────
@@ -469,6 +534,28 @@ test('grupoElegivel: MISSING e INACTIVE são indisponíveis (a checagem de statu
   assert.deepEqual(grupoElegivel({ status: 'MISSING', min: 1, max: 1, opcoes: [] }), { ok: false, codigo: 'GRUPO_INDISPONIVEL' });
 });
 
+test('grupoElegivel: PEGUE SUA BATATA 🍟 é 1–1 com UMA opção — não vira vitrine (rev. 3)', () => {
+  // Um card só não é vitrine: é o mesmo produto com outro nome. A jornada continua no detalhe.
+  const item = itemDe(catalogo(), CAT_QUINTA, IT_QUINTA);
+  const grupo = grupoDe(item, G_BATATA_GRATIS);
+  assert.equal(grupo.opcoes.length, 1);
+  assert.deepEqual(grupoElegivel(grupo), { ok: false, codigo: 'GRUPO_COM_UMA_OPCAO' });
+});
+
+test('grupoElegivel: MISSING é APRESENTÁVEL — 1 ACTIVE + 1 MISSING é vitrine legítima', () => {
+  // A opção em falta vira card "Em falta" e volta sozinha quando a loja repõe; exigir duas
+  // ACTIVE faria a vitrine desmontar no meio do expediente.
+  const base = { status: 'ACTIVE', min: 1, max: 1 };
+  assert.deepEqual(grupoElegivel({ ...base, opcoes: [{ id: 1, status: 'ACTIVE' }, { id: 2, status: 'MISSING' }] }), { ok: true });
+  assert.deepEqual(grupoElegivel({ ...base, opcoes: [{ id: 1, status: 'MISSING' }, { id: 2, status: 'MISSING' }] }), { ok: true });
+});
+
+test('grupoElegivel: INACTIVE não é apresentável e não conta para o par', () => {
+  const base = { status: 'ACTIVE', min: 1, max: 1 };
+  assert.deepEqual(grupoElegivel({ ...base, opcoes: [{ id: 1, status: 'ACTIVE' }, { id: 2, status: 'INACTIVE' }] }), { ok: false, codigo: 'GRUPO_COM_UMA_OPCAO' });
+  assert.deepEqual(grupoElegivel({ ...base, opcoes: [{ id: 1, status: 'INACTIVE' }] }), { ok: false, codigo: 'GRUPO_SEM_OPCOES' });
+});
+
 test('grupoElegivel: entrada lixo não explode', () => {
   assert.deepEqual(grupoElegivel(null), { ok: false, codigo: 'GRUPO_INDISPONIVEL' });
   assert.deepEqual(grupoElegivel(undefined), { ok: false, codigo: 'GRUPO_INDISPONIVEL' });
@@ -514,27 +601,44 @@ test('validarConfiguracao: ACOMPANHAMENTO 🍟 (SUMMABLE 1–1, index 1) entra d
   assert.equal(validarConfiguracao({ modo: 'EXPANDIDO', cwGrupoPrincipalId: G_FAVORITO_ACOMP }, item).ok, true);
 });
 
-test('validarConfiguracao: COMBO - TRADICIONAIS é OUTRO_GRUPO_OBRIGATORIO mesmo com o 1–1 em index 0', () => {
+test('validarConfiguracao: rev. 3 — COMBO - TRADICIONAIS por BURGUER DO COMBO é VÁLIDO', () => {
+  // Rev. 2 recusava isto (`OUTRO_GRUPO_OBRIGATORIO`) e estava errado: num combo o burguer é a
+  // IDENTIDADE e bebida/acompanhamento são etapas legítimas da jornada, que seguem no detalhe.
   const item = itemDe(catalogo(), CAT_COMBOS, IT_COMBO_TRAD);
   const grupo = grupoDe(item, G_BURGUER_COMBO_T);
   assert.equal(grupo.index, 0);
-  assert.deepEqual(grupoElegivel(grupo), { ok: true }); // sozinho o grupo passa…
-  // …mas bebida e acompanhamento também são obrigatórios: expandir mentiria para o cliente.
-  assert.deepEqual(validarConfiguracao({ modo: 'EXPANDIDO', cwGrupoPrincipalId: G_BURGUER_COMBO_T }, item), { ok: false, codigo: 'OUTRO_GRUPO_OBRIGATORIO' });
+  assert.deepEqual(grupoElegivel(grupo), { ok: true });
+  const veredito = validarConfiguracao({ modo: 'EXPANDIDO', cwGrupoPrincipalId: G_BURGUER_COMBO_T }, item);
+  assert.equal(veredito.ok, true);
+  assert.equal(veredito.grupo, grupo);
 });
 
 test('validarConfiguracao: COMBO - ARTESANAIS idem', () => {
   const item = itemDe(catalogo(), CAT_COMBOS, IT_COMBO_ART);
   assert.deepEqual(grupoElegivel(grupoDe(item, G_BURGUER_COMBO_A)), { ok: true });
-  assert.deepEqual(validarConfiguracao({ modo: 'EXPANDIDO', cwGrupoPrincipalId: G_BURGUER_COMBO_A }, item), { ok: false, codigo: 'OUTRO_GRUPO_OBRIGATORIO' });
+  assert.equal(validarConfiguracao({ modo: 'EXPANDIDO', cwGrupoPrincipalId: G_BURGUER_COMBO_A }, item).ok, true);
+  // Bebida e acompanhamento também são 1–1 com duas apresentáveis: servem de principal também.
+  assert.equal(validarConfiguracao({ modo: 'EXPANDIDO', cwGrupoPrincipalId: G_BEBIDA_COMBO }, item).ok, true);
 });
 
 test('validarConfiguracao: QUINTA DA BATATA reprova pelos dois lados', () => {
   const item = itemDe(catalogo(), CAT_QUINTA, IT_QUINTA);
   // Pelo 2–2: não é escolha única.
   assert.deepEqual(validarConfiguracao({ modo: 'EXPANDIDO', cwGrupoPrincipalId: G_ESCOLHA_DOIS }, item), { ok: false, codigo: 'GRUPO_NAO_E_ESCOLHA_UNICA' });
-  // Pela batata grátis (1–1 de verdade): o 2–2 obrigatório continua ali.
-  assert.deepEqual(validarConfiguracao({ modo: 'EXPANDIDO', cwGrupoPrincipalId: G_BATATA_GRATIS }, item), { ok: false, codigo: 'OUTRO_GRUPO_OBRIGATORIO' });
+  // Pela batata grátis (1–1 de verdade): rev. 3 recusa por ter UMA opção só, não pelo 2–2.
+  assert.deepEqual(validarConfiguracao({ modo: 'EXPANDIDO', cwGrupoPrincipalId: G_BATATA_GRATIS }, item), { ok: false, codigo: 'GRUPO_COM_UMA_OPCAO' });
+});
+
+test('validarConfiguracao: OUTRO_GRUPO_OBRIGATORIO não existe mais em lugar nenhum', () => {
+  const combo = itemDe(catalogo(), CAT_COMBOS, IT_COMBO_TRAD);
+  const quinta = itemDe(catalogo(), CAT_QUINTA, IT_QUINTA);
+  const codigos = [
+    validarConfiguracao({ modo: 'EXPANDIDO', cwGrupoPrincipalId: G_BURGUER_COMBO_T }, combo).codigo,
+    validarConfiguracao({ modo: 'EXPANDIDO', cwGrupoPrincipalId: G_BATATA_GRATIS }, quinta).codigo,
+    ...mesclarAdmin(catalogo(), []).itens.flatMap((i) => i.grupos.flatMap((gr) => [gr.elegivel.codigo, gr.selecionavel.codigo])),
+  ];
+  assert.equal(codigos.includes('OUTRO_GRUPO_OBRIGATORIO'), false);
+  assert.equal(Object.keys(MENSAGENS_ADMIN).includes('OUTRO_GRUPO_OBRIGATORIO'), false);
 });
 
 test('validarConfiguracao: grupo principal MISSING ou sem opções devolve o código do grupo', () => {
@@ -550,18 +654,36 @@ test('validarConfiguracao: grupo principal MISSING ou sem opções devolve o có
   );
 });
 
-test('validarConfiguracao: outro grupo obrigatório em falta TAMBÉM invalida', () => {
-  // Variante derivada: no snapshot real nenhum grupo está MISSING. Um grupo obrigatório em
-  // falta continua obrigatório no CW — ignorá-lo faria a configuração piscar com o estoque.
+test('validarConfiguracao: rev. 3 — outro obrigatório em falta NÃO derruba a configuração', () => {
+  // Variante derivada: no snapshot real nenhum grupo está MISSING. A configuração continua
+  // válida (spec §7); quem cai é o PRODUTO, que sai `ordenavel:false` — senão a vitrine
+  // trocaria de arrumação a cada ida e volta do estoque.
   const cat = variando((c) => {
     const grupo = grupoDe(itemDe(c, CAT_TRADICIONAIS, IT_TRADICIONAIS), G_TURBINE_LANCHE);
     grupo.status = 'MISSING';
     grupo.min = 1;
   });
-  assert.deepEqual(
-    validarConfiguracao({ modo: 'EXPANDIDO', cwGrupoPrincipalId: G_TRADICIONAL_FAVORITO }, itemDe(cat, CAT_TRADICIONAIS, IT_TRADICIONAIS)),
-    { ok: false, codigo: 'OUTRO_GRUPO_OBRIGATORIO' },
-  );
+  const item = itemDe(cat, CAT_TRADICIONAIS, IT_TRADICIONAIS);
+  assert.equal(validarConfiguracao({ modo: 'EXPANDIDO', cwGrupoPrincipalId: G_TRADICIONAL_FAVORITO }, item).ok, true);
+  const { avisos } = projetarCatalogo(cat, [cfg(IT_TRADICIONAIS, G_TRADICIONAL_FAVORITO)]);
+  assert.deepEqual(avisos, []);
+});
+
+// ── obrigatoriosRestantes ───────────────────────────────────────────────────
+test('obrigatoriosRestantes: obrigatórios visíveis, sem o principal, na ordem do CW', () => {
+  const combo = itemDe(catalogo(), CAT_COMBOS, IT_COMBO_TRAD);
+  assert.deepEqual(obrigatoriosRestantes(combo, G_BURGUER_COMBO_T).map((gr) => gr.nome), ['BEBIDA DO COMBO', 'ACOMPANHAMENTO DO COMBO']);
+  // Id como texto (veio do banco) exclui o principal igual.
+  assert.equal(obrigatoriosRestantes(combo, String(G_BURGUER_COMBO_T)).length, 2);
+  // Sem principal (modo NORMAL) o próprio 1–1 entra na conta.
+  assert.deepEqual(obrigatoriosRestantes(combo, null).map((gr) => gr.id), [G_BURGUER_COMBO_T, G_BEBIDA_COMBO, G_ACOMP_COMBO]);
+  // Opcional nunca entra: extra não é jornada.
+  assert.deepEqual(obrigatoriosRestantes(itemDe(catalogo(), CAT_TRADICIONAIS, IT_TRADICIONAIS), G_TRADICIONAL_FAVORITO), []);
+  // MISSING com min ≥ 1 continua obrigatório (está em falta agora, não deixou de existir).
+  const emFalta = variando((c) => { grupoDe(itemDe(c, CAT_COMBOS, IT_COMBO_TRAD), G_BEBIDA_COMBO).status = 'MISSING'; });
+  assert.equal(obrigatoriosRestantes(itemDe(emFalta, CAT_COMBOS, IT_COMBO_TRAD), G_BURGUER_COMBO_T).length, 2);
+  assert.deepEqual(obrigatoriosRestantes(null, 1), []);
+  assert.deepEqual(obrigatoriosRestantes({}, undefined), []);
 });
 
 // ── ordenavelDoItem ─────────────────────────────────────────────────────────
@@ -603,6 +725,9 @@ test('projetarProduto: X BURGUER de TRADICIONAIS — o golden do contrato §5', 
     descricao: 'Carne 56G, queijo muçarela, alface e tomate',
     imagem: `${CDN_SUB}3633259/1563a28eIMG-20240607-WA0039.jpg`,
     preco: 12,
+    // Só restam grupos OPCIONAIS: o mínimo é o próprio preço e o card não diz "a partir de".
+    precoMinimo: 12,
+    precoEhAPartirDe: false,
     status: 'ACTIVE',
     ordenavel: true,
     origem: { itemId: 2979325, grupoId: 795194, opcaoId: 3633259 },
@@ -611,6 +736,8 @@ test('projetarProduto: X BURGUER de TRADICIONAIS — o golden do contrato §5', 
   // Ajuste 1 da spec: o produto NÃO carrega o item técnico (o front indexa por origem).
   assert.equal('item' in produto, false);
   assert.equal('grupos' in produto, false);
+  // Sem promoção na base, nem `precoPromocional` nem o mínimo promocional existem.
+  assert.equal('precoMinimoPromocional' in produto, false);
 });
 
 test('projetarProduto: preço é base + opção, com duas casas', () => {
@@ -639,9 +766,99 @@ test('projetarProduto: promoção do item base soma a opção por cima', () => {
   assert.equal('precoPromocional' in semPromo, false);
 });
 
+test('projetarProduto: COMBO - TRADICIONAIS — o mínimo é a JORNADA inteira, não só a identidade', () => {
+  // 12,00 (X BURGUER) + 6,00 (bebida, a mais barata) + 9,90 (acompanhamento, o mais barato).
+  // `preco` continua sendo a identidade — é o que vai ao carrinho quando o cliente escolhe.
+  const item = itemDe(catalogo(), CAT_COMBOS, IT_COMBO_TRAD);
+  const grupo = grupoDe(item, G_BURGUER_COMBO_T);
+  const produto = projetarProduto(item, grupo, opcaoDe(grupo, OP_X_BURGUER_COMBO));
+  assert.equal(produto.preco, 12);
+  assert.equal(produto.precoMinimo, 27.9);
+  assert.equal(produto.precoEhAPartirDe, true); // acompanhamento varia (9,90 vs 15,90)
+  assert.equal(produto.ordenavel, true);
+});
+
+test('projetarProduto: obrigatório restante sem seleção válida → precoMinimo null, não ordenável', () => {
+  // Bebida do combo com TODAS as opções em falta: o HUB manda `custoMinimo: null` (não existe
+  // seleção válida). O card não pode inventar um mínimo nem deixar pedir.
+  const cat = variandoCw((bruto) => {
+    for (const op of gCw(itCw(bruto, CAT_COMBOS, IT_COMBO_TRAD), G_BEBIDA_COMBO).options) op.status = 'MISSING';
+  });
+  const item = itemDe(cat, CAT_COMBOS, IT_COMBO_TRAD);
+  assert.equal(grupoDe(item, G_BEBIDA_COMBO).custoMinimo, null);
+  const grupo = grupoDe(item, G_BURGUER_COMBO_T);
+  const produto = projetarProduto(item, grupo, opcaoDe(grupo, OP_X_BURGUER_COMBO));
+  assert.equal(produto.precoMinimo, null);
+  assert.equal(produto.ordenavel, false);
+  assert.equal(produto.motivo, 'GRUPO_EM_FALTA');
+  // E a CONFIGURAÇÃO segue válida (spec §7): sem aviso no admin, sem queda para NORMAL.
+  assert.equal(validarConfiguracao({ modo: 'EXPANDIDO', cwGrupoPrincipalId: G_BURGUER_COMBO_T }, item).ok, true);
+  assert.deepEqual(projetarCatalogo(cat, [cfg(IT_COMBO_TRAD, G_BURGUER_COMBO_T)]).avisos, []);
+});
+
+test('projetarProduto: obrigatório com opção grátis e opção paga → mínimo 0 e "a partir de"', () => {
+  // O caso da spec §3: R$ 0 e R$ 6 no mesmo grupo obrigatório — `custoMinimo 0`, mas variável.
+  const cat = variandoCw((bruto) => { gCw(itCw(bruto, CAT_COMBOS, IT_COMBO_TRAD), G_BEBIDA_COMBO).options[0].price = 0; });
+  const item = itemDe(cat, CAT_COMBOS, IT_COMBO_TRAD);
+  const bebida = grupoDe(item, G_BEBIDA_COMBO);
+  assert.equal(bebida.custoMinimo, 0);
+  assert.equal(bebida.precoVariavel, true);
+  const grupo = grupoDe(item, G_BURGUER_COMBO_T);
+  const produto = projetarProduto(item, grupo, opcaoDe(grupo, OP_X_BURGUER_COMBO));
+  assert.equal(produto.precoMinimo, 21.9); // 12,00 + 0 + 9,90
+  assert.equal(produto.precoEhAPartirDe, true);
+});
+
+test('projetarProduto: promoção na base também ganha o seu mínimo', () => {
+  const cat = variando((c) => {
+    const item = itemDe(c, CAT_COMBOS, IT_COMBO_TRAD);
+    item.preco = 5;
+    item.precoPromocional = 3.5;
+  });
+  const item = itemDe(cat, CAT_COMBOS, IT_COMBO_TRAD);
+  const grupo = grupoDe(item, G_BURGUER_COMBO_T);
+  const produto = projetarProduto(item, grupo, opcaoDe(grupo, OP_X_BURGUER_COMBO));
+  assert.equal(produto.preco, 17);              // 5 + 12
+  assert.equal(produto.precoPromocional, 15.5); // 3,50 + 12
+  assert.equal(produto.precoMinimo, 32.9);      // 17 + 6 + 9,90
+  assert.equal(produto.precoMinimoPromocional, 31.4); // 15,50 + 6 + 9,90
+});
+
+test('projetarProduto: bootstrap ANTIGO (sem os campos do HUB) volta ao comportamento da rev. 2', () => {
+  // Ordem de deploy (spec §10): HUB antes do PDV, mas o inverso acontece por um instante.
+  // Campo ausente é DESCONHECIDO, não zero: mostra o preço da identidade, sem "a partir de",
+  // e continua ordenável — nunca "R$ 0,00" nem "Indisponível" por falta de informação.
+  const cat = variando((c) => {
+    for (const grupo of itemDe(c, CAT_COMBOS, IT_COMBO_TRAD).grupos) {
+      delete grupo.custoMinimo;
+      delete grupo.custoMaximo;
+      delete grupo.precoVariavel;
+    }
+  });
+  const item = itemDe(cat, CAT_COMBOS, IT_COMBO_TRAD);
+  const grupo = grupoDe(item, G_BURGUER_COMBO_T);
+  const produto = projetarProduto(item, grupo, opcaoDe(grupo, OP_X_BURGUER_COMBO));
+  assert.equal(produto.preco, 12);
+  assert.equal(produto.precoMinimo, 12);
+  assert.equal(produto.precoEhAPartirDe, false);
+  assert.equal(produto.ordenavel, true);
+  // Um grupo sem o campo no meio de grupos que têm: contribui 0 e não liga o "a partir de".
+  const misto = variando((c) => {
+    const grupos = itemDe(c, CAT_COMBOS, IT_COMBO_TRAD).grupos;
+    const acomp = grupos.find((gr) => gr.id === G_ACOMP_COMBO);
+    delete acomp.custoMinimo;
+    delete acomp.precoVariavel;
+  });
+  const itemMisto = itemDe(misto, CAT_COMBOS, IT_COMBO_TRAD);
+  const grupoMisto = grupoDe(itemMisto, G_BURGUER_COMBO_T);
+  const parcial = projetarProduto(itemMisto, grupoMisto, opcaoDe(grupoMisto, OP_X_BURGUER_COMBO));
+  assert.equal(parcial.precoMinimo, 18); // 12 + 6 (bebida); o acompanhamento não é somado
+  assert.equal(parcial.precoEhAPartirDe, false);
+  assert.equal(parcial.ordenavel, true);
+});
+
 test('projetarProduto: grupo obrigatório em falta derruba a ordenabilidade do produto', () => {
-  // Estado que `projetarCatalogo` não alcança (a configuração cairia antes, em
-  // OUTRO_GRUPO_OBRIGATORIO), mas a função é pública e tem de tratar.
+  // Rev. 3: a configuração NÃO cai mais por causa disto — quem cai é o produto.
   const cat = variando((c) => {
     const grupo = grupoDe(itemDe(c, CAT_TRADICIONAIS, IT_TRADICIONAIS), G_TURBINE_LANCHE);
     grupo.status = 'MISSING';
@@ -684,10 +901,28 @@ test('produtoDeItem: item com preço próprio vira o card de hoje', () => {
     descricao: 'Carne artesanal 120G, catupiry empanado, cebola caramelizada e bacon em cubos',
     imagem: `${CDN_ITEM}3722649/b2a47d79_meta__2k_202601180308(2).jpeg`,
     preco: 29,
+    // Item com preço próprio e só grupos opcionais: mínimo = preço, sem "a partir de".
+    precoMinimo: 29,
+    precoEhAPartirDe: false,
     status: 'ACTIVE',
     ordenavel: true,
     origem: { itemId: 3722649 },
   });
+});
+
+test('produtoDeItem: COMBO em modo NORMAL não mostra mais R$ 0,00', () => {
+  // O card do combo sem vitrine mostrava o preço da BASE (zero). Rev. 3: o mínimo é a jornada
+  // obrigatória inteira — burguer (12,00) + bebida (6,00) + acompanhamento (9,90).
+  const produto = produtoDeItem(itemDe(catalogo(), CAT_COMBOS, IT_COMBO_TRAD));
+  assert.equal(produto.tipo, 'ITEM');
+  assert.equal(produto.preco, 0);
+  assert.equal(produto.precoMinimo, 27.9);
+  assert.equal(produto.precoEhAPartirDe, true);
+  assert.equal(produto.ordenavel, true);
+  // TRADICIONAIS 🍔 (vitrine em potencial) também: o 1–1 obrigatório entra na conta.
+  const trad = produtoDeItem(itemDe(catalogo(), CAT_TRADICIONAIS, IT_TRADICIONAIS));
+  assert.equal(trad.precoMinimo, 12);
+  assert.equal(trad.precoEhAPartirDe, true);
 });
 
 test('produtoDeItem: PUDIM em falta sai MISSING e não ordenável', () => {
@@ -709,6 +944,9 @@ test('projetarCatalogo: TRADICIONAIS EXPANDIDO vira 9 produtos na ordem do CW', 
     'X BURGUER', 'DELICIA', 'X SALADA', 'X CALA BURGUER', 'X BACON', 'CHEDDAR BACON', 'X DUPLO', 'HAMBURGÃO', 'ESPECIAL',
   ]);
   assert.deepEqual(produtos.map((p) => p.preco), [12, 14, 14, 16, 16, 17, 18, 18, 22]);
+  // Rev. 3: só restam grupos opcionais, então mínimo == preço e nada de "a partir de".
+  assert.deepEqual(produtos.map((p) => p.precoMinimo), [12, 14, 14, 16, 16, 17, 18, 18, 22]);
+  assert.deepEqual(produtos.map((p) => p.precoEhAPartirDe), Array(9).fill(false));
   assert.deepEqual(produtos.map((p) => p.tipo), Array(9).fill('OPCAO_PRINCIPAL'));
   assert.deepEqual(produtos.map((p) => p.grupoPrincipalId), Array(9).fill(G_TRADICIONAL_FAVORITO));
   assert.deepEqual(produtos.map((p) => p.origem.opcaoId), [3633259, 3633261, 3633260, 3633264, 3633262, 3633263, 3633265, 3633266, 3633267]);
@@ -721,6 +959,38 @@ test('projetarCatalogo: TRADICIONAIS EXPANDIDO vira 9 produtos na ordem do CW', 
   assert.equal(produtos[0].imagem, `${CDN_SUB}3633259/1563a28eIMG-20240607-WA0039.jpg`);
   assert.equal(produtos[0].descricao, 'Carne 56G, queijo muçarela, alface e tomate');
   assert.notEqual(produtos[0].imagem, itemDe(base, CAT_TRADICIONAIS, IT_TRADICIONAIS).imagem);
+});
+
+test('projetarCatalogo: COMBO - TRADICIONAIS EXPANDIDO por 964783 — golden rev. 3', () => {
+  const { catalogo: projetado, avisos } = projetarCatalogo(catalogo(), [cfg(IT_COMBO_TRAD, G_BURGUER_COMBO_T)]);
+  assert.deepEqual(avisos, []);
+  const todos = categoriaDe(projetado, CAT_COMBOS).produtos;
+  const produtos = todos.filter((p) => p.origem.itemId === IT_COMBO_TRAD);
+  assert.equal(produtos.length, 9);
+  assert.deepEqual(produtos.map((p) => p.nome), [
+    'X BURGUER', 'X SALADA', 'DELICIA', 'X BACON', 'X CALA BURGUER', 'CHEDDAR BACON', 'HAMBURGÃO', 'X DUPLO', 'ESPECIAL',
+  ]);
+  // `preco` = identidade (base 0 + opção); `precoMinimo` = + bebida 6,00 + acompanhamento 9,90.
+  assert.deepEqual(produtos.map((p) => p.preco), [12, 14, 14, 16, 16, 17, 18, 18, 22]);
+  assert.deepEqual(produtos.map((p) => p.precoMinimo), [27.9, 29.9, 29.9, 31.9, 31.9, 32.9, 33.9, 33.9, 37.9]);
+  assert.deepEqual(produtos.map((p) => p.precoEhAPartirDe), Array(9).fill(true));
+  assert.deepEqual(produtos.map((p) => p.ordenavel), Array(9).fill(true));
+  assert.deepEqual(produtos.map((p) => p.grupoPrincipalId), Array(9).fill(G_BURGUER_COMBO_T));
+  // O outro combo, sem configuração, segue como card de ITEM.
+  assert.equal(todos.at(-1).id, `item:${IT_COMBO_ART}`);
+});
+
+test('projetarCatalogo: COMBO - ARTESANAIS por 964784 — 11 produtos, CHICKEN CRISPY em falta', () => {
+  const { catalogo: projetado } = projetarCatalogo(catalogo(), [cfg(IT_COMBO_ART, G_BURGUER_COMBO_A)]);
+  const produtos = categoriaDe(projetado, CAT_COMBOS).produtos.filter((p) => p.origem.itemId === IT_COMBO_ART);
+  assert.equal(produtos.length, 11);
+  assert.deepEqual(produtos.map((p) => p.precoMinimo), [34.9, 34.9, 36.9, 37.9, 38.9, 40.9, 40.9, 40.9, 43.9, 44.9, 45.9]);
+  assert.deepEqual(produtos.map((p) => p.precoEhAPartirDe), Array(11).fill(true));
+  const crispy = produtos.find((p) => p.nome === 'CHICKEN CRISPY');
+  assert.equal(crispy.status, 'MISSING'); // em falta é card "Em falta", não sumiço
+  assert.equal(crispy.precoMinimo, 34.9);
+  assert.equal(crispy.ordenavel, true);
+  assert.deepEqual(produtos.filter((p) => p.status === 'MISSING').map((p) => p.nome), ['CHICKEN CRISPY']);
 });
 
 test('projetarCatalogo: DOGS — opção sem imagem cai para a do item (que aqui é null)', () => {
@@ -781,10 +1051,11 @@ test('projetarCatalogo: item sem configuração vira um produto ITEM', () => {
 });
 
 test('projetarCatalogo: configuração inválida cai para NORMAL com aviso (o cardápio não quebra)', () => {
-  const { catalogo: projetado, avisos } = projetarCatalogo(catalogo(), [cfg(IT_COMBO_TRAD, G_BURGUER_COMBO_T, 4)]);
-  assert.deepEqual(avisos, [{ cwItemId: IT_COMBO_TRAD, codigo: 'OUTRO_GRUPO_OBRIGATORIO' }]);
-  const produtos = categoriaDe(projetado, CAT_COMBOS).produtos;
-  assert.deepEqual(produtos.map((p) => p.id), ['item:3649498', 'item:3649501']);
+  // PEGUE SUA BATATA 🍟 tem uma opção só: vitrine de um card não é vitrine (rev. 3).
+  const { catalogo: projetado, avisos } = projetarCatalogo(catalogo(), [cfg(IT_QUINTA, G_BATATA_GRATIS, 4)]);
+  assert.deepEqual(avisos, [{ cwItemId: IT_QUINTA, codigo: 'GRUPO_COM_UMA_OPCAO' }]);
+  const produtos = categoriaDe(projetado, CAT_QUINTA).produtos;
+  assert.deepEqual(produtos.map((p) => p.id), [`item:${IT_QUINTA}`]);
   assert.equal(produtos[0].tipo, 'ITEM');
 });
 
@@ -893,7 +1164,7 @@ test('mesclarAdmin: uma linha por item, com preço base e categoria', () => {
   assert.equal(JSON.stringify(base), antes);
 });
 
-test('mesclarAdmin: elegivel ≠ selecionavel é o que desabilita o select do combo', () => {
+test('mesclarAdmin: rev. 3 — o 1–1 do combo é elegível E selecionável', () => {
   const { itens } = mesclarAdmin(catalogo(), []);
   const combo = itens.find((i) => i.cwItemId === IT_COMBO_TRAD);
   const burguer = combo.grupos.find((gr) => gr.id === G_BURGUER_COMBO_T);
@@ -905,11 +1176,37 @@ test('mesclarAdmin: elegivel ≠ selecionavel é o que desabilita o select do co
     choiceType: 'SINGLE',
     nOpcoes: 9,
     elegivel: { ok: true },
-    selecionavel: { ok: false, codigo: 'OUTRO_GRUPO_OBRIGATORIO' },
+    selecionavel: { ok: true },
   });
-  // Nenhum grupo do combo é selecionável: é isso que a tela mostra ao lado de cada opção.
-  assert.deepEqual(combo.grupos.map((gr) => gr.selecionavel.ok), [false, false, false, false]);
-  assert.deepEqual(combo.grupos.map((gr) => gr.elegivel.ok), combo.grupos.map((gr) => gr.min === 1 && gr.max === 1));
+  // Bebida e acompanhamento também são 1–1 com duas apresentáveis; a maionese (0–1) não é.
+  assert.deepEqual(combo.grupos.map((gr) => gr.selecionavel.ok), [true, false, true, true]);
+  assert.equal(combo.candidato, true);
+  assert.equal(combo.obrigatoriosAlem, 2); // bebida e acompanhamento: o card dirá "a partir de"
+});
+
+test('mesclarAdmin: elegivel e selecionavel coincidem em TODO grupo (o contrato fica para depois)', () => {
+  const { itens } = mesclarAdmin(catalogo(), [cfg(IT_TRADICIONAIS, G_TRADICIONAL_FAVORITO, 1)]);
+  for (const item of itens) {
+    for (const grupo of item.grupos) assert.deepEqual(grupo.elegivel, grupo.selecionavel, `${item.nome} › ${grupo.nome}`);
+  }
+});
+
+test('mesclarAdmin: candidato e obrigatoriosAlem guiam a tela (spec §8)', () => {
+  const { itens } = mesclarAdmin(catalogo(), []);
+  const por = (id) => itens.find((i) => i.cwItemId === id);
+  // DOM CATUPIRY não tem grupo de escolha única: estado NEUTRO, sem código, sem vermelho.
+  assert.equal(por(IT_DOM_CATUPIRY).candidato, false);
+  assert.equal(por(IT_DOM_CATUPIRY).obrigatoriosAlem, 0);
+  // QUINTA: o 2–2 não serve e a batata tem uma opção só.
+  assert.equal(por(IT_QUINTA).candidato, false);
+  // TRADICIONAIS é candidato e não tem outra escolha obrigatória: card sem "a partir de".
+  assert.equal(por(IT_TRADICIONAIS).candidato, true);
+  assert.equal(por(IT_TRADICIONAIS).obrigatoriosAlem, 0);
+  assert.equal(por(IT_COMBO_ART).candidato, true);
+  assert.equal(por(IT_COMBO_ART).obrigatoriosAlem, 2);
+  // Com configuração salva, a conta é feita a partir do grupo CONFIGURADO.
+  const comConfig = mesclarAdmin(catalogo(), [cfg(IT_COMBO_TRAD, G_BEBIDA_COMBO, 7)]).itens.find((i) => i.cwItemId === IT_COMBO_TRAD);
+  assert.equal(comConfig.obrigatoriosAlem, 2); // burguer e acompanhamento
 });
 
 test('mesclarAdmin: TRADICIONAIS tem exatamente um grupo selecionável', () => {
@@ -932,13 +1229,13 @@ test('mesclarAdmin: configuração que deixou de valer aparece com o código na 
   assert.deepEqual(trad.validacao, { ok: false, codigo: 'GRUPO_NAO_E_ESCOLHA_UNICA' });
 });
 
-test('mesclarAdmin: QUINTA DA BATATA mostra o 1–1 elegível e não selecionável', () => {
+test('mesclarAdmin: QUINTA DA BATATA — o 1–1 com uma opção só não serve de vitrine', () => {
   const { itens } = mesclarAdmin(catalogo(), []);
   const quinta = itens.find((i) => i.cwItemId === IT_QUINTA);
   assert.equal(quinta.nome, 'TRADICIONAIS 🍔'); // mesmo nome do outro item: só o id distingue
   const batata = quinta.grupos.find((gr) => gr.id === G_BATATA_GRATIS);
-  assert.deepEqual(batata.elegivel, { ok: true });
-  assert.deepEqual(batata.selecionavel, { ok: false, codigo: 'OUTRO_GRUPO_OBRIGATORIO' });
+  assert.deepEqual(batata.elegivel, { ok: false, codigo: 'GRUPO_COM_UMA_OPCAO' });
+  assert.deepEqual(batata.selecionavel, { ok: false, codigo: 'GRUPO_COM_UMA_OPCAO' });
   assert.equal(batata.nOpcoes, 1);
   const dois = quinta.grupos.find((gr) => gr.id === G_ESCOLHA_DOIS);
   assert.deepEqual(dois.elegivel, { ok: false, codigo: 'GRUPO_NAO_E_ESCOLHA_UNICA' });
@@ -965,6 +1262,26 @@ test('mesclarAdmin: item em duas categorias entra uma vez só (vale a primeira)'
   assert.equal(linhas.length, 1);
   assert.equal(linhas[0].categoria, '🥇 OS MAIS PEDIDOS');
   assert.deepEqual(linhas[0].validacao, { ok: true });
+});
+
+// ── MENSAGENS_ADMIN ─────────────────────────────────────────────────────────
+test('MENSAGENS_ADMIN: uma frase humana para cada código que a regra sabe emitir (spec §8)', () => {
+  const emitidos = [
+    'MODO_INVALIDO', 'ITEM_AUSENTE', 'GRUPO_AUSENTE',
+    'GRUPO_NAO_E_ESCOLHA_UNICA', 'GRUPO_SEM_OPCOES', 'GRUPO_COM_UMA_OPCAO', 'GRUPO_INDISPONIVEL',
+  ];
+  assert.deepEqual(Object.keys(MENSAGENS_ADMIN).sort(), [...emitidos].sort());
+  assert.equal(MENSAGENS_ADMIN.GRUPO_COM_UMA_OPCAO, 'o grupo tem uma opção só');
+  assert.equal(MENSAGENS_ADMIN.ITEM_AUSENTE, 'este item não está mais no cardápio do balcão');
+  for (const [codigo, frase] of Object.entries(MENSAGENS_ADMIN)) {
+    // Frase corrida em minúscula: a tela a emenda depois de "porque…", e o código vai discreto
+    // ao lado — nunca no lugar dela.
+    assert.equal(typeof frase, 'string', codigo);
+    assert.ok(frase.length > 0, codigo);
+    assert.equal(frase, frase.trim(), codigo);
+    assert.equal(frase[0], frase[0].toLowerCase(), codigo);
+    assert.equal(frase.endsWith('.'), false, codigo);
+  }
 });
 
 test('mesclarAdmin: catálogo vazio devolve listas vazias e as configurações viram órfãs', () => {
