@@ -33,7 +33,9 @@ export default function LinhaCarrinho({ linha, aoEditar, aoRemover, aoMudarQtd }
     <div className="tq-linha">
       <Foto src={imagemApresentada(linha)} alt="" className="tq-linha-foto" tamIcone={30} />
       <div className="tq-linha-corpo">
-        <div className="tq-linha-nome tq-disp">{linha.qtd}× {nome}</div>
+        <div className="tq-linha-nome tq-disp">
+          <span className="tq-linha-qtd tq-disp tq-disp-forte tq-num">{linha.qtd}×</span>{nome}
+        </div>
         {opcoes.length ? (
           <ul className="tq-linha-ops">
             {opcoes.map((o) => (

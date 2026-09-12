@@ -417,7 +417,7 @@
   flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 16px; text-align: center; padding: clamp(48px, 12vh, 120px) 32px; color: var(--tq-texto-3);
 }
-.tq-vazio-t { font-size: clamp(24px, 3vw, 34px); color: var(--tq-texto); }
+.tq-vazio-t { font-size: clamp(26px, 3.4vw, 40px); color: var(--tq-texto); }
 .tq-vazio p { font-size: clamp(17px, 1.7vw, 20px); max-width: 460px; }
 
 /* ═══ V4 — barra do pedido e aviso passageiro ══════════════════════════════ */
@@ -591,8 +591,8 @@
 /* -- Rodapé de ação do item ------------------------------------------------ */
 .tq-rodape {
   flex: 0 0 auto; display: flex; align-items: center; gap: 16px;
-  padding: 16px 24px calc(20px + env(safe-area-inset-bottom, 0px));
-  background: var(--tq-superficie); border-top: 1px solid var(--tq-borda);
+  padding: 18px 24px calc(22px + env(safe-area-inset-bottom, 0px));
+  background: var(--tq-superficie); border-top: 6px solid var(--tq-amarelo);
   box-shadow: 0 -8px 24px rgba(14, 19, 25, 0.07);
 }
 .tq-stepper { display: inline-flex; align-items: center; gap: 10px; flex: 0 0 auto; }
@@ -659,25 +659,37 @@
 .tq-subtotal { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .tq-subtotal span { font-size: clamp(16px, 1.7vw, 19px); color: var(--tq-texto-2); }
 .tq-subtotal small { display: block; font-size: clamp(13px, 1.3vw, 15px); color: var(--tq-texto-3); font-weight: 600; }
-.tq-subtotal strong { font-size: clamp(24px, 2.6vw, 32px); }
+.tq-subtotal strong { font-size: clamp(26px, 3vw, 38px); }
 .tq-rodape-botoes { display: flex; gap: 12px; }
 .tq-rodape-botoes > * { flex: 1 1 0; }
 
 .tq-lista { width: min(920px, 92%); margin: 0 auto; padding: 24px 0 40px; display: flex; flex-direction: column; gap: 14px; }
 .tq-linha {
-  display: flex; gap: 16px; align-items: flex-start;
-  background: var(--tq-superficie); border: 1px solid var(--tq-borda); border-radius: var(--tq-raio); padding: 16px;
+  display: flex; gap: 18px; align-items: flex-start;
+  background: var(--tq-superficie); border: 1px solid var(--tq-borda);
+  border-left: 6px solid var(--tq-preto); border-radius: var(--tq-raio); padding: 18px;
 }
 .tq-linha.mudou { border-color: var(--tq-amarelo); border-width: 3px; padding: 14px; }
-.tq-linha-foto { flex: 0 0 auto; width: 88px; height: 88px; aspect-ratio: auto; border-radius: var(--tq-raio-2); object-fit: cover; }
+.tq-linha-foto {
+  flex: 0 0 auto; width: clamp(88px, 10vw, 116px); height: clamp(88px, 10vw, 116px);
+  aspect-ratio: auto; border-radius: var(--tq-raio-2); object-fit: cover;
+}
 .tq-linha-corpo { flex: 1 1 auto; min-width: 0; }
-.tq-linha-nome { font-size: clamp(18px, 1.9vw, 22px); line-height: 1.2; }
+.tq-linha-nome { font-size: clamp(19px, 2.1vw, 26px); line-height: 1.2; }
+/* A quantidade vira ficha preta com número amarelo: num pedido de vários itens
+   é o dado que o cliente confere primeiro, e antes ela era só um "2×" no meio
+   do nome. */
+.tq-linha-qtd {
+  display: inline-grid; place-items: center; min-width: 46px; height: 38px; padding: 0 10px;
+  margin-right: 10px; border-radius: 10px; background: var(--tq-preto); color: var(--tq-amarelo);
+  font-size: clamp(16px, 1.7vw, 20px); vertical-align: 2px;
+}
 .tq-linha-ops { margin-top: 6px; font-size: clamp(15px, 1.5vw, 17px); color: var(--tq-texto-3); line-height: 1.5; }
 .tq-linha-ops li::before { content: '• '; color: #a8a091; }
 .tq-linha-obs { margin-top: 6px; font-size: clamp(14px, 1.5vw, 16px); font-style: italic; color: var(--tq-texto-3); }
 .tq-linha-mudou { margin-top: 6px; font-weight: 800; color: #8a3b00; font-size: clamp(14px, 1.4vw, 16px); }
 .tq-linha-lado { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 12px; }
-.tq-linha-valor { font-size: clamp(19px, 2vw, 23px); white-space: nowrap; }
+.tq-linha-valor { font-size: clamp(21px, 2.3vw, 28px); white-space: nowrap; }
 /* Editar e remover afastados: destrutivo colado em ação comum, num vidro tocado
    em pé, é erro de toque garantido. */
 .tq-linha-acoes { display: flex; align-items: center; gap: 32px; }
