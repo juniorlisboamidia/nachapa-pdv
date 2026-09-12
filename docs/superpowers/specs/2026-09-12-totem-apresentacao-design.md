@@ -1,121 +1,84 @@
 # Totem — Camada de Apresentação (modo EXPANDIDO) — Design
 
-**Data:** 2026-09-12 (rev. 2, com os seis ajustes do Junior) · **Status:** arquitetura aprovada; revisão documental antes de codificar · **Repos:** `nachapa-pdv` (configuração, projeção, admin, Totem) e `Traffic Hub` (campos aditivos no bootstrap). Sem redesign visual nesta versão.
+**Data:** 2026-09-12 (rev. 3: regra de Vitrine corrigida — outros grupos obrigatórios são legítimos; preço mínimo "a partir de" calculado no HUB) · **Status:** rev. 2 implementada e deployada (A1–A5); rev. 3 aprovada conceitualmente, aguardando implementação (B1–B3) · **Repos:** `nachapa-pdv` e `Traffic Hub`. Sem redesign visual.
 
 ## 1. Problema e decisão
 
-O Cardápio Web (CW) modela "TRADICIONAIS 🍔" como um **item base a R$ 0,00** com um grupo obrigatório de escolha única ("SEU TRADICIONAL FAVORITO") cujas opções são os produtos reais (X BURGUER R$ 12, DELICIA R$ 14…). No Totem o cliente deve ver **cada opção principal como um produto**, e o pedido continua indo ao CW como `item_id` + `option_id` principal.
+O Cardápio Web (CW) modela "TRADICIONAIS 🍔" como um **item base a R$ 0,00** com um grupo obrigatório de escolha única cujas opções são os produtos reais. No Totem cada opção principal vira um card; o pedido continua `item_id` + `option_id`.
 
-Inventário real (2026-09-11): 4 itens passam na regra estrita, 1 deles (COMBO - TRADICIONAIS) tem outros grupos obrigatórios e **não** deve expandir; 2 casos semanticamente iguais escapam de qualquer heurística (grupo em `index` 2; `SUMMABLE` 1–1). Por isso a **configuração é explícita**, por loja e item do CW, sem ativação automática; a heurística só **sugere** no admin.
+Rev. 2 tratava qualquer outro grupo obrigatório como impeditivo (`OUTRO_GRUPO_OBRIGATORIO`). **Isso estava errado**: num combo, BURGUER DO COMBO define a identidade e BEBIDA/ACOMPANHAMENTO são etapas obrigatórias legítimas da jornada. A rev. 3 permite outros obrigatórios, mantém todos visíveis no detalhe (só o principal fica pré-selecionado e oculto), e o card passa a mostrar o **preço mínimo completo** ("a partir de") quando a jornada obrigatória restante pode mudar o valor.
 
-**Fonte de verdade continua no CW** (item, opção, preço, disponibilidade, estoque, ordem, complementos, ids do pedido). O produto apresentado é uma **projeção dinâmica** do catálogo vivo; nada dele é persistido.
+**Configuração explícita**, por loja e item, sem ativação automática; heurística só sugere. **Fonte de verdade continua no CW**; o produto apresentado é projeção dinâmica.
 
-## 2. Modelo de dados (PDV)
+## 2. Modelo de dados (PDV) — inalterado desde a rev. 2
 
-```prisma
-// Apresentação do Totem: como um item do Cardápio Web aparece na vitrine do totem desta loja.
-// Explícita (nunca automática) e só com ids do CW; o produto apresentado é projetado do catálogo
-// vivo a cada bootstrap — nada de opção/produto persistido. A tabela só guarda EXCEÇÕES: voltar
-// a NORMAL apaga a linha (por isso não há `ativo` — não existe "desligado mas guardado").
-model TotemApresentacao {
-  id                 Int      @id @default(autoincrement())
-  empresaId          Int
-  cwItemId           Int                          // Item.id do CW (item base)
-  modo               String                       // hoje só 'EXPANDIDO' é persistido
-  cwGrupoPrincipalId Int                          // OptionGroupInItem.id do vínculo item↔grupo
-  criadoEm           DateTime @default(now())
-  atualizadoEm       DateTime @updatedAt
+`TotemApresentacao { id, empresaId, cwItemId, modo, cwGrupoPrincipalId, criadoEm, atualizadoEm }`, única por `(empresaId, cwItemId)`, só EXPANDIDO persistido (NORMAL apaga), sem `ativo`. Migration `20260912120000_totem_apresentacao` já aplicada em produção. **Rev. 3 não altera banco.**
 
-  @@unique([empresaId, cwItemId])
-  @@index([empresaId])
-}
+## 3. HUB — campos aditivos por grupo (rev. 3) e por opção (rev. 2)
+
+`backend/cardapioPedidoTotem.js`:
+- Rev. 2 (feito): opções do bootstrap com `imagem` e `descricao`.
+- Rev. 3: novo helper puro **`resumoPrecoDoGrupo(grupo) → { custoMinimo: number|null, custoMaximo: number|null, precoVariavel: boolean }`**, com **exatamente as regras que `validarGrupo` aceita**: só `price_calculation_type === 'SUM'` (não-SUM → o item nem entra no totem); só opções `ACTIVE` contam (MISSING/INACTIVE não podem ser escolhidas); preço da opção é o do vínculo naquele grupo; `SINGLE` = 1 opção qtd 1; `MULTIPLE` = opções distintas qtd 1; `SUMMABLE` = qtd por opção ≤ `max_quantity` (nulo = sem teto); `Σqtd` entre `minimum_quantity` e `maximum_quantity` (nulo = sem teto).
+  - `custoMinimo` = menor custo de uma seleção válida que satisfaça `minimum_quantity` (`0` quando `min = 0`; `null` quando não existe seleção válida — sem opções ACTIVE suficientes).
+  - `custoMaximo` = maior custo de uma seleção válida (com `maximum_quantity` nulo em SUMMABLE e alguma opção com preço > 0 → `Infinity`, serializado como `null` com `precoVariavel:true`).
+  - `precoVariavel` = existe seleção válida com custo ≠ `custoMinimo` (ex.: obrigatório com opções R$ 0 e R$ 6 → `custoMinimo 0`, `precoVariavel true`).
+- `catalogoParaTotem` emite, por grupo, `custoMinimo` e `precoVariavel` (aditivo). O PDV **não** recalcula nada de pricing: só soma números que o HUB entregou.
+- **Teste de equivalência (binding):** para cada tipo (SINGLE; SUMMABLE 1–1; SUMMABLE 2–2; `minimum_quantity` > 1 em MULTIPLE e SUMMABLE; `max_quantity` por opção; MISSING excluída; grupo todo MISSING → `null`; opcional min 0), `validarECotar` com a seleção mais barata devolve linha cujo `Σ opções` == `custoMinimo`, e com a mais cara == `custoMaximo`. Golden real: COMBO - TRADICIONAIS com X BURGUER + COCA COLA LATA + BATATA FRITA cota 27,90 = `precoMinimo` do produto X BURGUER.
+
+Nada muda em cotar, pedido, caches ou contratos existentes.
+
+## 4. PDV backend — projeção e validação (rev. 3)
+
+### 4.1 Módulo puro `backend/totemApresentacao.js`
+- `grupoElegivel(grupo) → { ok:true } | { ok:false, codigo }`, nesta ordem: `GRUPO_INDISPONIVEL` (status não ACTIVE); `GRUPO_NAO_E_ESCOLHA_UNICA` (`!(min === 1 && max === 1)`, independe de `choiceType`); `GRUPO_SEM_OPCOES` (zero opções apresentáveis); **`GRUPO_COM_UMA_OPCAO`** (só uma opção apresentável — não cria vitrine; é o caso "PEGUE SUA BATATA" da QUINTA). **Apresentável** = opção `ACTIVE` ou `MISSING` (MISSING vira card "Em falta"); INACTIVE não conta. Não se exige duas ACTIVE.
+- `validarConfiguracao(config, item)`: `MODO_INVALIDO` → `ITEM_AUSENTE` → `GRUPO_AUSENTE` → códigos de `grupoElegivel`. **`OUTRO_GRUPO_OBRIGATORIO` deixa de existir.**
+- `ordenavelDoItem(item)` (espelho do frontend) continua: item MISSING → `ITEM_EM_FALTA`; grupo obrigatório MISSING → `GRUPO_EM_FALTA`. Rev. 3 acrescenta: grupo obrigatório restante com `custoMinimo === null` (sem seleção válida) → `GRUPO_EM_FALTA`. Isso **não** derruba a configuração; o produto sai `ordenavel:false`.
+- `projetarProduto(item, grupo, opcao)`:
+  - `preco` = `item.preco + opcao.preco` (identidade); `precoPromocional` = `item.precoPromocional + opcao.preco` só quando a base tem promoção em vigor.
+  - `restantes` = grupos do item exceto o principal; `obrigatoriosRestantes` = restantes com `min ≥ 1` e status visível.
+  - `precoMinimo` = `preco + Σ custoMinimo(obrigatoriosRestantes)`; `precoMinimoPromocional` idem sobre `precoPromocional`; se algum `custoMinimo` for `null` → `precoMinimo: null` e `ordenavel:false / GRUPO_EM_FALTA`.
+  - `precoEhAPartirDe` = algum obrigatório restante com `precoVariavel === true`. (Grupos opcionais não entram: são extras, como hoje.)
+- `sugerirCandidatos`: **inalterada e conservadora** — preço base 0 + exatamente um grupo obrigatório + esse grupo elegível (agora incluindo ≥ 2 opções). Combos e QUINTA não são sugeridos; combos podem ser configurados manualmente.
+- `mesclarAdmin`: mantém `elegivel` e `selecionavel` por grupo (na rev. 3 coincidem; o contrato fica para evoluções), e adiciona por item `candidato: boolean` (existe grupo elegível) e `obrigatoriosAlem: n` (outros obrigatórios além do candidato, para a nota "a partir de" no admin).
+
+### 4.2 Bootstrap público e 4.3 Admin — inalterados (contratos aditivos apenas)
+
+## 5. Contrato para o frontend (rev. 3)
+
+`catalogo.categorias[].produtos[]`:
 ```
-
-Decisão sobre `ativo` (ajuste 6): **removido**. NORMAL apaga a linha e não há toggle nesta versão; um `ativo=false` seria um terceiro estado sem tela. Se um dia houver "pausar apresentação sem perder a escolha do grupo", volta como campo novo com migration própria. `cwGrupoPrincipalId` passa a ser obrigatório, já que só EXPANDIDO é persistido. `empresaId` sem FK (convenção do PDV); `'totemApresentacao'` entra em `MODELS_TENANT`. Sem campos de merchandising.
-
-**Migration `20260912120000_totem_apresentacao`:**
-```sql
-CREATE TABLE "TotemApresentacao" (
-  "id" SERIAL NOT NULL, "empresaId" INTEGER NOT NULL, "cwItemId" INTEGER NOT NULL,
-  "modo" TEXT NOT NULL, "cwGrupoPrincipalId" INTEGER NOT NULL,
-  "criadoEm" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "atualizadoEm" TIMESTAMP(3) NOT NULL,
-  CONSTRAINT "TotemApresentacao_pkey" PRIMARY KEY ("id")
-);
-CREATE UNIQUE INDEX "TotemApresentacao_empresaId_cwItemId_key" ON "TotemApresentacao"("empresaId", "cwItemId");
-CREATE INDEX "TotemApresentacao_empresaId_idx" ON "TotemApresentacao"("empresaId");
+{ id, tipo: 'ITEM' | 'OPCAO_PRINCIPAL', nome, descricao, imagem,
+  preco, precoPromocional?,                       // identidade: base + opção principal
+  precoMinimo, precoMinimoPromocional?,           // base + principal + mínimos dos obrigatórios restantes (null = sem seleção válida)
+  precoEhAPartirDe: boolean,                      // true quando algum obrigatório restante pode mudar o valor
+  status: 'ACTIVE' | 'MISSING', ordenavel, motivo?,
+  origem: { itemId, grupoId?, opcaoId? }, grupoPrincipalId? }
 ```
+Produtos `ITEM` (modo normal): `precoMinimo = preco + Σ custoMinimo(obrigatórios)`, `precoEhAPartirDe` = algum obrigatório variável — assim o card de um combo em modo normal também deixa de mostrar R$ 0,00. `itens` continua no bootstrap, agora com `grupos[].custoMinimo/precoVariavel` vindos do HUB.
 
-## 3. HUB — alterações aditivas
+## 6. Comportamento no Totem (rev. 3)
 
-`backend/cardapioPedidoTotem.js` › `catalogoParaTotem`: cada opção do bootstrap ganha `imagem` (`image.image_url || image.thumbnail_url || null`, mesma regra de `imagemDe`) e `descricao` (`description ?? null`). Nada mais muda: cotar, pedido, caches, contratos. O HUB **não conhece** a configuração de apresentação.
-
-## 4. PDV backend — projeção e validação
-
-### 4.1 Módulo puro `backend/totemApresentacao.js` (ESM, sem Prisma, sem I/O, não muta a entrada)
-- `MODOS = ['NORMAL', 'EXPANDIDO']`.
-- `grupoElegivel(grupo) → { ok:true } | { ok:false, codigo }`: grupo visível (`ACTIVE`), `min === 1 && max === 1` (**não** depende de `choice_type`: cobre `SINGLE` e `SUMMABLE` 1–1), ≥ 1 opção. Códigos: `GRUPO_NAO_E_ESCOLHA_UNICA`, `GRUPO_SEM_OPCOES`, `GRUPO_INDISPONIVEL`.
-- `validarConfiguracao({ modo, cwGrupoPrincipalId }, item) → { ok:true, grupo } | { ok:false, codigo }`: `MODO_INVALIDO`; `ITEM_AUSENTE` (item nulo/não está no bootstrap); `GRUPO_AUSENTE`; os códigos de `grupoElegivel`; `OUTRO_GRUPO_OBRIGATORIO` (qualquer outro grupo visível com `min ≥ 1`). É a **única** regra de "pode ser principal"; o admin e o bootstrap usam a mesma função (ajuste 4).
-- `projetarProduto(item, grupo, opcao) → ProdutoApresentado` (§5) — **sem** o item completo (ajuste 1).
-- `projetarCatalogo(catalogoBootstrap, configuracoes) → { catalogo, avisos }`: cada categoria ganha `produtos`; item com configuração válida → um produto `OPCAO_PRINCIPAL` por opção, na ordem do CW (o HUB já ordena por `index`); demais itens → um produto `ITEM`. Configuração inválida → produto `ITEM` + aviso `{ cwItemId, codigo }`. `itens` é preservado intacto.
-- `sugerirCandidatos(catalogoBootstrap) → [{ cwItemId, nome, categoria, cwGrupoPrincipalId, grupoNome }]` — regra documentada (ajuste 3): **preço base 0 + exatamente um grupo visível obrigatório (`min ≥ 1`) + esse grupo com `min 1 e max 1`**, sem olhar `choice_type` nem `index`. No catálogo real de 2026-09-11 sugere **TRADICIONAIS 🍔, ARTESANAIS 🍔, NOSSOS DOGS 🌭 e ESCOLHA SEU ACOMPANHAMENTO 🍟** (este é `SUMMABLE` 1–1 em `index` 1 e entra de pleno direito); **não** sugere COMBO - TRADICIONAIS/ARTESANAIS (três obrigatórios), QUINTA DA BATATA (2–2 + batata obrigatória) nem MONTE SUA BOX (3–3). Sem regra adicional de exclusão. Sugestão nunca ativa nada.
-
-### 4.2 Aplicação no bootstrap público
-`GET /api/public/aparelho/totem/bootstrap` (server.js ~8659): após obter o bootstrap do HUB (ou o snapshot), carrega `prisma.totemApresentacao.findMany({ where: { empresaId: aparelho.empresaId } })` e aplica `projetarCatalogo`. Resposta = bootstrap do HUB **+** `catalogo.categorias[].produtos` (aditivo; `itens` continua igual) **+** `avisosApresentacao` (separado dos `avisos` do HUB; só `{ cwItemId, codigo }`, sem dados sensíveis). Falha ao ler a configuração → bootstrap sem `produtos` (o front cai para `itens`) e log; **o catálogo público nunca quebra**.
-
-### 4.3 Admin (`exigirAdmin`, tenant via `getEmpresaIdAtual()`; prefixo `/totem` já mapeia para a área `aparelhos`)
-- `GET /api/totem/apresentacao` → **merge** entre catálogo vivo e configurações persistidas (ajuste 2):
-  ```
-  { itens:[{ cwItemId, nome, categoria, precoBase, config: { id, modo, cwGrupoPrincipalId } | null,
-             validacao: { ok, codigo? },                       // validarConfiguracao da config atual (ok quando NORMAL)
-             grupos:[{ id, nome, min, max, choiceType, nOpcoes,
-                       elegivel: { ok, codigo? },              // grupoElegivel — olha só o grupo
-                       selecionavel: { ok, codigo? } }] }],    // validarConfiguracao({EXPANDIDO, id}, item) — olha o item inteiro (ajuste 4)
-    orfas:[{ id, cwItemId, modo, cwGrupoPrincipalId, validacao: { ok:false, codigo:'ITEM_AUSENTE' } }],
-    sugestoes:[…], avisosApresentacao:[…] }
-  ```
-  Um grupo 1–1 de um combo aparece `elegivel.ok:true` e `selecionavel.ok:false, codigo:'OUTRO_GRUPO_OBRIGATORIO'`; a tela desabilita o select com esse motivo antes do salvar. Órfãs (config cujo `cwItemId` sumiu do bootstrap) vêm identificadas por `id` e `cwItemId`.
-- `PUT /api/totem/apresentacao/:cwItemId { modo, cwGrupoPrincipalId? }`: `modo` fora de `MODOS` → 400. `EXPANDIDO` → exige `cwGrupoPrincipalId` inteiro e `validarConfiguracao` contra o catálogo vivo (`bootstrapTotemCW`) → 422 `{ erro:'APRESENTACAO_INVALIDA', codigo }` quando falha; upsert por `(empresaId, cwItemId)`. `NORMAL` → `deleteMany({ empresaId, cwItemId })` **sem consultar o catálogo** (é o que remove uma órfã). Nunca aceita `empresaId` do corpo.
-
-## 5. Contrato para o frontend
-
-`catalogo.categorias[].produtos[]` — leve, sem a árvore técnica (ajuste 1):
-```
-{ id: 'item:2979325' | 'opcao:2979325:795194:3633259',
-  tipo: 'ITEM' | 'OPCAO_PRINCIPAL',
-  nome, descricao, imagem,                    // identidade apresentada (da opção no EXPANDIDO; imagem cai para a do item)
-  preco, precoPromocional?,                   // EXPANDIDO: base + preço da opção (promo da base + opção)
-  status: 'ACTIVE' | 'MISSING',               // EXPANDIDO: status da opção; item MISSING → todos MISSING
-  ordenavel: boolean, motivo?,                // itemOrdenavel do item base (outro grupo em falta etc.)
-  origem: { itemId, grupoId?, opcaoId? },     // ids exatos do CW — é o que vira carrinho
-  grupoPrincipalId?: 795194 }                 // EXPANDIDO: para o detalhe ocultar/travar
-```
-O frontend monta **um índice `itemId → item técnico`** a partir de `categorias[].itens` (o mesmo item em duas categorias tem grupos idênticos; vale a primeira ocorrência) e resolve `origem.itemId` ao abrir o produto. `itens` permanece obrigatório no bootstrap.
-
-## 6. Comportamento no Totem
-
-- **Grid:** renderiza `produtos` quando presente (fallback: `itens` como hoje). Card = `nome/imagem/descricao/preco`; MISSING → "Em falta"; `!ordenavel` → "Indisponível no momento".
-- **Detalhe:** `abrirProduto(produto)` → `linhaDeProduto(produto, indice)` cria `{ item: indice[origem.itemId], apresentado: { nome, imagem, descricao, grupoPrincipalId, opcaoId }, selecoes: { [grupoPrincipalId]: [{ opcaoId, qtd:1 }] }, qtd:1, uid }`; título/foto do apresentado; `gruposRenderizaveis(linha)` = grupos do item **sem** o principal; "Adicionar" usa `itemPronto` normal (o principal já satisfaz o grupo). Trocar o produto = voltar ao grid.
-- **Carrinho/Revisar/Confirmar:** cada linha tem `uid` próprio (já é assim); `nomeApresentado(linha)` = `apresentado?.nome ?? item.nome`; complementos listados sem o principal; `subtotalLocal` inalterado (base + opções, o principal entra como opção). `montarCarrinho` **não muda**.
-- **Cotar/Pedido:** intactos; o HUB recalcula pelo trio de ids; hash idêntico ao de uma seleção manual.
-- **Duas linhas do mesmo item base** (ajuste 5, verificado no código atual): edição/remoção/quantidade são por `uid`; `montarCarrinho` emite uma entrada por linha; o HUB devolve `linhas` na ordem do carrinho e soma o estoque das duas; `diffCotacao` casa por **índice** primeiro (correto) e só cai para `itemId` quando o índice não bate. É seguro para carrinho, cotação e pedido. A única imprecisão é de **destaque**: `alteradas` é lista de `itemId`, então se só X BURGUER mudar de preço, X BACON (mesmo `itemId`) também aparece marcado em "Preços atualizados". Correção aditiva na A5: `diffCotacao` passa a devolver também `alteradasIdx` (índices das linhas) e a tela marca por índice/`uid`; `alteradas` continua por compatibilidade. Sem mudança no casamento.
-- Frontend sem heurística: só consome `produtos`.
+- **Card:** mostra `precoMinimo` (ou `precoMinimoPromocional` com "de/por" quando houver promo); prefixo **"a partir de"** quando `precoEhAPartirDe`. MISSING → "Em falta"; `!ordenavel` → "Indisponível no momento".
+- **Detalhe:** título/foto/descrição do produto apresentado; grupo principal oculto e pré-selecionado; **todos os demais grupos visíveis na ordem do CW, obrigatórios marcados como hoje**; `itemPronto` exige todos; cabeçalho mostra o subtotal local corrente (identidade + escolhas) e o rótulo "a partir de" enquanto faltar obrigatório. Trocar o principal = voltar ao grid.
+- **Carrinho/Revisar/Confirmar/cotar/pedido:** sem mudança (rev. 2).
 
 ## 7. Fallback e avisos
 
-Toda configuração é revalidada **a cada bootstrap** contra o catálogo vivo com a mesma `validarConfiguracao`. Inválida → item em NORMAL na vitrine + aviso em `avisosApresentacao` e código no admin. Casos: item saiu do catálogo/`service_desk` (`ITEM_AUSENTE`, e no admin vira **órfã**), grupo removido, grupo deixou de ser 1–1, apareceu outro grupo obrigatório, grupo sem opções visíveis. Opção `MISSING` → produto MISSING (em falta), não é fallback.
+Configuração revalidada a cada bootstrap. Inválida → NORMAL na vitrine + aviso. Casos: item ausente do balcão, grupo ausente, grupo inelegível (não 1–1, sem opções, uma opção só, oculto). **Outro obrigatório em falta ou sem seleção válida não invalida**: produto `ordenavel:false`.
 
-## 8. Tela admin mínima (`/totem/apresentacao`)
+## 8. Tela admin — UX (rev. 3)
 
-Sidebar aprovada: **Loja Digital › Totem** vira grupo com **Pedidos** e **Apresentação** (`/totem/pedidos`, `/totem/apresentacao`); Aparelhos segue ao lado. Tela: lista dos itens do CW (nome, categoria, preço base), seletor NORMAL/EXPANDIDO, select do grupo principal com só `selecionavel.ok` habilitado e o `codigo` como motivo nos demais, estado da validação atual, seção **Órfãs** (config sem item no catálogo, com botão "Remover" = PUT NORMAL) e seção **Sugestões** (heurística; "Usar" só preenche o formulário). Salvar por item. Sem edição de nome/imagem/ordem.
+- **Estado neutro** para item que não é candidato: texto cinza "Sem grupo de escolha única com duas ou mais opções" — sem código, sem vermelho. Item candidato sem configuração: "Pode virar vitrine" com o select disponível. Item com `obrigatoriosAlem > 0`: nota informativa "Tem outras escolhas obrigatórias: o card mostra 'a partir de'".
+- **Vermelho só quando existe configuração salva e ela deixou de valer**, com frase humana e o código discreto ao lado: `ITEM_AUSENTE` "este item não está mais no cardápio do balcão"; `GRUPO_AUSENTE` "o grupo escolhido não existe mais neste item"; `GRUPO_NAO_E_ESCOLHA_UNICA` "o grupo passou a aceitar mais de uma escolha"; `GRUPO_SEM_OPCOES` "o grupo ficou sem opções"; `GRUPO_COM_UMA_OPCAO` "o grupo ficou com uma opção só"; `GRUPO_INDISPONIVEL` "o grupo está oculto no cardápio".
+- Select de grupo: opções não elegíveis desabilitadas com a frase humana (código só em `title`). Órfãs e Sugestões como na rev. 2. Sidebar já é Loja Digital › Totem › {Pedidos, Apresentação}.
 
-## 9. Testes
+## 9. Testes (delta rev. 3)
 
-- **HUB:** opções do bootstrap com `imagem`/`descricao` (presentes e nulos); golden TRADICIONAIS mantém preços/ordem.
-- **PDV `totemApresentacao.test.js`:** `grupoElegivel` (SINGLE 1–1 ok; SUMMABLE 1–1 ok; MULTIPLE 0–1 não; 2–2 não; sem opções não; INACTIVE não). `validarConfiguracao` para cada código, incluindo COMBO - TRADICIONAIS → `OUTRO_GRUPO_OBRIGATORIO` mesmo com o grupo 1–1 em `index` 0, e `ITEM_AUSENTE` com item nulo. `projetarCatalogo`: golden TRADICIONAIS → 9 produtos `OPCAO_PRINCIPAL` na ordem do CW, preço = opção, imagem/descrição da opção, `origem` com os três ids, **sem campo `item`**; DOGS → imagem cai para a do item; item MISSING → todos MISSING; opção MISSING → produto MISSING; promo na base soma à opção; item sem config → `ITEM`; config inválida → `ITEM` + aviso; `itens` preservado; entrada não mutada. `sugerirCandidatos` golden: **TRADICIONAIS, ARTESANAIS, DOGS, ACOMPANHAMENTO**; não COMBO ×2, QUINTA ×2, MONTE SUA BOX. Vínculo por id: X BURGUER com quatro ids diferentes → cada produto aponta ao seu.
-- **PDV admin (varredura em `totem.tenant.test.js`):** rotas `/api/totem/apresentacao*` nunca leem `empresaId`/`clienteId` do corpo; toda consulta escopada. Teste puro do merge: config órfã aparece em `orfas` com `ITEM_AUSENTE`; `selecionavel` ≠ `elegivel` no combo.
-- **Frontend `totemCarrinho.test.js`:** `indicePorItemId(categorias)`; `linhaDeProduto` gera `selecoes` com o principal; `gruposRenderizaveis` exclui o principal; `nomeApresentado`; `montarCarrinho` da pré-seleção byte-idêntico ao da seleção manual; `itemPronto` satisfeito só pelo principal; `subtotalLocal` = base + opção; **duas linhas do mesmo item base** (X BURGUER e X BACON de TRADICIONAIS): `montarCarrinho` com duas entradas corretas, `subtotalLocal` de cada uma, `nomeApresentado` de cada uma, `diffCotacao` com `linhasHub` na ordem marcando **só** a linha alterada em `alteradasIdx` (e `alteradas` por `itemId` como hoje), edição por `uid` não vaza para a outra linha.
-- **Smoke:** configurar TRADICIONAIS como EXPANDIDO, ver 9 cards, abrir X BURGUER, adicionar milho, cotar 13,50, adicionar também X BACON, revisar as duas linhas, **sem confirmar**; tentar COMBO - TRADICIONAIS → select desabilitado com `OUTRO_GRUPO_OBRIGATORIO` e PUT → 422.
+- **HUB:** `resumoPrecoDoGrupo` para SINGLE, MULTIPLE min>1, SUMMABLE 1–1, SUMMABLE 2–2, `max_quantity`, MISSING excluída, todo MISSING → null, opcional → 0, `precoVariavel` com R$ 0 e R$ 6; **equivalência** com `validarECotar` (seleção mais barata == `custoMinimo`, mais cara == `custoMaximo`); golden COMBO - TRADICIONAIS 27,90; bootstrap emite os dois campos por grupo.
+- **PDV `totemApresentacao.test.js`:** `GRUPO_COM_UMA_OPCAO` (QUINTA › PEGUE SUA BATATA); MISSING conta como apresentável (grupo com 1 ACTIVE + 1 MISSING é elegível); COMBO - TRADICIONAIS EXPANDIDO por BURGUER DO COMBO → 9 produtos com `precoMinimo` 27,90/29,90/…/37,90 e `precoEhAPartirDe:true`; COMBO - ARTESANAIS 11 produtos (CHICKEN CRISPY MISSING); obrigatório restante todo MISSING → `precoMinimo:null`, `ordenavel:false`; obrigatório com R$ 0 e R$ 6 → `custoMinimo 0` e `precoEhAPartirDe:true`; promoção na base → `precoMinimoPromocional`; produto `ITEM` de combo em modo normal com `precoMinimo` > 0; `sugerirCandidatos` continua não sugerindo combos nem QUINTA; nenhum teste espera `OUTRO_GRUPO_OBRIGATORIO`; `mesclarAdmin` com `candidato`/`obrigatoriosAlem`.
+- **Frontend:** card "a partir de"; `linhaDeProduto` de um combo mantém bebida/acompanhamento em `gruposRenderizaveis` e `itemPronto` só fica ok depois de escolhê-los; `subtotalLocal` do X BURGUER + Coca + Batata = 27,90; admin: item normal sem código vermelho (teste do helper puro de mensagens `mensagemApresentacao(codigo)`).
+- **Smoke:** COMBO - TRADICIONAIS = Vitrine por BURGUER DO COMBO → 9 cards "a partir de R$ 27,90" → abrir X BURGUER → bebida e acompanhamento visíveis e obrigatórios → cotar 27,90 com Coca e Batata → parar sem confirmar. TRADICIONAIS segue com 9 cards sem "a partir de" (só opcionais restantes).
 
 ## 10. Deploy
 
-HUB primeiro (aditivo, sem migration). PDV depois: `bash deploy.sh` aplica `20260912120000_totem_apresentacao`. Sem env novo. O Totem só muda depois que a loja configurar um item como EXPANDIDO.
+Sem migration. HUB antes do PDV (o PDV lê `custoMinimo`/`precoVariavel`; sem eles, o produto sai com `precoMinimo = preco` e `precoEhAPartirDe:false`, comportamento da rev. 2). Nada muda para lojas sem configuração além do card de item normal com obrigatórios passar a mostrar "a partir de".
