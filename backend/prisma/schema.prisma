@@ -839,6 +839,23 @@ model PedidoTotemEnvio {
   @@index([empresaId, status])
 }
 
+// Apresentação do Totem: como um item do Cardápio Web aparece na vitrine do totem desta loja.
+// Explícita (nunca automática) e só com ids do CW; o produto apresentado é projetado do catálogo
+// vivo a cada bootstrap — nada de opção/produto persistido. A tabela só guarda EXCEÇÕES: voltar
+// a NORMAL apaga a linha (por isso não há `ativo` — não existe "desligado mas guardado").
+model TotemApresentacao {
+  id                 Int      @id @default(autoincrement())
+  empresaId          Int
+  cwItemId           Int                          // Item.id do CW (item base)
+  modo               String                       // hoje só 'EXPANDIDO' é persistido
+  cwGrupoPrincipalId Int                          // OptionGroupInItem.id do vínculo item↔grupo
+  criadoEm           DateTime @default(now())
+  atualizadoEm       DateTime @updatedAt
+
+  @@unique([empresaId, cwItemId])
+  @@index([empresaId])
+}
+
 // Ponto Facial › Coletor — batidas que chegaram do coletor mas cujo enrollid
 // ainda não casou com um funcionário. Ficam na fila até o admin vincular
 // (aí viram PontoRegistro). Não perde ponto de quem não foi mapeado ainda.

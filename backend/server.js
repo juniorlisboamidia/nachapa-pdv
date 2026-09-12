@@ -83,6 +83,8 @@ const MODELS_TENANT = new Set([
   'tempoFaixaCardapioConfig',
   // Totem de autoatendimento: outbox/auditoria dos pedidos criados no Cardápio Web
   'pedidoTotemEnvio',
+  // Totem de autoatendimento: configuração explícita da apresentação (modo EXPANDIDO) por item
+  'totemApresentacao',
 ]);
 const OPS_WHERE = new Set([
   'findMany', 'findFirst', 'findFirstOrThrow', 'findUnique', 'findUniqueOrThrow',
