@@ -4,6 +4,12 @@
 
 **Revisão 2.1 — 2026-09-12, antes da V1.** O campo de observação **fica**. A retirada registrada no commit `8cf8159` foi revertida assim que se confirmou que o recurso é funcional em produção: nesta frente ele só muda de apresentação (§4.3). **Implementação V1–V11 autorizada.**
 
+**Revisão 3 — 2026-09-12, depois da V11, com a tela no ar.** Três mudanças que a spec anterior contradizia e que agora estão em produção:
+
+1. **A paleta e a tipografia passam a vir do Design System da marca**, no HUB. A identidade do Hamburgão é ESCURA, então o quiosque virou do claro para o escuro por consequência (§5.2 e §5.3 reescritos).
+2. **O amarelo deixou de ser usado como ornamento.** Nove marcas decorativas saíram — filete de botão, sombra deslocada, base de card, réguas de faixa. Amarelo agora indica só ação, seleção, categoria ativa e destaque pontual (§5.1).
+3. **Emoji no nome da categoria: decisão invertida.** A rev. 2 dizia que emoji vindo do Cardápio Web é dado da loja e deve aparecer. Com a tela na frente, o gestor decidiu o contrário para o totem, e a loja passou a controlar o nome exibido por categoria (§9.1).
+
 **Data:** 2026-09-12
 **Repo:** `nachapa-pdv` (PDV "Operação")
 **Escopo:** camada de apresentação visual do Totem do CLIENTE (`/dispositivo`). Nenhuma regra de negócio, nenhum contrato HTTP, nenhuma migration.
@@ -219,53 +225,53 @@ E também, dentro de `TotemQuiosque.jsx`, **toda a camada de orquestração**: b
 
 ### 5.1 Direção
 
-Preto como estrutura, branco como superfície de conteúdo, amarelo como **única** cor de ação, fotografia como protagonista. O amarelo nunca é fundo de texto pequeno nem decoração: ele marca **onde tocar** e **a categoria ativa**. Nada de gradiente, nada de sombra colorida, nada de emoji.
+Identidade **escura**: preto como chão, superfícies quase-pretas, texto branco, dourado como apoio e ação, fotografia como protagonista.
 
-### 5.2 Tokens (escopados em `.tq-raiz`, valores literais)
+O dourado é **funcional, nunca ornamento**. Ele indica: CTA principal, seleção, categoria ativa e destaque pontual de preço. Fora disso não aparece. Em particular, e por decisão explícita depois de ver a tela: **sem filete embaixo de botão, sem sombra colorida deslocada, sem borda decorativa sem função, sem régua atravessando seção e sem pseudo-elemento colorido "dando personalidade"**. Nada de gradiente, glassmorphism, glow, card dentro de card, ou emoji como elemento de interface.
 
-```
---tq-preto:        #0e1319   estrutura: sidebar, barra do pedido, painel do número
---tq-preto-2:      #1b222b   superfície escura elevada (item ativo na sidebar)
---tq-branco:       #ffffff   cards, sheets
---tq-amarelo:      #f9d900   AÇÃO e seleção
---tq-amarelo-2:    #e3c500   estado pressionado
---tq-tinta:        #0e1319   texto sobre amarelo (13,3:1)
---tq-fundo:        #f7f4ee   chão quente atrás dos cards
---tq-borda:        #e6e1d7
---tq-texto:        #0e1319
---tq-texto-2:      #4a443c   (6,8:1 sobre --tq-fundo)
---tq-texto-3:      #6b6357   (4,8:1 sobre --tq-fundo) — piso; nada mais claro que isto
---tq-perigo:       #b3261e
---tq-perigo-fraco: #fdeceb
---tq-aviso-fundo:  #fff6d6
---tq-aviso-tinta:  #6b4e00
---tq-ok:           #1c6b3a
---tq-raio:         18px   (cards)  ·  --tq-raio-2: 12px (controles)
---tq-sombra:       0 6px 20px rgba(14,19,25,.10)
-```
+Hierarquia se faz **trocando de família**, não engrossando a mesma (§5.3).
 
-Escala de espaço 4/8: `4 8 12 16 20 24 32 40 56`.
+### 5.2 Cores — Design System da marca
 
-Escala tipográfica (fluida, `clamp`):
+As dez cores vêm do **Brand Design System do HUB** (`Clientes › Marcas › [marca] › Design System`), copiadas valor por valor para tokens `--ds-*` no topo de `totem.css`. O que está em produção hoje, para o Hamburgão:
 
-| Papel | Tamanho | Peso |
+| Token do DS | Valor | Papel |
 |---|---|---|
-| Número do pedido | `clamp(96px, 16vw, 200px)` | 900 |
-| Título de tela | `clamp(28px, 3.4vw, 40px)` | 800 |
-| Nome do produto (card) | `clamp(20px, 2.1vw, 26px)` | 800 |
-| Preço do card | `clamp(22px, 2.3vw, 28px)` | 900, `tabular-nums` |
-| Nome de grupo | `clamp(19px, 2vw, 24px)` | 800 |
-| Corpo / opção | `clamp(17px, 1.7vw, 20px)` | 600 |
-| Rótulo, "a partir de", regra do grupo | `clamp(13px, 1.3vw, 15px)` | 700, `letter-spacing: .06em`, caixa alta |
+| `brand.primary` | `#d79e00` | a cor que a marca é |
+| `brand.secondary` | `#000000` | apoio da primária |
+| `brand.accent` | `#fab319` | realce pontual |
+| `surface.background` | `#000000` | fundo da página |
+| `surface.card` | `#251a07` | fundo de blocos |
+| `text.primary` | `#ffffff` | 21,0:1 sobre o fundo · 17,1:1 sobre o cartão |
+| `text.secondary` | `#d79e00` | 8,8:1 sobre o fundo · 7,1:1 sobre o cartão |
+| `action.primary.background` | `#d79e00` | fundo do botão |
+| `action.primary.text` | `#000000` | 8,8:1 sobre o botão |
+| `border.default` | `#ffffff` | 17,1:1 sobre o cartão |
 
-### 5.3 Tipografia
+**Dois desvios conscientes, marcados em comentário na folha:**
 
-**Decidido (§16-5): Archivo auto-hospedada, pesos 800 e 900**, em `woff2` servido pelo próprio Vite (sem CDN, sem `@import` externo — o tablet pode estar em rede ruim, e uma fonte que não carrega troca o desenho inteiro no meio do expediente). Licença SIL OFL, dois arquivos, ≈35 KB somados.
+- **`surface.card` não é usado como superfície.** O `#251a07` é um marrom dessaturado: ao lado do preto puro, e ainda por baixo de foto de comida, ele lê como sujeira em vez de superfície. As superfícies do quiosque são quase-pretas com um fio de calor (`#131211` no cartão), e quem dá cor à tela é a fotografia e o dourado. O marrom da marca **continua em uso onde funciona**: nas faixas de aviso.
+- **A borda branca entra com alfa.** Branco cheio em toda divisória vira wireframe. O traço fino usa a mesma cor a 34% (3,1:1 sobre o cartão, o piso para um contorno ser percebido) e o contorno de verdade a 50%.
 
-- **Archivo 800/900:** nomes de produto, preços, títulos de tela, nomes de grupo, rótulos em caixa alta e o número do pedido.
-- **Pilha do sistema:** todo o corpo de texto, descrições e frases de aviso.
-- Declarar `font-display: swap` e a pilha do sistema como fallback em cada `@font-face`, para que uma falha de carregamento degrade em vez de apagar texto.
-- Os arquivos entram em `frontend/src/assets/fontes/` na task V1.
+**Derivados, porque a marca não define** — o Design System diz que token não decidido é lacuna e que quem consome cai no próprio literal, e é o que está feito: dourado pressionado, vermelho de perigo, verde de confirmação, as duas superfícies entre fundo e cartão, e os alfas de borda e de texto terciário.
+
+Escala de espaço 4/8: `4 8 12 16 20 24 32 40 56`. Forma: raio 18px em card, 16px em botão, 12px em controle.
+
+### 5.3 Tipografia — Design System da marca
+
+O DS define dois papéis: **Geométrica** em títulos e botões, **Neutra** em texto. No catálogo de fontes do HUB isso é **Montserrat 900** e **Inter 400**, e os arquivos vieram de `backend/fontes` do HUB — os mesmos que ele serve nas experiências públicas, então a renderização é idêntica. Ambas OFL, auto-hospedadas em `frontend/src/assets/fontes/`, sem CDN: o tablet pode estar em rede ruim, e uma fonte que não chega troca o desenho inteiro no meio do expediente.
+
+**Um acréscimo nosso: Montserrat 600.** O catálogo do HUB serve um peso por família, e só o 900 deixava a tela em dois extremos — bloco preto ou Inter neutra demais. O 600 é o meio-termo, na mesma família da marca.
+
+| Voz | Família | Onde |
+|---|---|---|
+| Display forte | Montserrat 900 | preço, título de tela, número do pedido, botão, rótulo em caixa alta, selo |
+| Display médio | Montserrat 600 | nome de produto, de opção, de linha do carrinho, de método e de categoria |
+| Corpo | Inter 400 | descrição, texto corrido, frases de aviso |
+
+Cada arquivo tem **um peso**. As faixas declaradas no `@font-face` (`800 900`, `500 700`, `300 700`) dizem ao navegador para usar o arquivo em toda a faixa, o que evita o **negrito sintético** — a deformação que ele aplica ao pedir um peso inexistente. É por isso que hierarquia aqui se faz trocando de família.
+
+`font-display: swap` e pilha do sistema no fallback de cada face: falha de carregamento degrada, não apaga texto.
 
 ### 5.4 Ícones
 
@@ -630,10 +636,26 @@ Risco conhecido: um cliente que já rolou manualmente até o fim e então marca 
 - Sem dependência de `hover`; estado `:active` com `transform: scale(.99)`.
 - Transbordo: gradiente de 24px no topo/rodapé quando há conteúdo cortado.
 - Ao trocar de categoria, o grid volta ao topo (`scrollTop = 0`).
-- **Sem ícone e sem miniatura (decisão 4 do §16).** A V1 mostra **apenas o nome da categoria**, em caixa alta. O CW não fornece ícone nem imagem de categoria, e nenhuma configuração de merchandising é criada nesta frente.
-- **Toda categoria que vier do CW aparece.** A sidebar é um espelho do `catalogo.categorias` do bootstrap, na ordem do `index`. Se a loja tiver uma categoria chamada **🥇 OS MAIS PEDIDOS**, ela é uma categoria real como qualquer outra e é renderizada normalmente, com o emoji que faz parte do nome cadastrado — emoji em nome de dado não é o mesmo que emoji usado como ícone da interface, que continua proibido (§5.4). O que a V1 **não** faz é inventar uma categoria sintética a partir de histórico de vendas: isso não existe no contrato e exigiria dado novo vindo do HUB.
+- **Sem ícone e sem miniatura.** A sidebar mostra **apenas o nome da categoria**, em caixa alta. O CW não fornece ícone nem imagem de categoria.
+- **Toda categoria que vier do CW aparece**, na ordem do `index`. O que a V1 **não** faz é inventar uma categoria sintética a partir de histórico de vendas: isso não existe no contrato e exigiria dado novo vindo do HUB. Categoria real com esse nome (**🥇 OS MAIS PEDIDOS**) aparece como qualquer outra.
+- **O NOME é da loja (rev. 3).** A rev. 2 dizia que emoji vindo do CW é dado da loja e deve aparecer como está. **Decisão invertida com a tela na frente:** o nome é cadastrado no Cardápio Web pensando no cardápio digital, onde o emoji ajuda a varrer a lista com o polegar; numa coluna estreita e vertical ele come caractere de um nome que já é curto. Ver §9.2.
+- **Nome longo não é truncado, é lido.** Quando mesmo o apelido não couber, o nome **passa devagar**, ida e volta, com pausa nas pontas. Reticências escondem justamente o fim, que é o que costuma diferenciar uma categoria da outra. Três guardas, porque texto que anda sozinho num quiosque vira ruído: só quando o estouro é **medido** (não presumido), só na categoria **ativa**, e nunca com `prefers-reduced-motion`.
 
-### 9.2 Barra do pedido
+### 9.2 Nome de exibição por categoria (rev. 3)
+
+**Model `TotemCategoria`** (`empresaId` + `cwCategoriaId` + `nomeExibido`, migration `20260913120000_totem_categoria`, aditiva). Guarda **exceção**, como `TotemApresentacao`: categoria sem linha mostra o nome do Cardápio Web, e limpar o campo apaga a linha — que é também como se remove a configuração de uma categoria que saiu do cardápio.
+
+**Módulo puro `backend/totemCategoria.js`** (17 testes):
+
+- `sugerirNome(nome)` tira emoji e símbolos e apara pontuação solta nas pontas, mas **devolve o nome original quando sobra menos de dois caracteres**: categoria chamada só "🍔" continua se chamando isso, porque sumir com ela seria pior. Barra no MEIO do nome é conteúdo e não se toca.
+- `aplicarNomes(catalogo, configuracoes)` acrescenta `nomeExibido` **ao lado** de `nome`, aditivo — o nome do CW continua disponível para o admin mostrar os dois lados, e um totem em versão antiga segue desenhando o que sempre desenhou.
+- `mesclarAdmin` monta a lista da tela: nome do CW, apelido salvo, sugestão e contagem de itens.
+
+**Contrato:** `GET /api/totem/categorias` e `PUT /api/totem/categorias/:cwCategoriaId` (corpo vazio apaga), ambos atrás do gate de admin e escopados por empresa. O bootstrap público ganha `nomeExibido` por categoria.
+
+**Regra de tom, herdada da Vitrine: nada é automático.** A sugestão sem emoji preenche o campo do admin e para por aí; enquanto ninguém salvar, o totem mostra o que vem do Cardápio Web. **Ordem, itens e disponibilidade continuam vindo do CW** — este recurso troca uma string, a que o cliente lê.
+
+### 9.3 Barra do pedido
 
 ```
 ┌──────────────────────────────────────────────────────┐
@@ -811,7 +833,7 @@ Ordem escolhida para que **cada task deixe a tela funcionando**: nada de "meio r
 - Admin `Loja Digital › Totem › Apresentação` (recebeu a limpeza da rev. 3).
 - Qualquer mudança de contrato, rota ou banco.
 - Categoria sintética de "mais pedidos" calculada a partir de vendas (exigiria dado novo vindo do HUB). Categoria real vinda do CW com esse nome aparece normalmente — ver §9.1.
-- Ícone, miniatura ou qualquer configuração de merchandising por categoria.
+- Ícone ou miniatura por categoria (o **nome** passou a ser configurável na rev. 3 — §9.2).
 - Horário de funcionamento na tela de loja fechada (exigiria campo aditivo no HUB — §6.H).
 - Multi-idioma, acessibilidade por leitor de tela além do que já existe (`aria-pressed`, `aria-live`, foco visível), impressão de comprovante no próprio totem.
 - Fase B (reconciliação automática, `/confirm`).
@@ -826,8 +848,8 @@ As cinco decisões de produto foram tomadas pelo Junior em 2026-09-12. Nenhuma f
 |---|---|---|
 | 1 | **Referência oficial da V1: 1080 × 1920 em retrato, layout fluido.** A tela `Aparelhos` **não** ganha exibição de resolução agora; a resolução real é conferida pelo `heartbeatJson.tela` no checkpoint físico | §2.3 e item 16 do checklist §13.3 |
 | 2 | **Preto, branco e amarelo `#f9d900` exclusivamente no quiosque.** O admin mantém a identidade atual (`--brand-gold: #f97316`), sem uma linha alterada | §5.2, tokens escopados em `.tq-raiz`; §10.1, arquivo e prefixo separados |
-| 3 | **Adicionar um item devolve ao catálogo**, com confirmação e pulso na barra; o pedido continua acessível o tempo todo pela barra fixa | §6.B, §9.2, task V4 |
-| 4 | **Sidebar da V1 só com o nome das categorias** — sem ícone, sem miniatura automática, sem tela de configuração de merchandising | §9.1 |
+| 3 | **Adicionar um item devolve ao catálogo**, com confirmação e pulso na barra; o pedido continua acessível o tempo todo pela barra fixa | §6.B, §9.3, task V4 |
+| 4 | **Sidebar só com o nome das categorias** — sem ícone e sem miniatura. *Revisto na rev. 3:* o NOME passou a ser configurável por categoria, com apelido no admin | §9.1 e §9.2 |
 | 5 | **Archivo auto-hospedada nos pesos 800 e 900** para nomes, preços, títulos e número do pedido; corpo na pilha do sistema | §5.3, task V1 |
 
 Correções documentais aplicadas junto (pedidas na mesma revisão):
