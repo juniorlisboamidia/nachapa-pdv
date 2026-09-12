@@ -674,3 +674,72 @@
 }
 .tq-enviando-t { font-size: clamp(24px, 3vw, 34px); }
 .tq-enviando-p { font-size: clamp(16px, 1.7vw, 20px); color: var(--tq-texto-claro); max-width: 460px; }
+
+/* ═══ V10 — resultado, avisos de tela cheia e inatividade ══════════════════ */
+
+/* -- Tela de aviso (fechada, pausada, sem catálogo, erro) ------------------ */
+.tq-tela-aviso {
+  flex: 1 1 auto; background: var(--tq-preto); color: var(--tq-branco);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 18px; padding: clamp(32px, 6vw, 64px); text-align: center;
+}
+.tq-tela-aviso-ico {
+  width: clamp(96px, 12vw, 132px); aspect-ratio: 1; border-radius: 28%;
+  background: var(--tq-preto-2); color: var(--tq-amarelo);
+  display: grid; place-items: center; margin-bottom: 8px;
+}
+.tq-tela-aviso h1 { font-size: clamp(32px, 4.4vw, 52px); text-wrap: balance; }
+.tq-tela-aviso p { font-size: clamp(18px, 2vw, 23px); color: var(--tq-texto-claro); max-width: 660px; line-height: 1.45; }
+.tq-tela-aviso .tq-erro-lista { color: var(--tq-texto-claro); text-align: left; max-width: 640px; }
+.tq-tela-aviso .tq-btn-claro { background: transparent; color: var(--tq-branco); border-color: #3a4048; }
+.tq-acoes-aviso { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; margin-top: 8px; }
+
+/* -- Resultado ------------------------------------------------------------- */
+/* O número do pedido é o motivo desta tela existir: painel próprio, amarelo
+   sobre preto, tamanho de vitrine. E o botão "Novo pedido" volta a ter tamanho
+   de botão — antes ele era `flex: 1 1 auto` dentro de um container em coluna
+   com espaço livre, então CRESCIA na vertical e tomava meia tela. */
+.tq-result {
+  flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 20px; padding: clamp(32px, 5vw, 56px); text-align: center;
+}
+.tq-painel-num {
+  width: 100%; max-width: 780px; background: var(--tq-preto); color: var(--tq-branco);
+  border-radius: 26px; padding: clamp(24px, 3vw, 36px) 24px clamp(28px, 4vw, 42px);
+}
+.tq-painel-rot { color: var(--tq-texto-claro); font-size: clamp(16px, 1.8vw, 22px); letter-spacing: 0.3em; }
+.tq-numero {
+  font-size: clamp(96px, 16vw, 200px); line-height: 0.92; color: var(--tq-amarelo);
+  letter-spacing: -0.02em; word-break: break-word;
+}
+.tq-numero.ref { font-size: clamp(40px, 6vw, 76px); letter-spacing: 0.04em; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.tq-numero.buscando { font-size: clamp(24px, 3vw, 34px); display: inline-flex; align-items: center; gap: 14px; color: var(--tq-branco); }
+.tq-result-tx { font-size: clamp(18px, 2vw, 24px); color: var(--tq-texto-2); max-width: 640px; line-height: 1.45; }
+.tq-result-total { color: var(--tq-texto-3); font-size: clamp(15px, 1.7vw, 19px); letter-spacing: 0.06em; }
+.tq-codigo-balcao {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  background: var(--tq-superficie); border: 1px solid var(--tq-borda); border-radius: var(--tq-raio);
+  padding: 14px 22px; color: var(--tq-texto-2); font-size: clamp(15px, 1.6vw, 18px);
+}
+.tq-codigo-balcao strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.04em;
+  font-size: clamp(22px, 2.4vw, 28px); color: var(--tq-texto);
+}
+.tq-novo { flex: 0 0 auto; width: auto; min-width: 260px; max-width: 340px; }
+.tq-espera { color: var(--tq-texto-3); font-size: clamp(14px, 1.5vw, 17px); }
+
+/* -- "Ainda está aí?" ------------------------------------------------------ */
+/* Aviso antes do reset por inatividade. Nunca aparece durante o envio nem com a
+   confirmação em dúvida: nesses dois estados o relógio de reset também não corre. */
+.tq-sheet-fundo {
+  position: absolute; inset: 0; z-index: 50; background: rgba(14, 19, 25, 0.72);
+  display: flex; align-items: flex-end; justify-content: center; padding: 24px;
+}
+.tq-sheet {
+  width: min(680px, 100%); background: var(--tq-superficie); border-radius: 24px 24px 18px 18px;
+  padding: 28px 28px calc(28px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; gap: 14px; text-align: center;
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.3);
+}
+.tq-sheet h2 { font-size: clamp(24px, 3vw, 32px); }
+.tq-sheet p { color: var(--tq-texto-2); font-size: clamp(16px, 1.7vw, 19px); }

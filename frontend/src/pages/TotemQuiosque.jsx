@@ -34,6 +34,9 @@ import TelaCarrinho from '../components/totem/TelaCarrinho'
 import TelaPagamento from '../components/totem/TelaPagamento'
 import TelaRevisar from '../components/totem/TelaRevisar'
 import Spinner from '../components/totem/Spinner'
+import TelaAviso from '../components/totem/TelaAviso'
+import TelaResultado from '../components/totem/TelaResultado'
+import SheetInatividade from '../components/totem/SheetInatividade'
 import { Ico } from '../components/totem/icones'
 import { obrigatoriosPendentes, aplicarToque, aplicarMenos } from '../components/totemLayout'
 import { atingiuMax, proximoFoco } from '../components/totemFoco'
@@ -52,6 +55,7 @@ const MS_INATIVIDADE = 90_000
 const MS_POLL_DISPLAY = 3_000
 const MAX_POLL_DISPLAY = 20        // 20 × 3 s = 60 s
 const MS_LIBERAR_NOVO = 20_000     // no 202, "Novo pedido" só aparece depois disso
+const MS_AVISO_INATIVIDADE = 15_000 // "Ainda está aí?" 15 s antes do reset
 
 const MODOS = {
   onsite: { titulo: 'Comer aqui', sub: 'Vou comer na loja', ico: 'mesa' },
@@ -59,7 +63,6 @@ const MODOS = {
 }
 const KIND_LABEL = { money: 'Dinheiro', debit_card: 'Cartão de débito', credit_card: 'Cartão de crédito' }
 
-const moeda = (v) => Number(v ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 const codigoDe = (e) => e?.response?.data?.erro ?? (e?.response ? 'ERRO_INTERNO' : 'HUB_INDISPONIVEL')
 
 // Os grupos que o DETALHE desenha: sem o principal da vitrine (ele é a identidade
@@ -72,18 +75,6 @@ const gruposVisiveisDe = (linha) => (
 
 
 // ── Blocos de UI pequenos ───────────────────────────────────────────────────
-
-function TelaAviso({ emoji, titulo, texto, lista, acao }) {
-  return (
-    <div className="ttm-tela ttm-aviso-tela">
-      <div className="ttm-aviso-emoji" aria-hidden="true">{emoji}</div>
-      <h1 className="ttm-aviso-titulo">{titulo}</h1>
-      <p className="ttm-aviso-texto">{texto}</p>
-      {lista}
-      {acao}
-    </div>
-  )
-}
 
 // ════════════════════════════════════════════════════════════════════════════
 export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoPareado }) {
@@ -113,6 +104,8 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
   const [erroEnvio, setErroEnvio] = useState(null)  // { codigo, podeRepetir }
   const [resultado, setResultado] = useState(null)  // { status, cwDisplayId, referencia, envioId, total }
   const [liberouNovo, setLiberouNovo] = useState(false)
+  // Segundos restantes no aviso "Ainda está aí?"; `null` = sem aviso na tela.
+  const [alertaInatividade, setAlertaInatividade] = useState(null)
 
   // A chave de idempotência da confirmação em curso. Ref, não state: ela não desenha nada
   // e não pode ser perdida num re-render no meio da chamada.
@@ -223,6 +216,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
     setLiberouNovo(false)
     setCategoriaId(null)
     setAviso(null)
+    setAlertaInatividade(null)
     setTela('inicio')
     if (recarregar) carregarBoot(true)
   }, [carregarBoot])
@@ -259,6 +253,35 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
       eventos.forEach((ev) => window.removeEventListener(ev, armar))
     }
   }, [tela, enviando, travado, reiniciar])
+
+  // Aviso "Ainda está aí?", 15 s antes do reset. Vive num efeito PRÓPRIO, e não
+  // dentro do relógio acima, por dois motivos: o relógio de reset não pode ganhar
+  // dependência nova (é ele que protege a chave de idempotência), e nada aqui
+  // pode marcar estado de forma síncrona no corpo do efeito.
+  //
+  // As guardas são as mesmas do reset — enviando ou confirmação em dúvida não têm
+  // aviso, porque nesses estados o totem também não volta sozinho ao Início.
+  useEffect(() => {
+    if (tela === 'inicio' || enviando || travado) return undefined
+    let t = null
+    let iv = null
+    const parar = () => { clearTimeout(t); clearInterval(iv); t = null; iv = null }
+    const agendar = () => {
+      parar()
+      t = setTimeout(() => {
+        setAlertaInatividade(Math.round(MS_AVISO_INATIVIDADE / 1000))
+        iv = setInterval(() => setAlertaInatividade((n) => (n === null ? null : n - 1)), 1_000)
+      }, MS_INATIVIDADE - MS_AVISO_INATIVIDADE)
+    }
+    const aoInteragir = () => { setAlertaInatividade(null); agendar() }
+    agendar()
+    const eventos = ['pointerdown', 'keydown', 'touchstart', 'wheel']
+    eventos.forEach((ev) => window.addEventListener(ev, aoInteragir, { passive: true }))
+    return () => {
+      parar()
+      eventos.forEach((ev) => window.removeEventListener(ev, aoInteragir))
+    }
+  }, [tela, enviando, travado])
 
   // Confirmação em dúvida e o cliente foi embora: em vez de voltar ao Início (que apagaria a
   // dúvida em silêncio), a tela vira RESULTADO com o texto de "estamos confirmando" e manda
@@ -536,10 +559,14 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
   // pedido que o cliente vai apresentar no balcão. Se a loja fechar ou o catálogo cair
   // logo depois da confirmação, isso é problema do próximo cliente, não deste.
   if (bootErro && tela !== 'resultado') {
-    const recarregar = <button type="button" className="ttm-btn ttm-btn-primario" onClick={() => { setBootErro(null); carregarBoot() }}>Tentar de novo</button>
+    const recarregar = (
+      <button type="button" className="tq-btn tq-btn-primario" onClick={() => { setBootErro(null); carregarBoot() }}>
+        Tentar de novo
+      </button>
+    )
     return (
       <Casca>
-        <TelaAviso emoji="🔌" titulo="Totem indisponível" texto={mensagemErro(bootErro)} acao={recarregar} />
+        <TelaAviso icone="semRede" titulo="Totem indisponível" texto={mensagemErro(bootErro)} acoes={recarregar} />
       </Casca>
     )
   }
@@ -553,7 +580,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
     return (
       <Casca>
         <TelaAviso
-          emoji={fechada ? '🌙' : '⏸️'}
+          icone={fechada ? 'lua' : 'pausa'}
           titulo={fechada ? 'Estamos fechados' : 'Pedidos pausados'}
           texto={fechada
             ? 'A loja não está aceitando pedidos neste momento. Fale com um atendente no balcão.'
@@ -752,11 +779,11 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
     const detalhes = Array.isArray(erroEnvio?.detalhes) ? erroEnvio.detalhes : []
     conteudo = (
       <TelaAviso
-        emoji="⚠️"
+        icone="alerta"
         titulo="Não foi possível registrar o pedido"
         texto={mensagemErro(erroEnvio?.codigo)}
         lista={detalhes.length > 0 ? (
-          <ul className="ttm-erro-lista">
+          <ul className="tq-erro-lista">
             {detalhes.map((d, i) => {
               const nome = nomeDoDetalhe(d)
               // Idem: a frase do servidor (inclusive a de `validarCorpoPedido`, que já vem
@@ -765,75 +792,28 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
             })}
           </ul>
         ) : null}
-        acao={
-          <div className="ttm-rodape-botoes">
-            <button type="button" className="ttm-btn ttm-btn-secundario" onClick={() => { setErroEnvio(null); setTela('carrinho') }}>Voltar</button>
-            <button type="button" className="ttm-btn ttm-btn-primario" onClick={() => reiniciar(true)}>Começar de novo</button>
-          </div>
+        acoes={
+          <>
+            <button type="button" className="tq-btn tq-btn-claro" onClick={() => { setErroEnvio(null); setTela('carrinho') }}>Voltar</button>
+            <button type="button" className="tq-btn tq-btn-primario" onClick={() => reiniciar(true)}>Começar de novo</button>
+          </>
         }
       />
     )
   }
 
   if (tela === 'resultado' && resultado) {
-    const criado = resultado.status === 'CRIADO'
-    const temNumero = criado && !!resultado.cwDisplayId
-    const aindaBuscando = criado && !resultado.cwDisplayId && !resultado.desistiuDoNumero
     conteudo = (
-      <div className="ttm-tela ttm-resultado">
-        <div className="ttm-resultado-emoji" aria-hidden="true">{criado ? '✅' : '⏳'}</div>
-        {temNumero ? (
-          <>
-            <div className="ttm-resultado-rotulo">Seu pedido</div>
-            <div className="ttm-numero">#{resultado.cwDisplayId}</div>
-            <p className="ttm-resultado-texto">Acompanhe o número no balcão. O pagamento é feito na retirada.</p>
-          </>
-        ) : aindaBuscando ? (
-          <>
-            <div className="ttm-resultado-rotulo">Pedido registrado</div>
-            <div className="ttm-numero ttm-numero-buscando"><Spinner /> Gerando o número…</div>
-            <p className="ttm-resultado-texto">Já está na cozinha. Em instantes o número aparece aqui.</p>
-            <div className="ttm-codigo-balcao">
-              <span>Se preferir, apresente este código no balcão:</span>
-              <strong>{resultado.referencia}</strong>
-            </div>
-          </>
-        ) : criado ? (
-          <>
-            <div className="ttm-resultado-rotulo">Pedido registrado</div>
-            <p className="ttm-resultado-texto">Apresente este código no balcão:</p>
-            <div className="ttm-numero ttm-numero-ref">{resultado.referencia}</div>
-          </>
-        ) : resultado.referencia ? (
-          <>
-            <div className="ttm-resultado-rotulo">Estamos confirmando seu pedido</div>
-            <p className="ttm-resultado-texto">
-              Apresente este código no balcão e o atendente confirma para você. <strong>Não faça o pedido de novo.</strong>
-            </p>
-            <div className="ttm-numero ttm-numero-ref">{resultado.referencia}</div>
-          </>
-        ) : (
-          // Sem código: a confirmação ficou em dúvida antes de o servidor devolver a
-          // referência. Não há o que apresentar — o que existe é o balcão.
-          <>
-            <div className="ttm-resultado-rotulo">Estamos confirmando seu pedido</div>
-            <p className="ttm-resultado-texto">
-              <strong>Procure o balcão.</strong> O atendente confirma o seu pedido.{' '}
-              <strong>Não faça o pedido de novo.</strong>
-            </p>
-          </>
-        )}
-        <div className="ttm-resultado-total">Total {moeda(resultado.total)} · pague no balcão</div>
-        {liberouNovo
-          ? <button type="button" className="ttm-btn ttm-btn-primario ttm-btn-largo" onClick={() => reiniciar(true)}>Novo pedido</button>
-          : <div className="ttm-resultado-espera">Anote o código. O totem volta ao início em instantes.</div>}
-      </div>
+      <TelaResultado resultado={resultado} liberouNovo={liberouNovo} aoNovoPedido={() => reiniciar(true)} />
     )
   }
 
   return (
     <Casca>
       {conteudo}
+      {alertaInatividade !== null && tela !== 'inicio' && !enviando && !travado ? (
+        <SheetInatividade segundos={Math.max(0, alertaInatividade)} aoContinuar={() => setAlertaInatividade(null)} />
+      ) : null}
       {aviso && (
         <div className={'tq-toast' + (aviso.tom === 'erro' ? ' erro' : '')} role="status" aria-live="polite">
           <span className="tq-toast-ico" aria-hidden="true">
