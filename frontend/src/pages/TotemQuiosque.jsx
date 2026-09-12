@@ -876,7 +876,9 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
             onMais={() => setAberto((a) => ({ ...a, qtd: a.qtd + 1 }))}
           />
           <button type="button" className="ttm-btn ttm-btn-primario ttm-btn-largo" disabled={!pronto.ok || !podePedir.ok} onClick={adicionarAoCarrinho}>
-            {podePedir.ok ? (aberto.uid ? 'Salvar item' : 'Adicionar') : 'Indisponível no momento'} · {moeda(subtotalLocal(aberto))}
+            {/* Mesmo número do cabeçalho: enquanto faltar obrigatório, é o piso do card ("a partir de"),
+                nunca um subtotal parcial abaixo do menor preço pagável. */}
+            {podePedir.ok ? (aberto.uid ? 'Salvar item' : 'Adicionar') : 'Indisponível no momento'} · {cabecalho.aPartirDe ? 'a partir de ' : ''}{moeda(cabecalho.valorPromocional ?? cabecalho.valor)}
           </button>
         </footer>
       </>
