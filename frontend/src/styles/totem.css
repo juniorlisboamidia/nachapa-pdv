@@ -43,49 +43,77 @@
   src: url('../assets/fontes/inter-400.woff2') format('woff2');
 }
 
-/* -- Raiz e tokens (spec §5.2) --------------------------------------------- */
+/* -- Raiz e tokens ---------------------------------------------------------
+   As dez cores vêm do Design System da marca, no HUB (Clientes › Marcas ›
+   Design System), copiadas valor por valor. O que a marca NÃO define — vermelho
+   de perigo, verde de confirmação, superfícies intermediárias — é derivado
+   aqui e está marcado como tal: o Design System diz que token não decidido é
+   lacuna, e quem consome cai no literal do próprio runtime em vez de inventar
+   decisão de marca.
+
+   A identidade é ESCURA: fundo preto, cartão marrom escuro, texto branco, apoio
+   e ação em dourado. Foi essa troca que virou o quiosque do claro para o escuro. */
 .tq-raiz {
-  /* Estrutura */
-  --tq-preto: #0e1319;
-  --tq-preto-2: #1b222b;
-  --tq-branco: #ffffff;
-  /* Ação — o amarelo é a ÚNICA cor de ação; preto sobre ele dá 13,3:1 */
-  --tq-amarelo: #f9d900;
-  --tq-amarelo-2: #e3c500;
-  /* aresta inferior dos alvos amarelos: é ela que dá volume sem sombra borrada */
-  --tq-amarelo-3: #b99f00;
-  --tq-tinta: #0e1319;
-  /* Chão e superfícies */
-  --tq-fundo: #f7f4ee;
-  --tq-superficie: #ffffff;
-  --tq-borda: #e6e1d7;
-  --tq-borda-forte: #cfc7b6;
-  /* Texto — o -3 é o PISO (4,8:1 sobre o fundo); nada mais claro que isto */
-  --tq-texto: #0e1319;
-  --tq-texto-2: #4a443c;
-  --tq-texto-3: #6b6357;
-  --tq-texto-claro: #a9a396;
-  /* Semânticos (não contam como acento) */
-  --tq-perigo: #b3261e;
-  --tq-perigo-fraco: #fdeceb;
-  --tq-aviso-fundo: #fff6d6;
-  --tq-aviso-tinta: #6b4e00;
-  --tq-ok: #1c6b3a;
+  /* ── Os 10 tokens da marca, como estão no guia ── */
+  --ds-primaria: #d79e00;        /* brand.primary            */
+  --ds-secundaria: #000000;      /* brand.secondary          */
+  --ds-destaque: #fab319;        /* brand.accent             */
+  --ds-fundo: #000000;           /* surface.background       */
+  --ds-cartao: #251a07;          /* surface.card             */
+  --ds-texto: #ffffff;           /* text.primary       21,0:1 sobre o fundo */
+  --ds-texto-apoio: #d79e00;     /* text.secondary      8,8:1 sobre o fundo */
+  --ds-botao-fundo: #d79e00;     /* action.primary.background */
+  --ds-botao-texto: #000000;     /* action.primary.text  8,8:1 sobre o botão */
+  --ds-borda: #ffffff;           /* border.default     17,1:1 sobre o cartão */
+
+  /* ── Papéis do quiosque, apontando para a marca ── */
+  --tq-preto: var(--ds-fundo);
+  --tq-preto-2: var(--ds-cartao);
+  --tq-branco: var(--ds-texto);
+  --tq-amarelo: var(--ds-botao-fundo);
+  --tq-tinta: var(--ds-botao-texto);
+  --tq-fundo: var(--ds-fundo);
+  --tq-superficie: var(--ds-cartao);
+  --tq-texto: var(--ds-texto);
+  --tq-texto-2: var(--ds-texto-apoio);
+
+  /* ── Derivados (a marca não define) ── */
+  /* Dourado pressionado: o guia define uma cor de ação, não o estado de toque. */
+  --tq-amarelo-2: #b58400;
+  --tq-amarelo-3: #9c7100;
+  /* A borda da marca é branca. Cheia em cada divisória viraria wireframe, então
+     o traço usa a MESMA cor com alfa — 34% dá 3,1:1 sobre o cartão, que é o piso
+     para um contorno de interface ser percebido; 50% para o contorno que precisa
+     delimitar de verdade (opção, botão secundário). Abaixo disso o card some no
+     fundo, que é o defeito clássico de tela escura. */
+  --tq-borda: rgba(255, 255, 255, 0.34);
+  --tq-borda-forte: rgba(255, 255, 255, 0.50);
+  /* Terceiro nível de texto: branco rebaixado, nunca um cinza novo. */
+  --tq-texto-3: rgba(255, 255, 255, 0.70);
+  --tq-texto-claro: rgba(255, 255, 255, 0.74);
+  /* Superfícies entre o fundo e o cartão. */
+  --tq-superficie-2: #1b1305;
+  --tq-superficie-3: #33240a;
+  /* Semânticos: nenhum vem do Design System. */
+  --tq-perigo: #ff7a6e;
+  --tq-perigo-fraco: #2f100c;
+  --tq-aviso-fundo: #2a1d0b;
+  --tq-aviso-tinta: var(--ds-destaque);
+  --tq-ok: #5cc47f;
+  --tq-ok-fraco: #10281a;
+  /* Tipografia da marca: Geométrica (Montserrat 900) e Neutra (Inter 400). */
+  --tq-fonte-display: 'Totem Display', 'Segoe UI', Roboto, system-ui, sans-serif;
+  --tq-fonte-corpo: 'Totem Corpo', 'Segoe UI', Roboto, Helvetica, sans-serif;
   /* Forma */
   --tq-raio: 18px;
   --tq-raio-2: 12px;
-  --tq-sombra: 0 6px 20px rgba(14, 19, 25, 0.10);
-  /* Tipografia da marca: display para título, preço, nome e botão; corpo para
-     leitura. Fallback declarado nas duas, para uma falha de arquivo degradar em
-     vez de apagar texto. */
-  --tq-fonte-display: 'Totem Display', 'Segoe UI', Roboto, system-ui, sans-serif;
-  --tq-fonte-corpo: 'Totem Corpo', 'Segoe UI', Roboto, Helvetica, sans-serif;
+  --tq-sombra: 0 6px 20px rgba(0, 0, 0, 0.45);
   /* Métricas do aparelho (spec §2.3) */
   --tq-topo-h: 96px;
   --tq-barra-h: 132px;
   --tq-lado-l: 152px;
 
-  position: relative;   /* âncora do toast, da sobreposição de envio e do alerta */
+  position: relative;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
@@ -174,7 +202,7 @@
 /* -- Spinner --------------------------------------------------------------- */
 .tq-spinner {
   width: 30px; height: 30px; border-radius: 50%; display: inline-block; flex-shrink: 0;
-  border: 3px solid rgba(14, 19, 25, 0.14);
+  border: 3px solid rgba(255, 255, 255, 0.18);
   border-top-color: var(--tq-preto);
   animation: tq-gira 0.8s linear infinite;
   vertical-align: middle;
@@ -211,7 +239,7 @@
    a cor sozinha já diz "toque aqui", e o filete só somava ruído em cada tela. */
 .tq-btn-primario {
   background: var(--tq-amarelo); color: var(--tq-tinta);
-  box-shadow: 0 4px 12px rgba(14, 19, 25, 0.10);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
 }
 .tq-btn-primario:active:not(:disabled) { background: var(--tq-amarelo-2); transform: scale(0.985); }
 .tq-btn-primario:disabled { box-shadow: none; }
@@ -223,7 +251,7 @@
 .tq-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 /* Sobre o preto (barra do pedido, faixa de fechamento) o desabilitado não pode
    virar um borrão: fundo próprio em vez de opacidade sobre amarelo. */
-.tq-sobre-preto .tq-btn:disabled { opacity: 1; background: #333a43; color: #a49c88; border-color: transparent; }
+.tq-sobre-preto .tq-btn:disabled { opacity: 1; background: var(--tq-superficie-3); color: rgba(255, 255, 255, 0.5); border-color: transparent; }
 
 /* -- Cabeçalho ------------------------------------------------------------- */
 .tq-topo {
@@ -238,7 +266,7 @@
   font-family: var(--tq-fonte-display); font-weight: 900; font-size: clamp(15px, 1.5vw, 17px);
 }
 .tq-topo-btn:active { transform: scale(0.98); }
-.tq-topo-btn.perigo { border-color: #e8cfcd; color: var(--tq-perigo); }
+.tq-topo-btn.perigo { border-color: rgba(255, 122, 110, 0.5); color: var(--tq-perigo); }
 .tq-topo-logo { max-height: 56px; max-width: 132px; object-fit: contain; display: block; }
 .tq-marca {
   width: 56px; height: 56px; border-radius: 14px; background: var(--tq-preto); color: var(--tq-amarelo);
@@ -331,7 +359,7 @@
    tablet não mostra. */
 .tq-lado-fade {
   position: absolute; left: 0; right: 0; bottom: 0; height: 40px; pointer-events: none;
-  background: linear-gradient(to top, var(--tq-preto), rgba(14, 19, 25, 0));
+  background: linear-gradient(to top, var(--tq-preto), rgba(0, 0, 0, 0));
 }
 .tq-cat {
   width: 100%; min-height: 84px; padding: 14px 12px; text-align: left;
@@ -349,7 +377,7 @@
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
   word-break: normal; overflow-wrap: normal; hyphens: none;
 }
-.tq-cat:active { background: #202832; }
+.tq-cat:active { background: var(--tq-superficie-2); }
 /* Ativo é BLOCO AMARELO com texto preto — não uma barrinha lateral. Numa lista
    de dez categorias vista a dois metros, seis pixels de borda não respondem
    "onde eu estou". Preto sobre amarelo dá 13,3:1; branco sobre preto, 17,4:1. */
@@ -378,7 +406,6 @@
 .tq-card {
   position: relative; display: flex; flex-direction: column; text-align: left; overflow: hidden;
   background: var(--tq-superficie); border: 1px solid var(--tq-borda); border-radius: 18px;
-  box-shadow: 0 2px 8px rgba(14, 19, 25, 0.05);
   transition: transform 0.1s ease, box-shadow 0.15s ease;
 }
 .tq-card:active:not(:disabled) { transform: scale(0.99); }
@@ -400,8 +427,8 @@
 .tq-card-rod { margin-top: auto; padding-top: 12px; }
 
 /* -- Foto ------------------------------------------------------------------ */
-.tq-foto { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #eae5db; }
-.tq-foto-vazia { display: grid; place-items: center; color: #b3aa98; }
+.tq-foto { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--tq-superficie-3); }
+.tq-foto-vazia { display: grid; place-items: center; color: rgba(255, 255, 255, 0.34); }
 
 /* -- Preço ----------------------------------------------------------------- */
 .tq-preco { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
@@ -410,7 +437,7 @@
    de alto contraste (8,8:1). Sem etiqueta colorida — o destaque é o valor. */
 .tq-apartir { color: var(--tq-texto-2); line-height: 1.1; }
 .tq-preco-de { font-size: clamp(14px, 1.4vw, 16px); color: var(--tq-texto-3); text-decoration: line-through; font-weight: 700; }
-.tq-preco-por { color: #8a3b00; }
+.tq-preco-por { color: var(--ds-destaque); }
 .tq-selo {
   align-self: flex-start; padding: 7px 16px; border-radius: 8px;
   background: var(--tq-preto); color: var(--tq-branco);
@@ -439,11 +466,11 @@
   padding: 14px 24px calc(18px + env(safe-area-inset-bottom, 0px));
   display: flex; flex-direction: column; justify-content: center; gap: 10px;
 }
-.tq-barra-linha { display: flex; align-items: center; gap: 12px; font-size: clamp(15px, 1.6vw, 19px); color: #c9c3b4; }
+.tq-barra-linha { display: flex; align-items: center; gap: 12px; font-size: clamp(15px, 1.6vw, 19px); color: var(--tq-texto-claro); }
 .tq-barra-total { margin-left: auto; font-size: clamp(22px, 2.6vw, 32px); color: var(--tq-amarelo); }
 .tq-barra-vazia {
   display: flex; align-items: center; justify-content: center; gap: 12px;
-  min-height: calc(var(--tq-barra-h) - 32px); color: #8b8574;
+  min-height: calc(var(--tq-barra-h) - 32px); color: rgba(255, 255, 255, 0.55);
   font-size: clamp(15px, 1.6vw, 19px); text-align: center;
 }
 .tq-qtd {
@@ -467,19 +494,19 @@
   padding: 16px 24px; border-radius: 14px;
   background: var(--tq-preto); color: var(--tq-branco);
   font-size: clamp(16px, 1.7vw, 19px); font-weight: 700; text-align: left;
-  box-shadow: 0 12px 30px rgba(14, 19, 25, 0.34);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.55);
 }
 .tq-toast-ico {
   width: 32px; height: 32px; border-radius: 999px; flex: 0 0 auto;
   display: grid; place-items: center;
   background: var(--tq-amarelo); color: var(--tq-tinta);
 }
-.tq-toast.erro { background: #7f1d1d; }
-.tq-toast.erro .tq-toast-ico { background: var(--tq-branco); color: #7f1d1d; }
+.tq-toast.erro { background: #3a1210; }
+.tq-toast.erro .tq-toast-ico { background: var(--tq-branco); color: #3a1210; }
 
 /* ═══ V5 — detalhe do produto ══════════════════════════════════════════════ */
 
-.tq-hero { display: block; width: 100%; aspect-ratio: 4 / 3; max-height: 46vh; object-fit: cover; background: #eae5db; }
+.tq-hero { display: block; width: 100%; aspect-ratio: 4 / 3; max-height: 46vh; object-fit: cover; background: var(--tq-superficie-3); }
 /* Foto + faixa = uma peça só. A faixa preta é a placa do cardápio: nome em
    branco à esquerda, preço em amarelo à direita, encostada na imagem. */
 .tq-det-capa { position: relative; }
@@ -508,14 +535,14 @@
   font-weight: 800; font-size: clamp(13px, 1.4vw, 15px); letter-spacing: 0.05em; text-transform: uppercase;
 }
 .tq-pend:active { background: var(--tq-amarelo-2); }
-.tq-pend.ok { background: #e5efe6; color: var(--tq-ok); }
+.tq-pend.ok { background: var(--tq-ok-fraco); color: var(--tq-ok); }
 
 /* -- Bloco de grupo -------------------------------------------------------- */
 .tq-grupo {
   margin-top: 22px; overflow: hidden;
   background: var(--tq-superficie); border: 1px solid var(--tq-borda); border-radius: var(--tq-raio);
 }
-.tq-grupo.falta { background: #f2efe7; border-color: #ded8c9; }
+.tq-grupo.falta { background: var(--tq-superficie-2); border-color: var(--tq-borda); }
 /* Título à esquerda, regra à direita quando cabe; a regra cai para baixo quando
    não cabe. O título NUNCA é comprimido para forçar uma linha só. Obrigatório se
    anuncia por um selo amarelo pequeno — não por uma barra amarela na seção
@@ -537,7 +564,7 @@
 .tq-grupo-corpo { padding: clamp(14px, 2vw, 20px) clamp(16px, 2.2vw, 22px) clamp(16px, 2.2vw, 22px); }
 .tq-grupo-contagem { margin-bottom: 12px; color: var(--tq-texto-3); font-weight: 700; font-size: clamp(14px, 1.4vw, 16px); }
 .tq-grupo-indisponivel { font-size: clamp(16px, 1.6vw, 18px); font-weight: 700; color: var(--tq-texto-2); }
-.tq-grupo-falta { margin-top: 14px; font-family: var(--tq-fonte-display); font-weight: 900; color: #8a3b00; font-size: clamp(15px, 1.5vw, 17px); }
+.tq-grupo-falta { margin-top: 14px; font-family: var(--tq-fonte-display); font-weight: 900; color: var(--ds-destaque); font-size: clamp(15px, 1.5vw, 17px); }
 
 /* -- Opção de complemento -------------------------------------------------- */
 /* Card HORIZONTAL sempre: miniatura fixa, texto elástico com `min-width: 0`,
@@ -579,7 +606,7 @@
    marcador desenhado — é o que impede a grade de desmontar linha a linha. */
 .tq-op-foto {
   flex: 0 0 auto; width: 88px; height: 88px; aspect-ratio: auto;
-  border-radius: var(--tq-raio-2); object-fit: cover; background: #eae5db;
+  border-radius: var(--tq-raio-2); object-fit: cover; background: var(--tq-superficie-3);
 }
 @media (min-width: 900px) { .tq-op-foto { width: 96px; height: 96px; } }
 
@@ -592,12 +619,12 @@
 
 /* Em falta: fundo apagado e foto acinzentada, mas o TEXTO fica em contraste
    cheio — o aviso precisa ser lido. */
-.tq-op.falta { background: #f1eee7; border-color: #ded8c9; }
+.tq-op.falta { background: var(--tq-superficie-2); border-color: var(--tq-borda); }
 .tq-op.falta .tq-op-foto { filter: grayscale(1); opacity: 0.65; }
 .tq-op.falta .tq-op-nome { color: var(--tq-texto); }
 .tq-op.falta .tq-op-desc, .tq-op.falta .tq-op-preco { color: var(--tq-texto-2); }
 .tq-op-falta {
-  padding: 6px 12px; border-radius: 8px; background: #ddd6c8; color: var(--tq-texto);
+  padding: 6px 12px; border-radius: 8px; background: rgba(255, 255, 255, 0.16); color: var(--tq-texto);
   font-family: var(--tq-fonte-display);
   font-weight: 800; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap;
 }
@@ -636,7 +663,7 @@
   flex: 0 0 auto; display: flex; align-items: center; gap: 16px;
   padding: 18px 24px calc(22px + env(safe-area-inset-bottom, 0px));
   background: var(--tq-superficie); border-top: 1px solid var(--tq-borda);
-  box-shadow: 0 -8px 24px rgba(14, 19, 25, 0.07);
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.5);
 }
 .tq-stepper { display: inline-flex; align-items: center; gap: 10px; flex: 0 0 auto; }
 .tq-step {
@@ -649,8 +676,8 @@
 .tq-step-v { min-width: 48px; text-align: center; font-size: clamp(20px, 2.2vw, 26px); }
 /* Bloco de recado dentro de uma tela (item indisponível, recusa de cotação). */
 .tq-aviso-bloco {
-  background: var(--tq-perigo-fraco); border: 2px solid #e8b4b0; border-radius: var(--tq-raio-2);
-  padding: 14px 16px; margin-bottom: 18px; color: #7f1d1d;
+  background: var(--tq-perigo-fraco); border: 2px solid rgba(255, 122, 110, 0.5); border-radius: var(--tq-raio-2);
+  padding: 14px 16px; margin-bottom: 18px; color: #ffd9d5;
   font-size: clamp(16px, 1.6vw, 18px); line-height: 1.45;
 }
 
@@ -663,7 +690,7 @@
    sozinha, sem media query. */
 .tq-opcoes.grade { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
 
-.tq-grupo-limite { margin-bottom: 12px; color: #8a6a00; font-weight: 700; font-size: clamp(14px, 1.4vw, 16px); }
+.tq-grupo-limite { margin-bottom: 12px; color: var(--ds-destaque); font-weight: 700; font-size: clamp(14px, 1.4vw, 16px); }
 
 /* ═══ V7 — avanço automático ═══════════════════════════════════════════════ */
 /* Último grupo concluído: além de rolar até o rodapé, o botão pisca uma vez.
@@ -697,7 +724,7 @@
 /* A quantidade abre o nome, sem ficha nem cor: é leitura de comanda. */
 .tq-linha-qtd { margin-right: 6px; }
 .tq-linha-ops { margin-top: 8px; font-size: clamp(15px, 1.6vw, 18px); color: var(--tq-texto-2); line-height: 1.5; }
-.tq-linha-ops li::before { content: '• '; color: #a8a091; }
+.tq-linha-ops li::before { content: '• '; color: rgba(255, 255, 255, 0.45); }
 .tq-linha-obs { margin-top: 8px; font-size: clamp(14px, 1.5vw, 16px); font-style: italic; color: var(--tq-texto-2); }
 .tq-linha-mudou { margin-top: 8px; font-weight: 800; font-size: clamp(13px, 1.4vw, 15px); letter-spacing: 0.06em; text-transform: uppercase; }
 .tq-linha-lado { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 14px; }
@@ -712,8 +739,8 @@
   font-family: var(--tq-fonte-display); font-weight: 900; font-size: clamp(14px, 1.5vw, 16px);
 }
 .tq-mini:active { transform: scale(0.98); }
-.tq-mini.perigo { border-color: #e8cfcd; color: var(--tq-perigo); }
-.tq-mini.confirmando { background: var(--tq-perigo); border-color: var(--tq-perigo); color: var(--tq-branco); }
+.tq-mini.perigo { border-color: rgba(255, 122, 110, 0.5); color: var(--tq-perigo); }
+.tq-mini.confirmando { background: var(--tq-perigo); border-color: var(--tq-perigo); color: var(--tq-tinta); }
 
 /* ═══ V9 — pagamento e revisão ═════════════════════════════════════════════ */
 
@@ -757,7 +784,7 @@
 }
 .tq-link {
   background: none; border: none; padding: 12px 10px; min-height: 56px;
-  color: #8a3b00; font-family: var(--tq-fonte-display); font-weight: 900;
+  color: var(--ds-destaque); font-family: var(--tq-fonte-display); font-weight: 900;
   text-decoration: underline; font-size: clamp(15px, 1.5vw, 17px);
 }
 .tq-link:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -788,7 +815,7 @@
 .tq-travado-nota { text-align: center; color: var(--tq-texto-claro); font-size: clamp(14px, 1.5vw, 16px); }
 
 .tq-erro-bloco {
-  background: var(--tq-superficie); border: 2px solid #e8b4b0; border-radius: var(--tq-raio); padding: 20px;
+  background: var(--tq-superficie); border: 2px solid rgba(255, 122, 110, 0.5); border-radius: var(--tq-raio); padding: 20px;
 }
 .tq-erro-titulo { font-size: clamp(20px, 2.2vw, 26px); margin-bottom: 8px; }
 .tq-erro-texto { font-size: clamp(16px, 1.7vw, 19px); color: var(--tq-texto-2); line-height: 1.5; }
@@ -798,7 +825,7 @@
 /* Enquanto o pedido está sendo criado, NADA mais é tocável: um segundo toque em
    outro lugar no meio da chamada é o começo de um pedido duplicado. */
 .tq-enviando {
-  position: absolute; inset: 0; z-index: 60; background: rgba(14, 19, 25, 0.94); color: var(--tq-branco);
+  position: absolute; inset: 0; z-index: 60; background: rgba(0, 0, 0, 0.94); color: var(--tq-branco);
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
   text-align: center; padding: 32px;
 }
@@ -821,7 +848,7 @@
 .tq-tela-aviso h1 { font-size: clamp(32px, 4.4vw, 52px); text-wrap: balance; }
 .tq-tela-aviso p { font-size: clamp(18px, 2vw, 23px); color: var(--tq-texto-claro); max-width: 660px; line-height: 1.45; }
 .tq-tela-aviso .tq-erro-lista { color: var(--tq-texto-claro); text-align: left; max-width: 640px; }
-.tq-tela-aviso .tq-btn-claro { background: transparent; color: var(--tq-branco); border-color: #3a4048; }
+.tq-tela-aviso .tq-btn-claro { background: transparent; color: var(--tq-branco); border-color: var(--tq-superficie-3); }
 .tq-acoes-aviso { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; margin-top: 8px; }
 
 /* -- Resultado ------------------------------------------------------------- */
@@ -868,7 +895,7 @@
 /* Aviso antes do reset por inatividade. Nunca aparece durante o envio nem com a
    confirmação em dúvida: nesses dois estados o relógio de reset também não corre. */
 .tq-sheet-fundo {
-  position: absolute; inset: 0; z-index: 50; background: rgba(14, 19, 25, 0.72);
+  position: absolute; inset: 0; z-index: 50; background: rgba(0, 0, 0, 0.78);
   display: flex; align-items: flex-end; justify-content: center; padding: 24px;
 }
 .tq-sheet {
@@ -900,18 +927,18 @@
 .tq-caixas { display: flex; gap: 12px; justify-content: center; }
 .tq-caixa {
   width: clamp(52px, 6vw, 68px); height: clamp(68px, 8vw, 88px); border-radius: 14px;
-  border: 2px solid #39404a; background: var(--tq-preto-2); color: var(--tq-branco);
+  border: 2px solid var(--tq-borda); background: var(--tq-preto-2); color: var(--tq-branco);
   display: grid; place-items: center; font-size: clamp(28px, 3.4vw, 38px);
 }
 .tq-caixa.cheia { border-color: var(--tq-branco); }
-.tq-caixa.ativa { border-color: var(--tq-amarelo); box-shadow: 0 0 0 4px rgba(249, 217, 0, 0.22); }
+.tq-caixa.ativa { border-color: var(--tq-amarelo); box-shadow: 0 0 0 4px rgba(215, 158, 0, 0.3); }
 .tq-teclado { display: grid; grid-template-columns: repeat(3, clamp(96px, 11vw, 124px)); gap: 14px; justify-content: center; }
 .tq-tecla {
   min-height: clamp(74px, 8vh, 92px); border-radius: 16px;
-  border: 2px solid #39404a; background: var(--tq-preto-2); color: var(--tq-branco);
+  border: 2px solid var(--tq-borda); background: var(--tq-preto-2); color: var(--tq-branco);
   font-size: clamp(26px, 3vw, 32px);
 }
-.tq-tecla:active:not(:disabled) { background: #262d37; transform: scale(0.97); }
+.tq-tecla:active:not(:disabled) { background: var(--tq-superficie-3); transform: scale(0.97); }
 .tq-tecla:disabled { opacity: 0.35; cursor: not-allowed; }
 .tq-tecla.apagar { font-family: var(--tq-fonte-display); font-weight: 900; font-size: clamp(15px, 1.7vw, 19px); }
 .tq-tecla.vazia { visibility: hidden; }
@@ -920,10 +947,10 @@
 /* Menu possivelmente desatualizado (snapshot servido porque o HUB não respondeu).
    Faixa fina, nunca um bloqueio: o valor final é confirmado na revisão. */
 .tq-banner {
-  flex: 0 0 auto; background: var(--tq-aviso-fundo); border-bottom: 1px solid #e8cf6a;
+  flex: 0 0 auto; background: var(--tq-aviso-fundo); border-bottom: 1px solid var(--ds-destaque);
   padding: 10px 16px; text-align: center; color: var(--tq-aviso-tinta);
   font-weight: 600; font-size: clamp(14px, 1.5vw, 17px);
 }
 
 /* Cancelar pedido pede confirmação: o segundo toque é que apaga. */
-.tq-topo-btn.perigo.confirmando { background: var(--tq-perigo); border-color: var(--tq-perigo); color: var(--tq-branco); }
+.tq-topo-btn.perigo.confirmando { background: var(--tq-perigo); border-color: var(--tq-perigo); color: var(--tq-tinta); }
