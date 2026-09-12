@@ -329,18 +329,23 @@
   background: linear-gradient(to top, var(--tq-preto), rgba(14, 19, 25, 0));
 }
 .tq-cat {
-  width: 100%; min-height: 88px; padding: 14px 16px 14px 12px; text-align: left;
+  width: 100%; min-height: 96px; padding: 16px 16px 16px 14px; text-align: left;
   display: flex; align-items: center;
-  border-left: 6px solid transparent; color: #b9b3a4;
+  border-left: 8px solid transparent; color: #b9b3a4;
   font-family: 'Archivo Totem', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
-  font-weight: 700; font-size: clamp(15px, 1.5vw, 18px); line-height: 1.2;
+  font-weight: 800; font-size: clamp(15px, 1.6vw, 19px); line-height: 1.15;
   letter-spacing: 0.02em; text-transform: uppercase;
   overflow-wrap: anywhere; transition: background 0.12s ease, color 0.12s ease;
 }
 .tq-cat:active { background: #161c24; }
-/* Ativo por TRÊS sinais ao mesmo tempo (fundo, barra amarela, cor do texto):
-   cor sozinha não serve como indicador. */
-.tq-cat[aria-current='true'] { background: var(--tq-preto-2); border-left-color: var(--tq-amarelo); color: var(--tq-branco); }
+/* Ativo não é uma barrinha: é um BLOCO AMARELO com texto preto. Numa lista de
+   dez categorias vista a dois metros, meia dúzia de pixels de borda não responde
+   "onde eu estou". Continuam três sinais (fundo, barra, cor), agora no volume
+   certo — e o preto sobre amarelo dá 13,3:1. */
+.tq-cat[aria-current='true'] {
+  background: var(--tq-amarelo); border-left-color: var(--tq-amarelo-3);
+  color: var(--tq-tinta); font-weight: 900;
+}
 
 /* -- Grade ----------------------------------------------------------------- */
 .tq-grade {
@@ -366,14 +371,19 @@
 
 /* -- Card de produto ------------------------------------------------------- */
 .tq-card {
-  display: flex; flex-direction: column; text-align: left; overflow: hidden;
+  position: relative; display: flex; flex-direction: column; text-align: left; overflow: hidden;
   background: var(--tq-superficie); border: 1px solid var(--tq-borda); border-radius: var(--tq-raio);
+  /* Base amarela: a marca aparece em todo card, sem competir com a foto. */
+  border-bottom: 8px solid var(--tq-amarelo);
   transition: transform 0.1s ease, box-shadow 0.15s ease;
 }
-.tq-card:active:not(:disabled) { transform: scale(0.99); box-shadow: var(--tq-sombra); }
-.tq-card:disabled { cursor: not-allowed; opacity: 0.55; }
-.tq-card-txt { flex: 1 1 auto; display: flex; flex-direction: column; gap: 6px; padding: 16px 18px 18px; }
-.tq-card-nome { font-size: clamp(20px, 2.1vw, 26px); line-height: 1.15; }
+.tq-card:active:not(:disabled) { transform: translateY(3px); border-bottom-width: 5px; }
+/* Em falta: a foto acinzenta, o texto continua legível e o card perde a base
+   amarela — ele não é uma ação. */
+.tq-card:disabled { cursor: not-allowed; border-bottom-color: var(--tq-borda); }
+.tq-card:disabled .tq-foto { filter: grayscale(1); opacity: 0.6; }
+.tq-card-txt { flex: 1 1 auto; display: flex; flex-direction: column; gap: 6px; padding: 18px 20px 20px; }
+.tq-card-nome { font-size: clamp(21px, 2.2vw, 28px); line-height: 1.12; }
 .tq-card-desc {
   font-size: clamp(15px, 1.5vw, 17px); color: var(--tq-texto-3); line-height: 1.35;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
@@ -385,16 +395,19 @@
 .tq-foto-vazia { display: grid; place-items: center; color: #b3aa98; }
 
 /* -- Preço ----------------------------------------------------------------- */
-.tq-preco { display: flex; flex-direction: column; }
-.tq-preco-valor { font-size: clamp(22px, 2.3vw, 28px); line-height: 1.1; }
-/* "a partir de" é rótulo, não preço: pequeno, acima, para o número continuar
-   sendo a primeira coisa que se lê. */
-.tq-apartir { color: var(--tq-texto-3); }
+.tq-preco { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.tq-preco-valor { font-size: clamp(24px, 2.7vw, 34px); line-height: 1.05; }
+/* "a partir de" é rótulo, não preço: continua pequeno e acima, mas agora com
+   marcação amarela — vira sinal de leitura em vez de cinza que some. */
+.tq-apartir {
+  color: var(--tq-tinta); background: var(--tq-amarelo);
+  padding: 3px 8px; border-radius: 6px; line-height: 1.1;
+}
 .tq-preco-de { font-size: clamp(14px, 1.4vw, 16px); color: var(--tq-texto-3); text-decoration: line-through; font-weight: 700; }
 .tq-preco-por { color: #8a3b00; }
 .tq-selo {
-  align-self: flex-start; padding: 6px 14px; border-radius: 999px;
-  background: #e8e4da; color: var(--tq-texto-2);
+  align-self: flex-start; padding: 7px 16px; border-radius: 8px;
+  background: var(--tq-preto); color: var(--tq-branco);
   font-family: 'Archivo Totem', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
   font-weight: 800; font-size: clamp(13px, 1.3vw, 15px); letter-spacing: 0.06em; text-transform: uppercase;
 }
@@ -415,13 +428,13 @@
    de ar. Altura reservada mesmo com o pedido vazio: nada salta quando o
    primeiro item entra. */
 .tq-barra {
-  flex: 0 0 auto; min-height: var(--tq-barra-h);
+  flex: 0 0 auto; min-height: var(--tq-barra-h); border-top: 6px solid var(--tq-amarelo);
   background: var(--tq-preto); color: var(--tq-branco);
   padding: 14px 24px calc(18px + env(safe-area-inset-bottom, 0px));
   display: flex; flex-direction: column; justify-content: center; gap: 10px;
 }
 .tq-barra-linha { display: flex; align-items: center; gap: 12px; font-size: clamp(15px, 1.6vw, 19px); color: #c9c3b4; }
-.tq-barra-total { margin-left: auto; font-size: clamp(20px, 2.2vw, 27px); color: var(--tq-branco); }
+.tq-barra-total { margin-left: auto; font-size: clamp(22px, 2.6vw, 32px); color: var(--tq-amarelo); }
 .tq-barra-vazia {
   display: flex; align-items: center; justify-content: center; gap: 12px;
   min-height: calc(var(--tq-barra-h) - 32px); color: #8b8574;
