@@ -51,6 +51,8 @@
   /* Ação — o amarelo é a ÚNICA cor de ação; preto sobre ele dá 13,3:1 */
   --tq-amarelo: #f9d900;
   --tq-amarelo-2: #e3c500;
+  /* aresta inferior dos alvos amarelos: é ela que dá volume sem sombra borrada */
+  --tq-amarelo-3: #b99f00;
   --tq-tinta: #0e1319;
   /* Chão e superfícies */
   --tq-fundo: #f7f4ee;
@@ -187,7 +189,14 @@
   transition: background 0.14s ease, transform 0.1s ease, border-color 0.14s ease;
 }
 .tq-btn-primario { background: var(--tq-amarelo); color: var(--tq-tinta); }
-.tq-btn-primario:active:not(:disabled) { background: var(--tq-amarelo-2); transform: scale(0.99); }
+/* Botão que AFUNDA. A aresta inferior sólida (sem desfoque, sem gradiente) é o
+   que faz um alvo parecer físico num vidro — e some no toque, devolvendo a
+   sensação de tecla apertada. É a linguagem que se repete em todo alvo amarelo. */
+.tq-btn-primario { box-shadow: 0 8px 0 var(--tq-amarelo-3); }
+.tq-btn-primario:active:not(:disabled) {
+  background: var(--tq-amarelo-2); transform: translateY(5px); box-shadow: 0 3px 0 var(--tq-amarelo-3);
+}
+.tq-btn-primario:disabled { box-shadow: none; }
 .tq-btn-claro { background: var(--tq-superficie); color: var(--tq-texto); border: 2px solid var(--tq-borda); }
 .tq-btn-claro:active:not(:disabled) { border-color: var(--tq-borda-forte); transform: scale(0.99); }
 .tq-btn-largo { width: 100%; }
@@ -223,37 +232,80 @@
 .tq-topo-modo { font-size: clamp(15px, 1.5vw, 19px); color: var(--tq-texto-3); }
 .tq-topo-vaga { flex: 0 0 auto; width: 56px; }
 
+/* Textura do fundo preto: listras duras a 3% de branco. Não é gradiente (não há
+   transição), é padrão — serve só para o preto deixar de ser uma chapa morta em
+   telas grandes. */
+.tq-textura {
+  background-image: repeating-linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0) 0 26px,
+    rgba(255, 255, 255, 0.032) 26px 52px
+  );
+}
+
 /* -- Início ---------------------------------------------------------------- */
+/* A tela que fica horas no vidro chamando quem passa. Três correções em relação
+   à primeira versão: a composição sai do centro (placa e texto lado a lado, texto
+   alinhado à esquerda), o amarelo deixa de ser só a cor dos dois cards, e os
+   alvos crescem para tamanho de totem, não de link. */
 .tq-inicio {
-  flex: 1 1 auto; background: var(--tq-preto); color: var(--tq-branco);
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 12px; padding: clamp(32px, 5vw, 64px); text-align: center;
-  position: relative; /* âncora do nome do aparelho, no rodapé */
+  flex: 1 1 auto; position: relative; background: var(--tq-preto); color: var(--tq-branco);
+  display: flex; flex-direction: column; justify-content: center;
+  gap: clamp(28px, 5vh, 64px); padding: clamp(36px, 5vw, 72px);
 }
-.tq-inicio-logo { max-width: min(58%, 340px); max-height: 22vh; object-fit: contain; margin-bottom: 18px; }
+/* Faixa de marca no topo: sinalização, não enfeite. */
+.tq-inicio::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 14px;
+  background: var(--tq-amarelo);
+}
+
+.tq-inicio-topo { display: flex; align-items: center; gap: clamp(24px, 4vw, 48px); }
+@media (max-width: 599px) { .tq-inicio-topo { flex-direction: column; text-align: center; } }
+
+/* A logo do Cardápio Web quase sempre vem com fundo branco. Em vez de disfarçar,
+   assume-se: vira PLACA, com aresta amarela embaixo — sinal de fachada, não
+   arquivo colado sobre o preto. */
+.tq-placa {
+  flex: 0 0 auto; background: var(--tq-branco); border-radius: 22px;
+  padding: clamp(16px, 2.2vw, 28px); box-shadow: 0 14px 0 var(--tq-amarelo);
+  display: grid; place-items: center;
+}
+.tq-placa img { display: block; width: clamp(150px, 22vw, 300px); max-height: 22vh; object-fit: contain; }
 .tq-inicio-marca {
-  width: clamp(110px, 14vw, 160px); aspect-ratio: 1; border-radius: 28%;
+  flex: 0 0 auto; width: clamp(130px, 17vw, 220px); aspect-ratio: 1; border-radius: 26px;
   background: var(--tq-amarelo); color: var(--tq-tinta);
-  display: grid; place-items: center; margin-bottom: 18px;
-  font-size: clamp(56px, 7vw, 82px); line-height: 1;
+  display: grid; place-items: center; font-size: clamp(64px, 9vw, 110px); line-height: 1;
+  box-shadow: 0 14px 0 var(--tq-amarelo-3);
 }
-.tq-inicio-loja { font-size: clamp(15px, 1.6vw, 19px); letter-spacing: 0.22em; color: var(--tq-amarelo); }
-.tq-inicio-tit {
-  font-size: clamp(40px, 6vw, 68px); line-height: 1.02; margin-top: 6px; text-wrap: balance;
-}
-.tq-inicio-sub { font-size: clamp(18px, 1.9vw, 23px); color: var(--tq-texto-claro); margin-bottom: clamp(24px, 4vh, 44px); }
-.tq-modos { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(14px, 2vw, 24px); width: 100%; max-width: 860px; }
-.tq-modos.um { grid-template-columns: minmax(0, 1fr); max-width: 480px; }
+
+.tq-inicio-txt { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.tq-inicio-loja { color: var(--tq-amarelo); font-size: clamp(15px, 1.7vw, 21px); letter-spacing: 0.24em; }
+.tq-inicio-tit { font-size: clamp(44px, 7.4vw, 104px); line-height: 0.94; letter-spacing: -0.02em; }
+.tq-inicio-tit span { display: block; }
+/* Régua: fecha o bloco de texto e dá ao amarelo um papel além dos botões. */
+.tq-regua { width: clamp(96px, 14vw, 180px); height: 10px; background: var(--tq-amarelo); border-radius: 999px; }
+.tq-inicio-sub { font-size: clamp(17px, 2vw, 26px); color: var(--tq-texto-claro); }
+
+.tq-modos { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(16px, 2.4vw, 28px); }
+.tq-modos.um { grid-template-columns: minmax(0, 1fr); }
 .tq-modo {
-  background: var(--tq-amarelo); color: var(--tq-tinta); border-radius: 22px;
-  padding: clamp(24px, 3vw, 40px) 20px; min-height: clamp(180px, 22vh, 260px);
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
-  transition: background 0.14s ease, transform 0.1s ease;
+  background: var(--tq-amarelo); color: var(--tq-tinta); border-radius: 24px;
+  min-height: clamp(240px, 30vh, 440px); padding: clamp(24px, 3vw, 44px) 20px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  box-shadow: 0 12px 0 var(--tq-amarelo-3);
+  transition: background 0.14s ease, transform 0.1s ease, box-shadow 0.1s ease;
 }
-.tq-modo:active { background: var(--tq-amarelo-2); transform: scale(0.985); }
-.tq-modo-t { font-size: clamp(22px, 2.6vw, 32px); letter-spacing: 0.02em; text-transform: uppercase; }
-.tq-modo-s { font-size: clamp(15px, 1.5vw, 18px); opacity: 0.72; }
-.tq-inicio-pe { position: absolute; left: 0; right: 0; bottom: 14px; text-align: center; font-size: 13px; color: #8b8574; }
+.tq-modo:active {
+  background: var(--tq-amarelo-2); transform: translateY(7px); box-shadow: 0 5px 0 var(--tq-amarelo-3);
+}
+.tq-modo-t { font-size: clamp(26px, 3.6vw, 48px); letter-spacing: 0.01em; text-transform: uppercase; line-height: 1; }
+.tq-modo-s { font-size: clamp(15px, 1.7vw, 21px); opacity: 0.66; }
+
+.tq-inicio-rodape {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+}
+.tq-inicio-balcao { color: var(--tq-texto-claro); font-size: clamp(15px, 1.7vw, 20px); }
+.tq-inicio-pe { color: #8b8574; font-size: 13px; }
 
 /* ═══ V3 — catálogo: sidebar de categorias e grade de produtos ═════════════ */
 
