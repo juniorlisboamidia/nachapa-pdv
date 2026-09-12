@@ -353,3 +353,54 @@
 }
 .tq-vazio-t { font-size: clamp(24px, 3vw, 34px); color: var(--tq-texto); }
 .tq-vazio p { font-size: clamp(17px, 1.7vw, 20px); max-width: 460px; }
+
+/* ═══ V4 — barra do pedido e aviso passageiro ══════════════════════════════ */
+
+/* A barra é IRMÃ do conteúdo na coluna da raiz, não `position: fixed`. Assim ela
+   está sempre visível sem cobrir a última fileira de produtos — o botão
+   flutuante de antes tapava o card de baixo e obrigava a grade a reservar 96px
+   de ar. Altura reservada mesmo com o pedido vazio: nada salta quando o
+   primeiro item entra. */
+.tq-barra {
+  flex: 0 0 auto; min-height: var(--tq-barra-h);
+  background: var(--tq-preto); color: var(--tq-branco);
+  padding: 14px 24px calc(18px + env(safe-area-inset-bottom, 0px));
+  display: flex; flex-direction: column; justify-content: center; gap: 10px;
+}
+.tq-barra-linha { display: flex; align-items: center; gap: 12px; font-size: clamp(15px, 1.6vw, 19px); color: #c9c3b4; }
+.tq-barra-total { margin-left: auto; font-size: clamp(20px, 2.2vw, 27px); color: var(--tq-branco); }
+.tq-barra-vazia {
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  min-height: calc(var(--tq-barra-h) - 32px); color: #8b8574;
+  font-size: clamp(15px, 1.6vw, 19px); text-align: center;
+}
+.tq-qtd {
+  min-width: 40px; height: 40px; padding: 0 10px; border-radius: 999px;
+  background: var(--tq-amarelo); color: var(--tq-tinta);
+  display: inline-grid; place-items: center;
+  font-family: 'Archivo Totem', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
+  font-weight: 900; font-size: clamp(17px, 1.8vw, 20px);
+  animation: tq-pulso 0.45s ease;
+}
+@keyframes tq-pulso { 0% { transform: scale(1); } 40% { transform: scale(1.14); } 100% { transform: scale(1); } }
+
+/* -- Aviso passageiro ------------------------------------------------------ */
+/* Confirma que o item entrou (o cliente volta ao catálogo, não ao carrinho, e
+   precisa de sinal) e também dá o recado curto de erro de vitrine. */
+.tq-toast {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  bottom: calc(var(--tq-barra-h) + 24px); z-index: 40;
+  max-width: min(560px, calc(100% - 40px));
+  display: flex; align-items: center; gap: 12px;
+  padding: 16px 24px; border-radius: 14px;
+  background: var(--tq-preto); color: var(--tq-branco);
+  font-size: clamp(16px, 1.7vw, 19px); font-weight: 700; text-align: left;
+  box-shadow: 0 12px 30px rgba(14, 19, 25, 0.34);
+}
+.tq-toast-ico {
+  width: 32px; height: 32px; border-radius: 999px; flex: 0 0 auto;
+  display: grid; place-items: center;
+  background: var(--tq-amarelo); color: var(--tq-tinta);
+}
+.tq-toast.erro { background: #7f1d1d; }
+.tq-toast.erro .tq-toast-ico { background: var(--tq-branco); color: #7f1d1d; }

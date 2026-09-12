@@ -28,6 +28,8 @@ import Casca from '../components/totem/Casca'
 import Cabecalho from '../components/totem/Cabecalho'
 import TelaInicio from '../components/totem/TelaInicio'
 import TelaCatalogo from '../components/totem/TelaCatalogo'
+import BarraPedido from '../components/totem/BarraPedido'
+import { Ico } from '../components/totem/icones'
 import {
   podeAdicionarOpcao, grupoSatisfeito, itemPronto, itemOrdenavel, subtotalLocal,
   montarCarrinho, diffCotacao, chaveNova, mensagemErro, proximoEstadoAposFalha,
@@ -133,8 +135,9 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
   const [carrinho, setCarrinho] = useState([])
   const [aberto, setAberto] = useState(null)     // { item, apresentado, qtd, observacao, selecoes, uid? }
   const [categoriaId, setCategoriaId] = useState(null)
-  // Recado curto e passageiro (hoje só "Produto indisponível"): o totem não tem Toast —
-  // ele é público e standalone —, então é um aviso próprio, que some sozinho.
+  // Recado curto e passageiro: confirma o item que entrou no pedido e avisa a
+  // vitrine que saiu do ar. O totem não tem Toast (é público e standalone), então
+  // é um aviso próprio, que some sozinho. `{ texto, tom, ms }`.
   const [aviso, setAviso] = useState(null)
   const [metodoId, setMetodoId] = useState(null)
 
@@ -191,9 +194,10 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
   const indice = useMemo(() => indicePorItemId(categorias), [categorias])
 
   // O aviso passageiro se apaga sozinho. Sem Promise no efeito (regra do projeto).
+  // Confirmação some rápido (2,5 s); recado de erro fica os 4 s de sempre.
   useEffect(() => {
     if (!aviso) return undefined
-    const t = setTimeout(() => setAviso(null), 4_000)
+    const t = setTimeout(() => setAviso(null), aviso.ms ?? 4_000)
     return () => clearTimeout(t)
   }, [aviso])
 
@@ -367,7 +371,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
     if (produto?.status && produto.status !== 'ACTIVE') return
     if (produto?.ordenavel === false) return
     const linha = linhaDeProduto(produto, indice)
-    if (!linha) { setAviso('Produto indisponível. Escolha outro.'); return }
+    if (!linha) { setAviso({ texto: 'Produto indisponível. Escolha outro.', tom: 'erro' }); return }
     // O preço do CARD viaja junto (fora do módulo puro, porque é rotulagem de tela): é o
     // piso que o cliente acabou de ler no grid, e o cabeçalho do detalhe não pode desmentir
     // esse número enquanto ele ainda não escolheu os obrigatórios que faltam.
@@ -431,10 +435,15 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
     }
     // Casamento por `uid`, nunca por itemId: duas linhas do MESMO item base (X BURGUER e
     // X BACON) são normais na vitrine, e editar uma não pode encostar na outra.
+    const edicao = !!aberto.uid
     setCarrinho((c) => substituirLinha(c, aberto.uid, linha))
     setAberto(null)
     invalidarCotacao()
-    setTela('carrinho')
+    // Item NOVO devolve ao catálogo: montar três itens não pode custar três idas
+    // e voltas ao carrinho, que fica sempre à mão na barra. EDIÇÃO volta ao
+    // carrinho, que é de onde ela partiu.
+    setTela(edicao ? 'carrinho' : 'catalogo')
+    setAviso({ texto: edicao ? 'Item atualizado' : 'Adicionado ao pedido', tom: 'ok', ms: 2_500 })
   }
 
   function removerLinha(uid) {
@@ -640,6 +649,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
           aoAbrirProduto={abrirProduto}
           aoAbrirItem={abrirItem}
         />
+        <BarraPedido quantidade={itensNoCarrinho} total={totalLocal} aoVerPedido={() => setTela('carrinho')} />
       </>
     )
   }
@@ -1109,12 +1119,13 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
   return (
     <Casca>
       {conteudo}
-      {aviso && <div className="ttm-aviso-passageiro" role="status" aria-live="polite">{aviso}</div>}
-      {itensNoCarrinho > 0 && tela === 'catalogo' && (
-        <button type="button" className="ttm-flutuante" onClick={() => setTela('carrinho')}>
-          <span className="ttm-flutuante-qtd">{itensNoCarrinho}</span>
-          Ver meu pedido · {moeda(totalLocal)}
-        </button>
+      {aviso && (
+        <div className={'tq-toast' + (aviso.tom === 'erro' ? ' erro' : '')} role="status" aria-live="polite">
+          <span className="tq-toast-ico" aria-hidden="true">
+            <Ico nome={aviso.tom === 'erro' ? 'alerta' : 'check'} tam={18} traco={2.6} />
+          </span>
+          {aviso.texto}
+        </div>
       )}
     </Casca>
   )
