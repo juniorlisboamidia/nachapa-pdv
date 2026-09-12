@@ -407,7 +407,10 @@ test('o admin da apresentação nunca lê empresaId/clienteId da requisição', 
   }
   // O ÚNICO dado que vem da rota é o id do item — e ele vira inteiro positivo antes de tudo.
   const put = handlerAdmin('/api/totem/apresentacao/:cwItemId');
-  assert.ok(/const cwItemId = Math\.trunc\(Number\(req\.params\.cwItemId\)\);/.test(put), 'o :cwItemId tem de virar inteiro antes de qualquer uso');
+  assert.ok(/const cwItemId = Number\(req\.params\.cwItemId\);/.test(put), 'o :cwItemId tem de virar número antes de qualquer uso');
+  // Inteiro SEGURO: `12.7` truncado viraria a configuração de OUTRO item, e `1e30` estoura o Int do banco.
+  assert.equal((put.match(/Number\.isSafeInteger\(/g) || []).length, 2, 'os dois ids do PUT (item e grupo) exigem inteiro seguro');
+  assert.equal(put.match(/Math\.trunc\(/), null, 'nada de arredondar id: id quebrado é 400, não outro item');
   const invalido = put.indexOf("erro: 'ID_INVALIDO'");
   assert.ok(invalido > 0 && invalido < put.indexOf('prisma.'), 'o :cwItemId é validado antes de tocar no banco');
 });
@@ -493,4 +496,10 @@ test('o GET da apresentação devolve merge + órfãs + sugestões + avisos, do 
   assert.ok(/clienteIdDaEmpresaTotem\(empresaId\)/.test(fn), 'o clienteId nasce do empresaId, nunca de payload');
   assert.ok(/!clienteId[\s\S]*CLIENTE_SEM_CW/.test(fn) && /conectado === false[\s\S]*CLIENTE_SEM_CW/.test(fn), 'loja sem CW (ou desconectada) é 409');
   assert.ok(/status\(503\)[\s\S]*HUB_NAO_CONFIGURADO[\s\S]*HUB_INDISPONIVEL/.test(fn), 'HUB fora do ar é 503');
+  // Catálogo sem `categorias` é catálogo INDISPONÍVEL, jamais catálogo vazio: um catálogo
+  // vazio faria o merge marcar toda configuração salva como órfã e a tela ofereceria
+  // "Remover" em cima de cada uma — um clique apagaria a configuração da loja inteira.
+  assert.ok(/!Array\.isArray\(r\.data\?\.catalogo\?\.categorias\)/.test(fn), 'o helper tem de exigir `categorias` array');
+  assert.ok(/erro: 'CATALOGO_INDISPONIVEL'/.test(fn), 'catálogo inutilizável é 503 CATALOGO_INDISPONIVEL');
+  assert.equal(fn.match(/categorias: \[\]/), null, 'nada de cair para um catálogo vazio (isso declararia tudo órfão)');
 });

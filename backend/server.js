@@ -9099,7 +9099,11 @@ async function catalogoVivoDoAdmin(empresaId, res) {
   const r = await bootstrapTotemCW(clienteId);
   if (!r.ok) { res.status(503).json({ erro: r.codigo === 'HUB_NAO_CONFIGURADO' ? 'HUB_NAO_CONFIGURADO' : 'HUB_INDISPONIVEL' }); return null; }
   if (r.data?.conectado === false) { res.status(409).json({ erro: 'CLIENTE_SEM_CW' }); return null; }
-  return r.data?.catalogo ?? { categorias: [] };
+  // 200 do HUB SEM catálogo utilizável não pode virar "catálogo vazio": com zero categorias
+  // o merge declararia TODA configuração salva como órfã e a tela ofereceria "Remover" para
+  // cada uma — um clique apagaria a loja inteira por causa de uma resposta torta. Fail-closed.
+  if (!Array.isArray(r.data?.catalogo?.categorias)) { res.status(503).json({ erro: 'CATALOGO_INDISPONIVEL' }); return null; }
+  return r.data.catalogo;
 }
 
 // Item do catálogo pelo id do CW. Vale a PRIMEIRA ocorrência: o mesmo item pode estar em
@@ -9137,16 +9141,18 @@ app.put('/api/totem/apresentacao/:cwItemId', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
   const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
   try {
-    const cwItemId = Math.trunc(Number(req.params.cwItemId));
-    if (!Number.isInteger(cwItemId) || cwItemId <= 0) return res.status(400).json({ erro: 'ID_INVALIDO' });
+    // Inteiro SEGURO e positivo: `12.7` e `1e30` não são ids do CW, e arredondar um
+    // deles gravaria a configuração em cima de OUTRO item sem ninguém perceber.
+    const cwItemId = Number(req.params.cwItemId);
+    if (!Number.isSafeInteger(cwItemId) || cwItemId <= 0) return res.status(400).json({ erro: 'ID_INVALIDO' });
     const modo = String(req.body?.modo ?? '');
     if (!MODOS.includes(modo)) return res.status(400).json({ erro: 'MODO_INVALIDO' });
     if (modo === 'NORMAL') {
       const { count } = await prisma.totemApresentacao.deleteMany({ where: { empresaId, cwItemId } });
       return res.json({ ok: true, removida: count > 0 });
     }
-    const cwGrupoPrincipalId = Math.trunc(Number(req.body?.cwGrupoPrincipalId));
-    if (!Number.isInteger(cwGrupoPrincipalId) || cwGrupoPrincipalId <= 0) return res.status(400).json({ erro: 'GRUPO_OBRIGATORIO' });
+    const cwGrupoPrincipalId = Number(req.body?.cwGrupoPrincipalId);
+    if (!Number.isSafeInteger(cwGrupoPrincipalId) || cwGrupoPrincipalId <= 0) return res.status(400).json({ erro: 'GRUPO_OBRIGATORIO' });
     // Validação VIVA contra o CW e pela MESMA função que o bootstrap usa para projetar:
     // salvar algo que o totem recusaria deixaria o card mentindo até alguém reparar.
     const catalogo = await catalogoVivoDoAdmin(empresaId, res); if (!catalogo) return;
