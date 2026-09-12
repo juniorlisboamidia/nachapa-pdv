@@ -30,6 +30,7 @@ import TelaInicio from '../components/totem/TelaInicio'
 import TelaCatalogo from '../components/totem/TelaCatalogo'
 import BarraPedido from '../components/totem/BarraPedido'
 import TelaItem from '../components/totem/TelaItem'
+import TelaCarrinho from '../components/totem/TelaCarrinho'
 import { Ico } from '../components/totem/icones'
 import { obrigatoriosPendentes, aplicarToque, aplicarMenos } from '../components/totemLayout'
 import { atingiuMax, proximoFoco } from '../components/totemFoco'
@@ -37,7 +38,7 @@ import {
   itemPronto, itemOrdenavel, subtotalLocal,
   montarCarrinho, diffCotacao, chaveNova, mensagemErro, proximoEstadoAposFalha,
   indicePorItemId, linhaDeProduto, gruposRenderizaveis, nomeApresentado,
-  imagemApresentada, descricaoApresentada, opcoesVisiveisDaLinha, substituirLinha,
+  imagemApresentada, descricaoApresentada, substituirLinha,
   linhaDoDetalhe, precoDoCard, precoDoCabecalho,
 } from '../components/totemCarrinho'
 
@@ -78,16 +79,6 @@ function TelaAviso({ emoji, titulo, texto, lista, acao }) {
       <p className="ttm-aviso-texto">{texto}</p>
       {lista}
       {acao}
-    </div>
-  )
-}
-
-function Stepper({ valor, onMenos, onMais, minimo = 1, maximoAtingido, rotulo }) {
-  return (
-    <div className="ttm-stepper" role="group" aria-label={rotulo}>
-      <button type="button" className="ttm-step" onClick={onMenos} disabled={valor <= minimo} aria-label="Diminuir">−</button>
-      <span className="ttm-step-valor" aria-live="polite">{valor}</span>
-      <button type="button" className="ttm-step" onClick={onMais} disabled={maximoAtingido} aria-label="Aumentar">+</button>
     </div>
   )
 }
@@ -686,45 +677,15 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
       <>
         <Cabecalho loja={loja} titulo="Seu pedido" aoVoltar={() => setTela('catalogo')} aoCancelar={() => reiniciar()} />
         {banner}
-        <div className="ttm-tela ttm-carrinho">
-          {carrinho.length === 0 ? (
-            <p className="ttm-aviso-texto">Seu carrinho está vazio. Toque em “Voltar” e escolha um item.</p>
-          ) : carrinho.map((l) => (
-            <div key={l.uid} className="ttm-linha">
-              <div className="ttm-linha-corpo">
-                <div className="ttm-linha-nome">{l.qtd}× {nomeApresentado(l)}</div>
-                {/* Complementos SEM a opção principal: ela é o próprio nome da linha, e
-                    listá-la faria "X BURGUER" virar adicional de si mesmo. */}
-                <ul className="ttm-linha-opcoes">
-                  {opcoesVisiveisDaLinha(l).map((o) => (
-                    <li key={`${o.grupoId}-${o.opcaoId}`}>{o.qtd > 1 ? `${o.qtd}× ` : ''}{o.nome}</li>
-                  ))}
-                </ul>
-                {l.observacao ? <div className="ttm-linha-obs">“{l.observacao}”</div> : null}
-              </div>
-              <div className="ttm-linha-lado">
-                <div className="ttm-linha-valor">{moeda(subtotalLocal(l))}</div>
-                <Stepper valor={l.qtd} rotulo={`Quantidade de ${nomeApresentado(l)}`} onMenos={() => mudarQtdLinha(l.uid, -1)} onMais={() => mudarQtdLinha(l.uid, 1)} />
-                <div className="ttm-linha-acoes">
-                  <button type="button" className="ttm-btn-link" onClick={() => editarLinha(l)}>Editar</button>
-                  <button type="button" className="ttm-btn-link perigo" onClick={() => removerLinha(l.uid)}>Remover</button>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-        <footer className="ttm-rodape ttm-rodape-coluna">
-          <div className="ttm-subtotal">
-            <span>Subtotal <span className="ttm-subtotal-nota">(a confirmar na revisão)</span></span>
-            <strong>{moeda(totalLocal)}</strong>
-          </div>
-          <div className="ttm-rodape-botoes">
-            <button type="button" className="ttm-btn ttm-btn-secundario" onClick={() => setTela('catalogo')}>Adicionar mais</button>
-            <button type="button" className="ttm-btn ttm-btn-primario ttm-btn-largo" disabled={carrinho.length === 0} onClick={() => setTela('pagamento')}>
-              Ir para o pagamento
-            </button>
-          </div>
-        </footer>
+        <TelaCarrinho
+          linhas={carrinho}
+          total={totalLocal}
+          aoEditar={editarLinha}
+          aoRemover={removerLinha}
+          aoMudarQtd={mudarQtdLinha}
+          aoContinuar={() => setTela('pagamento')}
+          aoAdicionarMais={() => setTela('catalogo')}
+        />
       </>
     )
   }
