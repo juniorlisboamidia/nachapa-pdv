@@ -13,10 +13,11 @@ export default function TelaPagamento({ metodos, metodoId, nomeDoMetodo, total, 
       <div className="tq-conteudo">
         <div className="tq-lista">
           <div className="tq-aviso-forte">
-            <Ico nome="alerta" tam={26} />
+            <Ico nome="dinheiro" tam={40} traco={1.8} />
             <span>
-              <b>Nada é cobrado neste totem</b>
-              Você paga no balcão ao retirar. Aqui é só para o caixa já saber como você vai pagar.
+              <b>Você paga no balcão</b>
+              Nada é cobrado neste totem. Escolha aqui só a forma de pagamento, para o caixa já saber
+              como você vai pagar ao retirar o pedido.
             </span>
           </div>
 
@@ -32,7 +33,7 @@ export default function TelaPagamento({ metodos, metodoId, nomeDoMetodo, total, 
                 aria-pressed={escolhido}
                 onClick={() => aoEscolher(m.id)}
               >
-                <Ico nome={ICONE_POR_TIPO[m.kind] ?? 'cartao'} tam={34} />
+                <Ico nome={ICONE_POR_TIPO[m.kind] ?? 'cartao'} tam={40} traco={1.8} />
                 <span className="tq-metodo-nome tq-disp">{nomeDoMetodo(m)}</span>
                 <span className="tq-op-marca" aria-hidden="true"><Ico nome="check" tam={18} traco={3} /></span>
               </button>
