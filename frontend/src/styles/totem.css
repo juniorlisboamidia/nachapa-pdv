@@ -31,9 +31,21 @@
 @font-face {
   font-family: 'Totem Display';
   font-style: normal;
-  font-weight: 700 900;
+  font-weight: 800 900;
   font-display: swap;
   src: url('../assets/fontes/montserrat-900.woff2') format('woff2');
+}
+/* Montserrat 600 é acréscimo NOSSO: o catálogo do HUB serve um peso por família,
+   e só o 900 deixava a tela em dois extremos — ou bloco preto, ou Inter 400, que
+   é neutra demais para nome de produto. Mesma família da marca, um peso mais
+   leve: é o meio-termo que faltava, e nome de produto passa a ter a voz
+   geométrica sem virar barra. */
+@font-face {
+  font-family: 'Totem Display';
+  font-style: normal;
+  font-weight: 500 700;
+  font-display: swap;
+  src: url('../assets/fontes/montserrat-600.woff2') format('woff2');
 }
 @font-face {
   font-family: 'Totem Corpo';
@@ -384,18 +396,21 @@
   color: var(--tq-branco);
   /* Corpo, não display: em Montserrat 900 a lista virava um bloco de texto
      grosso sem respiro, e nome de categoria é ITEM DE LISTA, não título. */
-  font-family: var(--tq-fonte-corpo);
-  font-weight: 400; font-size: clamp(14px, 1.5vw, 17px); line-height: 1.2;
-  letter-spacing: 0.03em; text-transform: uppercase;
+  font-family: var(--tq-fonte-display);
+  font-weight: 600; font-size: clamp(13px, 1.4vw, 16px); line-height: 1.2;
+  letter-spacing: 0.02em; text-transform: uppercase;
   border-bottom: 1px solid rgba(255, 255, 255, 0.10);
   transition: background 0.12s ease, color 0.12s ease;
 }
 /* O nome da categoria SEMPRE aparece, e quebra por palavra. O `anywhere` de
    antes partia "ACOMPANHAMENTOS" letra a letra numa coluna estreita e deixava
    categorias reduzidas praticamente ao emoji do nome. */
+/* `break-word` (e não `anywhere`) quebra SÓ quando a palavra sozinha não cabe —
+   "ACOMPANHAMENTOS" na coluna de 152px. `anywhere` encolhia a largura mínima e
+   voltava a partir tudo letra a letra. */
 .tq-cat span {
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-  word-break: normal; overflow-wrap: normal; hyphens: none;
+  word-break: normal; overflow-wrap: break-word; hyphens: none;
 }
 .tq-cat:active { background: var(--tq-superficie-2); }
 /* Ativo é BLOCO AMARELO com texto preto — não uma barrinha lateral. Numa lista
@@ -443,8 +458,8 @@
    Nome nunca parte no meio da palavra: em duas colunas estreitas era assim que
    "X CALA BURGUER" virava uma coluna de letras. */
 .tq-card-nome {
-  font-family: var(--tq-fonte-corpo); font-weight: 400;
-  font-size: clamp(20px, 2.1vw, 26px); line-height: 1.15; letter-spacing: 0.01em;
+  font-family: var(--tq-fonte-display); font-weight: 600;
+  font-size: clamp(20px, 2.1vw, 26px); line-height: 1.15; letter-spacing: 0.005em;
   word-break: normal; overflow-wrap: normal; hyphens: none;
 }
 .tq-card-desc {
@@ -617,7 +632,7 @@
 .tq-op-txt { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 /* Quebra só por palavra, no máximo três linhas. */
 .tq-op-nome {
-  font-family: var(--tq-fonte-corpo); font-weight: 400;
+  font-family: var(--tq-fonte-display); font-weight: 600;
   font-size: clamp(15px, 1.6vw, 18px); line-height: 1.25; letter-spacing: 0.01em;
   word-break: normal; overflow-wrap: normal; hyphens: none;
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
@@ -749,7 +764,7 @@
 }
 .tq-linha-corpo { flex: 1 1 auto; min-width: 0; }
 .tq-linha-nome {
-  font-family: var(--tq-fonte-corpo); font-weight: 400;
+  font-family: var(--tq-fonte-display); font-weight: 600;
   font-size: clamp(18px, 2vw, 24px); line-height: 1.25;
 }
 /* A quantidade abre o nome, sem ficha nem cor: é leitura de comanda. */
@@ -788,7 +803,7 @@
   background: var(--tq-amarelo); border-color: var(--tq-amarelo-3); border-width: 3px; padding: 17px 21px;
 }
 .tq-metodo[aria-pressed='true'] .tq-op-marca { background: var(--tq-preto); border-color: var(--tq-preto); color: var(--tq-amarelo); }
-.tq-metodo-nome { flex: 1 1 auto; font-size: clamp(21px, 2.3vw, 28px); }
+.tq-metodo-nome { flex: 1 1 auto; font-family: var(--tq-fonte-display); font-weight: 600; font-size: clamp(21px, 2.3vw, 28px); }
 
 /* O recado de que nada é cobrado aqui deixa de ser rodapé e vira a primeira
    coisa da tela: é a dúvida número um de quem usa um totem pela primeira vez. */
