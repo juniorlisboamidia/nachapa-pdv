@@ -253,3 +253,103 @@
 .tq-modo-t { font-size: clamp(22px, 2.6vw, 32px); letter-spacing: 0.02em; text-transform: uppercase; }
 .tq-modo-s { font-size: clamp(15px, 1.5vw, 18px); opacity: 0.72; }
 .tq-inicio-pe { position: absolute; left: 0; right: 0; bottom: 14px; text-align: center; font-size: 13px; color: #5f5a50; }
+
+/* ═══ V3 — catálogo: sidebar de categorias e grade de produtos ═════════════ */
+
+/* -- Sidebar --------------------------------------------------------------- */
+/* Preta e fixa: em retrato as categorias precisam estar sempre à vista, e a
+   faixa horizontal rolável de antes escondia metade delas sem dar sinal. */
+.tq-lado {
+  position: relative; flex: 0 0 var(--tq-lado-l);
+  background: var(--tq-preto); min-width: 0;
+  display: flex; flex-direction: column;
+}
+.tq-lado-rolagem {
+  flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain;
+  scrollbar-width: none; padding-bottom: 12px;
+}
+.tq-lado-rolagem::-webkit-scrollbar { display: none; }
+/* Aviso de que a lista continua — sem depender de barra de rolagem, que o
+   tablet não mostra. */
+.tq-lado-fade {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 40px; pointer-events: none;
+  background: linear-gradient(to top, var(--tq-preto), rgba(14, 19, 25, 0));
+}
+.tq-cat {
+  width: 100%; min-height: 88px; padding: 14px 16px 14px 12px; text-align: left;
+  display: flex; align-items: center;
+  border-left: 6px solid transparent; color: #b9b3a4;
+  font-family: 'Archivo Totem', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
+  font-weight: 700; font-size: clamp(15px, 1.5vw, 18px); line-height: 1.2;
+  letter-spacing: 0.02em; text-transform: uppercase;
+  overflow-wrap: anywhere; transition: background 0.12s ease, color 0.12s ease;
+}
+.tq-cat:active { background: #161c24; }
+/* Ativo por TRÊS sinais ao mesmo tempo (fundo, barra amarela, cor do texto):
+   cor sozinha não serve como indicador. */
+.tq-cat[aria-current='true'] { background: var(--tq-preto-2); border-left-color: var(--tq-amarelo); color: var(--tq-branco); }
+
+/* -- Grade ----------------------------------------------------------------- */
+.tq-grade {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px; padding: 24px; align-content: start;
+}
+@media (min-width: 1500px) { .tq-grade { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+/* Modo de emergência: tablet pequeno improvisado. As categorias voltam a ser
+   faixa no topo — não é o alvo do projeto, é o que impede a tela de quebrar. */
+@media (max-width: 599px) {
+  .tq-corpo { flex-direction: column; }
+  .tq-lado { flex: 0 0 auto; }
+  .tq-lado-rolagem { display: flex; overflow-x: auto; overflow-y: hidden; padding: 8px; gap: 8px; }
+  .tq-lado-fade { display: none; }
+  .tq-cat {
+    width: auto; min-height: 56px; border-left: none; border-bottom: 4px solid transparent;
+    border-radius: 10px; white-space: nowrap; padding: 8px 14px;
+  }
+  .tq-cat[aria-current='true'] { border-left-color: transparent; border-bottom-color: var(--tq-amarelo); }
+  .tq-grade { grid-template-columns: minmax(0, 1fr); gap: 14px; padding: 14px; }
+}
+
+/* -- Card de produto ------------------------------------------------------- */
+.tq-card {
+  display: flex; flex-direction: column; text-align: left; overflow: hidden;
+  background: var(--tq-superficie); border: 1px solid var(--tq-borda); border-radius: var(--tq-raio);
+  transition: transform 0.1s ease, box-shadow 0.15s ease;
+}
+.tq-card:active:not(:disabled) { transform: scale(0.99); box-shadow: var(--tq-sombra); }
+.tq-card:disabled { cursor: not-allowed; opacity: 0.55; }
+.tq-card-txt { flex: 1 1 auto; display: flex; flex-direction: column; gap: 6px; padding: 16px 18px 18px; }
+.tq-card-nome { font-size: clamp(20px, 2.1vw, 26px); line-height: 1.15; }
+.tq-card-desc {
+  font-size: clamp(15px, 1.5vw, 17px); color: var(--tq-texto-3); line-height: 1.35;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.tq-card-rod { margin-top: auto; padding-top: 10px; }
+
+/* -- Foto ------------------------------------------------------------------ */
+.tq-foto { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #eae5db; }
+.tq-foto-vazia { display: grid; place-items: center; color: #b3aa98; }
+
+/* -- Preço ----------------------------------------------------------------- */
+.tq-preco { display: flex; flex-direction: column; }
+.tq-preco-valor { font-size: clamp(22px, 2.3vw, 28px); line-height: 1.1; }
+/* "a partir de" é rótulo, não preço: pequeno, acima, para o número continuar
+   sendo a primeira coisa que se lê. */
+.tq-apartir { color: var(--tq-texto-3); }
+.tq-preco-de { font-size: clamp(14px, 1.4vw, 16px); color: var(--tq-texto-3); text-decoration: line-through; font-weight: 700; }
+.tq-preco-por { color: #8a3b00; }
+.tq-selo {
+  align-self: flex-start; padding: 6px 14px; border-radius: 999px;
+  background: #e8e4da; color: var(--tq-texto-2);
+  font-family: 'Archivo Totem', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
+  font-weight: 800; font-size: clamp(13px, 1.3vw, 15px); letter-spacing: 0.06em; text-transform: uppercase;
+}
+
+/* -- Catálogo vazio -------------------------------------------------------- */
+.tq-vazio {
+  flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 16px; text-align: center; padding: clamp(48px, 12vh, 120px) 32px; color: var(--tq-texto-3);
+}
+.tq-vazio-t { font-size: clamp(24px, 3vw, 34px); color: var(--tq-texto); }
+.tq-vazio p { font-size: clamp(17px, 1.7vw, 20px); max-width: 460px; }

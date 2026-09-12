@@ -27,6 +27,7 @@ import { aparelhoApi } from '../services/api'
 import Casca from '../components/totem/Casca'
 import Cabecalho from '../components/totem/Cabecalho'
 import TelaInicio from '../components/totem/TelaInicio'
+import TelaCatalogo from '../components/totem/TelaCatalogo'
 import {
   podeAdicionarOpcao, grupoSatisfeito, itemPronto, itemOrdenavel, subtotalLocal,
   montarCarrinho, diffCotacao, chaveNova, mensagemErro, proximoEstadoAposFalha,
@@ -631,80 +632,14 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
       <>
         <Cabecalho loja={loja} modo={MODOS[orderType]?.titulo ?? 'Menu'} aoCancelar={() => reiniciar()} />
         {banner}
-        {categorias.length === 0 ? (
-          <div className="ttm-tela ttm-centrado">
-            <p className="ttm-aviso-texto">Nenhum item disponível para pedir no totem agora. Fale com um atendente.</p>
-          </div>
-        ) : (
-          <>
-            <nav className="ttm-abas" aria-label="Categorias">
-              {categorias.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  className={'ttm-aba' + (String(c.id) === String(categoria?.id) ? ' on' : '')}
-                  aria-pressed={String(c.id) === String(categoria?.id)}
-                  onClick={() => setCategoriaId(c.id)}
-                >
-                  {c.nome}
-                </button>
-              ))}
-            </nav>
-            <div className="ttm-tela ttm-grade">
-              {/* A vitrine manda quando o bootstrap a traz (§6). `produtos` pode faltar
-                  (falha do banco no PDV, ou versão antiga do servidor): aí o grid volta a
-                  ser o de sempre, item por item. Nenhum cliente fica sem cardápio. */}
-              {Array.isArray(categoria?.produtos) ? categoria.produtos.map((produto) => {
-                // Duas razões diferentes para o card apagar, e elas não se confundem: a
-                // OPÇÃO em falta (status MISSING) é "Em falta"; o ITEM base impossível de
-                // montar (outro grupo obrigatório sem opção) é "Indisponível no momento".
-                const emFalta = produto.status && produto.status !== 'ACTIVE'
-                // O preço do card vem PRONTO do HUB (§5): mínimo da jornada obrigatória e o
-                // sinal de "a partir de". A tela não soma nada — só escolhe o que mostrar.
-                const preco = precoDoCard(produto)
-                const bloqueado = emFalta || preco.indisponivel
-                return (
-                  <button
-                    key={`${categoria.id}-${produto.id}`}
-                    type="button"
-                    className={'ttm-card' + (bloqueado ? ' falta' : '')}
-                    disabled={bloqueado}
-                    onClick={() => abrirProduto(produto)}
-                  >
-                    <FotoItem src={produto.imagem} alt={produto.nome} />
-                    <span className="ttm-card-nome">{produto.nome}</span>
-                    {produto.descricao && <span className="ttm-card-desc">{produto.descricao}</span>}
-                    {bloqueado
-                      ? <span className="ttm-card-falta">{!emFalta && produto.motivo === 'GRUPO_EM_FALTA' ? 'Indisponível no momento' : 'Em falta'}</span>
-                      : <PrecoItem item={{ preco: preco.valor, precoPromocional: preco.valorPromocional }} aPartirDe={preco.aPartirDe} />}
-                  </button>
-                )
-              }) : (categoria?.itens ?? []).map((item) => {
-                // Dois jeitos de um item não estar disponível: ele mesmo em falta, ou um
-                // grupo obrigatório dele em falta (aí não existe montagem possível). O
-                // cliente vê o card apagado com o motivo, nunca um caminho que dá em erro.
-                const razao = itemOrdenavel(item)
-                const falta = !razao.ok
-                return (
-                  <button
-                    key={`${categoria.id}-${item.id}`}
-                    type="button"
-                    className={'ttm-card' + (falta ? ' falta' : '')}
-                    disabled={falta}
-                    onClick={() => abrirItem(item)}
-                  >
-                    <FotoItem src={item.imagem} alt={item.nome} />
-                    <span className="ttm-card-nome">{item.nome}</span>
-                    {item.descricao && <span className="ttm-card-desc">{item.descricao}</span>}
-                    {falta
-                      ? <span className="ttm-card-falta">{razao.motivo === 'GRUPO_EM_FALTA' ? 'Indisponível no momento' : 'Em falta'}</span>
-                      : <PrecoItem item={item} />}
-                  </button>
-                )
-              })}
-            </div>
-          </>
-        )}
+        <TelaCatalogo
+          categorias={categorias}
+          categoria={categoria}
+          categoriaId={categoria?.id}
+          aoTrocarCategoria={setCategoriaId}
+          aoAbrirProduto={abrirProduto}
+          aoAbrirItem={abrirItem}
+        />
       </>
     )
   }
