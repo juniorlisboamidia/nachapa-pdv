@@ -452,3 +452,50 @@ const GENERICA = 'Algo deu errado por aqui. Tente de novo ou chame um atendente.
 export function mensagemErro(codigo) {
   return MENSAGENS[String(codigo ?? '')] ?? GENERICA;
 }
+
+// ── Preço do card e mensagens do admin (rev. 3, spec §5/§6/§8) ──────────────
+
+// Qual número o CARD mostra. Quem calcula é o HUB: `precoMinimo` já é base + opção
+// principal + o mínimo de cada obrigatório que ainda falta escolher — é o menor valor com
+// que o cliente consegue TERMINAR a jornada. A tela não soma nada; se somasse, o preço
+// passaria a vir do navegador.
+//   · `precoEhAPartirDe` = algum obrigatório restante pode mudar o valor → prefixo
+//     "a partir de". Sem ele o número é exato e aparece sozinho.
+//   · `precoMinimo: null` = não existe seleção possível (obrigatório todo em falta): o card
+//     apaga em vez de prometer um preço que não dá para pagar.
+//   · Bootstrap antigo não traz campo nenhum → cai em `preco`/`precoPromocional`, que é
+//     exatamente o comportamento da rev. 2 (o deploy do HUB pode chegar depois).
+export function precoDoCard(produto) {
+  const p = produto && typeof produto === 'object' ? produto : {};
+  const minimo = p.precoMinimo;
+  const valor = round2(num(minimo === null || minimo === undefined ? p.preco : minimo));
+  const promoBase = p.precoPromocional;
+  const temPromo = promoBase !== null && promoBase !== undefined;
+  const minimoPromo = p.precoMinimoPromocional;
+  const valorPromocional = round2(num(minimoPromo === null || minimoPromo === undefined ? promoBase : minimoPromo));
+  return {
+    valor,
+    ...(temPromo ? { valorPromocional } : {}),
+    aPartirDe: p.precoEhAPartirDe === true,
+    indisponivel: minimo === null || p.ordenavel === false,
+  };
+}
+
+// Código do veredito do servidor (`MENSAGENS_ADMIN` de backend/totemApresentacao.js) → a
+// mesma frase, em português, para a tela do ADMIN. Aqui o público é o operador da loja, não
+// o cliente do totem: a frase explica o que mudou no cardápio, e o código cru fica ao lado,
+// discreto, porque é por ele que se procura o problema. Código desconhecido (servidor mais
+// novo que a tela) vira uma frase genérica — nunca a sigla nua.
+const MENSAGENS_APRESENTACAO = {
+  MODO_INVALIDO: 'modo inválido',
+  ITEM_AUSENTE: 'este item não está mais no cardápio do balcão',
+  GRUPO_AUSENTE: 'o grupo escolhido não existe mais neste item',
+  GRUPO_NAO_E_ESCOLHA_UNICA: 'o grupo passou a aceitar mais de uma escolha',
+  GRUPO_SEM_OPCOES: 'o grupo ficou sem opções',
+  GRUPO_COM_UMA_OPCAO: 'o grupo tem uma opção só',
+  GRUPO_INDISPONIVEL: 'o grupo está oculto no cardápio',
+};
+
+export function mensagemApresentacao(codigo) {
+  return MENSAGENS_APRESENTACAO[String(codigo ?? '')] ?? 'configuração inválida';
+}

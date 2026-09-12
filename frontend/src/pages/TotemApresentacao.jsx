@@ -11,13 +11,20 @@
 //     "Sugestões" é palpite: ela preenche o formulário e nada mais.
 //  2. Quem diz se uma configuração é possível é o SERVIDOR, com o catálogo vivo na mão
 //     (`validarConfiguracao`). Esta tela só mostra o veredito: grupo não `selecionavel`
-//     entra no select DESABILITADO, com o código do motivo à vista.
+//     entra no select DESABILITADO, com a frase humana no rótulo.
 //  3. NORMAL não é um estado guardado: é a AUSÊNCIA de configuração. Voltar para NORMAL
 //     apaga a linha — e é também o que remove uma órfã.
+//
+// Rev. 3 — o TOM da tela. A maioria dos itens de um cardápio nunca vai virar vitrine, e isso
+// é NORMAL, não defeito: item que não é candidato fica em CINZA, com uma frase, sem código e
+// sem vermelho. Vermelho existe num caso só — uma configuração que ALGUÉM SALVOU e que o
+// cardápio deixou de aceitar. Aí sim: a frase humana (`mensagemApresentacao`, a mesma do
+// servidor) e o código pequeno ao lado, para quem for procurar o problema.
 import { useEffect, useState } from 'react'
 import api from '../services/api'
 import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
+import { mensagemApresentacao } from '../components/totemCarrinho'
 
 // Erros de CARREGAMENTO (409/503 do §7). Todos falam do mesmo problema por ângulos
 // diferentes: sem o catálogo vivo não há o que validar nem o que listar.
@@ -34,20 +41,15 @@ const ERROS_SALVAR = {
   GRUPO_OBRIGATORIO: 'Escolha o grupo principal antes de salvar.',
   APRESENTACAO_INVALIDA: 'Esta configuração não é possível.',
 }
-// Códigos de VALIDAÇÃO (o veredito do servidor sobre um item ou um grupo). Frase curta,
-// porque ela aparece dentro de uma linha da tabela e dentro de um <option> desabilitado.
-const MOTIVOS = {
-  ITEM_AUSENTE: 'o item não existe mais no cardápio',
-  GRUPO_AUSENTE: 'o grupo escolhido não existe mais neste item',
-  GRUPO_INDISPONIVEL: 'o grupo está inativo no cardápio',
-  GRUPO_NAO_E_ESCOLHA_UNICA: 'não é "escolha 1 de 1"',
-  GRUPO_SEM_OPCOES: 'o grupo está sem opções',
-  OUTRO_GRUPO_OBRIGATORIO: 'o item tem outro grupo obrigatório',
-  MODO_INVALIDO: 'modo inválido',
-}
-// O código CRU acompanha a frase: é ele que aparece no aviso do bootstrap e nos testes, e é
-// por ele que o Junior procura quando algo não bate.
-const motivo = (codigo) => (codigo ? `${MOTIVOS[codigo] ?? 'não é possível'} (${codigo})` : '')
+// O veredito do servidor sobre um item ou um grupo vira FRASE (`mensagemApresentacao`, que
+// espelha o `MENSAGENS_ADMIN` do backend). O código cru não some — ele é por onde o Junior
+// procura —, mas só aparece pequeno, ao lado de uma configuração salva que deixou de valer,
+// e dentro do `title` de um grupo recusado. Em lugar nenhum ele é a explicação principal.
+const Codigo = ({ codigo }) => (codigo ? <code className="ttm-codigo">{codigo}</code> : null)
+// Um grupo serve de vitrine? `elegivel` olha o grupo e `selecionavel` olha o item; na rev. 3
+// os dois coincidem, e a tela aceita qualquer um dos dois (contrato aditivo).
+const grupoServe = (g) => (g?.selecionavel?.ok ?? g?.elegivel?.ok) === true
+const codigoDoGrupo = (g) => g?.selecionavel?.codigo ?? g?.elegivel?.codigo ?? null
 
 const erroDe = (e, mapa, fallback) => {
   const d = e?.response?.data
@@ -111,7 +113,7 @@ export default function TotemApresentacao() {
       const d = e?.response?.data
       // 422 vem com `{ erro:'APRESENTACAO_INVALIDA', codigo }`: quem explica é o `codigo`.
       const texto = d?.erro === 'APRESENTACAO_INVALIDA'
-        ? `Não dá para usar este grupo: ${motivo(d?.codigo)}.`
+        ? `Não dá para usar este grupo: ${mensagemApresentacao(d?.codigo)}.`
         : erroDe(e, ERROS_SALVAR, 'Não foi possível salvar.')
       notify(texto, 'error')
       return false
@@ -219,14 +221,19 @@ export default function TotemApresentacao() {
                     const emVitrine = item.config?.modo === 'EXPANDIDO'
                     const problema = item.config && !item.validacao?.ok
                     const grupoAtual = item.grupos.find((g) => String(g.id) === String(item.config?.cwGrupoPrincipalId))
-                    // Nenhum grupo serve? O modo Vitrine continua ESCOLHÍVEL — é escolhendo
-                    // que o operador vê a lista de grupos com cada recusa escrita (o caso
-                    // COMBO - TRADICIONAIS, `OUTRO_GRUPO_OBRIGATORIO`, é justamente esse).
-                    // Bloquear a opção esconderia o motivo e deixaria o item mudo.
-                    const semGrupoUtil = item.grupos.every((g) => !g.selecionavel?.ok)
+                    // ESTADO NEUTRO (§8): item que não é candidato e nunca foi configurado
+                    // não tem nada de errado — a maioria do cardápio é assim. Uma frase
+                    // cinza, sem select e sem código. Se existe configuração salva, mesmo
+                    // que o item tenha deixado de ser candidato, o formulário CONTINUA na
+                    // tela: é por ele que se conserta ou se volta ao normal.
+                    // `candidato` AUSENTE (servidor mais antigo) não é "não candidato": some
+                    // com a frase e com o convite, mas o formulário continua — esconder o
+                    // select por causa de um campo que não veio deixaria a tela sem uso.
+                    const neutro = item.candidato === false && !item.config
+                    const semGrupoUtil = item.grupos.every((g) => !grupoServe(g))
                     const razaoSemVitrine = !semGrupoUtil ? null : (item.grupos.length === 0
                       ? 'este item não tem grupos de escolha'
-                      : (motivo(item.grupos.find((g) => g.selecionavel?.codigo)?.selecionavel?.codigo) || 'nenhum grupo serve'))
+                      : mensagemApresentacao(item.grupos.map(codigoDoGrupo).find(Boolean)))
                     return (
                       <tr key={chave} className={problema ? 'ttm-linha-revisao' : undefined}>
                         <td>
@@ -242,10 +249,27 @@ export default function TotemApresentacao() {
                             ? <span className="badge badge-green">Vitrine</span>
                             : <span className="badge badge-slate">Normal</span>}
                           {emVitrine && grupoAtual && <div className="ttm-meta-txt">{grupoAtual.nome}</div>}
-                          {problema && <div className="ttm-erro">não está valendo: {motivo(item.validacao?.codigo)}</div>}
+                          {/* O ÚNICO vermelho da tela: alguém salvou esta vitrine e o
+                              cardápio mudou por baixo. Frase primeiro, código depois. */}
+                          {problema && (
+                            <div className="ttm-erro">
+                              não está valendo: {mensagemApresentacao(item.validacao?.codigo)} <Codigo codigo={item.validacao?.codigo} />
+                            </div>
+                          )}
+                          {/* Informativo, cor neutra: explica por que o card do totem vai
+                              dizer "a partir de" em vez de um preço fechado. */}
+                          {item.obrigatoriosAlem > 0 && (
+                            <div className="ttm-meta-txt">Tem outras escolhas obrigatórias: o card mostra “a partir de”.</div>
+                          )}
                         </td>
                         <td>
+                          {neutro ? (
+                            <div className="ttm-meta-txt">Sem grupo de escolha única com duas ou mais opções</div>
+                          ) : (
                           <div className="ttm-apr-form">
+                            {item.candidato === true && !item.config && (
+                              <div className="ttm-meta-txt">Pode virar vitrine</div>
+                            )}
                             <select
                               className="form-input"
                               aria-label={`Modo de ${item.nome}`}
@@ -255,10 +279,12 @@ export default function TotemApresentacao() {
                               <option value="NORMAL">Normal (um card do item)</option>
                               <option value="EXPANDIDO">Vitrine (um card por opção)</option>
                             </select>
+                            {/* Sem grupo que sirva, "Vitrine" continua ESCOLHÍVEL — é
+                                escolhendo que o operador vê a lista com cada recusa escrita.
+                                O aviso é neutro: não há nada quebrado, o item é que não tem
+                                a forma de uma vitrine. */}
                             {razaoSemVitrine && (
-                              <div className="ttm-erro" style={{ marginTop: 0, maxWidth: 'none' }}>
-                                Vitrine não é possível: {razaoSemVitrine}.
-                              </div>
+                              <div className="ttm-meta-txt">Vitrine não é possível: {razaoSemVitrine}.</div>
                             )}
                             {f.modo === 'EXPANDIDO' && (
                               <select
@@ -269,27 +295,37 @@ export default function TotemApresentacao() {
                               >
                                 <option value="">Escolha o grupo principal…</option>
                                 {item.grupos.map((g) => (
-                                  // Grupo que o servidor NÃO aceitaria entra desabilitado, com o
-                                  // motivo no próprio rótulo: o Junior descobre o porquê sem
-                                  // precisar tentar e levar um 422.
-                                  <option key={g.id} value={String(g.id)} disabled={!g.selecionavel?.ok}>
+                                  // Grupo que o servidor NÃO aceitaria entra desabilitado, com a
+                                  // frase humana no próprio rótulo: o Junior descobre o porquê sem
+                                  // precisar tentar e levar um 422. O código fica só no `title`
+                                  // (um <option> não aceita marcação lá dentro).
+                                  <option
+                                    key={g.id}
+                                    value={String(g.id)}
+                                    disabled={!grupoServe(g)}
+                                    title={grupoServe(g) ? undefined : (codigoDoGrupo(g) ?? undefined)}
+                                  >
                                     {g.nome} — {regraDoGrupo(g)}
-                                    {g.selecionavel?.ok ? '' : ` — ${motivo(g.selecionavel?.codigo)}`}
+                                    {grupoServe(g) ? '' : ` — ${mensagemApresentacao(codigoDoGrupo(g))}`}
                                   </option>
                                 ))}
                               </select>
                             )}
                           </div>
+                          )}
                         </td>
                         <td style={{ textAlign: 'right' }}>
-                          <button
-                            type="button"
-                            className="btn btn-secondary btn-sm"
-                            disabled={salvando === chave}
-                            onClick={() => salvarLinha(item)}
-                          >
-                            {salvando === chave ? 'Salvando…' : 'Salvar'}
-                          </button>
+                          {/* Item neutro não tem o que salvar: sem select, sem botão. */}
+                          {!neutro && (
+                            <button
+                              type="button"
+                              className="btn btn-secondary btn-sm"
+                              disabled={salvando === chave}
+                              onClick={() => salvarLinha(item)}
+                            >
+                              {salvando === chave ? 'Salvando…' : 'Salvar'}
+                            </button>
+                          )}
                         </td>
                       </tr>
                     )
@@ -327,7 +363,12 @@ export default function TotemApresentacao() {
                     <tr key={o.id}>
                       <td>{o.cwItemId}</td>
                       <td>{o.cwGrupoPrincipalId ?? '—'}</td>
-                      <td><span className="ttm-erro" style={{ marginTop: 0 }}>{motivo(o.validacao?.codigo ?? 'ITEM_AUSENTE')}</span></td>
+                      {/* Órfã não é erro do operador: é o cardápio que mudou. Aviso neutro,
+                          com o código pequeno ao lado — o mesmo tom do resto da tela. */}
+                      <td>
+                        <span className="ttm-meta-txt">{mensagemApresentacao(o.validacao?.codigo ?? 'ITEM_AUSENTE')}</span>{' '}
+                        <Codigo codigo={o.validacao?.codigo ?? 'ITEM_AUSENTE'} />
+                      </td>
                       <td style={{ textAlign: 'right' }}>
                         <button
                           type="button"

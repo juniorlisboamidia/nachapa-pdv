@@ -29,7 +29,7 @@ import {
   montarCarrinho, diffCotacao, chaveNova, mensagemErro, proximoEstadoAposFalha,
   indicePorItemId, linhaDeProduto, gruposRenderizaveis, nomeApresentado,
   imagemApresentada, descricaoApresentada, opcoesVisiveisDaLinha, substituirLinha,
-  linhaDoDetalhe,
+  linhaDoDetalhe, precoDoCard,
 } from '../components/totemCarrinho'
 
 const VERSAO = 'totem-1.0'
@@ -104,11 +104,17 @@ function FotoItem({ src, alt }) {
   return <img className="ttm-foto" src={src} alt={alt} loading="lazy" onError={() => setQuebrou(true)} />
 }
 
-function PrecoItem({ item }) {
+// `aPartirDe` (§6 rev. 3): o valor mostrado é o MÍNIMO da jornada obrigatória que ainda
+// falta — o cliente pode terminar pagando mais (bebida mais cara, acompanhamento com
+// adicional). O rótulo é pequeno e vem ANTES do número, para o preço continuar sendo a
+// primeira coisa que se lê no card.
+function PrecoItem({ item, aPartirDe }) {
   const promo = item?.precoPromocional !== null && item?.precoPromocional !== undefined
-  if (!promo) return <span className="ttm-preco">{moeda(item?.preco)}</span>
+  const rotulo = aPartirDe ? <span className="ttm-apartir">a partir de</span> : null
+  if (!promo) return <span className="ttm-preco">{rotulo}{moeda(item?.preco)}</span>
   return (
     <span className="ttm-preco">
+      {rotulo}
       <span className="ttm-preco-de">de {moeda(item.preco)}</span>
       <span className="ttm-preco-por">por {moeda(item.precoPromocional)}</span>
     </span>
@@ -360,7 +366,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
     // Item em falta, ou com um grupo OBRIGATÓRIO em falta, não abre: não há como montá-lo,
     // e deixar o cliente tentar só adiaria a recusa para a tela de revisão.
     if (!itemOrdenavel(item).ok) return
-    setAberto({ item, apresentado: null, qtd: 1, observacao: '', selecoes: {}, uid: null })
+    setAberto({ item, apresentado: null, qtd: 1, observacao: '', selecoes: {}, uid: null, aPartirDe: false })
     setTela('item')
   }
 
@@ -373,7 +379,9 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
     if (produto?.ordenavel === false) return
     const linha = linhaDeProduto(produto, indice)
     if (!linha) { setAviso('Produto indisponível. Escolha outro.'); return }
-    setAberto(linha)   // já nasce com `uid: null` (item novo, não edição)
+    // `aPartirDe` é só ROTULAGEM de tela e por isso viaja fora do módulo puro: o card já
+    // disse "a partir de", e o cabeçalho do detalhe repete o aviso enquanto faltar escolha.
+    setAberto({ ...linha, aPartirDe: precoDoCard(produto).aPartirDe })   // já nasce com `uid: null` (item novo, não edição)
     setTela('item')
   }
 
@@ -387,6 +395,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
       observacao: linha.observacao ?? '',
       selecoes: linha.selecoes,
       uid: linha.uid,
+      aPartirDe: linha.aPartirDe === true,
     })
     setTela('item')
   }
@@ -428,6 +437,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
       qtd: aberto.qtd,
       observacao: aberto.observacao,
       selecoes: aberto.selecoes,
+      aPartirDe: aberto.aPartirDe === true,
     }
     // Casamento por `uid`, nunca por itemId: duas linhas do MESMO item base (X BURGUER e
     // X BACON) são normais na vitrine, e editar uma não pode encostar na outra.
@@ -674,7 +684,10 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
                 // OPÇÃO em falta (status MISSING) é "Em falta"; o ITEM base impossível de
                 // montar (outro grupo obrigatório sem opção) é "Indisponível no momento".
                 const emFalta = produto.status && produto.status !== 'ACTIVE'
-                const bloqueado = emFalta || produto.ordenavel === false
+                // O preço do card vem PRONTO do HUB (§5): mínimo da jornada obrigatória e o
+                // sinal de "a partir de". A tela não soma nada — só escolhe o que mostrar.
+                const preco = precoDoCard(produto)
+                const bloqueado = emFalta || preco.indisponivel
                 return (
                   <button
                     key={`${categoria.id}-${produto.id}`}
@@ -688,7 +701,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
                     {produto.descricao && <span className="ttm-card-desc">{produto.descricao}</span>}
                     {bloqueado
                       ? <span className="ttm-card-falta">{!emFalta && produto.motivo === 'GRUPO_EM_FALTA' ? 'Indisponível no momento' : 'Em falta'}</span>
-                      : <PrecoItem item={produto} />}
+                      : <PrecoItem item={{ preco: preco.valor, precoPromocional: preco.valorPromocional }} aPartirDe={preco.aPartirDe} />}
                   </button>
                 )
               }) : (categoria?.itens ?? []).map((item) => {
@@ -730,21 +743,22 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
     // é a OPÇÃO escolhida no card, não o item base (que costuma se chamar "TRADICIONAIS 🍔"
     // e custar R$ 0,00). O cliente nunca vê o item base nem um id.
     const nomeNaTela = nomeApresentado(aberto)
-    // Preço do cabeçalho: com apresentação, o preço é base + a opção principal — a MESMA
-    // conta do card e da projeção do backend (promoção da base + opção). Vai pelo `PrecoItem`
-    // com um produto sintético para o "de/por" do card se repetir aqui, sem CSS novo.
-    const opcaoPrincipal = aberto.apresentado
-      ? ((aberto.item.grupos ?? []).find((g) => String(g.id) === String(aberto.apresentado.grupoPrincipalId))?.opcoes ?? [])
-        .find((o) => String(o.id) === String(aberto.apresentado.opcaoId)) ?? null
-      : null
-    const extraDoPrincipal = Number(opcaoPrincipal?.preco ?? 0)
+    // Preço do cabeçalho (§6 rev. 3): o SUBTOTAL CORRENTE da linha — a identidade (base + a
+    // opção principal já escolhida no card) mais tudo que o cliente foi marcando. É a mesma
+    // conta de `subtotalLocal`, então o número do cabeçalho e o do botão nunca divergem, e
+    // ele SOBE na hora em que uma escolha custa a mais.
+    // Enquanto faltar obrigatório num produto "a partir de", o rótulo continua ao lado;
+    // completado o item, o valor é exato e o rótulo some.
+    const subtotalAberto = subtotalLocal(aberto)
     const promoDaBase = aberto.item?.precoPromocional
-    const precoApresentado = aberto.apresentado
-      ? {
-        preco: Number(aberto.item?.preco ?? 0) + extraDoPrincipal,
-        precoPromocional: (promoDaBase === null || promoDaBase === undefined) ? undefined : Number(promoDaBase) + extraDoPrincipal,
-      }
-      : null
+    const temPromoBase = promoDaBase !== null && promoDaBase !== undefined
+    // `subtotalLocal` já usa o preço em vigor (a promoção). O "de" é o mesmo subtotal SEM o
+    // desconto — assim o "de/por" do card se repete aqui, sem CSS novo e sem outra conta.
+    const descontoDaBase = temPromoBase ? (Number(aberto.item?.preco ?? 0) - Number(promoDaBase)) * Math.max(1, Number(aberto.qtd) || 1) : 0
+    const precoCabecalho = temPromoBase
+      ? { preco: Math.round((subtotalAberto + descontoDaBase) * 100) / 100, precoPromocional: subtotalAberto }
+      : { preco: subtotalAberto }
+    const cabecalhoAPartirDe = aberto.aPartirDe === true && !pronto.ok
     conteudo = (
       <>
         <Cabecalho loja={loja} titulo={nomeNaTela} aoVoltar={() => { setAberto(null); setTela(carrinho.length ? 'carrinho' : 'catalogo') }} />
@@ -761,7 +775,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
           <div className="ttm-item-cabeca">
             <h1 className="ttm-item-nome">{nomeNaTela}</h1>
             {descricaoApresentada(aberto) && <p className="ttm-item-desc">{descricaoApresentada(aberto)}</p>}
-            <PrecoItem item={precoApresentado ?? aberto.item} />
+            <PrecoItem item={precoCabecalho} aPartirDe={cabecalhoAPartirDe} />
           </div>
 
           {/* O grupo principal NÃO é desenhado: ele é a identidade do produto, já escolhida

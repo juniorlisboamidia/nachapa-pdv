@@ -12,7 +12,7 @@ import {
   proximoEstadoAposFalha,
   indicePorItemId, linhaDeProduto, gruposRenderizaveis, nomeApresentado,
   imagemApresentada, descricaoApresentada, opcoesVisiveisDaLinha, substituirLinha,
-  linhaDoDetalhe,
+  linhaDoDetalhe, precoDoCard, mensagemApresentacao,
 } from './totemCarrinho.js';
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
@@ -678,4 +678,114 @@ test('linhaDoDetalhe: o COMPLEMENTO escolhido por uma linha só desempata', () =
   // Se as DUAS pediram, volta a ser ambíguo — e o nome exibido é o do item base.
   const ambas = [comMaionese, { ...semNada, selecoes: { ...semNada.selecoes, [G_MAIONESE]: [{ opcaoId: 2796650, qtd: 1 }] } }];
   assert.equal(linhaDoDetalhe(ambas, { itemId: '2979325', opcaoId: '2796650' }), null);
+});
+
+// ── Preço do card e mensagens do admin (rev. 3, spec §5/§6/§8) ──────────────
+// O card não faz conta: `precoMinimo` chega pronto do HUB (base + principal + mínimos dos
+// obrigatórios que ainda faltam). Aqui só se decide QUAL número mostrar e se ele leva o
+// rótulo "a partir de".
+const produtoCombo = {
+  id: 'opcao:1:2:3', tipo: 'OPCAO_PRINCIPAL', nome: 'X BURGUER', preco: 12,
+  precoMinimo: 27.9, precoEhAPartirDe: true, status: 'ACTIVE', ordenavel: true,
+  origem: { itemId: 1, grupoId: 2, opcaoId: 3 }, grupoPrincipalId: 2,
+};
+
+test('precoDoCard: combo expandido mostra o mínimo da jornada com "a partir de"', () => {
+  assert.deepEqual(precoDoCard(produtoCombo), { valor: 27.9, aPartirDe: true, indisponivel: false });
+});
+
+test('precoDoCard: opção sem outro obrigatório mostra o preço dela, sem "a partir de"', () => {
+  const p = { ...produtoXBurguer, precoMinimo: 12, precoEhAPartirDe: false };
+  assert.deepEqual(precoDoCard(p), { valor: 12, aPartirDe: false, indisponivel: false });
+});
+
+test('precoDoCard: promoção na base vira "de/por" sobre os MÍNIMOS', () => {
+  const p = { ...produtoCombo, preco: 12, precoPromocional: 10, precoMinimo: 27.9, precoMinimoPromocional: 25.9 };
+  assert.deepEqual(precoDoCard(p), { valor: 27.9, valorPromocional: 25.9, aPartirDe: true, indisponivel: false });
+  // Sem mínimo promocional (servidor antigo), o "por" cai para a promoção da base.
+  const semMinimoPromo = { ...produtoXBurguer, precoPromocional: 10 };
+  assert.deepEqual(precoDoCard(semMinimoPromo), { valor: 12, valorPromocional: 10, aPartirDe: false, indisponivel: false });
+  // Sem promoção na base não existe "por" — nem chave no objeto.
+  assert.equal('valorPromocional' in precoDoCard(produtoCombo), false);
+});
+
+test('precoDoCard: `precoMinimo: null` é produto sem jornada possível → indisponível', () => {
+  const p = { ...produtoCombo, precoMinimo: null, precoEhAPartirDe: false, ordenavel: false, motivo: 'GRUPO_EM_FALTA' };
+  assert.deepEqual(precoDoCard(p), { valor: 12, aPartirDe: false, indisponivel: true });
+  // `ordenavel:false` sozinho também apaga o card, mesmo com mínimo calculado.
+  assert.equal(precoDoCard({ ...produtoCombo, ordenavel: false }).indisponivel, true);
+});
+
+test('precoDoCard: bootstrap antigo (sem os campos novos) cai no preço, sem "a partir de"', () => {
+  assert.deepEqual(precoDoCard(produtoXBurguer), { valor: 12, aPartirDe: false, indisponivel: false });
+  assert.deepEqual(precoDoCard(produtoCoca), { valor: 6, aPartirDe: false, indisponivel: false });
+  assert.deepEqual(precoDoCard(null), { valor: 0, aPartirDe: false, indisponivel: false });
+});
+
+test('mensagemApresentacao: frase humana para cada código do servidor', () => {
+  assert.equal(mensagemApresentacao('MODO_INVALIDO'), 'modo inválido');
+  assert.equal(mensagemApresentacao('ITEM_AUSENTE'), 'este item não está mais no cardápio do balcão');
+  assert.equal(mensagemApresentacao('GRUPO_AUSENTE'), 'o grupo escolhido não existe mais neste item');
+  assert.equal(mensagemApresentacao('GRUPO_NAO_E_ESCOLHA_UNICA'), 'o grupo passou a aceitar mais de uma escolha');
+  assert.equal(mensagemApresentacao('GRUPO_SEM_OPCOES'), 'o grupo ficou sem opções');
+  assert.equal(mensagemApresentacao('GRUPO_COM_UMA_OPCAO'), 'o grupo tem uma opção só');
+  assert.equal(mensagemApresentacao('GRUPO_INDISPONIVEL'), 'o grupo está oculto no cardápio');
+  // Código que esta versão da tela não conhece (servidor mais novo) não vira sigla crua.
+  assert.equal(mensagemApresentacao('OUTRO_GRUPO_OBRIGATORIO'), 'configuração inválida');
+  assert.equal(mensagemApresentacao('QUALQUER_COISA'), 'configuração inválida');
+  assert.equal(mensagemApresentacao(undefined), 'configuração inválida');
+});
+
+// Combo em vitrine (spec §6/§9): expandir o grupo principal NÃO some com os outros
+// obrigatórios. Bebida e acompanhamento continuam na tela, continuam exigidos, e o
+// subtotal só chega no mínimo prometido pelo card depois que o cliente escolhe os dois.
+const G_BURGUER_COMBO = 800001;
+const itemCombo = {
+  id: 500001, nome: 'COMBO - TRADICIONAIS', preco: 15.9, status: 'ACTIVE', grupos: [
+    {
+      id: G_BURGUER_COMBO, nome: 'BURGUER DO COMBO', choiceType: 'SINGLE', min: 1, max: 1, status: 'ACTIVE',
+      opcoes: [
+        { id: 900001, nome: 'X BURGUER', preco: 12, status: 'ACTIVE', maxQuantidade: null },
+        { id: 900002, nome: 'X BACON', preco: 14, status: 'ACTIVE', maxQuantidade: null },
+      ],
+    },
+    {
+      id: 800002, nome: 'BEBIDA DO COMBO', choiceType: 'SINGLE', min: 1, max: 1, status: 'ACTIVE',
+      opcoes: [
+        { id: 900010, nome: 'COCA LATA', preco: 0, status: 'ACTIVE', maxQuantidade: null },
+        { id: 900011, nome: 'SUCO', preco: 3, status: 'ACTIVE', maxQuantidade: null },
+      ],
+    },
+    {
+      id: 800003, nome: 'ACOMPANHAMENTO', choiceType: 'SINGLE', min: 1, max: 1, status: 'ACTIVE',
+      opcoes: [
+        { id: 900020, nome: 'BATATA', preco: 0, status: 'ACTIVE', maxQuantidade: null },
+        { id: 900021, nome: 'ONION RINGS', preco: 6, status: 'ACTIVE', maxQuantidade: null },
+      ],
+    },
+  ],
+};
+const produtoComboXBurguer = {
+  id: `opcao:${itemCombo.id}:${G_BURGUER_COMBO}:900001`, tipo: 'OPCAO_PRINCIPAL', nome: 'X BURGUER',
+  descricao: null, imagem: null, preco: 27.9, precoMinimo: 27.9, precoEhAPartirDe: true,
+  status: 'ACTIVE', ordenavel: true,
+  origem: { itemId: itemCombo.id, grupoId: G_BURGUER_COMBO, opcaoId: 900001 }, grupoPrincipalId: G_BURGUER_COMBO,
+};
+
+test('combo em vitrine: os outros obrigatórios continuam visíveis e exigidos', () => {
+  const indiceCombo = indicePorItemId([{ id: 1, itens: [itemCombo], produtos: [produtoComboXBurguer] }]);
+  const linha = linhaDeProduto(produtoComboXBurguer, indiceCombo);
+  // O principal saiu da tela (é a identidade do card); bebida e acompanhamento ficaram.
+  assert.deepEqual(gruposRenderizaveis(linha).map((g) => g.nome), ['BEBIDA DO COMBO', 'ACOMPANHAMENTO']);
+  assert.deepEqual(itemPronto(linha.item, linha.selecoes), { ok: false, gruposFaltando: [800002, 800003] });
+  linha.selecoes['800002'] = [{ opcaoId: 900010, qtd: 1 }];
+  assert.equal(itemPronto(linha.item, linha.selecoes).ok, false);
+  linha.selecoes['800003'] = [{ opcaoId: 900020, qtd: 1 }];
+  assert.equal(itemPronto(linha.item, linha.selecoes).ok, true);
+  // Escolhendo o mais barato de cada obrigatório, o subtotal bate no "a partir de" do card.
+  assert.equal(subtotalLocal(linha), 27.9);
+  assert.equal(precoDoCard(produtoComboXBurguer).valor, 27.9);
+  // Trocando por opções mais caras, o subtotal sobe — que é o motivo do "a partir de".
+  linha.selecoes['800003'] = [{ opcaoId: 900021, qtd: 1 }];
+  assert.equal(subtotalLocal(linha), 33.9);
 });
