@@ -13,6 +13,10 @@ import { Ico } from './icones'
 // O nome do aparelho NÃO aparece: quem está na frente do totem é cliente, e
 // "Totem de teste" no vidro é informação de bastidor. Quem precisa saber de qual
 // tablet se trata tem a tela Aparelhos, no admin.
+//
+// "Pagamento no balcão" também não mora aqui. Na abertura ele é ruído: o cliente
+// ainda não escolheu nada e a frase compete com a decisão da tela. O recado tem
+// dono — é o bloco preto no topo do Pagamento, onde a dúvida realmente aparece.
 export default function TelaInicio({ loja, modos, aoEscolher }) {
   const um = modos.length === 1
   const logo = loja?.logo || loja?.logoDataUrl || null
@@ -47,10 +51,6 @@ export default function TelaInicio({ loja, modos, aoEscolher }) {
             <span className="tq-modo-s">{um ? m.titulo : m.sub}</span>
           </button>
         ))}
-      </div>
-
-      <div className="tq-inicio-rodape">
-        <span className="tq-inicio-balcao">Pagamento no balcão, na retirada.</span>
       </div>
     </div>
   )
