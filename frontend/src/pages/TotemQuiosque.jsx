@@ -8,7 +8,7 @@
 // Pagamento vem ANTES de Revisar porque o método entra no hash da cotação assinada: sem
 // ele o HUB não tem o que assinar, e trocar o método depois obriga a recotar.
 //
-// Três regras que valem mais que qualquer detalhe visual:
+// Quatro regras que valem mais que qualquer detalhe visual:
 //  1. Preço aqui é EXIBIÇÃO. Quem calcula é o HUB (`cotar`), e a tela de Revisar mostra
 //     o que ELE devolveu — marcando "Preços atualizados" quando diverge do carrinho.
 //  2. A chave de idempotência nasce UMA vez, quando o cliente toca em "Confirmar pedido",
@@ -16,11 +16,19 @@
 //     confirmação: é ela que impede dois pedidos no Cardápio Web.
 //  3. Depois de um 202 ("estamos confirmando") NÃO existe botão de repetir. O pedido pode
 //     ter sido criado; oferecer "tentar de novo" seria convidar a cobrar duas vezes.
+//  4. A VITRINE (spec §5/§6) é só apresentação. Quando o bootstrap traz `produtos`, o card
+//     pode ser uma OPÇÃO do grupo principal ("X BURGUER" dentro de "TRADICIONAIS 🍔"), e
+//     essa identidade acompanha o cliente até o comprovante. O que vai no fio, porém, não
+//     muda uma vírgula: `montarCarrinho` continua mandando o item base + a opção escolhida,
+//     e a linha sai IDÊNTICA à de quem montou o item à mão. Sem `produtos` (servidor antigo
+//     ou falha de banco), o grid volta a ser o de `itens`.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { aparelhoApi } from '../services/api'
 import {
   podeAdicionarOpcao, grupoSatisfeito, itemPronto, itemOrdenavel, subtotalLocal,
   montarCarrinho, diffCotacao, chaveNova, mensagemErro, proximoEstadoAposFalha,
+  precoEmVigor, indicePorItemId, linhaDeProduto, gruposRenderizaveis, nomeApresentado,
+  imagemApresentada, descricaoApresentada, opcoesVisiveisDaLinha, substituirLinha,
 } from '../components/totemCarrinho'
 
 const VERSAO = 'totem-1.0'
@@ -127,15 +135,18 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
   const [tela, setTela] = useState('inicio')
   const [orderType, setOrderType] = useState(null)
   const [carrinho, setCarrinho] = useState([])
-  const [aberto, setAberto] = useState(null)     // { item, qtd, observacao, selecoes, uid? }
+  const [aberto, setAberto] = useState(null)     // { item, apresentado, qtd, observacao, selecoes, uid? }
   const [categoriaId, setCategoriaId] = useState(null)
+  // Recado curto e passageiro (hoje só "Produto indisponível"): o totem não tem Toast —
+  // ele é público e standalone —, então é um aviso próprio, que some sozinho.
+  const [aviso, setAviso] = useState(null)
   const [metodoId, setMetodoId] = useState(null)
 
   // Revisar / confirmar
   const [cotando, setCotando] = useState(false)
   const [cotacao, setCotacao] = useState(null)   // { linhas, total, cotacao }
   const [erroCotar, setErroCotar] = useState(null) // { codigo, detalhes }
-  const [avisoPrecos, setAvisoPrecos] = useState(null) // { alteradas, totalMudou }
+  const [avisoPrecos, setAvisoPrecos] = useState(null) // { alteradas, alteradasIdx, totalMudou }
   const [enviando, setEnviando] = useState(false)
   const [erroEnvio, setErroEnvio] = useState(null)  // { codigo, podeRepetir }
   const [resultado, setResultado] = useState(null)  // { status, cwDisplayId, referencia, envioId, total }
@@ -178,6 +189,17 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
   const metodos = useMemo(() => (Array.isArray(boot?.metodos) ? boot.metodos : []), [boot])
   const orderTypes = useMemo(() => (Array.isArray(boot?.orderTypes) ? boot.orderTypes.filter((t) => MODOS[t]) : []), [boot])
   const categorias = useMemo(() => (Array.isArray(boot?.catalogo?.categorias) ? boot.catalogo.categorias : []), [boot])
+  // Vitrine (spec §5): o produto apresentado NÃO carrega o item técnico — ele só aponta
+  // para `origem.itemId`. Este índice é a ponte, e é o único lugar da tela que resolve
+  // esse vínculo. `itens` continua obrigatório no bootstrap, então o índice nunca some.
+  const indice = useMemo(() => indicePorItemId(categorias), [categorias])
+
+  // O aviso passageiro se apaga sozinho. Sem Promise no efeito (regra do projeto).
+  useEffect(() => {
+    if (!aviso) return undefined
+    const t = setTimeout(() => setAviso(null), 4_000)
+    return () => clearTimeout(t)
+  }, [aviso])
 
   // ── Bootstrap ─────────────────────────────────────────────────────────────
   // `silencioso` = refresh de fundo: ele NUNCA derruba um cliente no meio do pedido.
@@ -237,6 +259,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
     setResultado(null)
     setLiberouNovo(false)
     setCategoriaId(null)
+    setAviso(null)
     setTela('inicio')
     if (recarregar) carregarBoot(true)
   }, [carregarBoot])
@@ -336,12 +359,34 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
     // Item em falta, ou com um grupo OBRIGATÓRIO em falta, não abre: não há como montá-lo,
     // e deixar o cliente tentar só adiaria a recusa para a tela de revisão.
     if (!itemOrdenavel(item).ok) return
-    setAberto({ item, qtd: 1, observacao: '', selecoes: {}, uid: null })
+    setAberto({ item, apresentado: null, qtd: 1, observacao: '', selecoes: {}, uid: null })
+    setTela('item')
+  }
+
+  // Card da VITRINE (§6). O produto pode ser o item inteiro (`ITEM`) ou uma opção do grupo
+  // principal (`OPCAO_PRINCIPAL`) — nos dois casos quem vai ao carrinho é o item base, com
+  // a opção já escolhida quando for o caso. Item que sumiu do índice entre o bootstrap e o
+  // toque não abre uma tela quebrada: o cliente é avisado e continua onde estava.
+  function abrirProduto(produto) {
+    if (produto?.status && produto.status !== 'ACTIVE') return
+    if (produto?.ordenavel === false) return
+    const linha = linhaDeProduto(produto, indice)
+    if (!linha) { setAviso('Produto indisponível. Escolha outro.'); return }
+    setAberto({ ...linha, uid: null })
     setTela('item')
   }
 
   function editarLinha(linha) {
-    setAberto({ item: linha.item, qtd: linha.qtd, observacao: linha.observacao ?? '', selecoes: linha.selecoes, uid: linha.uid })
+    // `apresentado` viaja junto: é a identidade que o cliente escolheu (X BURGUER), e
+    // perdê-la aqui faria a linha voltar a se chamar pelo nome do item base no carrinho.
+    setAberto({
+      item: linha.item,
+      apresentado: linha.apresentado ?? null,
+      qtd: linha.qtd,
+      observacao: linha.observacao ?? '',
+      selecoes: linha.selecoes,
+      uid: linha.uid,
+    })
     setTela('item')
   }
 
@@ -378,11 +423,14 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
     const linha = {
       uid: aberto.uid ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       item: aberto.item,
+      apresentado: aberto.apresentado ?? null,
       qtd: aberto.qtd,
       observacao: aberto.observacao,
       selecoes: aberto.selecoes,
     }
-    setCarrinho((c) => (aberto.uid ? c.map((l) => (l.uid === aberto.uid ? linha : l)) : [...c, linha]))
+    // Casamento por `uid`, nunca por itemId: duas linhas do MESMO item base (X BURGUER e
+    // X BACON) são normais na vitrine, e editar uma não pode encostar na outra.
+    setCarrinho((c) => substituirLinha(c, aberto.uid, linha))
     setAberto(null)
     invalidarCotacao()
     setTela('carrinho')
@@ -608,7 +656,32 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
               ))}
             </nav>
             <div className="ttm-tela ttm-grade">
-              {(categoria?.itens ?? []).map((item) => {
+              {/* A vitrine manda quando o bootstrap a traz (§6). `produtos` pode faltar
+                  (falha do banco no PDV, ou versão antiga do servidor): aí o grid volta a
+                  ser o de sempre, item por item. Nenhum cliente fica sem cardápio. */}
+              {Array.isArray(categoria?.produtos) ? categoria.produtos.map((produto) => {
+                // Duas razões diferentes para o card apagar, e elas não se confundem: a
+                // OPÇÃO em falta (status MISSING) é "Em falta"; o ITEM base impossível de
+                // montar (outro grupo obrigatório sem opção) é "Indisponível no momento".
+                const emFalta = produto.status && produto.status !== 'ACTIVE'
+                const bloqueado = emFalta || produto.ordenavel === false
+                return (
+                  <button
+                    key={`${categoria.id}-${produto.id}`}
+                    type="button"
+                    className={'ttm-card' + (bloqueado ? ' falta' : '')}
+                    disabled={bloqueado}
+                    onClick={() => abrirProduto(produto)}
+                  >
+                    <FotoItem src={produto.imagem} alt={produto.nome} />
+                    <span className="ttm-card-nome">{produto.nome}</span>
+                    {produto.descricao && <span className="ttm-card-desc">{produto.descricao}</span>}
+                    {bloqueado
+                      ? <span className="ttm-card-falta">{!emFalta && produto.motivo === 'GRUPO_EM_FALTA' ? 'Indisponível no momento' : 'Em falta'}</span>
+                      : <PrecoItem item={produto} />}
+                  </button>
+                )
+              }) : (categoria?.itens ?? []).map((item) => {
                 // Dois jeitos de um item não estar disponível: ele mesmo em falta, ou um
                 // grupo obrigatório dele em falta (aí não existe montagem possível). O
                 // cliente vê o card apagado com o motivo, nunca um caminho que dá em erro.
@@ -643,9 +716,19 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
     // Editar uma linha do carrinho pode reabrir um item que ficou indisponível enquanto o
     // cliente escolhia — por isso a checagem vale aqui também, não só no catálogo.
     const podePedir = itemOrdenavel(aberto.item)
+    // Identidade apresentada (§6): no modo EXPANDIDO quem dá nome, foto e descrição à tela
+    // é a OPÇÃO escolhida no card, não o item base (que costuma se chamar "TRADICIONAIS 🍔"
+    // e custar R$ 0,00). O cliente nunca vê o item base nem um id.
+    const nomeNaTela = nomeApresentado(aberto)
+    // Preço do cabeçalho: com apresentação, o preço do produto é base + a opção principal
+    // (a mesma conta do card e do backend). Sem ela, é o preço do item, com promoção.
+    const opcaoPrincipal = aberto.apresentado
+      ? ((aberto.item.grupos ?? []).find((g) => String(g.id) === String(aberto.apresentado.grupoPrincipalId))?.opcoes ?? [])
+        .find((o) => String(o.id) === String(aberto.apresentado.opcaoId)) ?? null
+      : null
     conteudo = (
       <>
-        <Cabecalho loja={loja} titulo={aberto.item.nome} aoVoltar={() => { setAberto(null); setTela(carrinho.length ? 'carrinho' : 'catalogo') }} />
+        <Cabecalho loja={loja} titulo={nomeNaTela} aoVoltar={() => { setAberto(null); setTela(carrinho.length ? 'carrinho' : 'catalogo') }} />
         {banner}
         <div className="ttm-tela ttm-item">
           {!podePedir.ok && (
@@ -655,14 +738,18 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
                 : 'Este item acabou. Escolha outro ou chame um atendente.'}
             </div>
           )}
-          <FotoItem src={aberto.item.imagem} alt={aberto.item.nome} />
+          <FotoItem src={imagemApresentada(aberto)} alt={nomeNaTela} />
           <div className="ttm-item-cabeca">
-            <h1 className="ttm-item-nome">{aberto.item.nome}</h1>
-            {aberto.item.descricao && <p className="ttm-item-desc">{aberto.item.descricao}</p>}
-            <PrecoItem item={aberto.item} />
+            <h1 className="ttm-item-nome">{nomeNaTela}</h1>
+            {descricaoApresentada(aberto) && <p className="ttm-item-desc">{descricaoApresentada(aberto)}</p>}
+            {aberto.apresentado
+              ? <span className="ttm-preco">{moeda(precoEmVigor(aberto.item) + Number(opcaoPrincipal?.preco ?? 0))}</span>
+              : <PrecoItem item={aberto.item} />}
           </div>
 
-          {(aberto.item.grupos ?? []).filter((g) => !g.status || g.status === 'ACTIVE' || g.status === 'MISSING').map((g) => {
+          {/* O grupo principal NÃO é desenhado: ele é a identidade do produto, já escolhida
+              no card. Trocar de produto é voltar ao grid — não existe "trocar" aqui. */}
+          {gruposRenderizaveis(aberto).filter((g) => !g.status || g.status === 'ACTIVE' || g.status === 'MISSING').map((g) => {
             const sel = aberto.selecoes[g.id] ?? []
             const regra = regraDoGrupo(g)
             const faltando = pronto.gruposFaltando.some((id) => String(id) === String(g.id))
@@ -773,18 +860,19 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
           ) : carrinho.map((l) => (
             <div key={l.uid} className="ttm-linha">
               <div className="ttm-linha-corpo">
-                <div className="ttm-linha-nome">{l.qtd}× {l.item.nome}</div>
+                <div className="ttm-linha-nome">{l.qtd}× {nomeApresentado(l)}</div>
+                {/* Complementos SEM a opção principal: ela é o próprio nome da linha, e
+                    listá-la faria "X BURGUER" virar adicional de si mesmo. */}
                 <ul className="ttm-linha-opcoes">
-                  {(l.item.grupos ?? []).flatMap((g) => (l.selecoes[g.id] ?? []).map((e) => {
-                    const op = (g.opcoes ?? []).find((o) => String(o.id) === String(e.opcaoId))
-                    return op ? <li key={`${g.id}-${e.opcaoId}`}>{(Number(e.qtd) || 1) > 1 ? `${e.qtd}× ` : ''}{op.nome}</li> : null
-                  }))}
+                  {opcoesVisiveisDaLinha(l).map((o) => (
+                    <li key={`${o.grupoId}-${o.opcaoId}`}>{o.qtd > 1 ? `${o.qtd}× ` : ''}{o.nome}</li>
+                  ))}
                 </ul>
                 {l.observacao ? <div className="ttm-linha-obs">“{l.observacao}”</div> : null}
               </div>
               <div className="ttm-linha-lado">
                 <div className="ttm-linha-valor">{moeda(subtotalLocal(l))}</div>
-                <Stepper valor={l.qtd} rotulo={`Quantidade de ${l.item.nome}`} onMenos={() => mudarQtdLinha(l.uid, -1)} onMais={() => mudarQtdLinha(l.uid, 1)} />
+                <Stepper valor={l.qtd} rotulo={`Quantidade de ${nomeApresentado(l)}`} onMenos={() => mudarQtdLinha(l.uid, -1)} onMais={() => mudarQtdLinha(l.uid, 1)} />
                 <div className="ttm-linha-acoes">
                   <button type="button" className="ttm-btn-link" onClick={() => editarLinha(l)}>Editar</button>
                   <button type="button" className="ttm-btn-link perigo" onClick={() => removerLinha(l.uid)}>Remover</button>
@@ -856,6 +944,14 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
   if (tela === 'revisar') {
     const linhas = Array.isArray(cotacao?.linhas) ? cotacao.linhas : []
     const alteradas = avisoPrecos?.alteradas ?? []
+    const alteradasIdx = avisoPrecos?.alteradasIdx ?? []
+    // O HUB devolve as linhas NA ORDEM do carrinho. Quando a contagem bate, cada linha
+    // cotada tem a sua linha local — e é dela que saem o nome apresentado e os
+    // complementos, para o cliente ver "X BURGUER" aqui como viu no card (o HUB só
+    // conhece o item base). Se a contagem não bater (linha recusada), a tela volta ao
+    // que o servidor mandou e o destaque cai para o casamento por itemId.
+    const porIndice = linhas.length === carrinho.length
+    const localDa = (l, i) => (porIndice && String(carrinho[i]?.item?.id) === String(l?.itemId) ? carrinho[i] : null)
     conteudo = (
       <>
         {/* Travada (confirmação em dúvida): sem Voltar. Voltar levaria a uma nova cotação,
@@ -872,7 +968,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
               {erroCotar.detalhes.length > 0 && (
                 <ul className="ttm-erro-lista">
                   {erroCotar.detalhes.map((d, i) => {
-                    const nome = carrinho.find((l) => String(l.item.id) === String(d.itemId))?.item?.nome
+                    const nome = nomeApresentado(carrinho.find((l) => String(l.item.id) === String(d.itemId)))
                     // `mensagem` é a frase que o próprio servidor escreveu para ESTA linha
                     // (mais específica que a frase geral do código): quando vem, ela manda.
                     return <li key={`${d.codigo}-${i}`}>{nome ? <strong>{nome}: </strong> : null}{d.mensagem ?? mensagemErro(d.codigo)}</li>
@@ -901,13 +997,21 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
                 )}
               </div>
               {linhas.map((l, i) => {
-                const mudou = alteradas.some((id) => String(id) === String(l.itemId))
+                const local = localDa(l, i)
+                // Destaque por ÍNDICE (§6, ajuste 5): duas linhas podem ser do mesmo item
+                // base, e marcar por itemId acenderia as duas quando só uma mudou.
+                const mudou = local
+                  ? alteradasIdx.includes(i)
+                  : alteradas.some((id) => String(id) === String(l.itemId))
+                const opcoes = local
+                  ? opcoesVisiveisDaLinha(local).map((o) => ({ opcaoId: o.opcaoId, nome: o.nome, qtd: o.qtd }))
+                  : (l.opcoes ?? [])
                 return (
                   <div key={`${l.itemId}-${i}`} className={'ttm-linha' + (mudou ? ' mudou' : '')}>
                     <div className="ttm-linha-corpo">
-                      <div className="ttm-linha-nome">{l.qtd}× {l.nome}</div>
+                      <div className="ttm-linha-nome">{l.qtd}× {local ? nomeApresentado(local) : l.nome}</div>
                       <ul className="ttm-linha-opcoes">
-                        {(l.opcoes ?? []).map((o, j) => (
+                        {opcoes.map((o, j) => (
                           <li key={`${o.opcaoId}-${j}`}>{(Number(o.qtd) || 1) > 1 ? `${o.qtd}× ` : ''}{o.nome}</li>
                         ))}
                       </ul>
@@ -968,7 +1072,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
         lista={detalhes.length > 0 ? (
           <ul className="ttm-erro-lista">
             {detalhes.map((d, i) => {
-              const nome = carrinho.find((l) => String(l.item.id) === String(d.itemId))?.item?.nome
+              const nome = nomeApresentado(carrinho.find((l) => String(l.item.id) === String(d.itemId)))
               // Idem: a frase do servidor (inclusive a de `validarCorpoPedido`, que já vem
               // pronta por campo) ganha da frase genérica do código.
               return <li key={`${d.codigo ?? d.campo ?? 'd'}-${i}`}>{nome ? <strong>{nome}: </strong> : null}{d.mensagem ?? mensagemErro(d.codigo)}</li>
@@ -1044,6 +1148,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
   return (
     <div className="ttm-raiz">
       {conteudo}
+      {aviso && <div className="ttm-aviso-passageiro" role="status" aria-live="polite">{aviso}</div>}
       {itensNoCarrinho > 0 && tela === 'catalogo' && (
         <button type="button" className="ttm-flutuante" onClick={() => setTela('carrinho')}>
           <span className="ttm-flutuante-qtd">{itensNoCarrinho}</span>

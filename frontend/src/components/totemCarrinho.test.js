@@ -10,6 +10,8 @@ import {
   podeAdicionarOpcao, grupoSatisfeito, itemPronto, itemOrdenavel, subtotalLocal,
   montarCarrinho, diffCotacao, chaveNova, mensagemErro, precoEmVigor,
   proximoEstadoAposFalha,
+  indicePorItemId, linhaDeProduto, gruposRenderizaveis, nomeApresentado,
+  imagemApresentada, descricaoApresentada, opcoesVisiveisDaLinha, substituirLinha,
 } from './totemCarrinho.js';
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
@@ -184,32 +186,32 @@ const linhaUI = (qtd, selecoes) => ({ item, qtd, selecoes });
 test('diffCotacao: nada mudou', () => {
   const ui = [linhaUI(1, { 10: [{ opcaoId: 101, qtd: 1 }] })];
   const hub = [{ itemId: '999', nome: 'Burger da casa', qtd: 1, unitPrice: 30, totalPrice: 30, opcoes: [] }];
-  assert.deepEqual(diffCotacao(ui, hub, 30, 30), { alteradas: [], totalMudou: false });
+  assert.deepEqual(diffCotacao(ui, hub, 30, 30), { alteradas: [], alteradasIdx: [], totalMudou: false });
 });
 
 test('diffCotacao: preço do item subiu → linha marcada e total mudou', () => {
   const ui = [linhaUI(1, {})];
   const hub = [{ itemId: '999', qtd: 1, unitPrice: 34, totalPrice: 34, opcoes: [] }];
-  assert.deepEqual(diffCotacao(ui, hub, 30, 34), { alteradas: ['999'], totalMudou: true });
+  assert.deepEqual(diffCotacao(ui, hub, 30, 34), { alteradas: ['999'], alteradasIdx: [0], totalMudou: true });
 });
 
 test('diffCotacao: só o preço de uma OPÇÃO mudou (o unitPrice do item não muda)', () => {
   // local: 30 + 2 = 32. HUB cobrou a opção a 5: 35.
   const ui = [linhaUI(1, { 20: [{ opcaoId: 201, qtd: 1 }] })];
   const hub = [{ itemId: '999', qtd: 1, unitPrice: 30, totalPrice: 35, opcoes: [{ opcaoId: '201', grupoId: '20', nome: 'Opção 201', qtd: 1, unitPrice: 5 }] }];
-  assert.deepEqual(diffCotacao(ui, hub, 32, 35), { alteradas: ['999'], totalMudou: true });
+  assert.deepEqual(diffCotacao(ui, hub, 32, 35), { alteradas: ['999'], alteradasIdx: [0], totalMudou: true });
 });
 
 test('diffCotacao: centavos de arredondamento não contam como mudança', () => {
   const ui = [linhaUI(1, {})];
   const hub = [{ itemId: '999', qtd: 1, unitPrice: 30, totalPrice: 30.001, opcoes: [] }];
-  assert.deepEqual(diffCotacao(ui, hub, 30, 30.001), { alteradas: [], totalMudou: false });
+  assert.deepEqual(diffCotacao(ui, hub, 30, 30.001), { alteradas: [], alteradasIdx: [], totalMudou: false });
 });
 
 test('diffCotacao: linha que o HUB não devolveu conta como alterada', () => {
   const ui = [linhaUI(1, {}), { item: { id: 555, nome: 'Coca', preco: 7 }, qtd: 1, selecoes: {} }];
   const hub = [{ itemId: '999', qtd: 1, unitPrice: 30, totalPrice: 30, opcoes: [] }];
-  assert.deepEqual(diffCotacao(ui, hub, 37, 30), { alteradas: ['555'], totalMudou: true });
+  assert.deepEqual(diffCotacao(ui, hub, 37, 30), { alteradas: ['555'], alteradasIdx: [1], totalMudou: true });
 });
 
 test('diffCotacao: itemId fora de ordem no HUB ainda casa pelo id', () => {
@@ -219,7 +221,7 @@ test('diffCotacao: itemId fora de ordem no HUB ainda casa pelo id', () => {
     { itemId: '555', qtd: 1, unitPrice: 7, totalPrice: 7, opcoes: [] },
     { itemId: '999', qtd: 1, unitPrice: 30, totalPrice: 30, opcoes: [] },
   ];
-  assert.deepEqual(diffCotacao(ui, hub, 37, 37), { alteradas: [], totalMudou: false });
+  assert.deepEqual(diffCotacao(ui, hub, 37, 37), { alteradas: [], alteradasIdx: [], totalMudou: false });
 });
 
 test('diffCotacao: alteradas não repete o mesmo itemId', () => {
@@ -228,12 +230,12 @@ test('diffCotacao: alteradas não repete o mesmo itemId', () => {
     { itemId: '999', qtd: 1, unitPrice: 34, totalPrice: 34, opcoes: [] },
     { itemId: '999', qtd: 1, unitPrice: 34, totalPrice: 34, opcoes: [] },
   ];
-  assert.deepEqual(diffCotacao(ui, hub, 60, 68), { alteradas: ['999'], totalMudou: true });
+  assert.deepEqual(diffCotacao(ui, hub, 60, 68), { alteradas: ['999'], alteradasIdx: [0, 1], totalMudou: true });
 });
 
 test('diffCotacao aguenta entrada vazia/inválida sem quebrar', () => {
-  assert.deepEqual(diffCotacao([], [], 0, 0), { alteradas: [], totalMudou: false });
-  assert.deepEqual(diffCotacao(null, null, null, null), { alteradas: [], totalMudou: false });
+  assert.deepEqual(diffCotacao([], [], 0, 0), { alteradas: [], alteradasIdx: [], totalMudou: false });
+  assert.deepEqual(diffCotacao(null, null, null, null), { alteradas: [], alteradasIdx: [], totalMudou: false });
 });
 
 // ── proximoEstadoAposFalha ──────────────────────────────────────────────────
@@ -375,4 +377,229 @@ test('mensagemErro: mensagens distintas nos casos que o cliente precisa diferenc
   assert.notEqual(m('ITEM_EM_FALTA'), m('ITEM_FORA_DE_HORARIO'));
   assert.notEqual(m('LOJA_FECHADA'), m('MODO_INDISPONIVEL'));
   assert.notEqual(m('COTACAO_EXPIRADA'), m('COTACAO_DIVERGENTE'));
+});
+
+// ── Camada de apresentação (spec §5/§6/§9) ──────────────────────────────────
+// Fixture REAL do golden do backend (TRADICIONAIS 🍔 do Hamburgão): o item base custa
+// R$ 0,00 e quem tem preço é a opção do grupo principal — é justamente o caso em que a
+// vitrine muda tudo para o cliente e nada para o carrinho que vai no fio.
+const IT_TRADICIONAIS = 2979325;
+const G_FAVORITO = 795194;
+const OP_X_BURGUER = 3633259;
+const OP_X_BACON = 3633262;
+const G_MAIONESE = 745977;
+
+const grupoFavorito = {
+  id: G_FAVORITO, nome: 'SEU TRADICIONAL FAVORITO', choiceType: 'SINGLE', min: 1, max: 1, status: 'ACTIVE',
+  opcoes: [
+    { id: OP_X_BURGUER, nome: 'X BURGUER', preco: 12, status: 'ACTIVE', maxQuantidade: null, imagem: 'x-burguer.jpg', descricao: 'Carne 56G, queijo muçarela, alface e tomate' },
+    { id: OP_X_BACON, nome: 'X BACON', preco: 16, status: 'ACTIVE', maxQuantidade: null, imagem: 'x-bacon.jpg', descricao: 'Carne 56G, bacon em cubos, queijo muçarela, alface e tomate' },
+  ],
+};
+const grupoMaionese = {
+  id: G_MAIONESE, nome: 'ESCOLHA SUA MAIONESE', choiceType: 'MULTIPLE', min: 0, max: 1, status: 'ACTIVE',
+  opcoes: [{ id: 2796650, nome: 'MAIONESE TRADICIONAL', preco: 0, status: 'ACTIVE', maxQuantidade: null }],
+};
+const itemTradicionais = {
+  id: IT_TRADICIONAIS, nome: 'TRADICIONAIS 🍔', preco: 0, status: 'ACTIVE', imagem: 'capa-tradicionais.jpg',
+  descricao: 'Clique aqui para conhecer todos os tradicionais', grupos: [grupoFavorito, grupoMaionese],
+};
+const itemCoca = { id: 111, nome: 'COCA LATA', preco: 6, status: 'ACTIVE', grupos: [] };
+
+const produtoDe = (opcao) => ({
+  id: `opcao:${IT_TRADICIONAIS}:${G_FAVORITO}:${opcao.id}`,
+  tipo: 'OPCAO_PRINCIPAL',
+  nome: opcao.nome, descricao: opcao.descricao, imagem: opcao.imagem,
+  preco: opcao.preco, status: 'ACTIVE', ordenavel: true,
+  origem: { itemId: IT_TRADICIONAIS, grupoId: G_FAVORITO, opcaoId: opcao.id },
+  grupoPrincipalId: G_FAVORITO,
+});
+const produtoXBurguer = produtoDe(grupoFavorito.opcoes[0]);
+const produtoXBacon = produtoDe(grupoFavorito.opcoes[1]);
+const produtoCoca = {
+  id: `item:${itemCoca.id}`, tipo: 'ITEM', nome: itemCoca.nome, descricao: null, imagem: null,
+  preco: 6, status: 'ACTIVE', ordenavel: true, origem: { itemId: itemCoca.id },
+};
+
+const categorias = [
+  { id: 328734, nome: '🍔 TRADICIONAIS', itens: [itemTradicionais], produtos: [produtoXBurguer, produtoXBacon] },
+  { id: 400000, nome: '🥤 BEBIDAS', itens: [itemCoca, { ...itemTradicionais, nome: 'DUPLICADO' }], produtos: [produtoCoca] },
+];
+const indice = indicePorItemId(categorias);
+
+// ── indicePorItemId ─────────────────────────────────────────────────────────
+test('indicePorItemId: chaves em string e a PRIMEIRA ocorrência vence', () => {
+  assert.deepEqual([...indice.keys()], [String(IT_TRADICIONAIS), String(itemCoca.id)]);
+  // O mesmo item em duas categorias tem grupos idênticos: vale a primeira (nome original).
+  assert.equal(indice.get(String(IT_TRADICIONAIS)).nome, 'TRADICIONAIS 🍔');
+  assert.equal(indice.get('111'), itemCoca);
+  // A chave é STRING: o produto traz `origem.itemId` como número.
+  assert.equal(indice.get(IT_TRADICIONAIS), undefined);
+  assert.equal(indicePorItemId(null).size, 0);
+  assert.equal(indicePorItemId([{ itens: [{ nome: 'sem id' }] }]).size, 0);
+});
+
+// ── linhaDeProduto ──────────────────────────────────────────────────────────
+test('linhaDeProduto: OPCAO_PRINCIPAL nasce com o principal já escolhido', () => {
+  const linha = linhaDeProduto(produtoXBurguer, indice);
+  assert.deepEqual(linha, {
+    item: itemTradicionais,
+    apresentado: {
+      id: 'opcao:2979325:795194:3633259',
+      nome: 'X BURGUER',
+      imagem: 'x-burguer.jpg',
+      descricao: 'Carne 56G, queijo muçarela, alface e tomate',
+      grupoPrincipalId: G_FAVORITO,
+      opcaoId: OP_X_BURGUER,
+    },
+    selecoes: { [String(G_FAVORITO)]: [{ opcaoId: OP_X_BURGUER, qtd: 1 }] },
+    qtd: 1,
+    observacao: '',
+  });
+  // O item técnico vem POR REFERÊNCIA do índice (não é cópia): grupos e opções são os do
+  // catálogo, que é o que `podeAdicionarOpcao`/`subtotalLocal` sabem ler.
+  assert.equal(linha.item, itemTradicionais);
+});
+
+test('linhaDeProduto: ITEM abre vazio, como um toque no card de hoje', () => {
+  assert.deepEqual(linhaDeProduto(produtoCoca, indice), {
+    item: itemCoca, apresentado: null, selecoes: {}, qtd: 1, observacao: '',
+  });
+});
+
+test('linhaDeProduto: item fora do índice (ou produto quebrado) devolve null', () => {
+  assert.equal(linhaDeProduto({ ...produtoCoca, origem: { itemId: 999999 } }, indice), null);
+  assert.equal(linhaDeProduto({ ...produtoXBurguer, grupoPrincipalId: null, origem: { itemId: IT_TRADICIONAIS, opcaoId: OP_X_BURGUER } }, indice), null);
+  assert.equal(linhaDeProduto({ ...produtoXBurguer, origem: { itemId: IT_TRADICIONAIS, grupoId: G_FAVORITO } }, indice), null);
+  assert.equal(linhaDeProduto(null, indice), null);
+  assert.equal(linhaDeProduto(produtoXBurguer, null), null);
+});
+
+test('linhaDeProduto: grupoPrincipalId ausente cai para origem.grupoId', () => {
+  const semCampo = { ...produtoXBurguer };
+  delete semCampo.grupoPrincipalId;
+  const linha = linhaDeProduto(semCampo, indice);
+  assert.equal(linha.apresentado.grupoPrincipalId, G_FAVORITO);
+  assert.deepEqual(linha.selecoes, { [String(G_FAVORITO)]: [{ opcaoId: OP_X_BURGUER, qtd: 1 }] });
+});
+
+// ── A pré-seleção é INDISTINGUÍVEL de uma escolha manual ────────────────────
+test('montarCarrinho da vitrine é byte-idêntico ao da seleção manual do mesmo X BURGUER', () => {
+  const daVitrine = linhaDeProduto(produtoXBurguer, indice);
+  // O que o cliente faz hoje: abrir TRADICIONAIS e tocar em X BURGUER (chave NUMÉRICA).
+  const manual = { item: itemTradicionais, qtd: 1, observacao: '', selecoes: { [G_FAVORITO]: [{ opcaoId: OP_X_BURGUER, qtd: 1 }] } };
+  assert.equal(JSON.stringify(montarCarrinho([daVitrine])), JSON.stringify(montarCarrinho([manual])));
+  assert.deepEqual(montarCarrinho([daVitrine]), [{
+    itemId: '2979325', qtd: 1, grupos: [{ grupoId: '795194', opcoes: [{ opcaoId: '3633259', qtd: 1 }] }],
+  }]);
+});
+
+test('itemPronto: o principal já satisfaz o único grupo obrigatório', () => {
+  const linha = linhaDeProduto(produtoXBurguer, indice);
+  assert.deepEqual(itemPronto(linha.item, linha.selecoes), { ok: true, gruposFaltando: [] });
+  // Sem a pré-seleção o item não estaria pronto — é a prova de que a chave em string casa.
+  assert.deepEqual(itemPronto(linha.item, {}), { ok: false, gruposFaltando: [G_FAVORITO] });
+});
+
+test('subtotalLocal da linha da vitrine = preço base + preço da opção principal', () => {
+  assert.equal(subtotalLocal(linhaDeProduto(produtoXBurguer, indice)), 12);
+  assert.equal(subtotalLocal(linhaDeProduto(produtoXBacon, indice)), 16);
+  // Com um complemento de graça o valor não muda; com qtd 2, dobra.
+  const comMaionese = linhaDeProduto(produtoXBurguer, indice);
+  comMaionese.selecoes[G_MAIONESE] = [{ opcaoId: 2796650, qtd: 1 }];
+  assert.equal(subtotalLocal(comMaionese), 12);
+  assert.equal(subtotalLocal({ ...comMaionese, qtd: 2 }), 24);
+});
+
+// ── gruposRenderizaveis / identidade apresentada ────────────────────────────
+test('gruposRenderizaveis: o grupo principal não vai para a tela (nada de "trocar")', () => {
+  const linha = linhaDeProduto(produtoXBurguer, indice);
+  assert.deepEqual(gruposRenderizaveis(linha).map((g) => g.id), [G_MAIONESE]);
+  // Sem apresentação, todos os grupos aparecem, na ordem original.
+  assert.deepEqual(gruposRenderizaveis({ item: itemTradicionais }).map((g) => g.id), [G_FAVORITO, G_MAIONESE]);
+  assert.deepEqual(gruposRenderizaveis(null), []);
+});
+
+test('nome/imagem/descrição apresentados: a opção manda; sem ela, o item base', () => {
+  const linha = linhaDeProduto(produtoXBurguer, indice);
+  assert.equal(nomeApresentado(linha), 'X BURGUER');
+  assert.equal(imagemApresentada(linha), 'x-burguer.jpg');
+  assert.equal(descricaoApresentada(linha), 'Carne 56G, queijo muçarela, alface e tomate');
+
+  const semApresentacao = { item: itemTradicionais, apresentado: null, selecoes: {} };
+  assert.equal(nomeApresentado(semApresentacao), 'TRADICIONAIS 🍔');
+  assert.equal(imagemApresentada(semApresentacao), 'capa-tradicionais.jpg');
+
+  // Opção sem foto própria: cai para a do item (o mesmo que o backend faz na projeção).
+  const semFoto = { ...linha, apresentado: { ...linha.apresentado, imagem: null } };
+  assert.equal(imagemApresentada(semFoto), 'capa-tradicionais.jpg');
+  assert.equal(nomeApresentado(null), null);
+});
+
+test('opcoesVisiveisDaLinha: complementos sem o principal (X BURGUER não é adicional de si)', () => {
+  const linha = linhaDeProduto(produtoXBurguer, indice);
+  assert.deepEqual(opcoesVisiveisDaLinha(linha), []);
+  linha.selecoes[G_MAIONESE] = [{ opcaoId: 2796650, qtd: 1 }];
+  assert.deepEqual(opcoesVisiveisDaLinha(linha), [
+    { grupoId: G_MAIONESE, opcaoId: 2796650, nome: 'MAIONESE TRADICIONAL', preco: 0, qtd: 1 },
+  ]);
+  // Sem apresentação (item comum), não há principal e tudo aparece.
+  const manual = { item: itemTradicionais, selecoes: { [G_FAVORITO]: [{ opcaoId: OP_X_BURGUER, qtd: 1 }] } };
+  assert.deepEqual(opcoesVisiveisDaLinha(manual).map((o) => o.nome), ['X BURGUER']);
+});
+
+// ── DUAS linhas do mesmo item base (spec §6, ajuste 5) ──────────────────────
+// O caso que só existe por causa da vitrine: X BURGUER e X BACON são, no fio, o MESMO
+// item 2979325 com opções diferentes. Tudo que casa por itemId aqui é armadilha.
+test('duas linhas do mesmo item base: carrinho, subtotais e nomes são independentes', () => {
+  const l1 = { ...linhaDeProduto(produtoXBurguer, indice), uid: 'u1' };
+  const l2 = { ...linhaDeProduto(produtoXBacon, indice), uid: 'u2' };
+  const carrinho = [l1, l2];
+
+  assert.deepEqual(montarCarrinho(carrinho), [
+    { itemId: '2979325', qtd: 1, grupos: [{ grupoId: '795194', opcoes: [{ opcaoId: '3633259', qtd: 1 }] }] },
+    { itemId: '2979325', qtd: 1, grupos: [{ grupoId: '795194', opcoes: [{ opcaoId: '3633262', qtd: 1 }] }] },
+  ]);
+  assert.deepEqual(carrinho.map(subtotalLocal), [12, 16]);
+  assert.deepEqual(carrinho.map(nomeApresentado), ['X BURGUER', 'X BACON']);
+});
+
+test('duas linhas do mesmo item base: só a segunda mudou de preço → alteradasIdx [1]', () => {
+  const carrinho = [
+    { ...linhaDeProduto(produtoXBurguer, indice), uid: 'u1' },
+    { ...linhaDeProduto(produtoXBacon, indice), uid: 'u2' },
+  ];
+  // O HUB devolve as linhas NA ORDEM do carrinho (§5.2): X BACON subiu de 16 para 18.
+  const linhasHub = [
+    { itemId: '2979325', nome: 'TRADICIONAIS 🍔', qtd: 1, unitPrice: 0, totalPrice: 12, opcoes: [{ opcaoId: '3633259', nome: 'X BURGUER', qtd: 1, unitPrice: 12 }] },
+    { itemId: '2979325', nome: 'TRADICIONAIS 🍔', qtd: 1, unitPrice: 0, totalPrice: 18, opcoes: [{ opcaoId: '3633262', nome: 'X BACON', qtd: 1, unitPrice: 18 }] },
+  ];
+  const d = diffCotacao(carrinho, linhasHub, 28, 30);
+  // O DESTAQUE é por índice: só o X BACON acende.
+  assert.deepEqual(d.alteradasIdx, [1]);
+  // `alteradas` continua por itemId (compatibilidade) — e é exatamente por isso que ela
+  // NÃO serve para destacar aqui: as duas linhas têm o mesmo itemId.
+  assert.deepEqual(d.alteradas, ['2979325']);
+  assert.equal(d.totalMudou, true);
+});
+
+test('duas linhas do mesmo item base: editar uma por uid não encosta na outra', () => {
+  const l1 = { ...linhaDeProduto(produtoXBurguer, indice), uid: 'u1' };
+  const l2 = { ...linhaDeProduto(produtoXBacon, indice), uid: 'u2' };
+  const carrinho = [l1, l2];
+
+  // Edição do X BACON (qtd 3 + observação): é o corpo que `adicionarAoCarrinho` monta.
+  const editada = { ...l2, qtd: 3, observacao: 'sem tomate' };
+  const depois = substituirLinha(carrinho, 'u2', editada);
+  assert.deepEqual(depois.map((l) => l.uid), ['u1', 'u2']);
+  assert.equal(depois[0], l1);                       // a outra linha é a MESMA referência
+  assert.deepEqual(depois.map(subtotalLocal), [12, 48]);
+  assert.deepEqual(depois.map(nomeApresentado), ['X BURGUER', 'X BACON']);
+  assert.deepEqual(montarCarrinho(depois)[0], { itemId: '2979325', qtd: 1, grupos: [{ grupoId: '795194', opcoes: [{ opcaoId: '3633259', qtd: 1 }] }] });
+  assert.equal(montarCarrinho(depois)[1].observacao, 'sem tomate');
+
+  // Sem uid (item novo) a linha vai para o fim, sem tocar em ninguém.
+  const nova = { ...linhaDeProduto(produtoXBurguer, indice), uid: 'u3' };
+  assert.deepEqual(substituirLinha(carrinho, null, nova).map((l) => l.uid), ['u1', 'u2', 'u3']);
+  assert.deepEqual(substituirLinha(null, null, nova), [nova]);
 });

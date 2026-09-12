@@ -31,6 +31,7 @@ const DESCRICOES = {
   '/etiquetas/config': 'Etiquetas ANVISA e impressão',
   '/aparelhos': 'Tablets pareados: totem e TV',
   '/totem/pedidos': 'Pedidos criados pelo totem e revisão manual',
+  '/totem/apresentacao': 'O que o totem mostra: vitrine por opção ou card do item',
   '/relatorios/meta': 'Resultados dos anúncios no Meta',
   '/relatorios/cardapio': 'Vendas e faltas do cardápio',
 }

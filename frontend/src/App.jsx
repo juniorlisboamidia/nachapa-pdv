@@ -48,6 +48,7 @@ import MotoboysConfig from './pages/MotoboysConfig'
 import EscalaMotoboysPublica from './pages/EscalaMotoboysPublica'
 import Aparelhos from './pages/Aparelhos'
 import TotemPedidos from './pages/TotemPedidos'
+import TotemApresentacao from './pages/TotemApresentacao'
 import DispositivoPareamento from './pages/DispositivoPareamento'
 
 function TelaCarregando() {
@@ -148,11 +149,13 @@ export default function App() {
             {/* Em construção */}
             <Route path="etiquetas" element={<Etiquetas />} />
             <Route path="etiquetas/:tab" element={<Etiquetas />} />
-            {/* Aparelhos (tablets do totem/TV) e a auditoria do que o totem mandou ao CW.
-                As duas telas vivem na área `aparelhos` (backend/acessos/areas.js). */}
+            {/* Aparelhos (tablets do totem/TV), a auditoria do que o totem mandou ao CW e a
+                configuração do que ele MOSTRA. As três telas vivem na área `aparelhos`
+                (backend/acessos/areas.js) — o prefixo /totem já mapeia para ela. */}
             <Route path="aparelhos" element={<Aparelhos />} />
             <Route path="totem" element={<Navigate to="/totem/pedidos" replace />} />
             <Route path="totem/pedidos" element={<TotemPedidos />} />
+            <Route path="totem/apresentacao" element={<TotemApresentacao />} />
             {/* Marketing › Grupo VIP (Automações virou Marketing; rota antiga redireciona) */}
             <Route path="marketing/grupo-vip" element={<GrupoVip />} />
             <Route path="automacoes/grupo-vip" element={<Navigate to="/marketing/grupo-vip" replace />} />

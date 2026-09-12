@@ -117,6 +117,127 @@ export function subtotalLocal(linha) {
   return round2(unitario * qtd);
 }
 
+// ── Camada de APRESENTAÇÃO (spec §5/§6) ─────────────────────────────────────
+// O bootstrap agora pode trazer, ao lado de `itens` (a árvore técnica do CW), uma lista
+// `produtos` por categoria: a VITRINE. No modo EXPANDIDO uma opção do grupo principal
+// (ex.: "X BURGUER" dentro de "TRADICIONAIS 🍔") vira um card próprio, com nome, foto,
+// descrição e preço dela — mas o que vai para o carrinho continua sendo o item base com
+// aquela opção escolhida. Nada aqui inventa preço nem monta pedido: `montarCarrinho`,
+// `subtotalLocal` e `itemPronto` continuam exatamente os mesmos, e é por isso que uma
+// linha vinda da vitrine e uma linha montada à mão pelo cliente saem IDÊNTICAS no fio.
+//
+// Formas novas:
+//   produto  = { id, tipo, nome, descricao, imagem, preco, status, ordenavel, motivo?,
+//                origem:{ itemId, grupoId?, opcaoId? }, grupoPrincipalId? }   (§5)
+//   apresentado = { id, nome, imagem, descricao, grupoPrincipalId, opcaoId } | null
+//   linhaUI  = { item, apresentado, selecoes, qtd, observacao, uid? }
+
+// itemId → item TÉCNICO. O produto não carrega o item (ajuste 1 da spec): quem resolve o
+// vínculo é a tela, por id exato. O mesmo item em duas categorias tem grupos idênticos —
+// vale a primeira ocorrência, como no `mesclarAdmin` do backend.
+export function indicePorItemId(categorias) {
+  const indice = new Map();
+  for (const c of lista(categorias)) {
+    for (const it of lista(c?.itens)) {
+      if (it?.id === null || it?.id === undefined) continue;
+      const chave = String(it.id);
+      if (!indice.has(chave)) indice.set(chave, it);
+    }
+  }
+  return indice;
+}
+
+const doIndice = (indice, itemId) => {
+  const chave = String(itemId);
+  if (indice instanceof Map) return indice.get(chave) ?? null;
+  return (indice && typeof indice === 'object' ? indice[chave] : null) ?? null;
+};
+
+// Produto da vitrine → linha de carrinho. `null` quando o item base não está no índice
+// (catálogo trocou entre o bootstrap e o toque): a tela avisa e fica onde está, em vez de
+// abrir um detalhe sem grupos que morreria na cotação.
+// A chave de `selecoes` é o id do grupo em string — a mesma chave que `abrirItem` usa
+// (objeto JS converte `selecoes[795194]` e `selecoes['795194']` na MESMA propriedade), de
+// modo que `podeAdicionarOpcao`, `itemPronto` e `montarCarrinho` não distinguem uma
+// pré-seleção de um toque do cliente.
+export function linhaDeProduto(produto, indice) {
+  const item = doIndice(indice, produto?.origem?.itemId);
+  if (!item) return null;
+
+  if (produto?.tipo === 'OPCAO_PRINCIPAL') {
+    const grupoId = produto?.grupoPrincipalId ?? produto?.origem?.grupoId;
+    const opcaoId = produto?.origem?.opcaoId;
+    // Produto expandido sem o trio de ids é produto quebrado: não vira linha nenhuma.
+    if (grupoId === null || grupoId === undefined || opcaoId === null || opcaoId === undefined) return null;
+    return {
+      item,
+      apresentado: {
+        id: produto?.id ?? null,
+        nome: produto?.nome ?? null,
+        imagem: produto?.imagem ?? null,
+        descricao: produto?.descricao ?? null,
+        grupoPrincipalId: grupoId,
+        opcaoId,
+      },
+      selecoes: { [String(grupoId)]: [{ opcaoId, qtd: 1 }] },
+      qtd: 1,
+      observacao: '',
+    };
+  }
+
+  return { item, apresentado: null, selecoes: {}, qtd: 1, observacao: '' };
+}
+
+// Grupos que o DETALHE desenha: todos, menos o grupo principal. Ele já foi escolhido no
+// card (é a identidade do produto) — mostrá-lo deixaria o cliente "trocar" o X BURGUER por
+// um X BACON dentro da tela do X BURGUER. Trocar de produto é voltar ao grid.
+export function gruposRenderizaveis(linha) {
+  const grupos = lista(linha?.item?.grupos);
+  const principal = linha?.apresentado?.grupoPrincipalId;
+  if (principal === null || principal === undefined) return grupos;
+  return grupos.filter((g) => !mesmoId(g?.id, principal));
+}
+
+// Identidade que o CLIENTE vê, do card ao comprovante. Sem apresentação, é o item base.
+export function nomeApresentado(linha) {
+  return linha?.apresentado?.nome ?? linha?.item?.nome ?? null;
+}
+export function imagemApresentada(linha) {
+  return linha?.apresentado?.imagem ?? linha?.item?.imagem ?? null;
+}
+export function descricaoApresentada(linha) {
+  return linha?.apresentado?.descricao ?? linha?.item?.descricao ?? null;
+}
+
+// Complementos da linha para o carrinho/revisão: as opções escolhidas MENOS a principal.
+// Sem isto, "X BURGUER" apareceria listado como complemento de si mesmo.
+export function opcoesVisiveisDaLinha(linha) {
+  const out = [];
+  for (const g of gruposRenderizaveis(linha)) {
+    for (const e of lista(linha?.selecoes?.[g?.id])) {
+      const op = lista(g?.opcoes).find((o) => mesmoId(o?.id, e?.opcaoId));
+      if (!op) continue; // opção que saiu do catálogo: some da lista, como no subtotal
+      out.push({
+        grupoId: g?.id,
+        opcaoId: op.id,
+        nome: op.nome ?? null,
+        preco: num(op.preco),
+        qtd: Math.max(1, Math.trunc(num(e?.qtd, 1))),
+      });
+    }
+  }
+  return out;
+}
+
+// Troca a linha de mesmo `uid` (edição) ou acrescenta ao fim (item novo). Puro, e por isso
+// testável: é ele que garante que editar UMA das duas linhas do mesmo item base não
+// encoste na outra — o casamento é por `uid`, nunca por `itemId`.
+export function substituirLinha(linhas, uid, linha) {
+  const atual = lista(linhas);
+  if (!uid) return [...atual, linha];
+  return atual.map((l) => (l?.uid === uid ? linha : l));
+}
+
 // Carrinho no formato do contrato (§5.2). Ids em string, quantidades inteiras, e NENHUM
 // preço: o corpo que o aparelho manda descreve o que o cliente quer, nunca quanto custa.
 export function montarCarrinho(linhasUI) {
@@ -148,10 +269,17 @@ const difere = (a, b) => Math.abs(num(a) - num(b)) > 0.005;
 // `totalPrice` da linha: assim o preço de uma OPÇÃO que subiu também aparece.
 // O HUB devolve as linhas na ordem do carrinho; casamos por índice e, se o id do índice
 // não bater (linha recusada, ordem diferente), caímos para o casamento por itemId.
+//
+// Duas saídas, e a diferença importa (§6, ajuste 5): `alteradas` é lista de ITEM ID e
+// existe desde sempre; com a vitrine, DUAS linhas podem sair do mesmo item base (X BURGUER
+// e X BACON são o item "TRADICIONAIS 🍔"), e marcar por itemId acenderia as duas quando só
+// uma mudou de preço. `alteradasIdx` traz os ÍNDICES das linhas do carrinho — é por ele que
+// a tela destaca. O CASAMENTO não mudou: só a forma de relatar o resultado.
 export function diffCotacao(linhasUI, linhasHub, totalLocal, totalHub) {
   const ui = lista(linhasUI);
   const hub = lista(linhasHub);
   const alteradas = [];
+  const alteradasIdx = [];
   const marcar = (id) => { if (id != null && !alteradas.includes(String(id))) alteradas.push(String(id)); };
   const usados = new Set();
 
@@ -164,11 +292,11 @@ export function diffCotacao(linhasUI, linhasHub, totalLocal, totalHub) {
       if (j >= 0) { par = hub[j]; usados.add(j); }
     }
     // Sem par no retorno do HUB a linha não foi cotada: para o cliente, ela mudou.
-    if (!par) { marcar(itemId); return; }
-    if (difere(subtotalLocal(linha), par.totalPrice)) marcar(itemId);
+    if (!par) { marcar(itemId); alteradasIdx.push(i); return; }
+    if (difere(subtotalLocal(linha), par.totalPrice)) { marcar(itemId); alteradasIdx.push(i); }
   });
 
-  return { alteradas, totalMudou: difere(totalLocal, totalHub) };
+  return { alteradas, alteradasIdx, totalMudou: difere(totalLocal, totalHub) };
 }
 
 // Desfecho de um POST /pedido que NÃO deu 201/202 → o que a tela faz com ele.

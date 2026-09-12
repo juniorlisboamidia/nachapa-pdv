@@ -129,7 +129,17 @@ export const grupos = [
     // mandou ao cardápio. Rotas e permissões não mudam — só o agrupamento.
     label: 'Loja Digital', icon: 'monitorSmartphone',
     itens: [
-      { to: '/totem/pedidos', label: 'Totem', icon: 'tablet', area: 'aparelhos' },
+      {
+        // Totem virou subgrupo: são duas telas de naturezas diferentes — "Pedidos" audita o
+        // que o tablet mandou ao cardápio, "Apresentação" decide o que ele MOSTRA. Área e
+        // rotas não mudaram; a de cima (`/totem/pedidos`) segue sendo a primeira folha, que
+        // é para onde o card da Visão Geral e o /totem apontam.
+        label: 'Totem', icon: 'tablet', area: 'aparelhos',
+        itens: [
+          { to: '/totem/pedidos', label: 'Pedidos', icon: 'relatorios' },
+          { to: '/totem/apresentacao', label: 'Apresentação', icon: 'ficha' },
+        ],
+      },
       { to: '/aparelhos', label: 'Aparelhos', icon: 'cpu', area: 'aparelhos' },
     ],
   },

@@ -24,6 +24,10 @@ test('subitens de Ferramentas e Loja Digital com identidade própria', () => {
   assert.equal(icone('Ferramentas', 'Etiquetas'), 'tag');
   assert.equal(icone('Loja Digital', 'Totem'), 'tablet');
   assert.equal(icone('Loja Digital', 'Aparelhos'), 'cpu');
+  // As duas folhas do Totem também se distinguem entre si.
+  const totem = grupo(grupo(grupos, 'Loja Digital').itens, 'Totem').itens;
+  assert.deepEqual(totem.map((n) => n.icon), ['relatorios', 'ficha']);
+  assert.equal(new Set(totem.map((n) => n.icon)).size, totem.length);
 });
 
 test('subitens de Marketing, Produtos e Dep. Pessoal com ícone semântico (Lucide)', () => {
@@ -36,6 +40,9 @@ test('subitens de Marketing, Produtos e Dep. Pessoal com ícone semântico (Luci
 });
 
 test('nenhum ícone se repete entre os subitens de uma mesma categoria', () => {
+  // Só o 2º nível. Mais fundo o ícone deixa de ser identidade e vira decoração (Ponto
+  // Facial repete `ponto` de propósito, em Painel/Marcações/Coletor), então exigir
+  // unicidade lá dentro seria inventar uma regra que a árvore nunca teve.
   for (const g of grupos) {
     const usados = g.itens.map((n) => n.icon ?? n.iconImg).filter(Boolean);
     assert.equal(new Set(usados).size, usados.length, `ícone repetido em "${g.label}": ${usados.join(', ')}`);
@@ -73,19 +80,28 @@ test('Ferramentas volta a ter só Checklist e Etiquetas', () => {
   assert.deepEqual(labels(grupo(grupos, 'Ferramentas').itens), ['Checklist', 'Etiquetas']);
 });
 
-test('Loja Digital na ordem Totem, Aparelhos — Totem aponta para os pedidos, Aparelhos para /aparelhos', () => {
+test('Loja Digital na ordem Totem, Aparelhos — Totem é subgrupo (Pedidos, Apresentação)', () => {
   const ld = grupo(grupos, 'Loja Digital').itens;
-  assert.deepEqual(ld.map((n) => [n.label, n.to, n.area]), [
-    ['Totem', '/totem/pedidos', 'aparelhos'],
-    ['Aparelhos', '/aparelhos', 'aparelhos'],
+  assert.deepEqual(ld.map((n) => n.label), ['Totem', 'Aparelhos']);
+  const totem = grupo(ld, 'Totem');
+  // A área continua sendo a MESMA das duas telas (`aparelhos`): virar subgrupo é
+  // agrupamento visual, não mudança de permissão.
+  assert.equal(totem.area, 'aparelhos');
+  assert.equal(totem.to, undefined, 'o subgrupo não é link: quem tem rota são as folhas');
+  assert.deepEqual(totem.itens.map((n) => [n.label, n.to]), [
+    ['Pedidos', '/totem/pedidos'],
+    ['Apresentação', '/totem/apresentacao'],
   ]);
-  assert.ok(ld.every((n) => !n.itens), 'itens de Loja Digital são folhas (sem subgrupo)');
+  // Folha sem `area` herda a do pai — é o que faz o filtro do operador funcionar.
+  assert.ok(totem.itens.every((n) => n.area === undefined));
+  assert.deepEqual(grupo(ld, 'Aparelhos'), { to: '/aparelhos', label: 'Aparelhos', icon: 'cpu', area: 'aparelhos' });
 });
 
-test('operador com aparelhos vê só Loja Digital, com Totem e Aparelhos', () => {
+test('operador com aparelhos vê só Loja Digital, com Totem (as duas telas) e Aparelhos', () => {
   const v = gruposVisiveis({ tipo: 'operador', areas: ['aparelhos'] });
   assert.deepEqual(labels(v), ['Loja Digital']);
   assert.deepEqual(labels(grupo(v, 'Loja Digital').itens), ['Totem', 'Aparelhos']);
+  assert.deepEqual(labels(grupo(grupo(v, 'Loja Digital').itens, 'Totem').itens), ['Pedidos', 'Apresentação']);
 });
 
 test('operador com etiquetas vê Ferramentas com Etiquetas e NÃO vê Loja Digital', () => {
@@ -105,6 +121,7 @@ test('localizarRota abre o nível certo', () => {
   assert.deepEqual(localizarRota('/relatorios/meta'), { grupo: 'Relatórios', sub: null });
   assert.deepEqual(localizarRota('/checklist/painel'), { grupo: 'Ferramentas', sub: 'Checklist' });
   assert.deepEqual(localizarRota('/aparelhos'), { grupo: 'Loja Digital', sub: null });
-  assert.deepEqual(localizarRota('/totem/pedidos'), { grupo: 'Loja Digital', sub: null });
+  assert.deepEqual(localizarRota('/totem/pedidos'), { grupo: 'Loja Digital', sub: 'Totem' });
+  assert.deepEqual(localizarRota('/totem/apresentacao'), { grupo: 'Loja Digital', sub: 'Totem' });
   assert.deepEqual(localizarRota('/'), { grupo: null, sub: null });
 });

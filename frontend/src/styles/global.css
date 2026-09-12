@@ -3334,6 +3334,10 @@ body.theme-dark .apr-contagem, body.theme-dark .apr-qr-legenda, body.theme-dark 
 .ttm-acoes { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .ttm-acoes .btn { min-height: 34px; }
 .ttm-dica { font-size: 11.5px; color: var(--app-text-3); margin-top: 6px; }
+/* Formulário de uma linha da tela Totem › Apresentação: modo + grupo principal, empilhados
+   para o nome longo do grupo (e o motivo da recusa) caberem sem espremer a tabela. */
+.ttm-apr-form { display: flex; flex-direction: column; gap: 6px; min-width: 280px; max-width: 420px; }
+.ttm-apr-form .form-input { min-height: 34px; font-size: 13px; }
 
 body.theme-dark .ttm-alerta-admin { background: #2a1c0d; border-color: #b45309; color: #fde8cf; }
 body.theme-dark .ttm-linha-revisao td { background: #2a1c0d; }
@@ -3489,6 +3493,14 @@ body.theme-dark .hb-table tr.ttm-linha-revisao:hover td { background: #3a2612; }
   box-shadow: 0 10px 28px rgba(14, 19, 25, 0.34); max-width: calc(100vw - 32px);
 }
 .ttm-flutuante:active { transform: translateX(-50%) scale(0.985); }
+/* Recado passageiro do totem (ex.: produto que sumiu do catálogo entre o bootstrap e o
+   toque). Alto contraste, acima do botão flutuante, e some sozinho em 4 s. */
+.ttm-aviso-passageiro {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: 96px; z-index: 40;
+  max-width: calc(100vw - 32px); padding: 14px 22px; border-radius: 14px;
+  background: #7f1d1d; color: #fff; font-size: 17px; font-weight: 700; text-align: center;
+  box-shadow: 0 10px 28px rgba(14, 19, 25, 0.34);
+}
 .ttm-flutuante-qtd {
   min-width: 32px; height: 32px; padding: 0 8px; border-radius: 999px; background: #f97316; color: #fff;
   display: inline-grid; place-items: center; font-size: 16px; font-weight: 850;
