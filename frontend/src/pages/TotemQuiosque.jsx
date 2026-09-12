@@ -606,7 +606,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
   }
 
   const banner = boot?.desatualizado
-    ? <div className="ttm-banner-desatualizado">O menu pode estar desatualizado. O valor final é confirmado na revisão.</div>
+    ? <div className="tq-banner">O menu pode estar desatualizado. O valor final é confirmado na revisão.</div>
     : null
 
   // ── Telas ─────────────────────────────────────────────────────────────────

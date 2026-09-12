@@ -12,6 +12,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { aparelhoApi } from '../services/api'
 import { mensagemErro } from '../components/totemCarrinho'
 import TotemQuiosque from './TotemQuiosque'
+import Casca from '../components/totem/Casca'
+import TelaAviso from '../components/totem/TelaAviso'
 // A casca do quiosque vive em arquivo próprio, importado SÓ aqui: é esta página
 // (e o que ela monta) que roda no tablet. O admin não carrega nada disto, e o
 // prefixo `.tq-` não encosta no `.ttm-` das telas de escritório (spec §10.1).
@@ -137,12 +139,12 @@ export default function DispositivoPareamento() {
 
   if (estado === 'carregando') {
     return (
-      <div className="ttm-raiz">
-        <div className="ttm-tela ttm-centrado">
-          <span className="ttm-spinner" aria-hidden="true" />
-          <div className="ttm-carregando-txt">Verificando este aparelho…</div>
+      <Casca>
+        <div className="tq-centrado">
+          <span className="tq-spinner" aria-hidden="true" />
+          <div className="tq-carregando-txt">Verificando este aparelho…</div>
         </div>
-      </div>
+      </Casca>
     )
   }
 
@@ -152,54 +154,51 @@ export default function DispositivoPareamento() {
     }
     // TV_INDOOR: o aparelho está conectado, mas a tela dele é de outra fase.
     return (
-      <div className="ttm-raiz">
-        <div className="ttm-tela ttm-aviso-tela">
-          <div className="ttm-aviso-emoji" aria-hidden="true">📺</div>
-          <h1 className="ttm-aviso-titulo">Este aparelho é uma TV</h1>
-          <p className="ttm-aviso-texto">
-            “{sessao.aparelho.nome}” está conectado{sessao.loja?.nome ? ` à loja ${sessao.loja.nome}` : ''}, mas a tela da TV
-            ainda não está disponível. Nada a fazer aqui por enquanto.
-          </p>
-          <button type="button" className="ttm-btn ttm-btn-secundario" onClick={desconectar}>Desconectar este aparelho</button>
-        </div>
-      </div>
+      <Casca>
+        <TelaAviso
+          icone="pausa"
+          titulo="Este aparelho é uma TV"
+          texto={`“${sessao.aparelho.nome}” está conectado${sessao.loja?.nome ? ` à loja ${sessao.loja.nome}` : ''}, mas a tela da TV ainda não está disponível. Nada a fazer aqui por enquanto.`}
+          acoes={<button type="button" className="tq-btn tq-btn-claro" onClick={desconectar}>Desconectar este aparelho</button>}
+        />
+      </Casca>
     )
   }
 
   return (
-    <div className="ttm-raiz ttm-pareamento">
-      <div className="ttm-tela ttm-pareamento-tela">
-        <div className="ttm-pareamento-cabeca">
-          <div className="ttm-pareamento-rotulo">Conectar aparelho</div>
-          <h1 className="ttm-pareamento-titulo">Digite o código de 6 dígitos</h1>
-          <p className="ttm-pareamento-sub">
+    <Casca>
+      <div className="tq-pareamento">
+        <div className="tq-pareamento-cabeca">
+          <div className="tq-pareamento-rot tq-rotulo">Conectar aparelho</div>
+          <h1 className="tq-pareamento-tit tq-disp tq-disp-forte">Digite o código de 6 dígitos</h1>
+          <p className="tq-pareamento-sub">
             O código é gerado no PDV, em <strong>Ferramentas › Aparelhos › Parear</strong>, e vale por 10 minutos.
           </p>
         </div>
 
-        <div className="ttm-caixas" aria-label="Código de pareamento">
+        <div className="tq-caixas" aria-label="Código de pareamento">
           {Array.from({ length: TAMANHO }).map((_, i) => (
-            <div key={i} className={'ttm-caixa' + (codigo[i] ? ' cheia' : '') + (codigo.length === i && !enviando ? ' ativa' : '')}>
+            <div key={i} className={'tq-caixa tq-disp tq-disp-forte tq-num' + (codigo[i] ? ' cheia' : '') + (codigo.length === i && !enviando ? ' ativa' : '')}>
               {codigo[i] ?? ''}
             </div>
           ))}
         </div>
 
-        {enviando && <div className="ttm-pareamento-status"><span className="ttm-spinner" aria-hidden="true" /> Conectando…</div>}
-        {erro && !enviando && <div className="ttm-pareamento-erro" role="alert">{erro}</div>}
+        {enviando && <div className="tq-pareamento-status"><span className="tq-spinner claro" aria-hidden="true" /> Conectando…</div>}
+        {erro && !enviando && <div className="tq-pareamento-erro" role="alert">{erro}</div>}
         {falhaRede && !erro && !enviando && (
-          <div className="ttm-pareamento-erro" role="alert">Sem conexão com o sistema. Verifique a rede do tablet e tente de novo.</div>
+          <div className="tq-pareamento-erro" role="alert">Sem conexão com o sistema. Verifique a rede do tablet e tente de novo.</div>
         )}
 
-        <div className="ttm-teclado">
+        <div className="tq-teclado">
           {TECLAS.map((t) => (
-            <button key={t} type="button" className="ttm-tecla" disabled={enviando} onClick={() => digitar(t)}>{t}</button>
+            <button key={t} type="button" className="tq-tecla tq-disp tq-num" disabled={enviando} onClick={() => digitar(t)}>{t}</button>
           ))}
-          <button type="button" className="ttm-tecla ttm-tecla-vazia" disabled aria-hidden="true" tabIndex={-1} />
-          <button type="button" className="ttm-tecla" disabled={enviando} onClick={() => digitar('0')}>0</button>
+          <button type="button" className="tq-tecla vazia" disabled aria-hidden="true" tabIndex={-1} />
+          <button type="button" className="tq-tecla tq-disp tq-num" disabled={enviando} onClick={() => digitar('0')}>0</button>
           <button
             type="button"
-            className="ttm-tecla ttm-tecla-apagar"
+            className="tq-tecla apagar"
             disabled={enviando || codigo.length === 0}
             onClick={apagar}
           >
@@ -207,8 +206,8 @@ export default function DispositivoPareamento() {
           </button>
         </div>
 
-        <button type="button" className="ttm-btn-link" onClick={verificar} disabled={enviando}>Já conectei este aparelho</button>
+        <button type="button" className="tq-link" onClick={verificar} disabled={enviando}>Já conectei este aparelho</button>
       </div>
-    </div>
+    </Casca>
   )
 }

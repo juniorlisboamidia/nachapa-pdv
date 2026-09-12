@@ -77,6 +77,7 @@
   --tq-barra-h: 132px;
   --tq-lado-l: clamp(190px, 21vw, 260px);
 
+  position: relative;   /* âncora do toast, da sobreposição de envio e do alerta */
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
@@ -743,3 +744,49 @@
 }
 .tq-sheet h2 { font-size: clamp(24px, 3vw, 32px); }
 .tq-sheet p { color: var(--tq-texto-2); font-size: clamp(16px, 1.7vw, 19px); }
+
+/* ═══ V11 — pareamento do aparelho (/dispositivo) ══════════════════════════ */
+/* Mesma casca e mesmos tokens do quiosque: é a primeira tela que a equipe vê no
+   tablet, e ela não pode parecer de outro produto. */
+.tq-pareamento {
+  flex: 1 1 auto; background: var(--tq-preto); color: var(--tq-branco);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 20px; padding: clamp(28px, 4vw, 56px); text-align: center;
+}
+.tq-pareamento-cabeca { max-width: 520px; display: flex; flex-direction: column; gap: 8px; }
+.tq-pareamento-rot { color: var(--tq-amarelo); }
+.tq-pareamento-tit { font-size: clamp(26px, 3.4vw, 38px); line-height: 1.15; }
+.tq-pareamento-sub { color: var(--tq-texto-claro); font-size: clamp(16px, 1.7vw, 19px); line-height: 1.5; }
+.tq-pareamento-status { display: flex; align-items: center; gap: 12px; min-height: 32px; font-weight: 700; color: var(--tq-texto-claro); }
+.tq-pareamento-erro {
+  background: #3a1210; border: 2px solid #b3564f; border-radius: var(--tq-raio-2);
+  padding: 14px 18px; color: #ffd9d5; font-weight: 700; max-width: 520px; line-height: 1.45;
+}
+.tq-caixas { display: flex; gap: 12px; justify-content: center; }
+.tq-caixa {
+  width: clamp(52px, 6vw, 68px); height: clamp(68px, 8vw, 88px); border-radius: 14px;
+  border: 2px solid #39404a; background: var(--tq-preto-2); color: var(--tq-branco);
+  display: grid; place-items: center; font-size: clamp(28px, 3.4vw, 38px);
+}
+.tq-caixa.cheia { border-color: var(--tq-branco); }
+.tq-caixa.ativa { border-color: var(--tq-amarelo); box-shadow: 0 0 0 4px rgba(249, 217, 0, 0.22); }
+.tq-teclado { display: grid; grid-template-columns: repeat(3, clamp(96px, 11vw, 124px)); gap: 14px; justify-content: center; }
+.tq-tecla {
+  min-height: clamp(74px, 8vh, 92px); border-radius: 16px;
+  border: 2px solid #39404a; background: var(--tq-preto-2); color: var(--tq-branco);
+  font-size: clamp(26px, 3vw, 32px);
+}
+.tq-tecla:active:not(:disabled) { background: #262d37; transform: scale(0.97); }
+.tq-tecla:disabled { opacity: 0.35; cursor: not-allowed; }
+.tq-tecla.apagar { font-size: clamp(15px, 1.7vw, 19px); font-weight: 800; }
+.tq-tecla.vazia { visibility: hidden; }
+.tq-pareamento .tq-link { color: var(--tq-amarelo); }
+.tq-pareamento-pe { color: #5f5a50; font-size: 13px; }
+
+/* Menu possivelmente desatualizado (snapshot servido porque o HUB não respondeu).
+   Faixa fina, nunca um bloqueio: o valor final é confirmado na revisão. */
+.tq-banner {
+  flex: 0 0 auto; background: var(--tq-aviso-fundo); border-bottom: 1px solid #e8cf6a;
+  padding: 10px 16px; text-align: center; color: var(--tq-aviso-tinta);
+  font-weight: 600; font-size: clamp(14px, 1.5vw, 17px);
+}

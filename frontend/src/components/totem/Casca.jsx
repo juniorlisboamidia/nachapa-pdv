@@ -3,10 +3,12 @@
 // cada `return` — era assim que a tela antiga fazia, e cada cópia era uma chance
 // de esquecer uma regra de fundo, fonte ou rolagem.
 //
-// `ttm-raiz` continua aqui de propósito e sai na V11: enquanto houver tela
-// migrada e tela antiga convivendo, as antigas ainda dependem do bloco `.ttm-*`
-// do global.css para caixa e fonte. `.tq-raiz` entra depois na folha final, então
-// onde as duas se sobrepõem quem manda é a nova.
+// A partir da V11 não há mais convivência: o bloco `.ttm-*` do quiosque saiu do
+// global.css e a casca é só `.tq-raiz`. O que sobrou de `.ttm-` no global.css
+// pertence às telas de escritório (Totem › Pedidos e › Apresentação).
+//
+// `position: relative` é o que ancora o que flutua dentro do quiosque — aviso
+// passageiro, sobreposição de envio e o alerta de inatividade.
 export default function Casca({ children }) {
-  return <div className="tq-raiz ttm-raiz">{children}</div>
+  return <div className="tq-raiz">{children}</div>
 }
