@@ -12,6 +12,8 @@
 //   opcao   = { id, nome, preco, status, maxQuantidade, imagem, descricao }
 //   selecao = [{ opcaoId, qtd }]         · selecoes = { [grupoId]: selecao }
 
+import { podeAdicionarOpcao } from './totemCarrinho.js'
+
 const lista = (v) => (Array.isArray(v) ? v : [])
 const num = (v, padrao = 0) => {
   const n = Number(v)
@@ -74,4 +76,37 @@ export function obrigatoriosPendentes(grupos, selecoes) {
 export function modoDeOpcoes(grupo) {
   const temFoto = lista(grupo?.opcoes).some((o) => typeof o?.imagem === 'string' && o.imagem.trim() !== '')
   return temFoto ? 'GRADE' : 'LISTA'
+}
+
+// ── Aplicação de um toque numa opção ────────────────────────────────────────
+// A TRANSFORMAÇÃO da seleção, isolada da tela. Ela existe para que a decisão de
+// avançar de grupo (totemFoco) possa comparar o antes e o depois do MESMO toque
+// sem duplicar a lógica dentro de um manipulador de evento.
+//
+// A régua de o que pode entrar continua sendo `podeAdicionarOpcao`, de
+// totemCarrinho — aqui nada é redecidido. Quando o toque não muda nada, devolve
+// a MESMA referência: é assim que quem chama sabe que não houve transição.
+
+export function aplicarToque(grupo, selecao, opcao) {
+  const sel = lista(selecao)
+  // Em SINGLE/MULTIPLE, tocar no que já está escolhido DESMARCA — é o gesto que o
+  // cliente espera, e a única forma de desfazer num grupo opcional.
+  if (grupo?.choiceType !== 'SUMMABLE' && qtdDaOpcao(sel, opcao?.id) > 0) {
+    return sel.filter((e) => !mesmoId(e?.opcaoId, opcao?.id))
+  }
+  const r = podeAdicionarOpcao(grupo, sel, opcao)
+  if (!r.ok) return selecao
+  if (r.substitui) return [{ opcaoId: opcao.id, qtd: 1 }]
+  if (qtdDaOpcao(sel, opcao?.id) > 0) {
+    return sel.map((e) => (mesmoId(e?.opcaoId, opcao?.id) ? { ...e, qtd: Math.max(1, Math.trunc(num(e.qtd, 1))) + 1 } : e))
+  }
+  return [...sel, { opcaoId: opcao.id, qtd: 1 }]
+}
+
+// Uma unidade a menos. Na última, a opção sai da seleção.
+export function aplicarMenos(selecao, opcao) {
+  const sel = lista(selecao)
+  const atual = qtdDaOpcao(sel, opcao?.id)
+  if (atual <= 1) return sel.filter((e) => !mesmoId(e?.opcaoId, opcao?.id))
+  return sel.map((e) => (mesmoId(e?.opcaoId, opcao?.id) ? { ...e, qtd: atual - 1 } : e))
 }

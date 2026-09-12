@@ -31,9 +31,10 @@ import TelaCatalogo from '../components/totem/TelaCatalogo'
 import BarraPedido from '../components/totem/BarraPedido'
 import TelaItem from '../components/totem/TelaItem'
 import { Ico } from '../components/totem/icones'
-import { obrigatoriosPendentes } from '../components/totemLayout'
+import { obrigatoriosPendentes, aplicarToque, aplicarMenos } from '../components/totemLayout'
+import { atingiuMax, proximoFoco } from '../components/totemFoco'
 import {
-  podeAdicionarOpcao, itemPronto, itemOrdenavel, subtotalLocal,
+  itemPronto, itemOrdenavel, subtotalLocal,
   montarCarrinho, diffCotacao, chaveNova, mensagemErro, proximoEstadoAposFalha,
   indicePorItemId, linhaDeProduto, gruposRenderizaveis, nomeApresentado,
   imagemApresentada, descricaoApresentada, opcoesVisiveisDaLinha, substituirLinha,
@@ -57,10 +58,14 @@ const KIND_LABEL = { money: 'Dinheiro', debit_card: 'Cartão de débito', credit
 const moeda = (v) => Number(v ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 const codigoDe = (e) => e?.response?.data?.erro ?? (e?.response ? 'ERRO_INTERNO' : 'HUB_INDISPONIVEL')
 
-const qtdSelecionada = (sel, opcaoId) => {
-  const e = (Array.isArray(sel) ? sel : []).find((x) => String(x.opcaoId) === String(opcaoId))
-  return e ? (Number(e.qtd) || 1) : 0
-}
+// Os grupos que o DETALHE desenha: sem o principal da vitrine (ele é a identidade
+// do produto, escolhida no card) e sem os INACTIVE, que o HUB também ignora.
+// Vive fora do componente porque é usado nos dois lados — no que desenha e no
+// que decide o avanço automático — e precisa dar exatamente a mesma lista.
+const gruposVisiveisDe = (linha) => (
+  linha ? gruposRenderizaveis(linha).filter((g) => !g.status || g.status === 'ACTIVE' || g.status === 'MISSING') : []
+)
+
 
 // ── Blocos de UI pequenos ───────────────────────────────────────────────────
 const Spinner = ({ claro }) => <span className={'tq-spinner' + (claro ? ' claro' : '')} aria-hidden="true" />
@@ -359,33 +364,30 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
     setTela('item')
   }
 
+  // Tudo acontece DENTRO do updater, e de propósito: a decisão de avançar depende
+  // de comparar a seleção antes e depois do MESMO toque, e ler o estado de fora
+  // daria a versão do render anterior num toque duplo. Aqui é tudo puro —
+  // `aplicarToque` e `proximoFoco` são funções testadas, sem efeito colateral.
+  //
+  // O alvo do avanço mora em `aberto.foco`, não num estado à parte: abrir outro
+  // produto ou fechar o detalhe já apaga o alvo junto, sem limpeza manual.
   function tocarOpcao(grupo, opcao) {
     setAberto((a) => {
-      const sel = a.selecoes[grupo.id] ?? []
-      const tipo = grupo.choiceType
-      // Em SINGLE/MULTIPLE, tocar no que já está escolhido DESMARCA — é o gesto que o
-      // cliente espera, e é a única forma de desfazer num grupo opcional.
-      if (tipo !== 'SUMMABLE' && qtdSelecionada(sel, opcao.id) > 0) {
-        return { ...a, selecoes: { ...a.selecoes, [grupo.id]: sel.filter((e) => String(e.opcaoId) !== String(opcao.id)) } }
-      }
-      const r = podeAdicionarOpcao(grupo, sel, opcao)
-      if (!r.ok) return a
-      const nova = r.substitui
-        ? [{ opcaoId: opcao.id, qtd: 1 }]
-        : (qtdSelecionada(sel, opcao.id) > 0
-          ? sel.map((e) => (String(e.opcaoId) === String(opcao.id) ? { ...e, qtd: (Number(e.qtd) || 1) + 1 } : e))
-          : [...sel, { opcaoId: opcao.id, qtd: 1 }])
-      return { ...a, selecoes: { ...a.selecoes, [grupo.id]: nova } }
+      const antes = a.selecoes[grupo.id] ?? []
+      const depois = aplicarToque(grupo, antes, opcao)
+      if (depois === antes) return a   // toque recusado (limite, opção em falta)
+      const foco = atingiuMax(grupo, antes, depois)
+        ? { ...proximoFoco(gruposVisiveisDe(a), grupo.id), seq: (a.foco?.seq ?? 0) + 1 }
+        : a.foco                        // desmarcar e escolha parcial não movem a tela
+      return { ...a, selecoes: { ...a.selecoes, [grupo.id]: depois }, foco }
     })
   }
 
   function menosOpcao(grupo, opcao) {
-    setAberto((a) => {
-      const sel = a.selecoes[grupo.id] ?? []
-      const atual = qtdSelecionada(sel, opcao.id)
-      if (atual <= 1) return { ...a, selecoes: { ...a.selecoes, [grupo.id]: sel.filter((e) => String(e.opcaoId) !== String(opcao.id)) } }
-      return { ...a, selecoes: { ...a.selecoes, [grupo.id]: sel.map((e) => (String(e.opcaoId) === String(opcao.id) ? { ...e, qtd: atual - 1 } : e)) } }
-    })
+    setAberto((a) => ({
+      ...a,
+      selecoes: { ...a.selecoes, [grupo.id]: aplicarMenos(a.selecoes[grupo.id] ?? [], opcao) },
+    }))
   }
 
   function adicionarAoCarrinho() {
@@ -642,9 +644,8 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
       : (temPromoBase && !aberto.precoCard
         ? { valor: Math.round((cabecalho.valor + descontoDaBase) * 100) / 100, valorPromocional: cabecalho.valor }
         : { valor: cabecalho.valor })
-    // Só os grupos que a tela desenha: o principal da vitrine fica de fora (é a
-    // identidade do produto) e INACTIVE também, como o HUB faz na cotação.
-    const gruposVisiveis = gruposRenderizaveis(aberto).filter((g) => !g.status || g.status === 'ACTIVE' || g.status === 'MISSING')
+    // Só os grupos que a tela desenha — a MESMA lista que decide o avanço automático.
+    const gruposVisiveis = gruposVisiveisDe(aberto)
     const pendentes = obrigatoriosPendentes(gruposVisiveis, aberto.selecoes)
     conteudo = (
       <>
@@ -668,6 +669,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
           podePedir={podePedir}
           qtd={aberto.qtd}
           observacao={aberto.observacao}
+          foco={aberto.foco}
           ehEdicao={!!aberto.uid}
           aoTocarOpcao={tocarOpcao}
           aoMenosOpcao={menosOpcao}

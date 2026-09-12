@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import Foto from './Foto'
 import Preco from './Preco'
 import Stepper from './Stepper'
@@ -21,7 +21,7 @@ import { moeda } from './formato'
 export default function TelaItem({
   nome, descricao, imagem,
   grupos, selecoes, pendentes, temObrigatorio,
-  preco, pronto, podePedir, qtd, observacao, ehEdicao,
+  preco, pronto, podePedir, qtd, observacao, ehEdicao, foco,
   aoTocarOpcao, aoMenosOpcao, aoMudarQtd, aoMudarObservacao, aoAdicionar,
 }) {
   const conteudoRef = useRef(null)
@@ -33,6 +33,28 @@ export default function TelaItem({
     const suave = !window.matchMedia('(prefers-reduced-motion: reduce)').matches
     caixa.scrollTo({ top: Math.max(0, alvo.offsetTop - 16), behavior: suave ? 'smooth' : 'auto' })
   }, [])
+
+  // Avanço automático (spec §8). Quem decide SE avança e PARA ONDE é o módulo
+  // puro `totemFoco`, no orquestrador; aqui só se executa a rolagem — e com duas
+  // restrições que evitam que a tela brigue com o cliente: nunca rola para trás,
+  // e não rola se o alvo já está inteiro na área visível.
+  useEffect(() => {
+    if (!foco) return
+    const caixa = conteudoRef.current
+    if (!caixa) return
+    const suave = !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (foco.tipo === 'CTA') {
+      // Último grupo concluído: o destino é o fim do conteúdo, onde está o botão.
+      caixa.scrollTo({ top: caixa.scrollHeight, behavior: suave ? 'smooth' : 'auto' })
+      return
+    }
+    const alvo = document.getElementById(`tq-g-${foco.id}`)
+    if (!alvo) return
+    const topo = Math.max(0, alvo.offsetTop - 16)
+    const jaVisivel = alvo.offsetTop >= caixa.scrollTop && alvo.offsetTop + alvo.offsetHeight <= caixa.scrollTop + caixa.clientHeight
+    if (jaVisivel || topo <= caixa.scrollTop) return
+    caixa.scrollTo({ top: topo, behavior: suave ? 'smooth' : 'auto' })
+  }, [foco])
 
   return (
     <>
@@ -82,7 +104,8 @@ export default function TelaItem({
         />
         <button
           type="button"
-          className="tq-btn tq-btn-primario tq-btn-largo"
+          key={foco?.tipo === 'CTA' ? `cta-${foco.seq}` : 'cta'}
+          className={'tq-btn tq-btn-primario tq-btn-largo' + (foco?.tipo === 'CTA' ? ' tq-cta-pulso' : '')}
           disabled={!pronto.ok || !podePedir.ok}
           onClick={aoAdicionar}
         >

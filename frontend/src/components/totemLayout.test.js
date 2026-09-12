@@ -6,7 +6,7 @@
 // grupos que estão segurando o botão — na ordem do Cardápio Web.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { somaDaSelecao, qtdDaOpcao, regraDoGrupo, obrigatoriosPendentes, modoDeOpcoes } from './totemLayout.js';
+import { somaDaSelecao, qtdDaOpcao, regraDoGrupo, obrigatoriosPendentes, modoDeOpcoes, aplicarToque, aplicarMenos } from './totemLayout.js';
 
 const grupo = (id, extra = {}) => ({ id, nome: `Grupo ${id}`, min: 0, max: null, status: 'ACTIVE', opcoes: [], ...extra });
 
@@ -113,4 +113,42 @@ test('string vazia não conta como foto', () => {
 test('grupo sem opções não quebra', () => {
   assert.equal(modoDeOpcoes(grupo(1)), 'LISTA');
   assert.equal(modoDeOpcoes(null), 'LISTA');
+});
+
+// ── aplicarToque / aplicarMenos ─────────────────────────────────────────────
+const opt = (id, extra = {}) => ({ id, nome: `Op ${id}`, preco: 0, status: 'ACTIVE', maxQuantidade: null, ...extra });
+const gSingle = grupo(1, { choiceType: 'SINGLE', min: 1, max: 1, opcoes: [opt(10), opt(11)] });
+const gMult = grupo(2, { choiceType: 'MULTIPLE', min: 0, max: 2, opcoes: [opt(20), opt(21), opt(22)] });
+const gSum = grupo(3, { choiceType: 'SUMMABLE', min: 0, max: 3, opcoes: [opt(30, { maxQuantidade: 2 })] });
+
+test('SINGLE substitui a escolha anterior', () => {
+  assert.deepEqual(aplicarToque(gSingle, [{ opcaoId: 10, qtd: 1 }], opt(11)), [{ opcaoId: 11, qtd: 1 }]);
+});
+
+test('tocar no que já está escolhido desmarca (SINGLE e MULTIPLE)', () => {
+  assert.deepEqual(aplicarToque(gSingle, [{ opcaoId: 10, qtd: 1 }], opt(10)), []);
+  assert.deepEqual(aplicarToque(gMult, [{ opcaoId: 20, qtd: 1 }], opt(20)), []);
+});
+
+test('MULTIPLE no limite devolve a MESMA referência — nada mudou', () => {
+  const antes = [{ opcaoId: 20, qtd: 1 }, { opcaoId: 21, qtd: 1 }];
+  assert.equal(aplicarToque(gMult, antes, opt(22)), antes);
+});
+
+test('SUMMABLE soma até o teto da opção e para', () => {
+  const um = aplicarToque(gSum, [], opt(30, { maxQuantidade: 2 }));
+  assert.deepEqual(um, [{ opcaoId: 30, qtd: 1 }]);
+  const dois = aplicarToque(gSum, um, opt(30, { maxQuantidade: 2 }));
+  assert.deepEqual(dois, [{ opcaoId: 30, qtd: 2 }]);
+  assert.equal(aplicarToque(gSum, dois, opt(30, { maxQuantidade: 2 })), dois);
+});
+
+test('opção em falta não entra', () => {
+  const antes = [];
+  assert.equal(aplicarToque(gMult, antes, opt(20, { status: 'MISSING' })), antes);
+});
+
+test('aplicarMenos tira uma unidade e some na última', () => {
+  assert.deepEqual(aplicarMenos([{ opcaoId: 30, qtd: 2 }], opt(30)), [{ opcaoId: 30, qtd: 1 }]);
+  assert.deepEqual(aplicarMenos([{ opcaoId: 30, qtd: 1 }], opt(30)), []);
 });

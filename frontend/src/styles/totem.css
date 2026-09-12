@@ -558,3 +558,8 @@
 /* Limite do grupo atingido: as não escolhidas apagam, mas nenhuma some da tela. */
 .tq-op.bloqueada { opacity: 0.45; }
 .tq-grupo-limite { margin: -6px 0 12px; color: #8a6a00; font-weight: 700; font-size: clamp(14px, 1.4vw, 16px); }
+
+/* ═══ V7 — avanço automático ═══════════════════════════════════════════════ */
+/* Último grupo concluído: além de rolar até o rodapé, o botão pisca uma vez.
+   A `key` do botão muda a cada avanço, então a animação recomeça sem estado. */
+.tq-cta-pulso { animation: tq-pulso 0.5s ease; }
