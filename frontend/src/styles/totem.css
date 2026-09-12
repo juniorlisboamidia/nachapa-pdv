@@ -322,10 +322,14 @@
    à primeira versão: a composição sai do centro (placa e texto lado a lado, texto
    alinhado à esquerda), o amarelo deixa de ser só a cor dos dois cards, e os
    alvos crescem para tamanho de totem, não de link. */
+/* Em RETRATO `vw` é o lado curto: dimensionar a composição inteira por ele
+   deixava o conteúdo ocupando menos da metade de uma tela de 1920 de altura, com
+   preto morto em cima e embaixo. Aqui o bloco de ações CRESCE para tomar a
+   sobra, e as medidas verticais olham a altura. */
 .tq-inicio {
   flex: 1 1 auto; position: relative; background: var(--tq-preto); color: var(--tq-branco);
   display: flex; flex-direction: column; justify-content: center;
-  gap: clamp(28px, 5vh, 64px); padding: clamp(36px, 5vw, 72px);
+  gap: clamp(28px, 5vh, 110px); padding: clamp(36px, 4vh, 88px) clamp(36px, 5vw, 72px);
 }
 .tq-inicio-topo { display: flex; align-items: center; gap: clamp(24px, 4vw, 48px); }
 @media (max-width: 599px) { .tq-inicio-topo { flex-direction: column; text-align: center; } }
@@ -338,7 +342,7 @@
   padding: clamp(16px, 2.2vw, 28px); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
   display: grid; place-items: center;
 }
-.tq-placa img { display: block; width: clamp(150px, 22vw, 300px); max-height: 22vh; object-fit: contain; }
+.tq-placa img { display: block; width: clamp(150px, 26vw, 340px); max-height: 20vh; object-fit: contain; }
 .tq-inicio-marca {
   flex: 0 0 auto; width: clamp(130px, 17vw, 220px); aspect-ratio: 1; border-radius: 26px;
   background: var(--tq-amarelo); color: var(--tq-tinta);
@@ -346,16 +350,21 @@
 }
 
 .tq-inicio-txt { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
-.tq-inicio-loja { color: var(--tq-amarelo); font-size: clamp(15px, 1.7vw, 21px); letter-spacing: 0.24em; }
-.tq-inicio-tit { font-size: clamp(44px, 7.4vw, 104px); line-height: 0.94; letter-spacing: -0.02em; }
+.tq-inicio-loja { color: var(--tq-amarelo); font-size: clamp(15px, 2vw, 26px); letter-spacing: 0.24em; }
+.tq-inicio-tit { font-size: clamp(44px, 8.6vw, 128px); line-height: 0.94; letter-spacing: -0.02em; }
 .tq-inicio-tit span { display: block; }
-.tq-inicio-sub { font-size: clamp(17px, 2vw, 26px); color: var(--tq-texto-claro); }
+.tq-inicio-sub { font-size: clamp(17px, 2.4vw, 32px); color: var(--tq-texto-claro); }
 
-.tq-modos { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(16px, 2.4vw, 28px); }
+/* Ocupa a sobra da coluna, com teto para não virar um paredão numa tela muito
+   alta. É isto que enche o retrato, sem esticar tipografia. */
+.tq-modos {
+  flex: 0 1 auto; display: grid; grid-template-columns: 1fr 1fr;
+  gap: clamp(16px, 2.4vw, 32px); height: clamp(240px, 46vh, 880px);
+}
 .tq-modos.um { grid-template-columns: minmax(0, 1fr); }
 .tq-modo {
-  background: var(--tq-amarelo); color: var(--tq-tinta); border-radius: 24px;
-  min-height: clamp(240px, 30vh, 440px); padding: clamp(24px, 3vw, 44px) 20px;
+  background: var(--tq-amarelo); color: var(--tq-tinta); border-radius: 26px;
+  height: 100%; padding: clamp(24px, 3vw, 44px) 20px;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
   transition: background 0.14s ease, transform 0.1s ease;
 }
@@ -363,10 +372,13 @@
 /* A frase agora é a do cliente e é mais longa: quebra em duas linhas
    equilibradas em vez de espremer o corpo do cartão. */
 .tq-modo-t {
-  font-size: clamp(23px, 3.1vw, 42px); letter-spacing: 0.01em; text-transform: uppercase;
+  font-size: clamp(23px, 3.6vw, 52px); letter-spacing: 0.01em; text-transform: uppercase;
   line-height: 1.05; text-wrap: balance; max-width: 12ch;
 }
-.tq-modo-s { font-size: clamp(15px, 1.7vw, 21px); opacity: 0.66; }
+.tq-modo-s { font-size: clamp(15px, 1.9vw, 26px); opacity: 0.66; }
+/* O ícone acompanha a altura do cartão: em 96px fixos ele sumia dentro de um
+   bloco de 800px. O CSS vence o atributo width do SVG. */
+.tq-modo .tq-ico { width: clamp(72px, 10vh, 168px); height: auto; }
 
 
 /* ═══ V3 — catálogo: sidebar de categorias e grade de produtos ═════════════ */
