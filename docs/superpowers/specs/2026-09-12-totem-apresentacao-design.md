@@ -59,7 +59,7 @@ Produtos `ITEM` (modo normal): `precoMinimo = preco + Σ custoMinimo(obrigatóri
 ## 6. Comportamento no Totem (rev. 3)
 
 - **Card:** mostra `precoMinimo` (ou `precoMinimoPromocional` com "de/por" quando houver promo); prefixo **"a partir de"** quando `precoEhAPartirDe`. MISSING → "Em falta"; `!ordenavel` → "Indisponível no momento".
-- **Detalhe:** título/foto/descrição do produto apresentado; grupo principal oculto e pré-selecionado; **todos os demais grupos visíveis na ordem do CW, obrigatórios marcados como hoje**; `itemPronto` exige todos; cabeçalho mostra o subtotal local corrente (identidade + escolhas) e o rótulo "a partir de" enquanto faltar obrigatório. Trocar o principal = voltar ao grid.
+- **Detalhe:** título/foto/descrição do produto apresentado; grupo principal oculto e pré-selecionado; **todos os demais grupos visíveis na ordem do CW, obrigatórios marcados como hoje**; `itemPronto` exige todos. **Cabeçalho (preço):** enquanto faltar obrigatório, mostra `max(subtotal local, precoMinimo do card × qtd)` com o rótulo "a partir de" (o rótulo depende só de faltar obrigatório — nunca de `precoEhAPartirDe`); com tudo escolhido, mostra o subtotal local sem rótulo. Assim o detalhe nunca anuncia um valor abaixo do menor preço pagável nem diverge do card. Linha sem `precoMinimo` (bootstrap antigo) mantém o subtotal local. Trocar o principal = voltar ao grid.
 - **Carrinho/Revisar/Confirmar/cotar/pedido:** sem mudança (rev. 2).
 
 ## 7. Fallback e avisos
@@ -69,7 +69,7 @@ Configuração revalidada a cada bootstrap. Inválida → NORMAL na vitrine + av
 ## 8. Tela admin — UX (rev. 3)
 
 - **Estado neutro** para item que não é candidato: texto cinza "Sem grupo de escolha única com duas ou mais opções" — sem código, sem vermelho. Item candidato sem configuração: "Pode virar vitrine" com o select disponível. Item com `obrigatoriosAlem > 0`: nota informativa "Tem outras escolhas obrigatórias: o card mostra 'a partir de'".
-- **Vermelho só quando existe configuração salva e ela deixou de valer**, com frase humana e o código discreto ao lado: `ITEM_AUSENTE` "este item não está mais no cardápio do balcão"; `GRUPO_AUSENTE` "o grupo escolhido não existe mais neste item"; `GRUPO_NAO_E_ESCOLHA_UNICA` "o grupo passou a aceitar mais de uma escolha"; `GRUPO_SEM_OPCOES` "o grupo ficou sem opções"; `GRUPO_COM_UMA_OPCAO` "o grupo ficou com uma opção só"; `GRUPO_INDISPONIVEL` "o grupo está oculto no cardápio".
+- **Vermelho só quando existe configuração salva e ela deixou de valer**, com frase humana e o código discreto ao lado: `ITEM_AUSENTE` "este item não está mais no cardápio do balcão"; `GRUPO_AUSENTE` "o grupo escolhido não existe mais neste item"; `GRUPO_NAO_E_ESCOLHA_UNICA` "o grupo passou a aceitar mais de uma escolha"; `GRUPO_SEM_OPCOES` "o grupo ficou sem opções"; `GRUPO_COM_UMA_OPCAO` "o grupo tem uma opção só"; `GRUPO_INDISPONIVEL` "o grupo está oculto no cardápio". (Textos são os do `MENSAGENS_ADMIN` do backend, espelhados no frontend.)
 - Select de grupo: opções não elegíveis desabilitadas com a frase humana (código só em `title`). Órfãs e Sugestões como na rev. 2. Sidebar já é Loja Digital › Totem › {Pedidos, Apresentação}.
 
 ## 9. Testes (delta rev. 3)
