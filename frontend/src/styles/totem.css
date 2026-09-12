@@ -68,12 +68,12 @@
 
   /* ── Papéis do quiosque, apontando para a marca ── */
   --tq-preto: var(--ds-fundo);
-  --tq-preto-2: var(--ds-cartao);
+  --tq-preto-2: #1a1817;      /* derivado: ver nota das superfícies */
   --tq-branco: var(--ds-texto);
   --tq-amarelo: var(--ds-botao-fundo);
   --tq-tinta: var(--ds-botao-texto);
   --tq-fundo: var(--ds-fundo);
-  --tq-superficie: var(--ds-cartao);
+  --tq-superficie: #131211;   /* derivado: ver nota das superfícies */
   --tq-texto: var(--ds-texto);
   --tq-texto-2: var(--ds-texto-apoio);
 
@@ -91,9 +91,13 @@
   /* Terceiro nível de texto: branco rebaixado, nunca um cinza novo. */
   --tq-texto-3: rgba(255, 255, 255, 0.70);
   --tq-texto-claro: rgba(255, 255, 255, 0.74);
-  /* Superfícies entre o fundo e o cartão. */
-  --tq-superficie-2: #1b1305;
-  --tq-superficie-3: #33240a;
+  /* Superfícies. O `surface.card` da marca (#251a07) é um marrom dessaturado: ao
+     lado do preto puro, e ainda por baixo de foto de comida, ele lê como sujeira,
+     não como superfície. Aqui as superfícies são quase-pretas com um fio de calor
+     — quem dá cor à tela é a fotografia e o dourado. O marrom da marca continua
+     em uso onde funciona: nas faixas de aviso. */
+  --tq-superficie-2: #0b0a09;
+  --tq-superficie-3: #221f1b;
   /* Semânticos: nenhum vem do Design System. */
   --tq-perigo: #ff7a6e;
   --tq-perigo-fraco: #2f100c;
@@ -266,19 +270,29 @@
   font-family: var(--tq-fonte-display); font-weight: 900; font-size: clamp(15px, 1.5vw, 17px);
 }
 .tq-topo-btn:active { transform: scale(0.98); }
-.tq-topo-btn.perigo { border-color: rgba(255, 122, 110, 0.5); color: var(--tq-perigo); }
-.tq-topo-logo { max-height: 56px; max-width: 132px; object-fit: contain; display: block; }
-.tq-marca {
-  width: 56px; height: 56px; border-radius: 14px; background: var(--tq-preto); color: var(--tq-amarelo);
-  display: grid; place-items: center; font-size: 26px; flex: 0 0 auto;
-}
-.tq-topo-meio { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+/* A logo NÃO entra aqui. O arquivo do cardápio vem com fundo branco, e no
+   cabeçalho escuro ele virava um selo branco de 56px encostado no canto. A marca
+   já se apresenta inteira na tela de repouso; aqui basta o nome da loja como
+   sobrelinha. */
+.tq-topo-meio { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.tq-topo-sup { color: var(--tq-texto-2); font-size: clamp(11px, 1.1vw, 13px); }
 .tq-topo-tit {
-  font-size: clamp(20px, 2.2vw, 27px); line-height: 1.15;
+  font-size: clamp(19px, 2.1vw, 26px); line-height: 1.15;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.tq-topo-modo { font-size: clamp(15px, 1.5vw, 19px); color: var(--tq-texto-3); }
-.tq-topo-vaga { flex: 0 0 auto; width: 56px; }
+.tq-topo-vaga { flex: 0 0 auto; width: 40px; }
+/* Cancelar joga o pedido fora, mas é a ação MENOS provável da tela: vira texto,
+   sem moldura e sem peso. Só ganha corpo quando pede confirmação. */
+.tq-topo-cancelar {
+  flex: 0 0 auto; min-height: 56px; padding: 0 14px; border-radius: 12px;
+  background: none; border: none; color: rgba(255, 255, 255, 0.62);
+  font-family: var(--tq-fonte-corpo); font-weight: 400; font-size: clamp(14px, 1.4vw, 16px);
+}
+.tq-topo-cancelar:active { color: var(--tq-branco); }
+.tq-topo-cancelar.confirmando {
+  background: var(--tq-perigo); color: var(--tq-tinta);
+  font-family: var(--tq-fonte-display); font-weight: 900; padding: 0 18px;
+}
 
 /* Textura do fundo preto: listras duras a 3% de branco. Não é gradiente (não há
    transição), é padrão — serve só para o preto deixar de ser uma chapa morta em
@@ -365,12 +379,15 @@
   background: linear-gradient(to top, var(--tq-preto), rgba(0, 0, 0, 0));
 }
 .tq-cat {
-  width: 100%; min-height: 84px; padding: 14px 12px; text-align: left;
+  width: 100%; min-height: 76px; padding: 14px 14px; text-align: left;
   display: flex; align-items: center;
   color: var(--tq-branco);
-  font-family: var(--tq-fonte-display);
-  font-weight: 700; font-size: clamp(15px, 1.6vw, 18px); line-height: 1.15;
-  letter-spacing: 0.01em; text-transform: uppercase;
+  /* Corpo, não display: em Montserrat 900 a lista virava um bloco de texto
+     grosso sem respiro, e nome de categoria é ITEM DE LISTA, não título. */
+  font-family: var(--tq-fonte-corpo);
+  font-weight: 400; font-size: clamp(14px, 1.5vw, 17px); line-height: 1.2;
+  letter-spacing: 0.03em; text-transform: uppercase;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
   transition: background 0.12s ease, color 0.12s ease;
 }
 /* O nome da categoria SEMPRE aparece, e quebra por palavra. O `anywhere` de
@@ -384,7 +401,11 @@
 /* Ativo é BLOCO AMARELO com texto preto — não uma barrinha lateral. Numa lista
    de dez categorias vista a dois metros, seis pixels de borda não respondem
    "onde eu estou". Preto sobre amarelo dá 13,3:1; branco sobre preto, 17,4:1. */
-.tq-cat[aria-current='true'] { background: var(--tq-amarelo); color: var(--tq-tinta); font-weight: 900; }
+/* Ativa: bloco dourado e, aí sim, display — é a única linha que precisa gritar. */
+.tq-cat[aria-current='true'] {
+  background: var(--tq-amarelo); color: var(--tq-tinta);
+  font-family: var(--tq-fonte-display); font-weight: 900; border-bottom-color: transparent;
+}
 
 /* -- Grade ----------------------------------------------------------------- */
 .tq-grade {
@@ -416,10 +437,14 @@
 .tq-card:disabled { cursor: not-allowed; }
 .tq-card:disabled .tq-foto { filter: grayscale(1); opacity: 0.6; }
 .tq-card-txt { flex: 1 1 auto; display: flex; flex-direction: column; gap: 6px; padding: 16px 18px 18px; }
-/* Nome nunca parte no meio da palavra: em duas colunas estreitas era assim que
+/* Nome de produto em CORPO, não display: Montserrat 900 num nome de três
+   palavras vira uma barra preta e rouba a leitura da foto e do preço. O preço
+   continua em display — é ele que precisa ancorar o card.
+   Nome nunca parte no meio da palavra: em duas colunas estreitas era assim que
    "X CALA BURGUER" virava uma coluna de letras. */
 .tq-card-nome {
-  font-size: clamp(20px, 2.1vw, 27px); line-height: 1.12;
+  font-family: var(--tq-fonte-corpo); font-weight: 400;
+  font-size: clamp(20px, 2.1vw, 26px); line-height: 1.15; letter-spacing: 0.01em;
   word-break: normal; overflow-wrap: normal; hyphens: none;
 }
 .tq-card-desc {
@@ -592,8 +617,8 @@
 .tq-op-txt { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 /* Quebra só por palavra, no máximo três linhas. */
 .tq-op-nome {
-  font-family: var(--tq-fonte-display); font-weight: 900;
-  font-size: clamp(15px, 1.6vw, 18px); line-height: 1.2;
+  font-family: var(--tq-fonte-corpo); font-weight: 400;
+  font-size: clamp(15px, 1.6vw, 18px); line-height: 1.25; letter-spacing: 0.01em;
   word-break: normal; overflow-wrap: normal; hyphens: none;
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
 }
@@ -723,7 +748,10 @@
   aspect-ratio: auto; border-radius: var(--tq-raio-2); object-fit: cover;
 }
 .tq-linha-corpo { flex: 1 1 auto; min-width: 0; }
-.tq-linha-nome { font-size: clamp(19px, 2.1vw, 26px); line-height: 1.2; }
+.tq-linha-nome {
+  font-family: var(--tq-fonte-corpo); font-weight: 400;
+  font-size: clamp(18px, 2vw, 24px); line-height: 1.25;
+}
 /* A quantidade abre o nome, sem ficha nem cor: é leitura de comanda. */
 .tq-linha-qtd { margin-right: 6px; }
 .tq-linha-ops { margin-top: 8px; font-size: clamp(15px, 1.6vw, 18px); color: var(--tq-texto-2); line-height: 1.5; }
@@ -956,4 +984,3 @@
 }
 
 /* Cancelar pedido pede confirmação: o segundo toque é que apaga. */
-.tq-topo-btn.perigo.confirmando { background: var(--tq-perigo); border-color: var(--tq-perigo); color: var(--tq-tinta); }
