@@ -134,6 +134,10 @@ Nada no CSS atual foi escrito para **retrato grande**. Entre 561px e ∞ existe 
 
 Math do alvo: sidebar `clamp(190px, 21vw, 260px)` → 227px em 1080. Área de produtos 853 − 48 de padding = 805; gap 20 → **cards de 392px** com foto 4:3 de **294px**. Altura útil 1920 − 96 (header) − 132 (barra) = 1692 → ~4 linhas visíveis, 8 produtos por tela sem rolar. É esse número que transforma "app web" em "totem".
 
+> **Divergência conhecida entre spec e implementação (2026-09-12, aberta).** A faixa de 600–899px promete "sidebar estreita"; a implementação usa o mesmo piso de `190px` em qualquer largura abaixo de 900, então nessa faixa a sidebar ocupa ~27% da tela e os cards caem para ~218px. **Não corrigir antes de medir o hardware final**: a única leitura disponível hoje (`694 × 911`) é viewport de janela de teste, não monitor. Se o aparelho definitivo entregar viewport ≥ 900px CSS, a faixa não existe em produção e a regra some da spec em vez de virar código.
+>
+> Para a medição, o heartbeat **não basta**: `heartbeatJson.tela` guarda apenas `window.innerWidth × innerHeight`, ou seja, viewport CSS. Separar viewport de tela física exige também `screen.width × height`, `devicePixelRatio` e `screen.orientation.type` — hoje lidos à mão no console do aparelho, sem campo novo no contrato.
+
 **Confirmação da resolução real (decisão 1 do §16).** 1080 × 1920 é a referência oficial da V1 e a implementação segue com ela. A tela `Aparelhos` **não** passa a exibir resolução nesta frente — a medida verdadeira é lida no checkpoint físico, pelo `heartbeatJson.tela` que o próprio totem já grava a cada 60 s (item 16 do checklist §13.3). Como nenhuma medida do desenho é fixa em pixels de tela, uma divergência ajusta as faixas desta tabela, não o layout.
 
 ---
