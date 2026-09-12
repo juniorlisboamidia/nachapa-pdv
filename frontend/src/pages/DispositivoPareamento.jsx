@@ -12,6 +12,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { aparelhoApi } from '../services/api'
 import { mensagemErro } from '../components/totemCarrinho'
 import TotemQuiosque from './TotemQuiosque'
+// A casca do quiosque vive em arquivo próprio, importado SÓ aqui: é esta página
+// (e o que ela monta) que roda no tablet. O admin não carrega nada disto, e o
+// prefixo `.tq-` não encosta no `.ttm-` das telas de escritório (spec §10.1).
+import '../styles/totem.css'
 
 const TECLAS = ['1', '2', '3', '4', '5', '6', '7', '8', '9']
 const TAMANHO = 6
