@@ -1,6 +1,8 @@
 # Totem — Redesign de UX/UI (Fase V1) — Design Doc
 
-**Revisão 2 — 2026-09-12.** Arquitetura aprovada conceitualmente pelo Junior. Esta revisão fecha as cinco decisões de produto (§16) e aplica quatro correções: sai o campo de observação, o checklist passa a distinguir TRADICIONAIS de COMBO, "os mais pedidos" deixa de ser tratado como categoria sintética e a tela inicial perde a foto ambiente. **Implementação (V1–V11) ainda não autorizada.**
+**Revisão 2 — 2026-09-12.** Arquitetura aprovada pelo Junior. Fecha as cinco decisões de produto (§16); o checklist passa a distinguir TRADICIONAIS de COMBO, "os mais pedidos" deixa de ser tratado como categoria sintética e a tela inicial perde a foto ambiente.
+
+**Revisão 2.1 — 2026-09-12, antes da V1.** O campo de observação **fica**. A retirada registrada no commit `8cf8159` foi revertida assim que se confirmou que o recurso é funcional em produção: nesta frente ele só muda de apresentação (§4.3). **Implementação V1–V11 autorizada.**
 
 **Data:** 2026-09-12
 **Repo:** `nachapa-pdv` (PDV "Operação")
@@ -177,19 +179,30 @@ E também, dentro de `TotemQuiosque.jsx`, **toda a camada de orquestração**: b
 - Os subcomponentes locais `Cabecalho`, `TelaAviso`, `FotoItem`, `PrecoItem`, `Stepper`, `Spinner`.
 - Os emoji.
 
-### 4.3 É removido: o campo de observação
+### 4.3 É preservado, com apresentação nova: o campo de observação
 
-Decisão do Junior nesta revisão: o Totem redesenhado **não** tem o campo "Alguma observação?".
+**Decisão vigente (rev. 2.1):** o recurso de observação por item **continua funcionando exatamente como hoje**. A retirada descrita na rev. 2 foi revertida antes de qualquer código — ela partia da premissa de que o campo não estava no fluxo validado, e o campo está: `TotemQuiosque.jsx` desenha um `<textarea>` de 200 caracteres no detalhe, `montarCarrinho` emite `observacao` na linha quando há texto, o carrinho mostra o texto, e o HUB e o Cardápio Web aceitam o campo.
 
-Um registro honesto do que isso significa, porque o campo **existe hoje** e está no ar: `TotemQuiosque.jsx` desenha um `<textarea>` de 200 caracteres no fim do detalhe; `montarCarrinho` já emite `observacao` na linha quando o texto não está vazio; o carrinho mostra o texto entre aspas; e o HUB e o Cardápio Web aceitam o campo. Portanto isto é a **retirada de um elemento existente**, não a recusa de um elemento novo.
+**Preservado sem alteração:**
 
-O que sai e o que fica:
+- entrada de observação por item, com limite de **200 caracteres**;
+- o valor no estado do fluxo (`aberto.observacao` → `linha.observacao`);
+- `montarCarrinho` emitindo `observacao` (módulo puro intocado, testes intocados);
+- o envio ao HUB e ao CW;
+- a exibição da observação no carrinho e na revisão.
 
-- **Sai:** o bloco no detalhe, o texto na linha do carrinho, a regra de CSS do `<textarea>` e a exceção de `user-select`.
-- **Fica intocado:** `montarCarrinho` continua suportando `observacao` (e seus testes continuam passando) — simplesmente nada preenche o campo, e o corpo enviado passa a nunca trazê-lo. O contrato é opcional, então nada quebra no HUB nem no CW.
-- **Reversível:** voltar atrás é acrescentar um bloco de UI, sem tocar em contrato nem em teste.
+**Muda só a apresentação (task V5):**
 
-Se a intenção era manter o recurso e apenas não redesenhá-lo, este é o ponto de reverter — antes da V5, que é a task que constrói o detalhe.
+- depois do último grupo de complementos, uma ação discreta **"+ Adicionar observação"** — não um bloco de formulário permanente ocupando altura;
+- o campo nasce **fechado**; ao tocar, expande o `textarea`;
+- rótulo **"OBSERVAÇÃO DO ITEM · opcional"**, placeholder curto ("Ex.: sem cebola");
+- contador **"0 / 200"** ao lado do rótulo, acompanhando o que foi digitado;
+- exceção de `user-select` restaurada para o `textarea` — é o único ponto de digitação livre do quiosque;
+- teclado nativo do dispositivo, sem teclado próprio na tela;
+- **abre já expandido e preenchido** ao editar uma linha do carrinho que tem observação;
+- o texto **não se perde** ao rolar, ao escolher complementos nem ao avançar entre grupos: ele vive no estado do item aberto, como hoje.
+
+**Nenhum contrato, payload, rota, backend ou teste muda.**
 
 ### 4.4 É acrescentado (novo, puro e testado)
 
@@ -347,6 +360,12 @@ O wireframe acima mostra **TRADICIONAIS 🍔**, categoria normal: nove produtos 
 │ │ ✓ COCA COLA LATA      │ │  GUARANÁ LATA          │ │
 │ └───────────────────────┘ └────────────────────────┘ │
 │ …                                                    │
+│                                                      │
+│  + Adicionar observação                              │ ← fechado por padrão
+│  ┌─ ao tocar, expande ───────────────────────────┐   │
+│  │ OBSERVAÇÃO DO ITEM · opcional        12 / 200 │   │
+│  │ [ Ex.: sem cebola                           ] │   │
+│  └───────────────────────────────────────────────┘   │
 ├──────────────────────────────────────────────────────┤
 │  [− 1 +]     [   ADICIONAR · R$ 27,90            ]   │
 └──────────────────────────────────────────────────────┘
@@ -360,7 +379,7 @@ O wireframe acima mostra **TRADICIONAIS 🍔**, categoria normal: nove produtos 
 | Sem avanço automático | **Progressão automática** (§8) |
 | Grupo principal oculto | **Mantido** (`gruposRenderizaveis`) |
 | Cabeçalho/botão com o piso do card | **Mantido** (`precoDoCabecalho`), só re-tipografado |
-| Campo "Alguma observação?" no fim da página | **Removido** — o detalhe termina no último grupo (§4.3) |
+| Bloco "Alguma observação?" sempre aberto, ocupando altura no fim da página | **Ação discreta "+ Adicionar observação"**, fechada por padrão, que expande o campo com rótulo, placeholder e contador `0 / 200`. Recurso e limite idênticos (§4.3) |
 
 ### D. Carrinho
 
@@ -372,6 +391,7 @@ O wireframe acima mostra **TRADICIONAIS 🍔**, categoria normal: nove produtos 
 │ │[foto] 1× X BURGUER                     R$ 27,90  │ │
 │ │       • Coca cola lata                           │ │
 │ │       • Batata frita                             │ │
+│ │       “sem cebola”                               │ │  ← observação, quando houver
 │ │       [− 1 +]        [editar]        [ 🗑 ]      │ │  ← lixeira a ≥32px do editar
 │ └──────────────────────────────────────────────────┘ │
 │ ┌──────────────────────────────────────────────────┐ │
@@ -635,7 +655,7 @@ Risco conhecido: um cliente que já rolou manualmente até o fim e então marca 
 3. **Tokens escopados** em `.tq-raiz` com valores **literais** — o `body.theme-dark` do admin não alcança o quiosque (regra atual, preservada e agora garantida pelo escopo).
 4. Espaçamento por `gap` de flex/grid; nada de margens irmãs colapsando.
 5. Conteúdo largo (nome de opção longo) nunca causa rolagem horizontal: `min-width: 0` nos filhos flex e `overflow-wrap: anywhere` nos nomes.
-6. `user-select: none` na raiz, sem exceção — com a saída do campo de observação (§4.3), o quiosque não tem mais nenhum campo de digitação livre.
+6. `user-select: none` na raiz, com exceção explícita para o `<textarea>` de observação (§4.3) — é o único ponto de digitação livre do quiosque.
 7. Remoção do bloco antigo `global.css:3352–3718` (quiosque + pareamento + as duas media queries que só servem a eles) só na **última** task, depois de a tela nova estar completa. O bloco do admin (3313–3350) **fica**.
 
 ### 10.2 Componentização
@@ -702,7 +722,7 @@ O cliente está **em pé, com uma mão, sem familiaridade**. Regras que valem pa
 | Modal vs. página | Fluxo principal é **página** (o cliente não perde contexto). Sheet só para "Ainda está aí?" e confirmação de cancelar |
 | Escape | Toda tela que não seja Início e Resultado tem "‹ Voltar", exceto Revisar travada (regra de idempotência) |
 | Texto | Corpo ≥ 17px; nada abaixo de 4,5:1; nenhum cinza sobre cinza |
-| Seleção de texto | Desabilitada em toda a tela; não há campo de digitação livre no quiosque |
+| Seleção de texto | Desabilitada em toda a tela, exceto no `<textarea>` de observação |
 
 ---
 
@@ -748,7 +768,7 @@ Ordenados por gravidade. Cada um vira item de verificação obrigatória.
 5. Cabeçalho e botão do combo mostram **27,90**, nunca 12,00, enquanto faltar obrigatório.
 6. Escolher a bebida rola sozinho para o acompanhamento; escolher o acompanhamento rola para o CTA; **desmarcar não rola**.
 7. Complementos com foto aparecem em grade; grupo sem foto nenhuma aparece como lista.
-8. Nenhuma tela tem campo de digitação livre; toque longo não seleciona texto nem abre menu do sistema.
+8. Observação: a ação "+ Adicionar observação" aparece fechada; ao tocar, expande com contador `0 / 200`; o texto sobrevive à escolha de complementos; a linha do carrinho mostra a frase; ao editar a linha, o campo reabre preenchido. Toque longo não seleciona texto fora do `textarea`.
 9. Duas linhas do mesmo item base: editar uma não encosta na outra.
 10. Adicionar um item devolve ao catálogo, com o contador da barra atualizado — não abre o carrinho.
 11. Carrinho → pagamento → revisão: total confere; "trocar pagamento" recota.
@@ -770,7 +790,7 @@ Commit por task, `git add` explícito por caminho, sem deploy durante a sequênc
 | **V2** | Casca + `Cabecalho` compacto + `TelaInicio` | build; pareamento e Início na cara nova |
 | **V3** | `TelaCatalogo`: `SidebarCategorias` + `GradeProdutos` + `CardProduto` (foto grande, "a partir de", Em falta / Indisponível) | build; 9 cards do combo com 27,90 |
 | **V4** | `BarraPedido` fixa + feedback ao adicionar + retorno ao catálogo após "Adicionar" (decisão 3) | build; contador e total corretos com duas linhas do mesmo item |
-| **V5** | `TelaItem`: hero, chips de pendência, `BlocoGrupo` (obrigatório × opcional), `RodapeItem` com `precoDoCabecalho`. **Sem campo de observação** (§4.3) | build; R6/R7 do §12 conferidos |
+| **V5** | `TelaItem`: hero, chips de pendência, `BlocoGrupo` (obrigatório × opcional), `BlocoObservacao` colapsado com contador `0 / 200` (§4.3), `RodapeItem` com `precoDoCabecalho` | build; R6/R7 do §12 conferidos; observação preservada de ponta a ponta |
 | **V6** | `CardOpcao` + `totemLayout.js` (`modoDeOpcoes`) com foto, descrição, adicional, estados MISSING/limite | `node --test` + build |
 | **V7** | `totemFoco.js` + progressão automática com smooth scroll e reduced-motion | `node --test` (tabela §8.1) + build |
 | **V8** | `TelaCarrinho` (miniatura, remover afastado com confirmação inline, vazio resolvido) | build |
@@ -808,7 +828,7 @@ As cinco decisões de produto foram tomadas pelo Junior em 2026-09-12. Nenhuma f
 
 Correções documentais aplicadas junto (pedidas na mesma revisão):
 
-- **Campo de observação removido** de wireframes, CSS e regras de seleção de texto — com o registro, em §4.3, de que se trata da retirada de um campo que existe hoje e é aceito pelo contrato, e de como reverter se a intenção for outra.
+- **Campo de observação:** a rev. 2 previa a retirada; a **rev. 2.1 restabeleceu o recurso** ao confirmar que ele é funcional em produção. Vale o §4.3 — recurso, limite de 200 caracteres, estado, `montarCarrinho`, envio e exibição preservados; muda só a apresentação, que passa a ser uma ação colapsada.
 - **Checklist corrigido:** TRADICIONAIS normal tem nove produtos com preço próprio; COMBO - TRADICIONAIS em Vitrine tem nove produtos com mínimos, começando em R$ 27,90 (§13.3, itens 3 e 4).
 - **"Os mais pedidos" reescrito:** nenhuma categoria sintética por vendas nesta frente, e qualquer categoria real do CW com esse nome aparece normalmente na sidebar (§9.1, §15).
 - **Foto ambiente removida** da tela inicial: fundo preto, logo e ações amarelas, porque o bootstrap não tem campo de imagem de fundo (§6.A).
