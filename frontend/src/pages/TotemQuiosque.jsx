@@ -29,7 +29,7 @@ import {
   montarCarrinho, diffCotacao, chaveNova, mensagemErro, proximoEstadoAposFalha,
   indicePorItemId, linhaDeProduto, gruposRenderizaveis, nomeApresentado,
   imagemApresentada, descricaoApresentada, opcoesVisiveisDaLinha, substituirLinha,
-  linhaDoDetalhe, precoDoCard,
+  linhaDoDetalhe, precoDoCard, precoDoCabecalho,
 } from '../components/totemCarrinho'
 
 const VERSAO = 'totem-1.0'
@@ -366,7 +366,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
     // Item em falta, ou com um grupo OBRIGATÓRIO em falta, não abre: não há como montá-lo,
     // e deixar o cliente tentar só adiaria a recusa para a tela de revisão.
     if (!itemOrdenavel(item).ok) return
-    setAberto({ item, apresentado: null, qtd: 1, observacao: '', selecoes: {}, uid: null, aPartirDe: false })
+    setAberto({ item, apresentado: null, qtd: 1, observacao: '', selecoes: {}, uid: null, precoCard: null })
     setTela('item')
   }
 
@@ -379,9 +379,10 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
     if (produto?.ordenavel === false) return
     const linha = linhaDeProduto(produto, indice)
     if (!linha) { setAviso('Produto indisponível. Escolha outro.'); return }
-    // `aPartirDe` é só ROTULAGEM de tela e por isso viaja fora do módulo puro: o card já
-    // disse "a partir de", e o cabeçalho do detalhe repete o aviso enquanto faltar escolha.
-    setAberto({ ...linha, aPartirDe: precoDoCard(produto).aPartirDe })   // já nasce com `uid: null` (item novo, não edição)
+    // O preço do CARD viaja junto (fora do módulo puro, porque é rotulagem de tela): é o
+    // piso que o cliente acabou de ler no grid, e o cabeçalho do detalhe não pode desmentir
+    // esse número enquanto ele ainda não escolheu os obrigatórios que faltam.
+    setAberto({ ...linha, precoCard: precoDoCard(produto) })   // já nasce com `uid: null` (item novo, não edição)
     setTela('item')
   }
 
@@ -395,7 +396,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
       observacao: linha.observacao ?? '',
       selecoes: linha.selecoes,
       uid: linha.uid,
-      aPartirDe: linha.aPartirDe === true,
+      precoCard: linha.precoCard ?? null,
     })
     setTela('item')
   }
@@ -437,7 +438,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
       qtd: aberto.qtd,
       observacao: aberto.observacao,
       selecoes: aberto.selecoes,
-      aPartirDe: aberto.aPartirDe === true,
+      precoCard: aberto.precoCard ?? null,
     }
     // Casamento por `uid`, nunca por itemId: duas linhas do MESMO item base (X BURGUER e
     // X BACON) são normais na vitrine, e editar uma não pode encostar na outra.
@@ -750,15 +751,17 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
     // Enquanto faltar obrigatório num produto "a partir de", o rótulo continua ao lado;
     // completado o item, o valor é exato e o rótulo some.
     const subtotalAberto = subtotalLocal(aberto)
+    const cabecalho = precoDoCabecalho({ subtotal: subtotalAberto, qtd: aberto.qtd, precoCard: aberto.precoCard, pronto })
+    // Linha sem o preço do card (bootstrap antigo, ou uma linha do carrinho que nasceu antes
+    // deste campo): o "de/por" ainda sai do item base, exatamente como antes.
     const promoDaBase = aberto.item?.precoPromocional
     const temPromoBase = promoDaBase !== null && promoDaBase !== undefined
-    // `subtotalLocal` já usa o preço em vigor (a promoção). O "de" é o mesmo subtotal SEM o
-    // desconto — assim o "de/por" do card se repete aqui, sem CSS novo e sem outra conta.
     const descontoDaBase = temPromoBase ? (Number(aberto.item?.preco ?? 0) - Number(promoDaBase)) * Math.max(1, Number(aberto.qtd) || 1) : 0
-    const precoCabecalho = temPromoBase
-      ? { preco: Math.round((subtotalAberto + descontoDaBase) * 100) / 100, precoPromocional: subtotalAberto }
-      : { preco: subtotalAberto }
-    const cabecalhoAPartirDe = aberto.aPartirDe === true && !pronto.ok
+    const precoCabecalho = cabecalho.valorPromocional !== undefined
+      ? { preco: cabecalho.valor, precoPromocional: cabecalho.valorPromocional }
+      : (temPromoBase && !aberto.precoCard
+        ? { preco: Math.round((cabecalho.valor + descontoDaBase) * 100) / 100, precoPromocional: cabecalho.valor }
+        : { preco: cabecalho.valor })
     conteudo = (
       <>
         <Cabecalho loja={loja} titulo={nomeNaTela} aoVoltar={() => { setAberto(null); setTela(carrinho.length ? 'carrinho' : 'catalogo') }} />
@@ -775,7 +778,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
           <div className="ttm-item-cabeca">
             <h1 className="ttm-item-nome">{nomeNaTela}</h1>
             {descricaoApresentada(aberto) && <p className="ttm-item-desc">{descricaoApresentada(aberto)}</p>}
-            <PrecoItem item={precoCabecalho} aPartirDe={cabecalhoAPartirDe} />
+            <PrecoItem item={precoCabecalho} aPartirDe={cabecalho.aPartirDe} />
           </div>
 
           {/* O grupo principal NÃO é desenhado: ele é a identidade do produto, já escolhida

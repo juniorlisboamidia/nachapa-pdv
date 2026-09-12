@@ -151,7 +151,8 @@ export default function TotemApresentacao() {
   const orfas = Array.isArray(dados?.orfas) ? dados.orfas : []
   const sugestoes = Array.isArray(dados?.sugestoes) ? dados.sugestoes : []
   const expandidos = itens.filter((i) => i.config?.modo === 'EXPANDIDO').length
-  const invalidos = itens.filter((i) => i.config && !i.validacao?.ok).length
+  // Mesma régua da linha vermelha: só conta o veredito NEGATIVO explícito do servidor.
+  const invalidos = itens.filter((i) => i.config && i.validacao?.ok === false).length
 
   return (
     <div>
@@ -219,7 +220,10 @@ export default function TotemApresentacao() {
                     const chave = String(item.cwItemId)
                     const f = form[chave] ?? { modo: 'NORMAL', grupoId: '' }
                     const emVitrine = item.config?.modo === 'EXPANDIDO'
-                    const problema = item.config && !item.validacao?.ok
+                    // Vermelho SÓ com um "não" explícito do servidor: `validacao` ausente
+                    // (contrato mais antigo) não é veredito nenhum, e pintar a linha por
+                    // falta de campo acusaria de quebrada uma vitrine que está funcionando.
+                    const problema = !!item.config && item.validacao?.ok === false
                     const grupoAtual = item.grupos.find((g) => String(g.id) === String(item.config?.cwGrupoPrincipalId))
                     // ESTADO NEUTRO (§8): item que não é candidato e nunca foi configurado
                     // não tem nada de errado — a maioria do cardápio é assim. Uma frase
@@ -233,7 +237,11 @@ export default function TotemApresentacao() {
                     const semGrupoUtil = item.grupos.every((g) => !grupoServe(g))
                     const razaoSemVitrine = !semGrupoUtil ? null : (item.grupos.length === 0
                       ? 'este item não tem grupos de escolha'
-                      : mensagemApresentacao(item.grupos.map(codigoDoGrupo).find(Boolean)))
+                      // Sem código nenhum nos grupos não há o que traduzir: a frase genérica
+                      // "nenhum grupo serve" diz mais do que "configuração inválida".
+                      : (item.grupos.map(codigoDoGrupo).find(Boolean)
+                        ? mensagemApresentacao(item.grupos.map(codigoDoGrupo).find(Boolean))
+                        : 'nenhum grupo serve'))
                     return (
                       <tr key={chave} className={problema ? 'ttm-linha-revisao' : undefined}>
                         <td>

@@ -499,3 +499,35 @@ const MENSAGENS_APRESENTACAO = {
 export function mensagemApresentacao(codigo) {
   return MENSAGENS_APRESENTACAO[String(codigo ?? '')] ?? 'configuração inválida';
 }
+
+// Preço do CABEÇALHO do detalhe (§6, revisão da rev. 3). O subtotal corrente sozinho mente
+// enquanto falta escolha obrigatória: um combo recém aberto só somou a base (R$ 15,90) e o
+// card acabou de prometer "a partir de R$ 27,90" — o cabeçalho não pode desmentir o card
+// com um número que ninguém consegue pagar. O piso vem PRONTO do card (`precoDoCard`), e a
+// tela mostra o MAIOR entre ele e o que o cliente já montou.
+//
+// O rótulo é do que FALTA, não do card: enquanto houver obrigatório sem escolha, o valor é
+// um piso e diz isso — mesmo quando o card era exato (obrigatório restante de preço fixo).
+// Completo o item, o subtotal é a verdade inteira e o rótulo some.
+//
+// Sem `precoCard` (bootstrap antigo, ou edição de uma linha que nasceu antes deste campo)
+// não há piso para prometer: vale o subtotal, sem rótulo — o comportamento de antes.
+export function precoDoCabecalho({ subtotal, qtd, precoCard, pronto } = {}) {
+  const unidades = Math.max(1, Math.trunc(num(qtd, 1)));
+  const pago = round2(num(subtotal));
+  const completo = pronto === true || (pronto && typeof pronto === 'object' && pronto.ok === true);
+  const card = precoCard && typeof precoCard === 'object' ? precoCard : null;
+  if (!card) return { valor: pago, aPartirDe: false };
+
+  const temPromo = card.valorPromocional !== null && card.valorPromocional !== undefined;
+  // `subtotal` já vem com o preço EM VIGOR (o promocional, quando existe), então o piso a
+  // comparar também é o promocional. O "de" carrega o mesmo desconto por unidade.
+  const piso = round2(num(temPromo ? card.valorPromocional : card.valor) * unidades);
+  const valorPago = Math.max(pago, piso);
+  const desconto = temPromo ? round2((num(card.valor) - num(card.valorPromocional)) * unidades) : 0;
+  return {
+    valor: round2(valorPago + desconto),
+    ...(temPromo ? { valorPromocional: valorPago } : {}),
+    aPartirDe: !completo,
+  };
+}

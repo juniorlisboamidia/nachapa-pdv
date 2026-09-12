@@ -12,7 +12,7 @@ import {
   proximoEstadoAposFalha,
   indicePorItemId, linhaDeProduto, gruposRenderizaveis, nomeApresentado,
   imagemApresentada, descricaoApresentada, opcoesVisiveisDaLinha, substituirLinha,
-  linhaDoDetalhe, precoDoCard, mensagemApresentacao,
+  linhaDoDetalhe, precoDoCard, precoDoCabecalho, mensagemApresentacao,
 } from './totemCarrinho.js';
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
@@ -788,4 +788,84 @@ test('combo em vitrine: os outros obrigatórios continuam visíveis e exigidos',
   // Trocando por opções mais caras, o subtotal sobe — que é o motivo do "a partir de".
   linha.selecoes['800003'] = [{ opcaoId: 900021, qtd: 1 }];
   assert.equal(subtotalLocal(linha), 33.9);
+});
+
+// ── Preço do CABEÇALHO do detalhe (rev. 3, revisão de B3) ───────────────────
+// O subtotal corrente sozinho MENTE enquanto falta escolha obrigatória: um combo recém
+// aberto vale só a base (R$ 15,90) e o card acabou de prometer "a partir de R$ 27,90".
+// O piso do card é a verdade do "a partir de"; o subtotal só manda quando passa dele.
+const cardCombo = { valor: 27.9, aPartirDe: true };
+
+test('precoDoCabecalho: combo recém aberto mostra o piso do card, não a base', () => {
+  assert.deepEqual(
+    precoDoCabecalho({ subtotal: 15.9, qtd: 1, precoCard: cardCombo, pronto: false }),
+    { valor: 27.9, aPartirDe: true },
+  );
+});
+
+test('precoDoCabecalho: completo, é o subtotal exato e sem rótulo', () => {
+  assert.deepEqual(
+    precoDoCabecalho({ subtotal: 27.9, qtd: 1, precoCard: cardCombo, pronto: true }),
+    { valor: 27.9, aPartirDe: false },
+  );
+  // Escolhas mais caras passam do piso e o valor acompanha.
+  assert.deepEqual(
+    precoDoCabecalho({ subtotal: 33.9, qtd: 1, precoCard: cardCombo, pronto: true }),
+    { valor: 33.9, aPartirDe: false },
+  );
+  // Ainda incompleto, mas já acima do piso: vale o subtotal, com o rótulo.
+  assert.deepEqual(
+    precoDoCabecalho({ subtotal: 30.9, qtd: 1, precoCard: cardCombo, pronto: false }),
+    { valor: 30.9, aPartirDe: true },
+  );
+});
+
+test('precoDoCabecalho: produto sem obrigatório restante nasce exato e sem rótulo', () => {
+  // X BURGUER expandido: só grupos OPCIONAIS sobraram, então `pronto` já é true na abertura.
+  assert.deepEqual(
+    precoDoCabecalho({ subtotal: 12, qtd: 1, precoCard: { valor: 12, aPartirDe: false }, pronto: true }),
+    { valor: 12, aPartirDe: false },
+  );
+});
+
+test('precoDoCabecalho: o piso multiplica pela quantidade', () => {
+  assert.deepEqual(
+    precoDoCabecalho({ subtotal: 31.8, qtd: 2, precoCard: cardCombo, pronto: false }),
+    { valor: 55.8, aPartirDe: true },
+  );
+});
+
+test('precoDoCabecalho: o rótulo é do que FALTA, não do card', () => {
+  // Card exato (R$ 29,90, sem "a partir de" porque o obrigatório restante tem preço fixo):
+  // enquanto o cliente não escolher, o cabeçalho ainda é um piso — e diz isso.
+  assert.deepEqual(
+    precoDoCabecalho({ subtotal: 24.9, qtd: 1, precoCard: { valor: 29.9, aPartirDe: false }, pronto: false }),
+    { valor: 29.9, aPartirDe: true },
+  );
+});
+
+test('precoDoCabecalho: promoção mantém o "de/por" sobre o piso', () => {
+  const card = { valor: 27.9, valorPromocional: 25.9, aPartirDe: true };
+  // O subtotal já vem com o preço em vigor (o promocional): o "por" é o piso promocional e
+  // o "de" carrega o MESMO desconto por unidade.
+  assert.deepEqual(
+    precoDoCabecalho({ subtotal: 13.9, qtd: 1, precoCard: card, pronto: false }),
+    { valor: 27.9, valorPromocional: 25.9, aPartirDe: true },
+  );
+  assert.deepEqual(
+    precoDoCabecalho({ subtotal: 25.9, qtd: 1, precoCard: card, pronto: true }),
+    { valor: 27.9, valorPromocional: 25.9, aPartirDe: false },
+  );
+  assert.deepEqual(
+    precoDoCabecalho({ subtotal: 51.8, qtd: 2, precoCard: card, pronto: false }),
+    { valor: 55.8, valorPromocional: 51.8, aPartirDe: true },
+  );
+});
+
+test('precoDoCabecalho: sem o preço do card (bootstrap antigo) é o subtotal, sem rótulo', () => {
+  assert.deepEqual(precoDoCabecalho({ subtotal: 18.5, qtd: 1, precoCard: null, pronto: false }), { valor: 18.5, aPartirDe: false });
+  assert.deepEqual(precoDoCabecalho({ subtotal: 18.5, qtd: 1, pronto: true }), { valor: 18.5, aPartirDe: false });
+  // `pronto` aceita o veredito de `itemPronto` inteiro, não só o booleano.
+  assert.deepEqual(precoDoCabecalho({ subtotal: 15.9, precoCard: cardCombo, pronto: { ok: false, gruposFaltando: [1] } }), { valor: 27.9, aPartirDe: true });
+  assert.deepEqual(precoDoCabecalho({ subtotal: 27.9, precoCard: cardCombo, pronto: { ok: true, gruposFaltando: [] } }), { valor: 27.9, aPartirDe: false });
 });
