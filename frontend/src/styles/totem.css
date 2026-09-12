@@ -468,8 +468,8 @@
 /* ═══ V5 — detalhe do produto ══════════════════════════════════════════════ */
 
 .tq-hero { display: block; width: 100%; aspect-ratio: 4 / 3; max-height: 46vh; object-fit: cover; background: #eae5db; }
-/* Foto + faixa = uma peca so. A faixa preta e a placa do cardapio: nome em
-   branco a esquerda, preco em amarelo a direita, encostada na imagem. */
+/* Foto + faixa = uma peça só. A faixa preta é a placa do cardápio: nome em
+   branco à esquerda, preço em amarelo à direita, encostada na imagem. */
 .tq-det-capa { position: relative; }
 .tq-det-faixa {
   display: flex; align-items: flex-end; justify-content: space-between; gap: 20px;
@@ -504,55 +504,92 @@
   background: var(--tq-superficie); border: 1px solid var(--tq-borda); border-radius: var(--tq-raio);
 }
 .tq-grupo.falta { background: #f2efe7; border-color: #ded8c9; }
-/* O cabecalho do grupo e a regua da tela: obrigatorio vem em BARRA AMARELA com
-   texto preto, opcional em barra clara. A diferenca tem de ser lida de relance,
-   porque e ela que explica por que o botao nao libera. */
+/* Título à esquerda, regra à direita quando cabe; a regra cai para baixo quando
+   não cabe. O título NUNCA é comprimido para forçar uma linha só. Obrigatório se
+   anuncia por um selo amarelo pequeno — não por uma barra amarela na seção
+   inteira, que virava mais uma faixa decorativa na tela. */
 .tq-grupo-cab {
-  display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
-  padding: 16px clamp(18px, 2.4vw, 24px); background: var(--tq-fundo);
+  display: flex; align-items: baseline; gap: 6px 16px; flex-wrap: wrap;
+  padding: 16px clamp(16px, 2.2vw, 22px) 14px;
   border-bottom: 1px solid var(--tq-borda);
 }
-.tq-grupo.obrigatorio .tq-grupo-cab { background: var(--tq-amarelo); border-bottom-color: var(--tq-amarelo-3); }
-.tq-grupo-nome { font-size: clamp(20px, 2.1vw, 26px); }
-.tq-grupo-regra { margin-left: auto; color: var(--tq-texto-3); }
-.tq-grupo.obrigatorio .tq-grupo-regra { color: var(--tq-tinta); opacity: 0.72; }
-.tq-grupo-corpo { padding: clamp(16px, 2.2vw, 22px); }
+.tq-grupo-nome {
+  flex: 1 1 auto; min-width: 0; font-size: clamp(19px, 2.1vw, 26px); line-height: 1.15;
+  word-break: normal; overflow-wrap: normal;
+}
+.tq-grupo-regra { flex: 0 0 auto; margin-left: auto; color: var(--tq-texto-2); }
+.tq-grupo-selo {
+  display: inline-block; padding: 4px 10px; border-radius: 6px; margin-right: 4px;
+  background: var(--tq-amarelo); color: var(--tq-tinta); letter-spacing: 0.06em;
+}
+.tq-grupo-corpo { padding: clamp(14px, 2vw, 20px) clamp(16px, 2.2vw, 22px) clamp(16px, 2.2vw, 22px); }
 .tq-grupo-contagem { margin-bottom: 12px; color: var(--tq-texto-3); font-weight: 700; font-size: clamp(14px, 1.4vw, 16px); }
 .tq-grupo-indisponivel { font-size: clamp(16px, 1.6vw, 18px); font-weight: 700; color: var(--tq-texto-2); }
 .tq-grupo-falta { margin-top: 14px; font-weight: 800; color: #8a3b00; font-size: clamp(15px, 1.5vw, 17px); }
 
-/* -- Opção (V5: lista de texto; V6 acrescenta a grade com foto) ------------ */
+/* -- Opção de complemento -------------------------------------------------- */
+/* Card HORIZONTAL sempre: miniatura fixa, texto elástico com `min-width: 0`,
+   controle pequeno no canto. Era a divisão interna que quebrava — foto, nome e
+   um botão "Adicionar" disputando a largura de uma coluna estreita faziam
+   "ADIC. DE CARNE 56G" descer letra por letra. */
 .tq-opcoes { display: grid; gap: 12px; }
 .tq-op {
-  display: flex; align-items: center; gap: 14px; width: 100%; min-height: 72px;
-  padding: 12px 16px; text-align: left;
+  display: flex; align-items: center; gap: 14px; width: 100%; min-height: 76px;
+  padding: 12px 14px; text-align: left;
   background: var(--tq-superficie); border: 2px solid var(--tq-borda); border-radius: 14px;
   transition: border-color 0.14s ease, background 0.14s ease, transform 0.1s ease;
 }
 .tq-op:active:not(:disabled) { transform: scale(0.99); }
-/* Selecionada = FUNDO AMARELO com texto preto. A versao anterior marcava so a
-   borda em amarelo sobre branco, que da ~1,1:1 de contraste: a escolha do
-   cliente praticamente nao aparecia. */
-.tq-op[aria-pressed='true'] {
-  background: var(--tq-amarelo); border-color: var(--tq-amarelo-3); border-width: 3px; padding: 11px 15px;
-}
-.tq-op[aria-pressed='true'] .tq-op-preco { color: var(--tq-tinta); opacity: 0.75; }
-.tq-op[aria-pressed='true'] .tq-op-desc { color: var(--tq-tinta); opacity: 0.7; }
+/* Escolhida: borda amarela e marcador preenchido. O fundo continua branco — a
+   opção precisa continuar legível, e pintar o card inteiro tirava o contraste
+   do preço e da descrição. */
+.tq-op[aria-pressed='true'],
+.tq-op.on { border-color: var(--tq-amarelo); }
 .tq-op:disabled { cursor: not-allowed; }
+
 .tq-op-txt { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.tq-op-nome { font-size: clamp(16px, 1.7vw, 19px); font-weight: 700; overflow-wrap: anywhere; }
-.tq-op-preco { color: var(--tq-texto-2); font-size: clamp(15px, 1.6vw, 17px); }
+/* Quebra só por palavra, no máximo três linhas. */
+.tq-op-nome {
+  font-size: clamp(16px, 1.7vw, 19px); font-weight: 700; line-height: 1.2;
+  word-break: normal; overflow-wrap: normal; hyphens: none;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.tq-op-desc {
+  font-size: clamp(13px, 1.4vw, 16px); color: var(--tq-texto-2); line-height: 1.3;
+  word-break: normal; overflow-wrap: normal;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.tq-op-preco { color: var(--tq-texto); font-weight: 800; font-size: clamp(14px, 1.6vw, 17px); }
+.tq-op-lado { flex: 0 0 auto; display: flex; align-items: center; }
+
+/* Miniatura fixa. No grupo em modo foto, a opção sem imagem mantém o slot com o
+   marcador desenhado — é o que impede a grade de desmontar linha a linha. */
+.tq-op-foto {
+  flex: 0 0 auto; width: 88px; height: 88px; aspect-ratio: auto;
+  border-radius: var(--tq-raio-2); object-fit: cover; background: #eae5db;
+}
+@media (min-width: 900px) { .tq-op-foto { width: 96px; height: 96px; } }
+
 .tq-op-marca {
-  flex: 0 0 auto; width: 40px; height: 40px; border-radius: 12px;
+  width: 40px; height: 40px; border-radius: 999px;
   border: 2px solid var(--tq-borda-forte); background: var(--tq-superficie);
   display: grid; place-items: center; color: transparent;
 }
-.tq-op[aria-pressed='true'] .tq-op-marca { background: var(--tq-preto); border-color: var(--tq-preto); color: var(--tq-amarelo); }
+.tq-op[aria-pressed='true'] .tq-op-marca { background: var(--tq-amarelo); border-color: var(--tq-amarelo); color: var(--tq-tinta); }
+
+/* Em falta: fundo apagado e foto acinzentada, mas o TEXTO fica em contraste
+   cheio — o aviso precisa ser lido. */
+.tq-op.falta { background: #f1eee7; border-color: #ded8c9; }
+.tq-op.falta .tq-op-foto { filter: grayscale(1); opacity: 0.65; }
+.tq-op.falta .tq-op-nome { color: var(--tq-texto); }
+.tq-op.falta .tq-op-desc, .tq-op.falta .tq-op-preco { color: var(--tq-texto-2); }
 .tq-op-falta {
-  flex: 0 0 auto; padding: 5px 12px; border-radius: 999px; background: #e0dbd0; color: var(--tq-texto-2);
+  padding: 6px 12px; border-radius: 8px; background: #ddd6c8; color: var(--tq-texto);
   font-family: 'Archivo Totem', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
-  font-weight: 800; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase;
+  font-weight: 800; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap;
 }
+/* Limite do grupo atingido: as não escolhidas apagam, mas nenhuma some da tela. */
+.tq-op.bloqueada { opacity: 0.45; }
 
 /* -- Observação (spec §4.3) ------------------------------------------------ */
 /* Ação fechada por padrão: o recurso continua inteiro, mas deixa de gastar a
@@ -597,17 +634,6 @@
 .tq-step:active:not(:disabled) { transform: scale(0.97); }
 .tq-step:disabled { opacity: 0.35; cursor: not-allowed; }
 .tq-step-v { min-width: 48px; text-align: center; font-size: clamp(20px, 2.2vw, 26px); }
-/* Opção somável: o "Adicionar" vira contador assim que entra a primeira unidade. */
-.tq-op-add {
-  flex: 0 0 auto; min-height: 56px; min-width: 116px; padding: 0 18px; border-radius: 12px;
-  border: 2px solid var(--tq-borda-forte); background: var(--tq-superficie); color: var(--tq-texto);
-  font-weight: 800; font-size: clamp(15px, 1.5vw, 17px);
-}
-.tq-op-add:active:not(:disabled) { transform: scale(0.98); }
-.tq-op-add:disabled { opacity: 0.4; cursor: not-allowed; }
-.tq-op.on { background: var(--tq-amarelo); border-color: var(--tq-amarelo-3); border-width: 3px; padding: 11px 15px; }
-.tq-op.on .tq-op-preco, .tq-op.on .tq-op-desc { color: var(--tq-tinta); opacity: 0.75; }
-.tq-op.on .tq-step { border-color: var(--tq-amarelo-3); }
 /* Bloco de recado dentro de uma tela (item indisponível, recusa de cotação). */
 .tq-aviso-bloco {
   background: var(--tq-perigo-fraco); border: 2px solid #e8b4b0; border-radius: var(--tq-raio-2);
@@ -615,30 +641,15 @@
   font-size: clamp(16px, 1.6vw, 18px); line-height: 1.45;
 }
 
-/* ═══ V6 — cards de opção (complementos) ═══════════════════════════════════ */
+/* ═══ Grade das opções ═════════════════════════════════════════════════════ */
 
-/* Grade só quando o grupo TEM foto (ver modoDeOpcoes): grupo inteiro sem imagem
-   fica em lista de texto bem resolvida, sem espaço reservado para um vazio. */
-.tq-opcoes.grade { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.tq-opcoes.grade .tq-op { align-items: flex-start; min-height: clamp(120px, 14vw, 152px); }
-@media (max-width: 599px) { .tq-opcoes.grade { grid-template-columns: minmax(0, 1fr); } }
+/* Duas colunas SÓ quando o card couber. Abaixo de 280px por card o conteúdo
+   começa a espremer, e uma coluna bem resolvida vale mais que duas quebradas —
+   por isso `auto-fit` com piso, e não duas colunas forçadas. No alvo de 1080
+   sobram ~364px por card; num viewport de 694 a mesma regra devolve uma coluna
+   sozinha, sem media query. */
+.tq-opcoes.grade { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
 
-.tq-op-foto {
-  flex: 0 0 auto; width: clamp(96px, 11vw, 128px); height: clamp(96px, 11vw, 128px); aspect-ratio: auto;
-  border-radius: var(--tq-raio-2); object-fit: cover; background: #eae5db;
-}
-/* Em falta: a foto apaga, o TEXTO não. O aviso precisa continuar legível. */
-.tq-op.falta .tq-op-foto { filter: grayscale(1); opacity: 0.7; }
-.tq-op.falta .tq-op-nome, .tq-op.falta .tq-op-preco { opacity: 1; }
-.tq-op.falta { opacity: 1; background: #f4f1e9; border-color: #ded8c9; }
-.tq-op.falta .tq-op-desc { color: var(--tq-texto-3); }
-.tq-op-desc {
-  font-size: clamp(14px, 1.4vw, 16px); color: var(--tq-texto-3); line-height: 1.3;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-}
-.tq-op-lado { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
-/* Limite do grupo atingido: as não escolhidas apagam, mas nenhuma some da tela. */
-.tq-op.bloqueada { opacity: 0.45; }
 .tq-grupo-limite { margin-bottom: 12px; color: #8a6a00; font-weight: 700; font-size: clamp(14px, 1.4vw, 16px); }
 
 /* ═══ V7 — avanço automático ═══════════════════════════════════════════════ */

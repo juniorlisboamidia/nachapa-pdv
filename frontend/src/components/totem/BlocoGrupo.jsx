@@ -20,7 +20,9 @@ export default function BlocoGrupo({ grupo, selecao, aoTocar, aoMenos }) {
       <section className="tq-grupo falta" id={`tq-g-${grupo.id}`} aria-disabled="true">
         <div className="tq-grupo-cab">
           <h2 className="tq-grupo-nome tq-disp">{grupo.nome}</h2>
-          <span className="tq-grupo-regra tq-rotulo">{regra.obrigatorio ? 'obrigatório · ' : ''}em falta</span>
+          <span className="tq-grupo-regra tq-rotulo">
+            {regra.obrigatorio ? <span className="tq-grupo-selo">Obrigatório</span> : 'Opcional'} · em falta
+          </span>
         </div>
         <div className="tq-grupo-corpo">
           <p className="tq-grupo-indisponivel">Em falta — não dá para escolher agora.</p>
@@ -43,7 +45,9 @@ export default function BlocoGrupo({ grupo, selecao, aoTocar, aoMenos }) {
       <div className="tq-grupo-cab">
         <h2 className="tq-grupo-nome tq-disp">{grupo.nome}</h2>
         <span className="tq-grupo-regra tq-rotulo">
-          {regra.obrigatorio ? 'obrigatório · ' : ''}{regra.texto}
+          {regra.obrigatorio
+            ? <><span className="tq-grupo-selo">Obrigatório</span> · {regra.texto}</>
+            : (regra.texto === 'opcional' ? 'Opcional' : <>Opcional · {regra.texto}</>)}
         </span>
       </div>
 
