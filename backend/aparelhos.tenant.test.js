@@ -123,7 +123,7 @@ test('(b) todo acesso ao Prisma no bloco público passa pelo escopo do aparelho'
   const linhas = semComentarios(blocoPublico()).split('\n');
   const alvos = [];
   linhas.forEach((linha, i) => {
-    if (/prisma\.(dispositivo|empresa|pedidoTotemEnvio)\./.test(linha)) {
+    if (/prisma\.(dispositivo|empresa|pedidoTotemEnvio|totemApresentacao)\./.test(linha)) {
       // O where pode estar na mesma linha ou nas 3 seguintes (chamada multilinha).
       alvos.push({ linha: i + 1, trecho: linhas.slice(i, i + 4).join('\n') });
     }

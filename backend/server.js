@@ -37,6 +37,8 @@ import {
   novaReferencia, classificarResposta, transicao, proximaAcaoJob, precisaDisplay, selecionarParaReconciliar,
   respostaPublica, corpoDaResposta, httpDaResposta, validarCorpoPedido, camposDoDesfecho, bootstrapPublico,
 } from './totemEnvio.js';
+// Totem › Apresentação: projeção pura do catálogo (sem Prisma, sem rede) — spec §4.1.
+import { MODOS, validarConfiguracao, projetarCatalogo, mesclarAdmin, sugerirCandidatos } from './totemApresentacao.js';
 import { calcularCmvGlobal } from './cmv/calculo.js';
 import { normalizarRelatorio, FONTES } from './relatorios/normalizar.js';
 
@@ -8657,6 +8659,31 @@ function exigirTotem(ap, res) {
   return false;
 }
 
+// Apresentação (spec §4.2): o bootstrap que vai ao aparelho ganha
+// `catalogo.categorias[].produtos` e `avisosApresentacao`. É ADITIVO — `itens` continua
+// igual e é o que o frontend indexa; os `avisos` do HUB não são tocados.
+//
+// Três cuidados que valem o comentário:
+//  · O ESCOPO É O DO APARELHO. A configuração é lida com whereDoAparelho(ap, body) — o
+//    corpo entra só para ser descartado —, nunca com empresaId vindo da requisição.
+//  · NADA É MUTADO. `projetarCatalogo` devolve catálogo NOVO (com `itens` por referência)
+//    e aqui só se espalha a resposta; o snapshot em memória segue CRU, para poder ser
+//    reprojetado com a configuração mais nova no próximo bootstrap desatualizado.
+//  · O CATÁLOGO PÚBLICO NUNCA QUEBRA (spec §7). Banco fora do ar — ou um defeito na
+//    própria projeção — responde o bootstrap SEM `produtos` (o front cai para `itens`) e
+//    com `avisosApresentacao: []`. Por isso a projeção está DENTRO do try, e esta função
+//    não conhece `res`: daqui não sai 5xx nenhum depois de o catálogo estar em mãos.
+async function comApresentacao(ap, body, resposta) {
+  try {
+    const configuracoes = await prisma.totemApresentacao.findMany({ where: whereDoAparelho(ap, body) });
+    const { catalogo, avisos } = projetarCatalogo(resposta.catalogo, configuracoes);
+    return { ...resposta, catalogo, avisosApresentacao: avisos };
+  } catch (err) {
+    console.error('[public/aparelho totem apresentacao]', err?.code ?? err?.name ?? 'erro');
+    return { ...resposta, avisosApresentacao: [] };
+  }
+}
+
 // Bootstrap: loja, catálogo, métodos de pagamento e modos ativos.
 app.get('/api/public/aparelho/totem/bootstrap', async (req, res) => {
   try {
@@ -8674,10 +8701,10 @@ app.get('/api/public/aparelho/totem/bootstrap', async (req, res) => {
     if (r.ok) {
       const em = new Date();
       snapshotTotem.set(loja, { data: r.data, em });
-      return res.json(bootstrapPublico(r.data, em, false));
+      return res.json(await comApresentacao(ap, req.body, bootstrapPublico(r.data, em, false)));
     }
     const snap = snapshotTotem.get(loja);
-    if (snap) return res.json(bootstrapPublico(snap.data, snap.em, true));
+    if (snap) return res.json(await comApresentacao(ap, req.body, bootstrapPublico(snap.data, snap.em, true)));
     res.status(503).json({ erro: r.codigo === 'HUB_NAO_CONFIGURADO' ? 'HUB_NAO_CONFIGURADO' : 'CATALOGO_INDISPONIVEL' });
   } catch (err) { console.error('[public/aparelho totem bootstrap]', err?.code ?? err?.name ?? 'erro'); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
 });
@@ -9055,6 +9082,83 @@ app.post('/api/totem/pedidos/:id/encerrar', async (req, res) => {
     const atual = await prisma.pedidoTotemEnvio.findFirst({ where: { id, empresaId }, include: APARELHO_DA_LINHA });
     res.json({ pedido: atual ? pedidoTotemAdmin(atual) : null });
   } catch (err) { console.error('[totem/pedidos encerrar]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// ── Totem › Apresentação (ADMIN, spec §4.3) ─────────────────────────────────
+// A loja escolhe, item a item, se ele aparece no totem como um card só (NORMAL) ou como
+// um card por opção do grupo principal (EXPANDIDO). A escolha é EXPLÍCITA e mora aqui;
+// o catálogo continua sendo do Cardápio Web e é relido vivo a cada chamada.
+// `empresaId` vem SEMPRE de empresaDoAdmin (tenantStore), jamais do corpo/query/rota.
+
+// Catálogo vivo do CW para as duas rotas, com a mesma régua de erro:
+// sem clienteId (loja não vinculada) ou HUB dizendo `conectado:false` → 409 CLIENTE_SEM_CW;
+// HUB fora do ar → 503. Devolve null quando JÁ respondeu (padrão do exigirAdmin).
+async function catalogoVivoDoAdmin(empresaId, res) {
+  const clienteId = await clienteIdDaEmpresaTotem(empresaId);
+  if (!clienteId) { res.status(409).json({ erro: 'CLIENTE_SEM_CW' }); return null; }
+  const r = await bootstrapTotemCW(clienteId);
+  if (!r.ok) { res.status(503).json({ erro: r.codigo === 'HUB_NAO_CONFIGURADO' ? 'HUB_NAO_CONFIGURADO' : 'HUB_INDISPONIVEL' }); return null; }
+  if (r.data?.conectado === false) { res.status(409).json({ erro: 'CLIENTE_SEM_CW' }); return null; }
+  return r.data?.catalogo ?? { categorias: [] };
+}
+
+// Item do catálogo pelo id do CW. Vale a PRIMEIRA ocorrência: o mesmo item pode estar em
+// duas categorias e os grupos são os mesmos. Comparação por texto — o id chega number do
+// HUB e string da rota. Nunca por nome: no cardápio real "X BURGUER" tem quatro ids.
+function itemDoCatalogoCW(catalogo, cwItemId) {
+  for (const categoria of catalogo?.categorias ?? []) {
+    for (const item of categoria?.itens ?? []) {
+      if (item?.id != null && String(item.id) === String(cwItemId)) return item;
+    }
+  }
+  return null;
+}
+
+// Lista da tela: catálogo vivo + configurações persistidas (mesclarAdmin), sugestões da
+// heurística e os avisos que o totem veria AGORA com essa mesma configuração.
+app.get('/api/totem/apresentacao', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const catalogo = await catalogoVivoDoAdmin(empresaId, res); if (!catalogo) return;
+    const configuracoes = await prisma.totemApresentacao.findMany({ where: { empresaId }, orderBy: { cwItemId: 'asc' } });
+    res.json({
+      ...mesclarAdmin(catalogo, configuracoes),
+      sugestoes: sugerirCandidatos(catalogo),
+      avisosApresentacao: projetarCatalogo(catalogo, configuracoes).avisos,
+    });
+  } catch (err) { console.error('[totem/apresentacao]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// Salvar a apresentação de UM item. NORMAL apaga a linha (é o estado padrão — a tabela só
+// guarda EXPANDIDO) e por isso NÃO consulta o catálogo: é o único jeito de remover uma
+// ÓRFÃ, cujo item sumiu do CW e nunca voltaria numa validação viva.
+app.put('/api/totem/apresentacao/:cwItemId', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const cwItemId = Math.trunc(Number(req.params.cwItemId));
+    if (!Number.isInteger(cwItemId) || cwItemId <= 0) return res.status(400).json({ erro: 'ID_INVALIDO' });
+    const modo = String(req.body?.modo ?? '');
+    if (!MODOS.includes(modo)) return res.status(400).json({ erro: 'MODO_INVALIDO' });
+    if (modo === 'NORMAL') {
+      const { count } = await prisma.totemApresentacao.deleteMany({ where: { empresaId, cwItemId } });
+      return res.json({ ok: true, removida: count > 0 });
+    }
+    const cwGrupoPrincipalId = Math.trunc(Number(req.body?.cwGrupoPrincipalId));
+    if (!Number.isInteger(cwGrupoPrincipalId) || cwGrupoPrincipalId <= 0) return res.status(400).json({ erro: 'GRUPO_OBRIGATORIO' });
+    // Validação VIVA contra o CW e pela MESMA função que o bootstrap usa para projetar:
+    // salvar algo que o totem recusaria deixaria o card mentindo até alguém reparar.
+    const catalogo = await catalogoVivoDoAdmin(empresaId, res); if (!catalogo) return;
+    const veredito = validarConfiguracao({ modo, cwGrupoPrincipalId }, itemDoCatalogoCW(catalogo, cwItemId));
+    if (!veredito.ok) return res.status(422).json({ erro: 'APRESENTACAO_INVALIDA', codigo: veredito.codigo });
+    const cfg = await prisma.totemApresentacao.upsert({
+      where: { empresaId_cwItemId: { empresaId, cwItemId } },
+      create: { empresaId, cwItemId, modo, cwGrupoPrincipalId },
+      update: { modo, cwGrupoPrincipalId },
+    });
+    res.json({ ok: true, config: { id: cfg.id, cwItemId: cfg.cwItemId, modo: cfg.modo, cwGrupoPrincipalId: cfg.cwGrupoPrincipalId } });
+  } catch (err) { console.error('[totem/apresentacao PUT]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
 });
 
 // ── Job do totem (§5.4): 60 s, in-process, com lock ─────────────────────────

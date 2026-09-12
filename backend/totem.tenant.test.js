@@ -299,6 +299,8 @@ test('os códigos de erro do totem são os do §7 (nada inventado)', () => {
     'PAGAMENTO_INVALIDO', 'CLIENTE_SEM_CW', 'HUB_NAO_CONFIGURADO', 'HUB_INDISPONIVEL', 'CATALOGO_INDISPONIVEL',
     'PEDIDO_NAO_ENCONTRADO', 'PEDIDO_NAO_CORRESPONDE', 'ID_INVALIDO', 'ESTADO_NAO_PERMITE_ACAO', 'ESTADO_MUDOU',
     'MOTIVO_OBRIGATORIO', 'CW_ORDER_ID_OBRIGATORIO', 'ERRO_INTERNO',
+    // Totem › Apresentação (spec §4.3): validação do PUT e do catálogo vivo do admin.
+    'MODO_INVALIDO', 'GRUPO_OBRIGATORIO', 'APRESENTACAO_INVALIDA',
     // Do pareamento (P2, §3.2), que divide o mesmo bloco público.
     'CODIGO_INVALIDO', 'MUITAS_TENTATIVAS',
   ]);
@@ -363,4 +365,132 @@ test('reconciliação: 4xx do HUB vai inteiro para o admin; o snapshot do bootst
   const guarda = h.indexOf("r.data?.conectado === false");
   const grava = h.indexOf('snapshotTotem.set(');
   assert.ok(guarda > 0 && grava > guarda, 'o 409 CLIENTE_SEM_CW tem de vir ANTES de gravar o snapshot');
+});
+
+// ── Totem › Apresentação (spec §4.2/§4.3) ───────────────────────────────────
+// Mesma lógica do resto do arquivo: o que precisa de trava não é o JSON que sai, é o que o
+// código pode FAZER — de onde vem a loja, o que é escopado e em que ORDEM.
+
+const ROTAS_APRESENTACAO = ['/api/totem/apresentacao', '/api/totem/apresentacao/:cwItemId'];
+
+// Trecho de um handler admin: da string da rota até o `});` na coluna 0.
+function handlerAdmin(rota) {
+  const secao = secaoTotem();
+  const i = secao.indexOf(`'${rota}'`);
+  assert.ok(i > 0, `rota admin ${rota} não encontrada na seção do totem`);
+  return secao.slice(i, secao.indexOf('\n});', i));
+}
+
+test('as rotas de apresentação passam por exigirAdmin + empresaDoAdmin ANTES de qualquer Prisma', () => {
+  for (const rota of ROTAS_APRESENTACAO) {
+    const h = handlerAdmin(rota);
+    const admin = h.indexOf('exigirAdmin(req, res)');
+    const empresa = h.indexOf('empresaDoAdmin(req, res)');
+    const banco = h.indexOf('prisma.');
+    assert.ok(admin > 0, `${rota} sem exigirAdmin`);
+    assert.ok(empresa > admin, `${rota} sem empresaDoAdmin depois do exigirAdmin`);
+    assert.ok(banco < 0 || banco > empresa, `${rota} consulta o banco antes de resolver a loja`);
+  }
+});
+
+test('o admin da apresentação nunca lê empresaId/clienteId da requisição', () => {
+  const trechos = ROTAS_APRESENTACAO.map(handlerAdmin).join('\n');
+  const proibidos = [
+    /req\.(?:body|query|params|headers)\s*\??\.?\s*\[?\s*['"]?(?:empresaId|clienteId)/,
+    /\bempresaId\s*:\s*(?:Number|String|parseInt|Math\.trunc)?\(?\s*req\./,
+    /\bclienteId\s*:\s*(?:Number|String|parseInt)?\(?\s*req\./,
+    /\{[^}\n]*\b(?:empresaId|clienteId)\b[^}\n]*\}\s*=\s*req\./,
+  ];
+  for (const re of proibidos) {
+    const m = trechos.match(re);
+    assert.equal(m, null, `o admin da apresentação casou com ${re}: "${m?.[0]}"`);
+  }
+  // O ÚNICO dado que vem da rota é o id do item — e ele vira inteiro positivo antes de tudo.
+  const put = handlerAdmin('/api/totem/apresentacao/:cwItemId');
+  assert.ok(/const cwItemId = Math\.trunc\(Number\(req\.params\.cwItemId\)\);/.test(put), 'o :cwItemId tem de virar inteiro antes de qualquer uso');
+  const invalido = put.indexOf("erro: 'ID_INVALIDO'");
+  assert.ok(invalido > 0 && invalido < put.indexOf('prisma.'), 'o :cwItemId é validado antes de tocar no banco');
+});
+
+test('toda consulta a totemApresentacao no admin leva empresaId explícito', () => {
+  const linhas = secaoTotem().split('\n');
+  const alvos = [];
+  linhas.forEach((linha, i) => {
+    if (/prisma\.totemApresentacao\./.test(linha)) alvos.push({ linha: i + 1, trecho: linhas.slice(i, i + 5).join('\n') });
+  });
+  assert.ok(alvos.length >= 3, `esperava findMany + deleteMany + upsert na seção admin, achei ${alvos.length}`);
+  for (const alvo of alvos) {
+    assert.ok(/where: \{[\s\S]{0,160}?\bempresaId\b/.test(alvo.trecho), `consulta à apresentação sem empresaId no where (linha ${alvo.linha}):\n${alvo.trecho}`);
+  }
+});
+
+test('a leitura da apresentação no bloco público é escopada pelo aparelho', () => {
+  const linhas = semComentarios(blocoPublico()).split('\n');
+  const alvos = [];
+  linhas.forEach((linha, i) => {
+    if (/prisma\.totemApresentacao\./.test(linha)) alvos.push({ linha: i + 1, trecho: linhas.slice(i, i + 4).join('\n') });
+  });
+  assert.equal(alvos.length, 1, `a apresentação é lida uma vez só no bloco público; achei ${alvos.length}`);
+  assert.ok(/whereDoAparelho\(|escopoEmpresa\(/.test(alvos[0].trecho), `leitura da apresentação sem escopo do aparelho:\n${alvos[0].trecho}`);
+});
+
+test('o bootstrap público projeta produtos e NUNCA quebra por causa disso', () => {
+  const bloco = semComentarios(blocoPublico());
+  const i = bloco.indexOf('async function comApresentacao(');
+  assert.ok(i > 0, 'comApresentacao (a projeção do bootstrap) não encontrada no bloco público');
+  const fn = bloco.slice(i, bloco.indexOf('\n}\n', i));
+  // A projeção mora DENTRO do try: nem o banco fora do ar nem um defeito na projeção podem
+  // esvaziar a vitrine — no pior caso a resposta sai sem `produtos` (o front cai para `itens`).
+  const tentativa = fn.indexOf('try {');
+  const projecao = fn.indexOf('projetarCatalogo(');
+  const captura = fn.indexOf('} catch (err)');
+  assert.ok(tentativa >= 0 && projecao > tentativa && captura > projecao, 'projetarCatalogo tem de estar dentro do try/catch');
+  assert.ok(/avisosApresentacao: avisos/.test(fn), 'o sucesso devolve os avisos da projeção');
+  assert.ok(/avisosApresentacao: \[\]/.test(fn.slice(captura)), 'a falha devolve avisosApresentacao vazio');
+  assert.ok(/console\.error\('\[public\/aparelho totem apresentacao\]', err\?\.code \?\? err\?\.name/.test(fn), 'a falha loga só code/name');
+  // Entre projetar e responder não cabe 5xx nenhum: esta função sequer conhece `res`.
+  assert.equal(fn.match(/\bres\b/), null, 'comApresentacao não pode responder nada — quem responde é o handler');
+  // E não escreve no que recebeu: o snapshot fica CRU, para ser reprojetado com a
+  // configuração mais nova no próximo bootstrap desatualizado.
+  assert.equal(fn.match(/resposta\.[a-zA-Z]+\s*=[^=]|catalogo\.[a-zA-Z]+\s*=[^=]|\.push\(/), null, 'a projeção não pode mutar a resposta nem o catálogo');
+  // Os DOIS caminhos de sucesso do bootstrap (HUB vivo e snapshot desatualizado) passam por ela.
+  const h = handler('/api/public/aparelho/totem/bootstrap', 'get');
+  const passagens = h.match(/res\.json\(await comApresentacao\(ap, req\.body, bootstrapPublico\(/g) || [];
+  assert.equal(passagens.length, 2, `os dois caminhos de sucesso têm de projetar; achei ${passagens.length}`);
+  assert.equal(h.match(/snapshotTotem\.set\([^\n]*comApresentacao/), null, 'o snapshot guarda o catálogo CRU, nunca o projetado');
+});
+
+test('PUT NORMAL apaga a configuração sem consultar o catálogo (é o que remove uma órfã)', () => {
+  const h = handlerAdmin('/api/totem/apresentacao/:cwItemId');
+  const normal = h.indexOf("modo === 'NORMAL'");
+  const apaga = h.indexOf('deleteMany(');
+  const catalogo = h.indexOf('catalogoVivoDoAdmin(');
+  const upsert = h.indexOf('upsert(');
+  assert.ok(normal > 0 && apaga > normal, 'o ramo NORMAL tem de apagar a linha');
+  assert.ok(catalogo > apaga, 'NORMAL não pode consultar o catálogo vivo antes de apagar');
+  assert.equal(h.slice(0, apaga).match(/bootstrapTotemCW\(/), null, 'nada de ida ao HUB antes do deleteMany do NORMAL');
+  assert.ok(/removida: count > 0/.test(h), 'a resposta diz se havia mesmo uma configuração');
+  // EXPANDIDO: grupo obrigatório, validação viva pela MESMA função do bootstrap, depois upsert.
+  const grupo = h.indexOf("erro: 'GRUPO_OBRIGATORIO'");
+  const valida = h.indexOf('validarConfiguracao(');
+  assert.ok(grupo > apaga && catalogo > grupo, 'o grupo é exigido antes de ir ao HUB');
+  assert.ok(valida > catalogo && upsert > valida, 'valida contra o catálogo vivo ANTES de gravar');
+  assert.ok(/erro: 'APRESENTACAO_INVALIDA', codigo: veredito\.codigo/.test(h), 'a recusa devolve o código da regra');
+  assert.ok(/where: \{ empresaId_cwItemId: \{ empresaId, cwItemId \} \}/.test(h), 'o upsert é pela chave (empresaId, cwItemId)');
+});
+
+test('o GET da apresentação devolve merge + órfãs + sugestões + avisos, do catálogo vivo', () => {
+  const h = handlerAdmin('/api/totem/apresentacao');
+  assert.ok(/catalogoVivoDoAdmin\(empresaId, res\)/.test(h), 'o catálogo vem vivo do HUB, pela loja do admin');
+  for (const parte of ['mesclarAdmin(catalogo, configuracoes)', 'sugestoes: sugerirCandidatos(catalogo)', 'avisosApresentacao: projetarCatalogo(catalogo, configuracoes).avisos']) {
+    assert.ok(h.includes(parte), `o GET precisa de ${parte}`);
+  }
+  // A régua de erro do catálogo vivo é uma só, e é a do §7.
+  const secao = secaoTotem();
+  const i = secao.indexOf('async function catalogoVivoDoAdmin(');
+  assert.ok(i > 0, 'catalogoVivoDoAdmin não encontrada');
+  const fn = secao.slice(i, secao.indexOf('\n}\n', i));
+  assert.ok(/clienteIdDaEmpresaTotem\(empresaId\)/.test(fn), 'o clienteId nasce do empresaId, nunca de payload');
+  assert.ok(/!clienteId[\s\S]*CLIENTE_SEM_CW/.test(fn) && /conectado === false[\s\S]*CLIENTE_SEM_CW/.test(fn), 'loja sem CW (ou desconectada) é 409');
+  assert.ok(/status\(503\)[\s\S]*HUB_NAO_CONFIGURADO[\s\S]*HUB_INDISPONIVEL/.test(fn), 'HUB fora do ar é 503');
 });
