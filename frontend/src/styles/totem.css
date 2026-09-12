@@ -182,23 +182,24 @@
 
 /* -- Botões base ----------------------------------------------------------- */
 .tq-btn {
-  min-height: 72px; padding: 0 28px; border-radius: 14px;
+  min-height: 64px; padding: 0 28px; border: none; border-radius: 16px;
   display: inline-flex; align-items: center; justify-content: center; gap: 12px;
   font-family: 'Archivo Totem', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
-  font-weight: 900; font-size: clamp(18px, 1.9vw, 22px); letter-spacing: 0.05em; text-transform: uppercase;
+  font-weight: 900; font-size: clamp(18px, 1.9vw, 22px); letter-spacing: 0.04em; text-transform: uppercase;
   transition: background 0.14s ease, transform 0.1s ease, border-color 0.14s ease;
 }
-.tq-btn-primario { background: var(--tq-amarelo); color: var(--tq-tinta); }
-/* Botão que AFUNDA. A aresta inferior sólida (sem desfoque, sem gradiente) é o
-   que faz um alvo parecer físico num vidro — e some no toque, devolvendo a
-   sensação de tecla apertada. É a linguagem que se repete em todo alvo amarelo. */
-.tq-btn-primario { box-shadow: 0 8px 0 var(--tq-amarelo-3); }
-.tq-btn-primario:active:not(:disabled) {
-  background: var(--tq-amarelo-2); transform: translateY(5px); box-shadow: 0 3px 0 var(--tq-amarelo-3);
+/* CTA = bloco amarelo sólido. Nada de aresta inferior nem de sombra colorida:
+   a cor sozinha já diz "toque aqui", e o filete só somava ruído em cada tela. */
+.tq-btn-primario {
+  background: var(--tq-amarelo); color: var(--tq-tinta);
+  box-shadow: 0 4px 12px rgba(14, 19, 25, 0.10);
 }
+.tq-btn-primario:active:not(:disabled) { background: var(--tq-amarelo-2); transform: scale(0.985); }
 .tq-btn-primario:disabled { box-shadow: none; }
-.tq-btn-claro { background: var(--tq-superficie); color: var(--tq-texto); border: 2px solid var(--tq-borda); }
-.tq-btn-claro:active:not(:disabled) { border-color: var(--tq-borda-forte); transform: scale(0.99); }
+/* Secundário é branco de verdade, com borda neutra — nunca branco com detalhe
+   amarelo, que era o que o fazia sumir ao lado do primário. */
+.tq-btn-claro { background: var(--tq-superficie); color: var(--tq-texto); border: 2px solid var(--tq-borda-forte); }
+.tq-btn-claro:active:not(:disabled) { background: var(--tq-fundo); transform: scale(0.985); }
 .tq-btn-largo { width: 100%; }
 .tq-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 /* Sobre o preto (barra do pedido, faixa de fechamento) o desabilitado não pode
@@ -253,12 +254,6 @@
   display: flex; flex-direction: column; justify-content: center;
   gap: clamp(28px, 5vh, 64px); padding: clamp(36px, 5vw, 72px);
 }
-/* Faixa de marca no topo: sinalização, não enfeite. */
-.tq-inicio::before {
-  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 14px;
-  background: var(--tq-amarelo);
-}
-
 .tq-inicio-topo { display: flex; align-items: center; gap: clamp(24px, 4vw, 48px); }
 @media (max-width: 599px) { .tq-inicio-topo { flex-direction: column; text-align: center; } }
 
@@ -267,7 +262,7 @@
    arquivo colado sobre o preto. */
 .tq-placa {
   flex: 0 0 auto; background: var(--tq-branco); border-radius: 22px;
-  padding: clamp(16px, 2.2vw, 28px); box-shadow: 0 14px 0 var(--tq-amarelo);
+  padding: clamp(16px, 2.2vw, 28px); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
   display: grid; place-items: center;
 }
 .tq-placa img { display: block; width: clamp(150px, 22vw, 300px); max-height: 22vh; object-fit: contain; }
@@ -275,15 +270,12 @@
   flex: 0 0 auto; width: clamp(130px, 17vw, 220px); aspect-ratio: 1; border-radius: 26px;
   background: var(--tq-amarelo); color: var(--tq-tinta);
   display: grid; place-items: center; font-size: clamp(64px, 9vw, 110px); line-height: 1;
-  box-shadow: 0 14px 0 var(--tq-amarelo-3);
 }
 
 .tq-inicio-txt { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
 .tq-inicio-loja { color: var(--tq-amarelo); font-size: clamp(15px, 1.7vw, 21px); letter-spacing: 0.24em; }
 .tq-inicio-tit { font-size: clamp(44px, 7.4vw, 104px); line-height: 0.94; letter-spacing: -0.02em; }
 .tq-inicio-tit span { display: block; }
-/* Régua: fecha o bloco de texto e dá ao amarelo um papel além dos botões. */
-.tq-regua { width: clamp(96px, 14vw, 180px); height: 10px; background: var(--tq-amarelo); border-radius: 999px; }
 .tq-inicio-sub { font-size: clamp(17px, 2vw, 26px); color: var(--tq-texto-claro); }
 
 .tq-modos { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(16px, 2.4vw, 28px); }
@@ -292,12 +284,9 @@
   background: var(--tq-amarelo); color: var(--tq-tinta); border-radius: 24px;
   min-height: clamp(240px, 30vh, 440px); padding: clamp(24px, 3vw, 44px) 20px;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
-  box-shadow: 0 12px 0 var(--tq-amarelo-3);
-  transition: background 0.14s ease, transform 0.1s ease, box-shadow 0.1s ease;
+  transition: background 0.14s ease, transform 0.1s ease;
 }
-.tq-modo:active {
-  background: var(--tq-amarelo-2); transform: translateY(7px); box-shadow: 0 5px 0 var(--tq-amarelo-3);
-}
+.tq-modo:active { background: var(--tq-amarelo-2); transform: scale(0.985); }
 .tq-modo-t { font-size: clamp(26px, 3.6vw, 48px); letter-spacing: 0.01em; text-transform: uppercase; line-height: 1; }
 .tq-modo-s { font-size: clamp(15px, 1.7vw, 21px); opacity: 0.66; }
 
@@ -373,14 +362,11 @@
 .tq-card {
   position: relative; display: flex; flex-direction: column; text-align: left; overflow: hidden;
   background: var(--tq-superficie); border: 1px solid var(--tq-borda); border-radius: var(--tq-raio);
-  /* Base amarela: a marca aparece em todo card, sem competir com a foto. */
-  border-bottom: 8px solid var(--tq-amarelo);
   transition: transform 0.1s ease, box-shadow 0.15s ease;
 }
-.tq-card:active:not(:disabled) { transform: translateY(3px); border-bottom-width: 5px; }
-/* Em falta: a foto acinzenta, o texto continua legível e o card perde a base
-   amarela — ele não é uma ação. */
-.tq-card:disabled { cursor: not-allowed; border-bottom-color: var(--tq-borda); }
+.tq-card:active:not(:disabled) { transform: scale(0.99); }
+/* Em falta: a foto acinzenta e o texto continua legível — o card não é uma ação. */
+.tq-card:disabled { cursor: not-allowed; }
 .tq-card:disabled .tq-foto { filter: grayscale(1); opacity: 0.6; }
 .tq-card-txt { flex: 1 1 auto; display: flex; flex-direction: column; gap: 6px; padding: 18px 20px 20px; }
 .tq-card-nome { font-size: clamp(21px, 2.2vw, 28px); line-height: 1.12; }
@@ -397,12 +383,9 @@
 /* -- Preço ----------------------------------------------------------------- */
 .tq-preco { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
 .tq-preco-valor { font-size: clamp(24px, 2.7vw, 34px); line-height: 1.05; }
-/* "a partir de" é rótulo, não preço: continua pequeno e acima, mas agora com
-   marcação amarela — vira sinal de leitura em vez de cinza que some. */
-.tq-apartir {
-  color: var(--tq-tinta); background: var(--tq-amarelo);
-  padding: 3px 8px; border-radius: 6px; line-height: 1.1;
-}
+/* "a partir de" é rótulo, não preço: pequeno, acima do número, em cinza escuro
+   de alto contraste (8,8:1). Sem etiqueta colorida — o destaque é o valor. */
+.tq-apartir { color: var(--tq-texto-2); line-height: 1.1; }
 .tq-preco-de { font-size: clamp(14px, 1.4vw, 16px); color: var(--tq-texto-3); text-decoration: line-through; font-weight: 700; }
 .tq-preco-por { color: #8a3b00; }
 .tq-selo {
@@ -428,7 +411,7 @@
    de ar. Altura reservada mesmo com o pedido vazio: nada salta quando o
    primeiro item entra. */
 .tq-barra {
-  flex: 0 0 auto; min-height: var(--tq-barra-h); border-top: 6px solid var(--tq-amarelo);
+  flex: 0 0 auto; min-height: var(--tq-barra-h);
   background: var(--tq-preto); color: var(--tq-branco);
   padding: 14px 24px calc(18px + env(safe-area-inset-bottom, 0px));
   display: flex; flex-direction: column; justify-content: center; gap: 10px;
@@ -481,7 +464,6 @@
   display: flex; align-items: flex-end; justify-content: space-between; gap: 20px;
   background: var(--tq-preto); color: var(--tq-branco);
   padding: clamp(18px, 2.4vw, 28px) clamp(20px, 4vw, 40px);
-  border-bottom: 8px solid var(--tq-amarelo);
 }
 .tq-det-faixa-txt { min-width: 0; }
 .tq-det-nome { font-size: clamp(28px, 4vw, 52px); line-height: 1.02; letter-spacing: -0.015em; }
@@ -592,7 +574,7 @@
 .tq-rodape {
   flex: 0 0 auto; display: flex; align-items: center; gap: 16px;
   padding: 18px 24px calc(22px + env(safe-area-inset-bottom, 0px));
-  background: var(--tq-superficie); border-top: 6px solid var(--tq-amarelo);
+  background: var(--tq-superficie); border-top: 1px solid var(--tq-borda);
   box-shadow: 0 -8px 24px rgba(14, 19, 25, 0.07);
 }
 .tq-stepper { display: inline-flex; align-items: center; gap: 10px; flex: 0 0 auto; }
@@ -667,7 +649,7 @@
 .tq-linha {
   display: flex; gap: 18px; align-items: flex-start;
   background: var(--tq-superficie); border: 1px solid var(--tq-borda);
-  border-left: 6px solid var(--tq-preto); border-radius: var(--tq-raio); padding: 18px;
+  border-radius: var(--tq-raio); padding: 18px;
 }
 .tq-linha.mudou { border-color: var(--tq-amarelo); border-left-color: var(--tq-amarelo); border-width: 3px; padding: 16px; }
 .tq-linha-mudou { display: inline-block; background: var(--tq-amarelo); color: var(--tq-tinta); padding: 4px 10px; border-radius: 6px; }
@@ -677,14 +659,8 @@
 }
 .tq-linha-corpo { flex: 1 1 auto; min-width: 0; }
 .tq-linha-nome { font-size: clamp(19px, 2.1vw, 26px); line-height: 1.2; }
-/* A quantidade vira ficha preta com número amarelo: num pedido de vários itens
-   é o dado que o cliente confere primeiro, e antes ela era só um "2×" no meio
-   do nome. */
-.tq-linha-qtd {
-  display: inline-grid; place-items: center; min-width: 46px; height: 38px; padding: 0 10px;
-  margin-right: 10px; border-radius: 10px; background: var(--tq-preto); color: var(--tq-amarelo);
-  font-size: clamp(16px, 1.7vw, 20px); vertical-align: 2px;
-}
+/* A quantidade abre o nome, sem ficha nem cor: é leitura de comanda. */
+.tq-linha-qtd { margin-right: 6px; }
 .tq-linha-ops { margin-top: 6px; font-size: clamp(15px, 1.5vw, 17px); color: var(--tq-texto-3); line-height: 1.5; }
 .tq-linha-ops li::before { content: '• '; color: #a8a091; }
 .tq-linha-obs { margin-top: 6px; font-size: clamp(14px, 1.5vw, 16px); font-style: italic; color: var(--tq-texto-3); }
@@ -723,7 +699,7 @@
 /* O recado de que nada é cobrado aqui deixa de ser rodapé e vira a primeira
    coisa da tela: é a dúvida número um de quem usa um totem pela primeira vez. */
 .tq-aviso-forte {
-  background: var(--tq-preto); border: none; border-bottom: 6px solid var(--tq-amarelo);
+  background: var(--tq-preto); border: none;
   border-radius: var(--tq-raio); padding: clamp(20px, 2.6vw, 28px);
   color: var(--tq-branco); font-size: clamp(16px, 1.8vw, 21px); line-height: 1.45;
   display: flex; gap: 18px; align-items: flex-start;
@@ -757,7 +733,6 @@
 /* Faixa preta de fechamento: marca o ponto sem volta. Só a revisão tem. */
 .tq-fechamento {
   flex: 0 0 auto; background: var(--tq-preto); color: var(--tq-branco);
-  border-top: 6px solid var(--tq-amarelo);
   padding: 22px 24px calc(24px + env(safe-area-inset-bottom, 0px));
   display: flex; flex-direction: column; gap: 16px;
 }
@@ -830,9 +805,6 @@
     rgba(255, 255, 255, 0) 0 26px,
     rgba(255, 255, 255, 0.032) 26px 52px
   );
-}
-.tq-painel-num::before {
-  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 12px; background: var(--tq-amarelo);
 }
 .tq-painel-rot { color: var(--tq-texto-claro); font-size: clamp(17px, 2vw, 26px); letter-spacing: 0.32em; }
 .tq-numero {

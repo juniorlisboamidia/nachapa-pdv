@@ -29,7 +29,6 @@ export default function TelaInicio({ loja, aparelho, modos, aoEscolher }) {
             <span>Faça seu</span>
             <span>pedido aqui</span>
           </h1>
-          <div className="tq-regua" aria-hidden="true" />
           <p className="tq-inicio-sub">Escolha como você vai comer e monte o seu pedido.</p>
         </div>
       </div>
