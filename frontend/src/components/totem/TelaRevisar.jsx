@@ -1,4 +1,5 @@
-import { nomeApresentado } from '../totemCarrinho'
+import { nomeApresentado, imagemApresentada } from '../totemCarrinho'
+import Foto from './Foto'
 import { moeda } from './formato'
 import Spinner from './Spinner'
 
@@ -70,8 +71,9 @@ export default function TelaRevisar({
               <div className="tq-aviso-bloco">{mensagem(erroEnvio.codigo)}</div>
             ) : null}
 
-            <div className="tq-resumo-modo tq-rotulo">
-              {modo} · {metodo ?? '—'}
+            <div className="tq-resumo-modo">
+              <span className="tq-ficha">{modo}</span>
+              <span className="tq-ficha">{metodo ?? '—'}</span>
               {!travado ? (
                 <button type="button" className="tq-link" disabled={enviando} onClick={aoTrocarPagamento}>trocar pagamento</button>
               ) : null}
@@ -91,8 +93,14 @@ export default function TelaRevisar({
               ))
               return (
                 <div key={`${l.itemId}-${i}`} className={'tq-linha' + (mudou ? ' mudou' : '')}>
+                  {/* A miniatura só existe quando a linha cotada casou com a local:
+                      a foto é da identidade apresentada, que o HUB não conhece. */}
+                  {local ? <Foto src={imagemApresentada(local)} alt="" className="tq-linha-foto" tamIcone={26} /> : null}
                   <div className="tq-linha-corpo">
-                    <div className="tq-linha-nome tq-disp">{l.qtd}× {local ? nomeApresentado(local) : l.nome}</div>
+                    <div className="tq-linha-nome tq-disp">
+                      <span className="tq-linha-qtd tq-disp tq-disp-forte tq-num">{l.qtd}×</span>
+                      {local ? nomeApresentado(local) : l.nome}
+                    </div>
                     {opcoes.length ? (
                       <ul className="tq-linha-ops">
                         {opcoes.map((o, j) => (
