@@ -334,7 +334,12 @@
   transition: background 0.14s ease, transform 0.1s ease;
 }
 .tq-modo:active { background: var(--tq-amarelo-2); transform: scale(0.985); }
-.tq-modo-t { font-size: clamp(26px, 3.6vw, 48px); letter-spacing: 0.01em; text-transform: uppercase; line-height: 1; }
+/* A frase agora é a do cliente e é mais longa: quebra em duas linhas
+   equilibradas em vez de espremer o corpo do cartão. */
+.tq-modo-t {
+  font-size: clamp(23px, 3.1vw, 42px); letter-spacing: 0.01em; text-transform: uppercase;
+  line-height: 1.05; text-wrap: balance; max-width: 12ch;
+}
 .tq-modo-s { font-size: clamp(15px, 1.7vw, 21px); opacity: 0.66; }
 
 

@@ -45,10 +45,13 @@ export default function TelaInicio({ loja, modos, aoEscolher }) {
         {modos.map((m) => (
           <button key={m.id} type="button" className="tq-modo" onClick={() => aoEscolher(m.id)}>
             <Ico nome={m.ico} tam={96} traco={1.6} />
-            {/* Com um modo só, o cartão vira "Começar meu pedido" e o modo desce
-                para a linha de apoio: o cliente não escolhe o que não tem escolha. */}
-            <span className="tq-modo-t tq-disp tq-disp-forte">{um ? 'Começar meu pedido' : m.titulo}</span>
-            <span className="tq-modo-s">{um ? m.titulo : m.sub}</span>
+            {/* UMA frase por cartão, na voz do cliente. "COMER AQUI" com
+                "Vou comer na loja" embaixo dizia a mesma coisa duas vezes, só
+                trocando de linguagem — e a que decide é a do cliente.
+                O rótulo curto (`titulo`) continua existindo para o cabeçalho e a
+                revisão, onde "Vou levar para viagem" não caberia. */}
+            <span className="tq-modo-t tq-disp tq-disp-forte">{um ? 'Começar meu pedido' : m.sub}</span>
+            {um ? <span className="tq-modo-s">{m.sub}</span> : null}
           </button>
         ))}
       </div>
