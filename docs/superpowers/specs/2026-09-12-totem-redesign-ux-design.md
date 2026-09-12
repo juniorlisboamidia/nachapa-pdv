@@ -1,5 +1,7 @@
 # Totem — Redesign de UX/UI (Fase V1) — Design Doc
 
+**Revisão 2 — 2026-09-12.** Arquitetura aprovada conceitualmente pelo Junior. Esta revisão fecha as cinco decisões de produto (§16) e aplica quatro correções: sai o campo de observação, o checklist passa a distinguir TRADICIONAIS de COMBO, "os mais pedidos" deixa de ser tratado como categoria sintética e a tela inicial perde a foto ambiente. **Implementação (V1–V11) ainda não autorizada.**
+
 **Data:** 2026-09-12
 **Repo:** `nachapa-pdv` (PDV "Operação")
 **Escopo:** camada de apresentação visual do Totem do CLIENTE (`/dispositivo`). Nenhuma regra de negócio, nenhum contrato HTTP, nenhuma migration.
@@ -124,11 +126,13 @@ Nada no CSS atual foi escrito para **retrato grande**. Entre 561px e ∞ existe 
 |---|---|
 | ≥ 900px e retrato | Sidebar completa + **2 colunas** de produto (o padrão do projeto) |
 | ≥ 1500px | Sidebar completa + 3 colunas |
-| 600–899px | Sidebar estreita (miniatura + nome em 2 linhas) + 2 colunas |
+| 600–899px | Sidebar estreita (nome em 2 linhas, fonte menor) + 2 colunas |
 | < 600px | Modo de emergência: categorias voltam a ser faixa no topo, 1–2 colunas (é o tablet pequeno improvisado, não o alvo) |
 | altura < 760px (paisagem) | Header 72px, barra do pedido 96px, sidebar com rolagem própria |
 
 Math do alvo: sidebar `clamp(190px, 21vw, 260px)` → 227px em 1080. Área de produtos 853 − 48 de padding = 805; gap 20 → **cards de 392px** com foto 4:3 de **294px**. Altura útil 1920 − 96 (header) − 132 (barra) = 1692 → ~4 linhas visíveis, 8 produtos por tela sem rolar. É esse número que transforma "app web" em "totem".
+
+**Confirmação da resolução real (decisão 1 do §16).** 1080 × 1920 é a referência oficial da V1 e a implementação segue com ela. A tela `Aparelhos` **não** passa a exibir resolução nesta frente — a medida verdadeira é lida no checkpoint físico, pelo `heartbeatJson.tela` que o próprio totem já grava a cada 60 s (item 16 do checklist §13.3). Como nenhuma medida do desenho é fixa em pixels de tela, uma divergência ajusta as faixas desta tabela, não o layout.
 
 ---
 
@@ -168,12 +172,26 @@ E também, dentro de `TotemQuiosque.jsx`, **toda a camada de orquestração**: b
 
 ### 4.2 É substituído (casca)
 
-- O bloco CSS `.ttm-*` do quiosque (linhas 3352–3699 de `global.css`).
+- O bloco CSS `.ttm-*` do quiosque (linhas 3352–3718 de `global.css`).
 - O JSX de renderização das 8 telas.
 - Os subcomponentes locais `Cabecalho`, `TelaAviso`, `FotoItem`, `PrecoItem`, `Stepper`, `Spinner`.
 - Os emoji.
 
-### 4.3 É acrescentado (novo, puro e testado)
+### 4.3 É removido: o campo de observação
+
+Decisão do Junior nesta revisão: o Totem redesenhado **não** tem o campo "Alguma observação?".
+
+Um registro honesto do que isso significa, porque o campo **existe hoje** e está no ar: `TotemQuiosque.jsx` desenha um `<textarea>` de 200 caracteres no fim do detalhe; `montarCarrinho` já emite `observacao` na linha quando o texto não está vazio; o carrinho mostra o texto entre aspas; e o HUB e o Cardápio Web aceitam o campo. Portanto isto é a **retirada de um elemento existente**, não a recusa de um elemento novo.
+
+O que sai e o que fica:
+
+- **Sai:** o bloco no detalhe, o texto na linha do carrinho, a regra de CSS do `<textarea>` e a exceção de `user-select`.
+- **Fica intocado:** `montarCarrinho` continua suportando `observacao` (e seus testes continuam passando) — simplesmente nada preenche o campo, e o corpo enviado passa a nunca trazê-lo. O contrato é opcional, então nada quebra no HUB nem no CW.
+- **Reversível:** voltar atrás é acrescentar um bloco de UI, sem tocar em contrato nem em teste.
+
+Se a intenção era manter o recurso e apenas não redesenhá-lo, este é o ponto de reverter — antes da V5, que é a task que constrói o detalhe.
+
+### 4.4 É acrescentado (novo, puro e testado)
 
 - `frontend/src/components/totemFoco.js` — regra da progressão automática entre grupos (§8).
 - `frontend/src/components/totemLayout.js` — decisões de layout que são **regra**, não CSS: `modoDeOpcoes(grupo)` (grade com foto vs. lista de texto), `obrigatoriosPendentes(item, selecoes)` (chips do "falta escolher"), `resumoDoPedido(carrinho)`.
@@ -225,7 +243,12 @@ Escala tipográfica (fluida, `clamp`):
 
 ### 5.3 Tipografia
 
-Hoje: pilha do sistema. Proposta: **display auto-hospedado** (2 pesos `woff2`, ~35 KB, servido do próprio Vite — sem CDN) para nomes, preços e o número do pedido; corpo continua na pilha do sistema. Sugestão de família: uma grotesca pesada e levemente condensada (Archivo / Barlow Condensed, ambas SIL OFL). **Decisão do Junior** (§16) — se ele preferir não adicionar asset, o fallback é pilha do sistema com peso 800/900 e `letter-spacing: -0.01em` nos títulos, que já melhora muito sobre o atual.
+**Decidido (§16-5): Archivo auto-hospedada, pesos 800 e 900**, em `woff2` servido pelo próprio Vite (sem CDN, sem `@import` externo — o tablet pode estar em rede ruim, e uma fonte que não carrega troca o desenho inteiro no meio do expediente). Licença SIL OFL, dois arquivos, ≈35 KB somados.
+
+- **Archivo 800/900:** nomes de produto, preços, títulos de tela, nomes de grupo, rótulos em caixa alta e o número do pedido.
+- **Pilha do sistema:** todo o corpo de texto, descrições e frases de aviso.
+- Declarar `font-display: swap` e a pilha do sistema como fallback em cada `@font-face`, para que uma falha de carregamento degrade em vez de apagar texto.
+- Os arquivos entram em `frontend/src/assets/fontes/` na task V1.
 
 ### 5.4 Ícones
 
@@ -258,7 +281,7 @@ Hoje: pilha do sistema. Proposta: **display auto-hospedado** (2 pesos `woff2`, ~
 
 | Atual | Proposto |
 |---|---|
-| Fundo creme; logo ≤180px; título 40px; dois cartões brancos de 190px com emoji 46px | Fundo **preto** com a logo em destaque e, se houver, foto ambiente esmaecida ao fundo; cartões **amarelos** de altura proporcional (26vh) com ícone SVG; título em 2 níveis (marca / instrução) |
+| Fundo creme; logo ≤180px; título 40px; dois cartões brancos de 190px com emoji 46px | Fundo **preto liso**, a logo da loja em destaque, cartões **amarelos** de altura proporcional (26vh) com ícone SVG, título em 2 níveis (marca / instrução). **Sem foto ambiente:** o bootstrap entrega `loja = { nome, logo }` e nada mais — não existe campo de imagem de fundo, e inventar um exigiria contrato novo |
 | Um modo → texto muda para "Começar meu pedido" | Mantido (regra), com o cartão único ocupando a largura |
 
 Nada de novo no dado: `loja.logo`, `orderTypes` e `MODOS` já existem.
@@ -271,14 +294,14 @@ Nada de novo no dado: `loja.logo`, `orderTypes` e `MODOS` já existem.
 ├───────────┬──────────────────────────────────────────┤
 │           │                                          │
 │  ▌TRADIC. │  ┌────────────────┐ ┌────────────────┐  │
-│   ARTES.  │  │                │ │                │  │
-│   DOGS    │  │     FOTO       │ │     FOTO       │  │
-│   PORÇÕES │  │    (4:3)       │ │    (4:3)       │  │
-│   BEBIDAS │  ├────────────────┤ ├────────────────┤  │
-│   DOCES   │  │ X BURGUER      │ │ X SALADA       │  │
+│   COMBO   │  │                │ │                │  │
+│   ARTES.  │  │     FOTO       │ │     FOTO       │  │
+│   DOGS    │  │    (4:3)       │ │    (4:3)       │  │
+│   PORÇÕES │  ├────────────────┤ ├────────────────┤  │
+│   BEBIDAS │  │ X BURGUER      │ │ X SALADA       │  │
 │           │  │ pão, hambúrguer│ │ pão, alface…   │  │
-│  (rolagem │  │ a partir de    │ │                │  │
-│   própria)│  │ R$ 27,90       │ │ R$ 14,00       │  │
+│  (rolagem │  │                │ │                │  │
+│   própria)│  │ R$ 12,00       │ │ R$ 14,00       │  │
 │           │  └────────────────┘ └────────────────┘  │
 │           │  ┌────────────────┐ ┌────────────────┐  │
 │           │  │      …         │ │      …         │  │
@@ -293,8 +316,10 @@ Nada de novo no dado: `loja.logo`, `orderTypes` e `MODOS` já existem.
 | Chips horizontais roláveis no topo | **Sidebar preta fixa** à esquerda, rolagem própria |
 | 4 colunas de 250px, foto 132px | **2 colunas** de ~392px, foto 4:3 (~294px) |
 | Botão flutuante em pílula, centralizado, sobreposto | **Barra fixa** no rodapé, altura reservada sempre (sem CLS) |
-| Após adicionar → vai para o carrinho | Após adicionar → **volta ao catálogo** com confirmação e pulso na barra (§16, decisão) |
+| Após adicionar → vai para o carrinho | Após adicionar → **volta ao catálogo** com confirmação e pulso na barra (decisão 3 do §16) |
 | Nome + descrição + preço | Mesmos campos, hierarquia nova; "a partir de" acima do número |
+
+O wireframe acima mostra **TRADICIONAIS 🍔**, categoria normal: nove produtos com o preço de cada um (R$ 12,00 a R$ 22,00), **sem** rótulo. Em **COMBO - TRADICIONAIS**, configurada como Vitrine, os mesmos nove nomes aparecem com o mínimo da jornada e o rótulo: X BURGUER "a partir de R$ 27,90", X SALADA e X DELICIA 29,90, X BACON e X CALA BURGUER 31,90, CHEDDAR BACON 32,90, HAMBURGÃO e X DUPLO 33,90, ESPECIAL 37,90. O card é o mesmo componente nos dois casos; o que muda é o dado que o HUB manda.
 
 ### C. Detalhe do produto
 
@@ -322,8 +347,6 @@ Nada de novo no dado: `loja.logo`, `orderTypes` e `MODOS` já existem.
 │ │ ✓ COCA COLA LATA      │ │  GUARANÁ LATA          │ │
 │ └───────────────────────┘ └────────────────────────┘ │
 │ …                                                    │
-│ ALGUMA OBSERVAÇÃO?                        opcional   │
-│ [ Ex.: sem cebola                                  ] │
 ├──────────────────────────────────────────────────────┤
 │  [− 1 +]     [   ADICIONAR · R$ 27,90            ]   │
 └──────────────────────────────────────────────────────┘
@@ -337,6 +360,7 @@ Nada de novo no dado: `loja.logo`, `orderTypes` e `MODOS` já existem.
 | Sem avanço automático | **Progressão automática** (§8) |
 | Grupo principal oculto | **Mantido** (`gruposRenderizaveis`) |
 | Cabeçalho/botão com o piso do card | **Mantido** (`precoDoCabecalho`), só re-tipografado |
+| Campo "Alguma observação?" no fim da página | **Removido** — o detalhe termina no último grupo (§4.3) |
 
 ### D. Carrinho
 
@@ -348,7 +372,6 @@ Nada de novo no dado: `loja.logo`, `orderTypes` e `MODOS` já existem.
 │ │[foto] 1× X BURGUER                     R$ 27,90  │ │
 │ │       • Coca cola lata                           │ │
 │ │       • Batata frita                             │ │
-│ │       “sem cebola”                               │ │
 │ │       [− 1 +]        [editar]        [ 🗑 ]      │ │  ← lixeira a ≥32px do editar
 │ └──────────────────────────────────────────────────┘ │
 │ ┌──────────────────────────────────────────────────┐ │
@@ -583,7 +606,8 @@ Risco conhecido: um cliente que já rolou manualmente até o fim e então marca 
 - Sem dependência de `hover`; estado `:active` com `transform: scale(.99)`.
 - Transbordo: gradiente de 24px no topo/rodapé quando há conteúdo cortado.
 - Ao trocar de categoria, o grid volta ao topo (`scrollTop = 0`).
-- **Ícone por categoria:** o CW não fornece ícone nem imagem de categoria. Opções em §16 (decisão). Padrão recomendado enquanto não se decide: **sem ícone**, só o nome em caixa alta — legível e honesto. "Mais pedidos" também não existe no contrato (exigiria dado de vendas no HUB): fora de escopo.
+- **Sem ícone e sem miniatura (decisão 4 do §16).** A V1 mostra **apenas o nome da categoria**, em caixa alta. O CW não fornece ícone nem imagem de categoria, e nenhuma configuração de merchandising é criada nesta frente.
+- **Toda categoria que vier do CW aparece.** A sidebar é um espelho do `catalogo.categorias` do bootstrap, na ordem do `index`. Se a loja tiver uma categoria chamada **🥇 OS MAIS PEDIDOS**, ela é uma categoria real como qualquer outra e é renderizada normalmente, com o emoji que faz parte do nome cadastrado — emoji em nome de dado não é o mesmo que emoji usado como ícone da interface, que continua proibido (§5.4). O que a V1 **não** faz é inventar uma categoria sintética a partir de histórico de vendas: isso não existe no contrato e exigiria dado novo vindo do HUB.
 
 ### 9.2 Barra do pedido
 
@@ -611,7 +635,7 @@ Risco conhecido: um cliente que já rolou manualmente até o fim e então marca 
 3. **Tokens escopados** em `.tq-raiz` com valores **literais** — o `body.theme-dark` do admin não alcança o quiosque (regra atual, preservada e agora garantida pelo escopo).
 4. Espaçamento por `gap` de flex/grid; nada de margens irmãs colapsando.
 5. Conteúdo largo (nome de opção longo) nunca causa rolagem horizontal: `min-width: 0` nos filhos flex e `overflow-wrap: anywhere` nos nomes.
-6. `user-select: none` na raiz, com exceção explícita para o `<textarea>` de observação.
+6. `user-select: none` na raiz, sem exceção — com a saída do campo de observação (§4.3), o quiosque não tem mais nenhum campo de digitação livre.
 7. Remoção do bloco antigo `global.css:3352–3718` (quiosque + pareamento + as duas media queries que só servem a eles) só na **última** task, depois de a tela nova estar completa. O bloco do admin (3313–3350) **fica**.
 
 ### 10.2 Componentização
@@ -678,7 +702,7 @@ O cliente está **em pé, com uma mão, sem familiaridade**. Regras que valem pa
 | Modal vs. página | Fluxo principal é **página** (o cliente não perde contexto). Sheet só para "Ainda está aí?" e confirmação de cancelar |
 | Escape | Toda tela que não seja Início e Resultado tem "‹ Voltar", exceto Revisar travada (regra de idempotência) |
 | Texto | Corpo ≥ 17px; nada abaixo de 4,5:1; nenhum cinza sobre cinza |
-| Seleção de texto | Desabilitada, exceto no campo de observação |
+| Seleção de texto | Desabilitada em toda a tela; não há campo de digitação livre no quiosque |
 
 ---
 
@@ -719,16 +743,20 @@ Ordenados por gravidade. Cada um vira item de verificação obrigatória.
 
 1. Retrato: 2 colunas, sem rolagem horizontal, última fileira não coberta pela barra.
 2. Sidebar rola sozinha; grid volta ao topo ao trocar de categoria; categoria ativa óbvia a 2 m de distância.
-3. `TRADICIONAIS` → 9 cards com "a partir de R$ 27,90"; combo abre com o principal oculto e os dois obrigatórios visíveis.
-4. Cabeçalho e botão mostram **27,90**, nunca 12,00, enquanto faltar obrigatório.
-5. Escolher a bebida rola sozinho para o acompanhamento; escolher o acompanhamento rola para o CTA; **desmarcar não rola**.
-6. Complementos com foto aparecem em grade; grupo sem foto nenhuma aparece como lista.
-7. Duas linhas do mesmo item base: editar uma não encosta na outra.
-8. Carrinho → pagamento → revisão: total confere; "trocar pagamento" recota.
-9. Drill de ambiguidade (falha simulada PDV→HUB, **sem POST real**): tela trava, sem Voltar, um botão só.
-10. Inatividade: sheet aos 75 s; **não** aparece durante envio nem no estado travado.
-11. Tela de sucesso: número protagonista; botão "Novo pedido" pequeno.
-12. Admin (`Totem › Pedidos` e `› Apresentação`) inalterado depois da remoção do CSS antigo.
+3. **TRADICIONAIS 🍔** (categoria normal): 9 produtos com o preço de cada um — X BURGUER R$ 12,00, X SALADA e X DELICIA R$ 14,00, X BACON e X CALA BURGUER R$ 16,00, CHEDDAR BACON R$ 17,00, HAMBURGÃO e X DUPLO R$ 18,00, ESPECIAL R$ 22,00 — **sem** o rótulo "a partir de".
+4. **COMBO - TRADICIONAIS** (Vitrine por BURGUER DO COMBO 964783): 9 produtos com mínimos diferentes, começando em X BURGUER **"a partir de R$ 27,90"** e terminando em ESPECIAL R$ 37,90; ao abrir, o grupo principal fica oculto e BEBIDA e ACOMPANHAMENTO aparecem obrigatórios.
+5. Cabeçalho e botão do combo mostram **27,90**, nunca 12,00, enquanto faltar obrigatório.
+6. Escolher a bebida rola sozinho para o acompanhamento; escolher o acompanhamento rola para o CTA; **desmarcar não rola**.
+7. Complementos com foto aparecem em grade; grupo sem foto nenhuma aparece como lista.
+8. Nenhuma tela tem campo de digitação livre; toque longo não seleciona texto nem abre menu do sistema.
+9. Duas linhas do mesmo item base: editar uma não encosta na outra.
+10. Adicionar um item devolve ao catálogo, com o contador da barra atualizado — não abre o carrinho.
+11. Carrinho → pagamento → revisão: total confere; "trocar pagamento" recota.
+12. Drill de ambiguidade (falha simulada PDV→HUB, **sem POST real**): tela trava, sem Voltar, um botão só.
+13. Inatividade: sheet aos 75 s; **não** aparece durante envio nem no estado travado.
+14. Tela de sucesso: número protagonista; botão "Novo pedido" pequeno.
+15. Admin (`Totem › Pedidos` e `› Apresentação`) inalterado depois da remoção do CSS antigo.
+16. **Resolução real do aparelho** (decisão 1 do §16): ler `heartbeatJson.tela` do dispositivo do totem no banco (`SELECT "heartbeatJson"->'tela' FROM "Dispositivo" WHERE tipo='TOTEM'`) e conferir contra a referência de 1080 × 1920. Se divergir, ajustar as faixas do §2.3 antes de dar o checkpoint por aprovado — nenhuma medida do desenho é fixa em pixels de tela, então o ajuste é de faixa, não de layout.
 
 ---
 
@@ -738,11 +766,11 @@ Commit por task, `git add` explícito por caminho, sem deploy durante a sequênc
 
 | Task | Entrega | Verificação |
 |---|---|---|
-| **V1** | `styles/totem.css` com tokens, reset, tipografia e casca `.tq-raiz`; `components/totem/icones.jsx`; importado por `DispositivoPareamento`. Nenhuma tela migrada ainda | build; a tela antiga continua idêntica |
+| **V1** | `styles/totem.css` com tokens, reset e casca `.tq-raiz`; Archivo 800/900 em `assets/fontes/` com `@font-face` e `font-display: swap`; `components/totem/icones.jsx`; importado por `DispositivoPareamento`. Nenhuma tela migrada ainda | build; a tela antiga continua idêntica; a fonte carrega sem rede externa |
 | **V2** | Casca + `Cabecalho` compacto + `TelaInicio` | build; pareamento e Início na cara nova |
 | **V3** | `TelaCatalogo`: `SidebarCategorias` + `GradeProdutos` + `CardProduto` (foto grande, "a partir de", Em falta / Indisponível) | build; 9 cards do combo com 27,90 |
-| **V4** | `BarraPedido` fixa + feedback ao adicionar + retorno ao catálogo após "Adicionar" (§16-3) | build; contador e total corretos com duas linhas do mesmo item |
-| **V5** | `TelaItem`: hero, chips de pendência, `BlocoGrupo` (obrigatório × opcional), `RodapeItem` com `precoDoCabecalho` | build; R6/R7 do §12 conferidos |
+| **V4** | `BarraPedido` fixa + feedback ao adicionar + retorno ao catálogo após "Adicionar" (decisão 3) | build; contador e total corretos com duas linhas do mesmo item |
+| **V5** | `TelaItem`: hero, chips de pendência, `BlocoGrupo` (obrigatório × opcional), `RodapeItem` com `precoDoCabecalho`. **Sem campo de observação** (§4.3) | build; R6/R7 do §12 conferidos |
 | **V6** | `CardOpcao` + `totemLayout.js` (`modoDeOpcoes`) com foto, descrição, adicional, estados MISSING/limite | `node --test` + build |
 | **V7** | `totemFoco.js` + progressão automática com smooth scroll e reduced-motion | `node --test` (tabela §8.1) + build |
 | **V8** | `TelaCarrinho` (miniatura, remover afastado com confirmação inline, vazio resolvido) | build |
@@ -758,26 +786,32 @@ Ordem escolhida para que **cada task deixe a tela funcionando**: nada de "meio r
 
 - Admin `Loja Digital › Totem › Apresentação` (recebeu a limpeza da rev. 3).
 - Qualquer mudança de contrato, rota ou banco.
-- Categoria "Mais pedidos" (exigiria dado de vendas vindo do HUB).
+- Categoria sintética de "mais pedidos" calculada a partir de vendas (exigiria dado novo vindo do HUB). Categoria real vinda do CW com esse nome aparece normalmente — ver §9.1.
+- Ícone, miniatura ou qualquer configuração de merchandising por categoria.
 - Horário de funcionamento na tela de loja fechada (exigiria campo aditivo no HUB — §6.H).
 - Multi-idioma, acessibilidade por leitor de tela além do que já existe (`aria-pressed`, `aria-live`, foco visível), impressão de comprovante no próprio totem.
 - Fase B (reconciliação automática, `/confirm`).
 
 ---
 
-## 16. Decisões que ainda precisam do Junior
+## 16. Decisões fechadas (rev. 2)
 
-Cinco. Tudo o mais está recomendado tecnicamente e segue sem perguntar.
+As cinco decisões de produto foram tomadas pelo Junior em 2026-09-12. Nenhuma fica em aberto para a implementação.
 
-1. **Resolução real do monitor.** O projeto assume **1080×1920 retrato** como referência e é fluido em volta disso. O aparelho já reporta a resolução no heartbeat (`Dispositivo.heartbeatJson.tela = {w,h}`), mas a tela `Aparelhos` **não exibe** esse campo hoje. Basta me dizer o modelo/resolução; se preferir, uma linha na tela de Aparelhos mostrando `w×h` do último heartbeat resolveria de vez (mudança mínima no admin — **reportada, não implementada**, conforme o item 11 do briefing).
+| # | Decisão | Onde vive na spec |
+|---|---|---|
+| 1 | **Referência oficial da V1: 1080 × 1920 em retrato, layout fluido.** A tela `Aparelhos` **não** ganha exibição de resolução agora; a resolução real é conferida pelo `heartbeatJson.tela` no checkpoint físico | §2.3 e item 16 do checklist §13.3 |
+| 2 | **Preto, branco e amarelo `#f9d900` exclusivamente no quiosque.** O admin mantém a identidade atual (`--brand-gold: #f97316`), sem uma linha alterada | §5.2, tokens escopados em `.tq-raiz`; §10.1, arquivo e prefixo separados |
+| 3 | **Adicionar um item devolve ao catálogo**, com confirmação e pulso na barra; o pedido continua acessível o tempo todo pela barra fixa | §6.B, §9.2, task V4 |
+| 4 | **Sidebar da V1 só com o nome das categorias** — sem ícone, sem miniatura automática, sem tela de configuração de merchandising | §9.1 |
+| 5 | **Archivo auto-hospedada nos pesos 800 e 900** para nomes, preços, títulos e número do pedido; corpo na pilha do sistema | §5.3, task V1 |
 
-2. **Amarelo `#f9d900` só no Totem.** O `:root` do PDV declara hoje `--brand-gold: #f97316` (laranja) como cor da marca e o admin inteiro usa isso. A proposta troca a cor **apenas** dentro do quiosque (tokens escopados), deixando o admin como está. Confirma? *(Recomendo sim: além da identidade, branco sobre laranja hoje dá 2,8:1 e reprova em contraste; preto sobre amarelo dá 13,3:1.)*
+Correções documentais aplicadas junto (pedidas na mesma revisão):
 
-3. **Depois de "Adicionar", voltar ao catálogo em vez de ir ao carrinho.** *(Recomendo mudar: hoje são 3 idas ao carrinho para montar 3 itens. O acesso ao pedido fica sempre visível na barra fixa.)* É mudança de navegação, não de regra — por isso pergunto.
-
-4. **Ícone/miniatura por categoria na sidebar.** O CW não fornece ícone nem imagem de categoria. Três caminhos: **(a)** só o nome, sem ícone *(recomendado — zero dependência)*; **(b)** miniatura automática = foto do primeiro produto da categoria *(sem custo de dado, mas a foto pode não representar a categoria)*; **(c)** mapa manual nome→ícone numa nova tela de configuração *(fora do escopo desta frente)*.
-
-5. **Fonte display auto-hospedada** (≈35 KB, 2 pesos, licença SIL OFL) para nomes, preços e o número do pedido. *(Recomendo sim — é o que mais separa "totem de restaurante" de "app web". Se não, o fallback é a pilha do sistema em peso 900, que ainda melhora sobre o atual.)*
+- **Campo de observação removido** de wireframes, CSS e regras de seleção de texto — com o registro, em §4.3, de que se trata da retirada de um campo que existe hoje e é aceito pelo contrato, e de como reverter se a intenção for outra.
+- **Checklist corrigido:** TRADICIONAIS normal tem nove produtos com preço próprio; COMBO - TRADICIONAIS em Vitrine tem nove produtos com mínimos, começando em R$ 27,90 (§13.3, itens 3 e 4).
+- **"Os mais pedidos" reescrito:** nenhuma categoria sintética por vendas nesta frente, e qualquer categoria real do CW com esse nome aparece normalmente na sidebar (§9.1, §15).
+- **Foto ambiente removida** da tela inicial: fundo preto, logo e ações amarelas, porque o bootstrap não tem campo de imagem de fundo (§6.A).
 
 ---
 
