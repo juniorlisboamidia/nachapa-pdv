@@ -39,7 +39,9 @@ export default function SidebarCategorias({ categorias, categoriaId, aoTrocar })
             aria-current={String(c.id) === String(categoriaId) ? 'true' : undefined}
             onClick={() => aoTrocar(c.id)}
           >
-            {c.nome}
+            {/* O nome vai num span para o recorte de duas linhas valer sobre o
+                texto, e não sobre a caixa do botão. */}
+            <span>{c.nome}</span>
           </button>
         ))}
       </div>

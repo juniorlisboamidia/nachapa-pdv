@@ -77,7 +77,7 @@
   /* Métricas do aparelho (spec §2.3) */
   --tq-topo-h: 96px;
   --tq-barra-h: 132px;
-  --tq-lado-l: clamp(190px, 21vw, 260px);
+  --tq-lado-l: 152px;
 
   position: relative;   /* âncora do toast, da sobreposição de envio e do alerta */
   min-height: 100dvh;
@@ -102,6 +102,10 @@
 @media (max-height: 760px) {
   .tq-raiz { --tq-topo-h: 72px; --tq-barra-h: 96px; }
 }
+/* A sidebar cresce com a tela, e só com ela. Em 694px de viewport os 190px de
+   antes comiam 27% da largura e espremiam os cards; a partir de 900px ela pode
+   ocupar o espaço que o alvo de produção tem de sobra. */
+@media (min-width: 900px) { .tq-raiz { --tq-lado-l: clamp(210px, 21vw, 240px); } }
 
 .tq-raiz *,
 .tq-raiz *::before,
@@ -318,28 +322,31 @@
   background: linear-gradient(to top, var(--tq-preto), rgba(14, 19, 25, 0));
 }
 .tq-cat {
-  width: 100%; min-height: 96px; padding: 16px 16px 16px 14px; text-align: left;
+  width: 100%; min-height: 84px; padding: 14px 12px; text-align: left;
   display: flex; align-items: center;
-  border-left: 8px solid transparent; color: #b9b3a4;
+  color: var(--tq-branco);
   font-family: 'Archivo Totem', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
-  font-weight: 800; font-size: clamp(15px, 1.6vw, 19px); line-height: 1.15;
-  letter-spacing: 0.02em; text-transform: uppercase;
-  overflow-wrap: anywhere; transition: background 0.12s ease, color 0.12s ease;
+  font-weight: 700; font-size: clamp(15px, 1.6vw, 18px); line-height: 1.15;
+  letter-spacing: 0.01em; text-transform: uppercase;
+  transition: background 0.12s ease, color 0.12s ease;
 }
-.tq-cat:active { background: #161c24; }
-/* Ativo não é uma barrinha: é um BLOCO AMARELO com texto preto. Numa lista de
-   dez categorias vista a dois metros, meia dúzia de pixels de borda não responde
-   "onde eu estou". Continuam três sinais (fundo, barra, cor), agora no volume
-   certo — e o preto sobre amarelo dá 13,3:1. */
-.tq-cat[aria-current='true'] {
-  background: var(--tq-amarelo); border-left-color: var(--tq-amarelo-3);
-  color: var(--tq-tinta); font-weight: 900;
+/* O nome da categoria SEMPRE aparece, e quebra por palavra. O `anywhere` de
+   antes partia "ACOMPANHAMENTOS" letra a letra numa coluna estreita e deixava
+   categorias reduzidas praticamente ao emoji do nome. */
+.tq-cat span {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  word-break: normal; overflow-wrap: normal; hyphens: none;
 }
+.tq-cat:active { background: #202832; }
+/* Ativo é BLOCO AMARELO com texto preto — não uma barrinha lateral. Numa lista
+   de dez categorias vista a dois metros, seis pixels de borda não respondem
+   "onde eu estou". Preto sobre amarelo dá 13,3:1; branco sobre preto, 17,4:1. */
+.tq-cat[aria-current='true'] { background: var(--tq-amarelo); color: var(--tq-tinta); font-weight: 900; }
 
 /* -- Grade ----------------------------------------------------------------- */
 .tq-grade {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px; padding: 24px; align-content: start;
+  gap: 18px; padding: 20px; align-content: start;
 }
 @media (min-width: 1500px) { .tq-grade { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 
@@ -350,31 +357,35 @@
   .tq-lado { flex: 0 0 auto; }
   .tq-lado-rolagem { display: flex; overflow-x: auto; overflow-y: hidden; padding: 8px; gap: 8px; }
   .tq-lado-fade { display: none; }
-  .tq-cat {
-    width: auto; min-height: 56px; border-left: none; border-bottom: 4px solid transparent;
-    border-radius: 10px; white-space: nowrap; padding: 8px 14px;
-  }
-  .tq-cat[aria-current='true'] { border-left-color: transparent; border-bottom-color: var(--tq-amarelo); }
+  .tq-cat { width: auto; min-height: 56px; border-radius: 10px; padding: 8px 14px; }
+  .tq-cat span { -webkit-line-clamp: 1; white-space: nowrap; }
   .tq-grade { grid-template-columns: minmax(0, 1fr); gap: 14px; padding: 14px; }
 }
 
 /* -- Card de produto ------------------------------------------------------- */
 .tq-card {
   position: relative; display: flex; flex-direction: column; text-align: left; overflow: hidden;
-  background: var(--tq-superficie); border: 1px solid var(--tq-borda); border-radius: var(--tq-raio);
+  background: var(--tq-superficie); border: 1px solid var(--tq-borda); border-radius: 18px;
+  box-shadow: 0 2px 8px rgba(14, 19, 25, 0.05);
   transition: transform 0.1s ease, box-shadow 0.15s ease;
 }
 .tq-card:active:not(:disabled) { transform: scale(0.99); }
 /* Em falta: a foto acinzenta e o texto continua legível — o card não é uma ação. */
 .tq-card:disabled { cursor: not-allowed; }
 .tq-card:disabled .tq-foto { filter: grayscale(1); opacity: 0.6; }
-.tq-card-txt { flex: 1 1 auto; display: flex; flex-direction: column; gap: 6px; padding: 18px 20px 20px; }
-.tq-card-nome { font-size: clamp(21px, 2.2vw, 28px); line-height: 1.12; }
-.tq-card-desc {
-  font-size: clamp(15px, 1.5vw, 17px); color: var(--tq-texto-3); line-height: 1.35;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+.tq-card-txt { flex: 1 1 auto; display: flex; flex-direction: column; gap: 6px; padding: 16px 18px 18px; }
+/* Nome nunca parte no meio da palavra: em duas colunas estreitas era assim que
+   "X CALA BURGUER" virava uma coluna de letras. */
+.tq-card-nome {
+  font-size: clamp(20px, 2.1vw, 27px); line-height: 1.12;
+  word-break: normal; overflow-wrap: normal; hyphens: none;
 }
-.tq-card-rod { margin-top: auto; padding-top: 10px; }
+.tq-card-desc {
+  font-size: clamp(14px, 1.5vw, 17px); color: var(--tq-texto-2); line-height: 1.3;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  word-break: normal; overflow-wrap: normal;
+}
+.tq-card-rod { margin-top: auto; padding-top: 12px; }
 
 /* -- Foto ------------------------------------------------------------------ */
 .tq-foto { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: #eae5db; }
