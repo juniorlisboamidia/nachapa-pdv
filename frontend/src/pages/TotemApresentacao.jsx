@@ -122,10 +122,7 @@ export default function TotemApresentacao() {
 
   function salvarLinha(item) {
     const f = form[String(item.cwItemId)] ?? { modo: 'NORMAL', grupoId: '' }
-    if (f.modo === 'NORMAL') {
-      setConfirmNormal({ cwItemId: item.cwItemId, nome: item.nome });
-      return
-    }
+    if (f.modo === 'NORMAL') { setConfirmNormal({ cwItemId: item.cwItemId, nome: item.nome }); return }
     if (!f.grupoId) { notify(ERROS_SALVAR.GRUPO_OBRIGATORIO, 'error'); return }
     salvar(item.cwItemId, { modo: 'EXPANDIDO', cwGrupoPrincipalId: Number(f.grupoId) }, `“${item.nome}” agora aparece como vitrine no totem.`)
   }
@@ -370,25 +367,30 @@ export default function TotemApresentacao() {
         </>
       )}
 
+      {/* Os dois diálogos APAGAM uma configuração (é o que "NORMAL" significa): variante
+          perigosa, e o modal fica aberto com "Aguarde…" enquanto o PUT está no ar — só
+          fecha depois do desfecho, que é o que impede um segundo clique no meio. */}
       <ConfirmDialog
         open={!!confirmNormal}
-        loading={salvando !== null}
+        variant="danger"
+        loading={salvando === String(confirmNormal?.cwItemId)}
         title="Voltar este item ao modo normal?"
-        message={confirmNormal ? confirmNormal.nome ?? '' : ''}
+        message={confirmNormal?.nome ?? ''}
         description="A configuração de vitrine é APAGADA (não existe “desligada”). No totem o item volta a aparecer como um card só, e o cliente escolhe a opção lá dentro. Para voltar à vitrine é só configurar de novo."
         confirmLabel="Voltar ao normal"
         cancelLabel="Cancelar"
         onConfirm={async () => {
           const alvo = confirmNormal
-          setConfirmNormal(null)
           await salvar(alvo.cwItemId, { modo: 'NORMAL' }, `“${alvo.nome}” voltou ao modo normal.`)
+          setConfirmNormal(null)
         }}
         onCancel={() => setConfirmNormal(null)}
       />
 
       <ConfirmDialog
         open={!!confirmOrfa}
-        loading={salvando !== null}
+        variant="danger"
+        loading={salvando === String(confirmOrfa?.cwItemId)}
         title="Remover esta configuração órfã?"
         message={confirmOrfa ? `Item ${confirmOrfa.cwItemId} do cardápio` : ''}
         description="O item não existe mais no Cardápio Web, então a configuração não faz efeito nenhum. Remover só limpa o registro. Se o item voltar ao cardápio, ele volta no modo normal."
@@ -396,8 +398,8 @@ export default function TotemApresentacao() {
         cancelLabel="Cancelar"
         onConfirm={async () => {
           const alvo = confirmOrfa
-          setConfirmOrfa(null)
           await salvar(alvo.cwItemId, { modo: 'NORMAL' }, 'Configuração órfã removida.')
+          setConfirmOrfa(null)
         }}
         onCancel={() => setConfirmOrfa(null)}
       />

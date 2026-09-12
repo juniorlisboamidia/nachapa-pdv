@@ -27,8 +27,9 @@ import { aparelhoApi } from '../services/api'
 import {
   podeAdicionarOpcao, grupoSatisfeito, itemPronto, itemOrdenavel, subtotalLocal,
   montarCarrinho, diffCotacao, chaveNova, mensagemErro, proximoEstadoAposFalha,
-  precoEmVigor, indicePorItemId, linhaDeProduto, gruposRenderizaveis, nomeApresentado,
+  indicePorItemId, linhaDeProduto, gruposRenderizaveis, nomeApresentado,
   imagemApresentada, descricaoApresentada, opcoesVisiveisDaLinha, substituirLinha,
+  linhaDoDetalhe,
 } from '../components/totemCarrinho'
 
 const VERSAO = 'totem-1.0'
@@ -372,7 +373,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
     if (produto?.ordenavel === false) return
     const linha = linhaDeProduto(produto, indice)
     if (!linha) { setAviso('Produto indisponível. Escolha outro.'); return }
-    setAberto({ ...linha, uid: null })
+    setAberto(linha)   // já nasce com `uid: null` (item novo, não edição)
     setTela('item')
   }
 
@@ -599,6 +600,15 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
   const metodoEscolhido = metodos.find((m) => String(m.id) === String(metodoId)) ?? null
   const nomeMetodo = (m) => (m.kindAmbiguo ? (m.name || KIND_LABEL[m.kind] || m.kind) : (KIND_LABEL[m.kind] || m.name || m.kind))
 
+  // Nome do produto que um `detalhe` de erro está acusando. Com a vitrine, duas linhas podem
+  // ser o mesmo item base: quando `linhaDoDetalhe` não consegue apontar UMA, o nome cai para
+  // o do item base — verdadeiro para todas — em vez de acusar o produto errado.
+  const nomeDoDetalhe = (d) => {
+    const linha = linhaDoDetalhe(carrinho, d)
+    if (linha) return nomeApresentado(linha)
+    return carrinho.find((l) => String(l.item?.id) === String(d?.itemId))?.item?.nome ?? null
+  }
+
   const banner = boot?.desatualizado
     ? <div className="ttm-banner-desatualizado">O menu pode estar desatualizado. O valor final é confirmado na revisão.</div>
     : null
@@ -720,11 +730,20 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
     // é a OPÇÃO escolhida no card, não o item base (que costuma se chamar "TRADICIONAIS 🍔"
     // e custar R$ 0,00). O cliente nunca vê o item base nem um id.
     const nomeNaTela = nomeApresentado(aberto)
-    // Preço do cabeçalho: com apresentação, o preço do produto é base + a opção principal
-    // (a mesma conta do card e do backend). Sem ela, é o preço do item, com promoção.
+    // Preço do cabeçalho: com apresentação, o preço é base + a opção principal — a MESMA
+    // conta do card e da projeção do backend (promoção da base + opção). Vai pelo `PrecoItem`
+    // com um produto sintético para o "de/por" do card se repetir aqui, sem CSS novo.
     const opcaoPrincipal = aberto.apresentado
       ? ((aberto.item.grupos ?? []).find((g) => String(g.id) === String(aberto.apresentado.grupoPrincipalId))?.opcoes ?? [])
         .find((o) => String(o.id) === String(aberto.apresentado.opcaoId)) ?? null
+      : null
+    const extraDoPrincipal = Number(opcaoPrincipal?.preco ?? 0)
+    const promoDaBase = aberto.item?.precoPromocional
+    const precoApresentado = aberto.apresentado
+      ? {
+        preco: Number(aberto.item?.preco ?? 0) + extraDoPrincipal,
+        precoPromocional: (promoDaBase === null || promoDaBase === undefined) ? undefined : Number(promoDaBase) + extraDoPrincipal,
+      }
       : null
     conteudo = (
       <>
@@ -742,9 +761,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
           <div className="ttm-item-cabeca">
             <h1 className="ttm-item-nome">{nomeNaTela}</h1>
             {descricaoApresentada(aberto) && <p className="ttm-item-desc">{descricaoApresentada(aberto)}</p>}
-            {aberto.apresentado
-              ? <span className="ttm-preco">{moeda(precoEmVigor(aberto.item) + Number(opcaoPrincipal?.preco ?? 0))}</span>
-              : <PrecoItem item={aberto.item} />}
+            <PrecoItem item={precoApresentado ?? aberto.item} />
           </div>
 
           {/* O grupo principal NÃO é desenhado: ele é a identidade do produto, já escolhida
@@ -968,7 +985,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
               {erroCotar.detalhes.length > 0 && (
                 <ul className="ttm-erro-lista">
                   {erroCotar.detalhes.map((d, i) => {
-                    const nome = nomeApresentado(carrinho.find((l) => String(l.item.id) === String(d.itemId)))
+                    const nome = nomeDoDetalhe(d)
                     // `mensagem` é a frase que o próprio servidor escreveu para ESTA linha
                     // (mais específica que a frase geral do código): quando vem, ela manda.
                     return <li key={`${d.codigo}-${i}`}>{nome ? <strong>{nome}: </strong> : null}{d.mensagem ?? mensagemErro(d.codigo)}</li>
@@ -1072,7 +1089,7 @@ export default function TotemQuiosque({ aparelho, loja: lojaInicial, onNaoParead
         lista={detalhes.length > 0 ? (
           <ul className="ttm-erro-lista">
             {detalhes.map((d, i) => {
-              const nome = nomeApresentado(carrinho.find((l) => String(l.item.id) === String(d.itemId)))
+              const nome = nomeDoDetalhe(d)
               // Idem: a frase do servidor (inclusive a de `validarCorpoPedido`, que já vem
               // pronta por campo) ganha da frase genérica do código.
               return <li key={`${d.codigo ?? d.campo ?? 'd'}-${i}`}>{nome ? <strong>{nome}: </strong> : null}{d.mensagem ?? mensagemErro(d.codigo)}</li>

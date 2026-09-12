@@ -12,6 +12,7 @@ import {
   proximoEstadoAposFalha,
   indicePorItemId, linhaDeProduto, gruposRenderizaveis, nomeApresentado,
   imagemApresentada, descricaoApresentada, opcoesVisiveisDaLinha, substituirLinha,
+  linhaDoDetalhe,
 } from './totemCarrinho.js';
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
@@ -455,6 +456,7 @@ test('linhaDeProduto: OPCAO_PRINCIPAL nasce com o principal já escolhido', () =
     selecoes: { [String(G_FAVORITO)]: [{ opcaoId: OP_X_BURGUER, qtd: 1 }] },
     qtd: 1,
     observacao: '',
+    uid: null,
   });
   // O item técnico vem POR REFERÊNCIA do índice (não é cópia): grupos e opções são os do
   // catálogo, que é o que `podeAdicionarOpcao`/`subtotalLocal` sabem ler.
@@ -463,7 +465,7 @@ test('linhaDeProduto: OPCAO_PRINCIPAL nasce com o principal já escolhido', () =
 
 test('linhaDeProduto: ITEM abre vazio, como um toque no card de hoje', () => {
   assert.deepEqual(linhaDeProduto(produtoCoca, indice), {
-    item: itemCoca, apresentado: null, selecoes: {}, qtd: 1, observacao: '',
+    item: itemCoca, apresentado: null, selecoes: {}, qtd: 1, observacao: '', uid: null,
   });
 });
 
@@ -602,4 +604,55 @@ test('duas linhas do mesmo item base: editar uma por uid não encosta na outra',
   const nova = { ...linhaDeProduto(produtoXBurguer, indice), uid: 'u3' };
   assert.deepEqual(substituirLinha(carrinho, null, nova).map((l) => l.uid), ['u1', 'u2', 'u3']);
   assert.deepEqual(substituirLinha(null, null, nova), [nova]);
+});
+
+// ── linhaDoDetalhe (§5.6/§7) ────────────────────────────────────────────────
+// O erro do HUB vem por `itemId` (+ `opcaoId`, quando é numa opção). Com duas linhas do
+// MESMO item base, nomear a errada é pior do que não nomear nenhuma.
+test('linhaDoDetalhe: a opção principal do detalhe escolhe a linha certa', () => {
+  const l1 = { ...linhaDeProduto(produtoXBurguer, indice), uid: 'u1' };
+  const l2 = { ...linhaDeProduto(produtoXBacon, indice), uid: 'u2' };
+  const carrinho = [l1, l2];
+  // O HUB manda os ids como STRING; a linha guarda número. O casamento é em string.
+  assert.equal(linhaDoDetalhe(carrinho, { codigo: 'OPCAO_EM_FALTA', itemId: '2979325', opcaoId: '3633262' }), l2);
+  assert.equal(linhaDoDetalhe(carrinho, { codigo: 'OPCAO_EM_FALTA', itemId: '2979325', opcaoId: 3633259 }), l1);
+});
+
+test('linhaDoDetalhe: sem pista de qual linha é, devolve null (nunca chuta um nome)', () => {
+  const carrinho = [
+    { ...linhaDeProduto(produtoXBurguer, indice), uid: 'u1' },
+    { ...linhaDeProduto(produtoXBacon, indice), uid: 'u2' },
+  ];
+  // Erro no ITEM (sem opcaoId): as duas linhas casam pelo itemId → ambíguo.
+  assert.equal(linhaDoDetalhe(carrinho, { codigo: 'ITEM_EM_FALTA', itemId: '2979325' }), null);
+  // Opção de COMPLEMENTO em falta: não é a principal de ninguém, e o itemId segue ambíguo.
+  assert.equal(linhaDoDetalhe(carrinho, { codigo: 'OPCAO_EM_FALTA', itemId: '2979325', opcaoId: '2796650' }), null);
+});
+
+test('linhaDoDetalhe: uma linha só com aquele itemId é ela, com opção ou sem', () => {
+  const burguer = { ...linhaDeProduto(produtoXBurguer, indice), uid: 'u1' };
+  const coca = { ...linhaDeProduto(produtoCoca, indice), uid: 'u2' };
+  const carrinho = [burguer, coca];
+  assert.equal(linhaDoDetalhe(carrinho, { itemId: '2979325' }), burguer);
+  assert.equal(linhaDoDetalhe(carrinho, { itemId: 111, codigo: 'ITEM_EM_FALTA' }), coca);
+  // Item que não está no carrinho, detalhe sem itemId, carrinho vazio: null.
+  assert.equal(linhaDoDetalhe(carrinho, { itemId: '999999' }), null);
+  assert.equal(linhaDoDetalhe(carrinho, { codigo: 'PAGAMENTO_INVALIDO' }), null);
+  assert.equal(linhaDoDetalhe(null, { itemId: '2979325' }), null);
+});
+
+test('linhaDoDetalhe: nome exibido — a linha certa, ou o do item BASE (verdadeiro p/ todas)', () => {
+  const carrinho = [
+    { ...linhaDeProduto(produtoXBurguer, indice), uid: 'u1' },
+    { ...linhaDeProduto(produtoXBacon, indice), uid: 'u2' },
+  ];
+  // É esta a régua que a tela usa nos dois lugares (Revisar e a tela de erro).
+  const nomeDoDetalhe = (d) => {
+    const l = linhaDoDetalhe(carrinho, d);
+    if (l) return nomeApresentado(l);
+    return carrinho.find((x) => String(x.item?.id) === String(d?.itemId))?.item?.nome ?? null;
+  };
+  assert.equal(nomeDoDetalhe({ itemId: '2979325', opcaoId: '3633262' }), 'X BACON');
+  assert.equal(nomeDoDetalhe({ itemId: '2979325' }), 'TRADICIONAIS 🍔');
+  assert.equal(nomeDoDetalhe({ codigo: 'PAGAMENTO_INVALIDO' }), null);
 });

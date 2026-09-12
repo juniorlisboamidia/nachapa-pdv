@@ -182,10 +182,11 @@ export function linhaDeProduto(produto, indice) {
       selecoes: { [String(grupoId)]: [{ opcaoId, qtd: 1 }] },
       qtd: 1,
       observacao: '',
+      uid: null,
     };
   }
 
-  return { item, apresentado: null, selecoes: {}, qtd: 1, observacao: '' };
+  return { item, apresentado: null, selecoes: {}, qtd: 1, observacao: '', uid: null };
 }
 
 // Grupos que o DETALHE desenha: todos, menos o grupo principal. Ele já foi escolhido no
@@ -227,6 +228,32 @@ export function opcoesVisiveisDaLinha(linha) {
     }
   }
   return out;
+}
+
+// Qual LINHA do carrinho um `detalhe` de erro do HUB está acusando (§5.6/§7).
+//
+// O detalhe traz `itemId` e, quando o problema é numa opção, também `opcaoId`. Casar só por
+// `itemId` era suficiente enquanto uma linha era um item; com a vitrine, X BURGUER e X BACON
+// são o MESMO item base, e o `find` por itemId escolheria sempre o primeiro — a tela diria
+// "X BURGUER: essa opção acabou" quando quem acabou foi o X BACON. Mentir sobre qual produto
+// deu problema é pior do que não nomear nenhum.
+//
+// A régua, em ordem: (1) alguma linha tem esta opção como PRINCIPAL? é ela — a identidade
+// apresentada é justamente essa opção; (2) uma única linha tem o itemId? é ela; (3) várias
+// linhas do mesmo item base e nenhuma pista de qual → `null`, e quem chama cai para o nome
+// do ITEM BASE, que é verdadeiro para todas. Nunca um nome apresentado específico no palpite.
+export function linhaDoDetalhe(linhas, detalhe) {
+  const carrinho = lista(linhas);
+  const opcaoId = detalhe?.opcaoId;
+  if (opcaoId !== null && opcaoId !== undefined) {
+    // Duas linhas com a MESMA opção principal têm o mesmo nome apresentado: a primeira serve.
+    const porOpcao = carrinho.find((l) => mesmoId(l?.apresentado?.opcaoId, opcaoId));
+    if (porOpcao) return porOpcao;
+  }
+  const itemId = detalhe?.itemId;
+  if (itemId === null || itemId === undefined) return null;
+  const porItem = carrinho.filter((l) => mesmoId(l?.item?.id, itemId));
+  return porItem.length === 1 ? porItem[0] : null;
 }
 
 // Troca a linha de mesmo `uid` (edição) ou acrescenta ao fim (item novo). Puro, e por isso
