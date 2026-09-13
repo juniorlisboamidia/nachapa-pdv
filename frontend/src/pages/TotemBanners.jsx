@@ -3,6 +3,8 @@ import { useParams } from 'react-router-dom'
 import api from '../services/api'
 import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
+import PreviaBannerTotem from '../components/PreviaBannerTotem'
+import { useAuth } from '../contexts/AuthContext'
 
 // Loja Digital › Totem › Aparência › Banners.
 //
@@ -86,10 +88,16 @@ export default function TotemBanners() {
   const [ocupado, setOcupado] = useState(false)
   const [editando, setEditando] = useState(null)   // { id? , tipo, nome, duracaoSegundos, ... }
   const [excluindo, setExcluindo] = useState(null)
+  /* A aparência que a loja configurou, só para a prévia desenhar as cores e a logo certas.
+     Chamada SEPARADA da lista: ela não muda enquanto o gestor mexe nos banners, então não
+     tem por que voltar a cada salvamento. Se falhar, a prévia cai nas cores padrão do
+     totem — é uma ilustração, não pode derrubar a tela de quem veio trocar uma arte. */
+  const [aparencia, setAparencia] = useState(null)
   const [vendo, setVendo] = useState(null)
   const [arrastando, setArrastando] = useState(null)
   const [sobre, setSobre] = useState(null)
   const { tipo: tipoRota } = useParams()
+  const { lojas, empresaAtual } = useAuth()
   const aba = tipoDaRota(tipoRota)
 
   const buscar = useCallback(() => api.get('/totem/banners')
@@ -102,6 +110,13 @@ export default function TotemBanners() {
     .finally(() => setCarregando(false)), [])
 
   useEffect(() => { buscar() }, [buscar])
+  useEffect(() => {
+    let vivo = true
+    api.get('/totem/aparencia')
+      .then((r) => { if (vivo) setAparencia(r.data ?? null) })
+      .catch(() => {})
+    return () => { vivo = false }
+  }, [])
 
   async function alternar(b) {
     setOcupado(true)
@@ -178,9 +193,16 @@ export default function TotemBanners() {
     } catch (e) { setToast({ message: erroDe(e, 'Não foi possível salvar.'), type: 'error' }) } finally { setOcupado(false) }
   }
 
+  /* Sem `useMemo` à mão: o React Compiler está ligado neste projeto e já dá identidade
+     estável a este array. Isso importa aqui — o carrossel da prévia guarda um `setTimeout`
+     com a duração da arte atual, e se o array fosse novo a cada render o temporizador
+     reiniciaria junto e a prévia nunca giraria. Escrever o `useMemo` mesmo assim faz o
+     compilador DESISTIR do arquivo inteiro, que é o contrário do que se quer. */
   const visiveis = lista.filter((b) => b.tipo === aba)
   const noAr = visiveis.filter((b) => b.status === 'ATIVO').length
   const medida = limites?.medidas?.[aba] ?? (aba === 'CAPA' ? { largura: 1200, altura: 400 } : { largura: 1080, altura: 1920 })
+  // Só serve de reserva para quando a loja não subiu logo — é o que o totem desenha.
+  const inicial = (lojas.find((l) => String(l.id) === String(empresaAtual))?.nome ?? '?').trim().charAt(0).toUpperCase() || '?'
 
   if (carregando) return <div className="loading-state">Carregando…</div>
   if (erro) {
@@ -228,96 +250,112 @@ export default function TotemBanners() {
         </span>
       </div>
 
-      {visiveis.length === 0 ? (
-        <div className="empty-state">
-          {aba === 'CAPA'
-            ? 'Nenhuma capa cadastrada. O cabeçalho do catálogo está mostrando o título.'
-            : 'Nenhum banner cadastrado. O totem está mostrando a tela institucional.'}
-        </div>
-      ) : (
-        /* Lista de CARTÕES, não tabela. A arte é o assunto da linha, e numa tabela ela
-           virava uma célula do lado de cinco colunas de texto. Aqui ela ocupa a linha e o
-           resto se organiza em volta.
-           A ORDEM é o número à esquerda, e ele só significa alguma coisa quando há mais de
-           uma arte no ar ao mesmo tempo — é a sequência do rodízio. */
-        <ul className="ttm-bn-lista">
-          {visiveis.map((b, i) => (
-            <li
-              key={b.id}
-              className={'ttm-bn' + (b.ativo ? '' : ' desligado')
-                + (arrastando === i ? ' arrastando' : '')
-                + (sobre === i && arrastando !== null && arrastando !== i ? ' sobre' : '')}
-              draggable={!ocupado}
-              onDragStart={(e) => { setArrastando(i); e.dataTransfer.effectAllowed = 'move' }}
-              onDragEnd={() => { setArrastando(null); setSobre(null) }}
-              /* `preventDefault` no dragover é o que AUTORIZA o drop — sem ele o navegador
-                 recusa a soltura e o arrasto volta sozinho para o lugar. */
-              onDragOver={(e) => { e.preventDefault(); if (sobre !== i) setSobre(i) }}
-              onDrop={(e) => { e.preventDefault(); setSobre(null); soltarEm(i) }}
-            >
-              {/* A alça é BOTÃO, e responde às setas do teclado: arrastar não pode ser o
-                  único jeito de reordenar, senão quem não usa mouse fica de fora. */}
-              <button
-                type="button"
-                className="ttm-bn-alca"
-                disabled={ocupado}
-                aria-label={`Reordenar ${b.nome}. Posição ${i + 1} de ${visiveis.length}. Use as setas para cima e para baixo.`}
-                onKeyDown={(e) => {
-                  if (e.key === 'ArrowUp') { e.preventDefault(); mover(i, -1) }
-                  if (e.key === 'ArrowDown') { e.preventDefault(); mover(i, 1) }
-                }}
+      {/* Lista à esquerda, prévia à direita. A tela é larga e a lista é estreita por
+          natureza — sobrava metade da largura, e a pergunta que o gestor tem aqui ("como
+          isso vai ficar?") não tinha resposta sem ir até o totem olhar. */}
+      <div className="ttm-bn-split">
+        <div>
+        {visiveis.length === 0 ? (
+          <div className="empty-state">
+            {aba === 'CAPA'
+              ? 'Nenhuma capa cadastrada. O cabeçalho do catálogo está mostrando o título.'
+              : 'Nenhum banner cadastrado. O totem está mostrando a tela institucional.'}
+          </div>
+        ) : (
+          /* Lista de CARTÕES, não tabela. A arte é o assunto da linha, e numa tabela ela
+             virava uma célula do lado de cinco colunas de texto. Aqui ela ocupa a linha e o
+             resto se organiza em volta.
+             A ORDEM é o número à esquerda, e ele só significa alguma coisa quando há mais de
+             uma arte no ar ao mesmo tempo — é a sequência do rodízio. */
+          <ul className="ttm-bn-lista">
+            {visiveis.map((b, i) => (
+              <li
+                key={b.id}
+                className={'ttm-bn' + (b.ativo ? '' : ' desligado')
+                  + (arrastando === i ? ' arrastando' : '')
+                  + (sobre === i && arrastando !== null && arrastando !== i ? ' sobre' : '')}
+                draggable={!ocupado}
+                onDragStart={(e) => { setArrastando(i); e.dataTransfer.effectAllowed = 'move' }}
+                onDragEnd={() => { setArrastando(null); setSobre(null) }}
+                /* `preventDefault` no dragover é o que AUTORIZA o drop — sem ele o navegador
+                   recusa a soltura e o arrasto volta sozinho para o lugar. */
+                onDragOver={(e) => { e.preventDefault(); if (sobre !== i) setSobre(i) }}
+                onDrop={(e) => { e.preventDefault(); setSobre(null); soltarEm(i) }}
               >
-                <IconeBn nome="alca" />
-              </button>
-              <span className="ttm-bn-num">{i + 1}</span>
-
-              {/* A arte abre a edição: é o alvo grande e óbvio da linha. */}
-              <button
-                type="button"
-                className={'ttm-bn-arte' + (aba === 'CAPA' ? ' capa' : '')}
-                disabled={ocupado}
-                onClick={() => setEditando(deBanner(b))}
-                title="Editar"
-              >
-                {/* A imagem tem arrasto próprio no navegador: sem isto, puxar pela arte
-                    arrastaria a FIGURA em vez da linha. */}
-                <img src={b.imagemUrl} alt="" draggable={false} />
-              </button>
-
-              <div className="ttm-bn-info">
-                <button type="button" className="ttm-bn-nome" disabled={ocupado} onClick={() => setEditando(deBanner(b))}>
-                  {b.nome}
-                </button>
-                <div className="ttm-bn-meta">
-                  <span className={'badge ' + STATUS[b.status].cor}>{STATUS[b.status].texto}</span>
-                  <span>{textoAgenda(b)}</span>
-                  <span>{b.duracaoSegundos}s</span>
-                </div>
-              </div>
-
-              <div className="ttm-bn-acoes">
-                <button type="button" className="ttm-bn-ico" disabled={ocupado} title="Visualizar" aria-label={`Visualizar ${b.nome}`} onClick={() => setVendo(b)}>
-                  <IconeBn nome="olho" />
-                </button>
-                {/* Toggle de verdade, com semântica de interruptor — o rótulo diz o que ele
-                    faz, e não só o estado em que está. */}
+                {/* A alça é BOTÃO, e responde às setas do teclado: arrastar não pode ser o
+                    único jeito de reordenar, senão quem não usa mouse fica de fora. */}
                 <button
                   type="button"
-                  className={'intel-switch' + (b.ativo ? ' on' : '')}
-                  role="switch"
-                  aria-checked={b.ativo}
-                  aria-label={`${b.ativo ? 'Desativar' : 'Ativar'} ${b.nome}`}
+                  className="ttm-bn-alca"
                   disabled={ocupado}
-                  onClick={() => alternar(b)}
-                />
-                <button type="button" className="ttm-bn-ico perigo" disabled={ocupado} title="Excluir" aria-label={`Excluir ${b.nome}`} onClick={() => setExcluindo(b)}>
-                  <IconeBn nome="lixeira" />
+                  aria-label={`Reordenar ${b.nome}. Posição ${i + 1} de ${visiveis.length}. Use as setas para cima e para baixo.`}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowUp') { e.preventDefault(); mover(i, -1) }
+                    if (e.key === 'ArrowDown') { e.preventDefault(); mover(i, 1) }
+                  }}
+                >
+                  <IconeBn nome="alca" />
                 </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+                <span className="ttm-bn-num">{i + 1}</span>
+
+                {/* A arte abre a edição: é o alvo grande e óbvio da linha. */}
+                <button
+                  type="button"
+                  className={'ttm-bn-arte' + (aba === 'CAPA' ? ' capa' : '')}
+                  disabled={ocupado}
+                  onClick={() => setEditando(deBanner(b))}
+                  title="Editar"
+                >
+                  {/* A imagem tem arrasto próprio no navegador: sem isto, puxar pela arte
+                      arrastaria a FIGURA em vez da linha. */}
+                  <img src={b.imagemUrl} alt="" draggable={false} />
+                </button>
+
+                <div className="ttm-bn-info">
+                  <button type="button" className="ttm-bn-nome" disabled={ocupado} onClick={() => setEditando(deBanner(b))}>
+                    {b.nome}
+                  </button>
+                  <div className="ttm-bn-meta">
+                    <span className={'badge ' + STATUS[b.status].cor}>{STATUS[b.status].texto}</span>
+                    <span>{textoAgenda(b)}</span>
+                    <span>{b.duracaoSegundos}s</span>
+                  </div>
+                </div>
+
+                <div className="ttm-bn-acoes">
+                  <button type="button" className="ttm-bn-ico" disabled={ocupado} title="Visualizar" aria-label={`Visualizar ${b.nome}`} onClick={() => setVendo(b)}>
+                    <IconeBn nome="olho" />
+                  </button>
+                  {/* Toggle de verdade, com semântica de interruptor — o rótulo diz o que ele
+                      faz, e não só o estado em que está. */}
+                  <button
+                    type="button"
+                    className={'intel-switch' + (b.ativo ? ' on' : '')}
+                    role="switch"
+                    aria-checked={b.ativo}
+                    aria-label={`${b.ativo ? 'Desativar' : 'Ativar'} ${b.nome}`}
+                    disabled={ocupado}
+                    onClick={() => alternar(b)}
+                  />
+                  <button type="button" className="ttm-bn-ico perigo" disabled={ocupado} title="Excluir" aria-label={`Excluir ${b.nome}`} onClick={() => setExcluindo(b)}>
+                    <IconeBn nome="lixeira" />
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        </div>
+
+        <PreviaBannerTotem
+          tipo={aba}
+          itens={visiveis}
+          cores={aparencia?.efetivas}
+          logoUrl={aparencia?.logo?.tem ? aparencia.logo.url : null}
+          inicial={inicial}
+          posicaoCategorias={aparencia?.posicaoCategoriasPadrao}
+        />
+      </div>
 
       {vendo && (
         /* Visualizar é só ver: nenhuma ação, e fecha por botão como todo modal do PDV. */

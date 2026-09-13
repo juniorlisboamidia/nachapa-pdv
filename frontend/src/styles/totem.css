@@ -1352,6 +1352,13 @@
   position: absolute; inset: 0; width: 100%; height: 100%;
   object-fit: cover; object-position: center; display: block;
 }
+/* A TROCA entre capas. O `key` no componente já remontava a imagem, mas sem animação a
+   arte simplesmente aparecia cortada no meio da anterior — com duas capas girando, isso
+   pisca. Mesmo fade de 420ms da tela de espera, e o mesmo `@keyframes`: as duas trocas do
+   totem são a mesma troca. */
+@media (prefers-reduced-motion: no-preference) {
+  .tq-topo-capa-img { animation: tq-arte-entra 420ms ease-out both; }
+}
 .tq-topo-faixa .tq-topo-tit { position: relative; }
 /* Sobre a arte, o Cancelar precisa de chão próprio: a capa é do lojista, e não dá para
    contar com contraste em cima dela. */
