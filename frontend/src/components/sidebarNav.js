@@ -142,14 +142,12 @@ export const grupos = [
           { to: '/totem/configuracoes', label: 'Configurações', icon: 'config' },
           { to: '/totem/aparelhos', label: 'Gestão de totens', icon: 'cpu' },
           { to: '/totem/cardapio', label: 'Cardápio', icon: 'ficha' },
-          // FOLHA, e não subgrupo: a Sidebar desenha três níveis, e Personalização/Banners
-          // são ABAS dentro da página (`/totem/aparencia/:aba`), como Etiquetas, Checklist e
-          // Ponto Facial já fazem. Aprofundar o render do menu inteiro para servir um caso
-          // só sairia caro em toda a aplicação.
-          //
-          // O `to` aponta para a RAIZ da seção, não para a aba: `matchLeaf` casa por
-          // prefixo, e é o que faz `/totem/aparencia/banners` continuar sendo esta folha.
-          { to: '/totem/aparencia', label: 'Aparência do totem', icon: 'star' },
+          // Duas FOLHAS, e não uma com abas dentro. Aba dentro de página cria um segundo
+          // sistema de navegação: o operador passa a ter de lembrar se o que ele procura
+          // está na sidebar ou numa aba lá dentro. O PDV inteiro resolve profundidade com
+          // subcategoria, e aqui não é exceção.
+          { to: '/totem/personalizacao', label: 'Personalização', icon: 'star' },
+          { to: '/totem/banners', label: 'Banners', icon: 'marketing' },
           { to: '/totem/pagamentos', label: 'Formas de pagamento', icon: 'financeiro' },
         ],
       },

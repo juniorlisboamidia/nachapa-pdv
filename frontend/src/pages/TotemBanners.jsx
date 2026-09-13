@@ -150,20 +150,31 @@ export default function TotemBanners() {
     <>
       <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />
 
-      <nav className="ttm-abas" aria-label="Onde a arte aparece">
+      <div className="page-header">
+        <div>
+          <h1>Banners do totem</h1>
+          <div className="page-header-sub">
+            A arte que o totem mostra ao cliente — na faixa do topo enquanto ele escolhe, e na tela inteira enquanto ninguém está usando.
+          </div>
+        </div>
+      </div>
+
+      {/* FILTRO, e não aba: é uma lista só, vista por recorte. O padrão de filtro do PDV
+          (`ttm-filtros` + `ttm-seg-on`) é o mesmo do Cardápio do totem — abas criariam um
+          segundo sistema de navegação dentro de uma página que já tem o dela na sidebar. */}
+      <div className="ttm-filtros" role="group" aria-label="Onde a arte aparece">
         {TIPOS.map((t) => (
           <button
             key={t.id}
             type="button"
-            className={'ttm-aba' + (t.id === aba ? ' ativa' : '')}
-            aria-current={t.id === aba ? 'true' : undefined}
+            className={'btn btn-secondary' + (t.id === aba ? ' ttm-seg-on' : '')}
+            aria-pressed={t.id === aba}
             onClick={() => setAba(t.id)}
           >
-            {t.rotulo}
-            <span className="ttm-aba-conta">{lista.filter((b) => b.tipo === t.id).length}</span>
+            {t.rotulo} ({lista.filter((b) => b.tipo === t.id).length})
           </button>
         ))}
-      </nav>
+      </div>
 
       <div className="table-card" style={{ padding: 16, marginBottom: 16 }}>
         <div className="ttm-nota" style={{ marginTop: 0 }}>

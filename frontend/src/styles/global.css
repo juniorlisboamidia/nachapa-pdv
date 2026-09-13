@@ -3338,22 +3338,11 @@ body.theme-dark .apr-contagem, body.theme-dark .apr-qr-legenda, body.theme-dark 
    o que acontece ao salvar). Não é `ttm-dica`: aquilo é rodapé de apoio, e 11,5px
    apagados são para quem já entendeu — este texto é para quem ainda vai decidir. */
 .ttm-nota { font-size: 13px; color: var(--app-text-2); margin-top: 8px; max-width: 60ch; line-height: 1.45; }
-/* Abas INTERNAS de uma folha da sidebar (hoje: Totem › Aparência). Existem porque a
-   Sidebar desenha três níveis, e a profundidade extra se resolve dentro da página. */
-.ttm-abas { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--app-border); margin: 0 0 18px; }
-.ttm-aba {
-  text-decoration: none; padding: 9px 14px; border-radius: 8px 8px 0 0;
-  font-size: 12.5px; font-weight: 600; color: var(--app-text-2);
-  border-bottom: 2px solid transparent; margin-bottom: -1px;
-  transition: color 0.12s ease, background 0.12s ease;
-}
-.ttm-aba:hover { background: var(--app-surface-2); }
-/* A aba ativa se distingue por COR e por barra — nunca só por cor. */
-/* `--brand-gold-deep`, e NÃO `--brand-gold-ink`: o segundo é branco, feito para texto
-   SOBRE o laranja. Aqui o laranja é a barra de baixo e o fundo é claro — o ink daria
-   branco no branco. */
-.ttm-aba.ativa { color: var(--brand-gold-deep); background: var(--app-surface-2); border-bottom-color: var(--brand-gold); }
-/* Grade dos campos: duas colunas onde couber, uma no resto. */
+/* As abas internas foram removidas. Personalização e Banners viraram SUBCATEGORIAS na
+   sidebar, como o resto do PDV: aba dentro de página cria um segundo sistema de navegação,
+   e o operador passa a ter de lembrar se o que procura está no menu ou numa aba lá dentro.
+   Filtro dentro de uma lista continua existindo — mas com a cara de filtro (`ttm-filtros`
+   + `ttm-seg-on`), que é outra coisa. */
 .ttm-aparencia-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; }
 .ttm-secao-t { margin: 0 0 6px; font-size: 15px; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; color: var(--app-text-2); }
 /* Cores: seis campos, duas ou três colunas conforme couber. */

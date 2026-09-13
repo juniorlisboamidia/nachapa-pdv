@@ -27,7 +27,7 @@ test('subitens de Ferramentas e Loja Digital com identidade própria', () => {
   // As folhas do Totem também se distinguem entre si: numa lista de seis, ícone
   // repetido faz duas telas diferentes parecerem a mesma de relance.
   const totem = grupo(grupo(grupos, 'Loja Digital').itens, 'Totem').itens;
-  assert.deepEqual(totem.map((n) => n.icon), ['relatorios', 'config', 'cpu', 'ficha', 'star', 'financeiro']);
+  assert.deepEqual(totem.map((n) => n.icon), ['relatorios', 'config', 'cpu', 'ficha', 'star', 'marketing', 'financeiro']);
   assert.equal(new Set(totem.map((n) => n.icon)).size, totem.length);
 });
 
@@ -81,7 +81,7 @@ test('Ferramentas volta a ter só Checklist e Etiquetas', () => {
   assert.deepEqual(labels(grupo(grupos, 'Ferramentas').itens), ['Checklist', 'Etiquetas']);
 });
 
-test('Loja Digital é suíte de canais: Totem (seis folhas) e TV Indoor', () => {
+test('Loja Digital é suíte de canais: Totem (sete folhas) e TV Indoor', () => {
   const ld = grupo(grupos, 'Loja Digital').itens;
   assert.deepEqual(ld.map((n) => n.label), ['Totem', 'TV Indoor']);
   const totem = grupo(ld, 'Totem');
@@ -94,16 +94,18 @@ test('Loja Digital é suíte de canais: Totem (seis folhas) e TV Indoor', () => 
     ['Configurações', '/totem/configuracoes'],
     ['Gestão de totens', '/totem/aparelhos'],
     ['Cardápio', '/totem/cardapio'],
-    ['Aparência do totem', '/totem/aparencia'],
+    ['Personalização', '/totem/personalizacao'],
+    ['Banners', '/totem/banners'],
     ['Formas de pagamento', '/totem/pagamentos'],
   ]);
   // Pedidos PRIMEIRO, e isto não é ordem alfabética nem gosto: a `primeiraFolha` da
   // Visão Geral e o redirect de `/totem` apontam para a primeira folha. Trocar a
   // ordem mudaria o destino dos dois em silêncio.
   assert.equal(totem.itens[0].to, '/totem/pedidos');
-  // A folha da Aparência aponta para a RAIZ da seção, não para a aba: é assim que
-  // `matchLeaf` (prefixo) reconhece `/totem/aparencia/banners` como sendo dela.
-  assert.equal(totem.itens.find((n) => n.label === 'Aparência do totem').to, '/totem/aparencia');
+  // Personalização e Banners são SUBCATEGORIAS, não abas de uma página só: aba dentro de
+  // página criaria um segundo sistema de navegação, e o PDV inteiro resolve profundidade
+  // com subcategoria.
+  assert.equal(totem.itens.find((n) => n.label === 'Banners').to, '/totem/banners');
   // Folha sem `area` herda a do pai — é o que faz o filtro do operador funcionar.
   assert.ok(totem.itens.every((n) => n.area === undefined));
   assert.deepEqual(grupo(ld, 'TV Indoor'), { to: '/tv-indoor', label: 'TV Indoor', icon: 'megaphone', area: 'aparelhos' });
@@ -114,7 +116,7 @@ test('operador com aparelhos vê só Loja Digital, com as duas suítes', () => {
   assert.deepEqual(labels(v), ['Loja Digital']);
   assert.deepEqual(labels(grupo(v, 'Loja Digital').itens), ['Totem', 'TV Indoor']);
   assert.deepEqual(labels(grupo(grupo(v, 'Loja Digital').itens, 'Totem').itens), [
-    'Pedidos', 'Configurações', 'Gestão de totens', 'Cardápio', 'Aparência do totem', 'Formas de pagamento',
+    'Pedidos', 'Configurações', 'Gestão de totens', 'Cardápio', 'Personalização', 'Banners', 'Formas de pagamento',
   ]);
 });
 
@@ -138,8 +140,7 @@ test('localizarRota abre o nível certo', () => {
   assert.deepEqual(localizarRota('/totem/pedidos'), { grupo: 'Loja Digital', sub: 'Totem' });
   assert.deepEqual(localizarRota('/totem/cardapio'), { grupo: 'Loja Digital', sub: 'Totem' });
   assert.deepEqual(localizarRota('/totem/aparelhos'), { grupo: 'Loja Digital', sub: 'Totem' });
-  // As duas abas da Aparência abrem o mesmo nível da sidebar.
-  assert.deepEqual(localizarRota('/totem/aparencia/personalizacao'), { grupo: 'Loja Digital', sub: 'Totem' });
-  assert.deepEqual(localizarRota('/totem/aparencia/banners'), { grupo: 'Loja Digital', sub: 'Totem' });
+  assert.deepEqual(localizarRota('/totem/personalizacao'), { grupo: 'Loja Digital', sub: 'Totem' });
+  assert.deepEqual(localizarRota('/totem/banners'), { grupo: 'Loja Digital', sub: 'Totem' });
   assert.deepEqual(localizarRota('/'), { grupo: null, sub: null });
 });

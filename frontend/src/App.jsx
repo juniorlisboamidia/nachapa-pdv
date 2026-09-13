@@ -50,7 +50,8 @@ import Aparelhos from './pages/Aparelhos'
 import TotemPedidos from './pages/TotemPedidos'
 import TotemCardapio from './pages/TotemCardapio'
 import TotemConfiguracoes from './pages/TotemConfiguracoes'
-import TotemAparencia from './pages/TotemAparencia'
+import TotemPersonalizacao from './pages/TotemPersonalizacao'
+import TotemBanners from './pages/TotemBanners'
 import DispositivoPareamento from './pages/DispositivoPareamento'
 
 function TelaCarregando() {
@@ -159,14 +160,17 @@ export default function App() {
             <Route path="totem/configuracoes" element={<TotemConfiguracoes />} />
             <Route path="totem/aparelhos" element={<Aparelhos />} />
             <Route path="totem/cardapio" element={<TotemCardapio />} />
-            <Route path="totem/aparencia" element={<Navigate to="/totem/aparencia/personalizacao" replace />} />
-            <Route path="totem/aparencia/:aba" element={<TotemAparencia />} />
+            <Route path="totem/personalizacao" element={<TotemPersonalizacao />} />
+            <Route path="totem/banners" element={<TotemBanners />} />
             <Route path="totem/pagamentos" element={<EmConstrucao titulo="Formas de pagamento" descricao="Em breve." />} />
             <Route path="tv-indoor" element={<EmConstrucao titulo="TV Indoor" descricao="Em breve." />} />
             {/* Compatibilidade: os endereços antigos continuam abrindo o lugar novo. Link
                 anotado, favorito do navegador e aba esquecida aberta não podem virar 404. */}
             <Route path="aparelhos" element={<Navigate to="/totem/aparelhos" replace />} />
             <Route path="totem/apresentacao" element={<Navigate to="/totem/cardapio" replace />} />
+            <Route path="totem/aparencia" element={<Navigate to="/totem/personalizacao" replace />} />
+            <Route path="totem/aparencia/personalizacao" element={<Navigate to="/totem/personalizacao" replace />} />
+            <Route path="totem/aparencia/banners" element={<Navigate to="/totem/banners" replace />} />
             {/* Marketing › Grupo VIP (Automações virou Marketing; rota antiga redireciona) */}
             <Route path="marketing/grupo-vip" element={<GrupoVip />} />
             <Route path="automacoes/grupo-vip" element={<Navigate to="/marketing/grupo-vip" replace />} />

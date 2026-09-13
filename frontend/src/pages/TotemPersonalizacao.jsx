@@ -1,16 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { NavLink, useParams } from 'react-router-dom'
 import api from '../services/api'
 import Toast from '../components/Toast'
-import { ABAS, abaValida } from '../components/totemAparencia'
 import { razaoDeContraste, normalizarHex, AA_NORMAL } from '../components/totemTema'
-import TotemBanners from './TotemBanners'
 
-// Loja Digital › Totem › Aparência do totem.
+// Loja Digital › Totem › Personalização.
 //
-// A aba vem da URL (`/totem/aparencia/:aba`) porque a Aparência é FOLHA da sidebar — a
-// Sidebar desenha três níveis, e a profundidade extra se resolve aqui dentro em vez de
-// aprofundar o menu inteiro da aplicação para servir um caso só.
+// Era uma aba dentro de "Aparência do totem". Virou subcategoria própria na sidebar, que é
+// como o resto do PDV se organiza: aba dentro de página cria um segundo sistema de
+// navegação, e o operador passa a ter de lembrar em qual dos dois procurar.
 //
 // ── SOBRE O DESIGN SYSTEM, e é o que mais importa deste arquivo ───────────────────────
 // O tema do totem nasce INDEPENDENTE do Design System do HUB. Não é intenção: já é fato.
@@ -22,40 +19,6 @@ import TotemBanners from './TotemBanners'
 // O caminho futuro é "Importar identidade": um botão que traz os valores do HUB para
 // dentro do canal, uma vez, com o gestor vendo o que mudou. Origem opcional, nunca
 // dependência de runtime.
-export default function TotemAparencia() {
-  const { aba: abaParam } = useParams()
-  const aba = abaValida(abaParam)
-
-  return (
-    <div>
-      <div className="page-header">
-        <div>
-          <h1>Aparência do totem</h1>
-          <div className="page-header-sub">
-            Como o totem se apresenta ao cliente: identidade, cores e o lado das categorias.
-          </div>
-        </div>
-      </div>
-
-      <nav className="ttm-abas" aria-label="Seções da aparência">
-        {ABAS.map((a) => (
-          <NavLink
-            key={a.id}
-            to={`/totem/aparencia/${a.id}`}
-            className={'ttm-aba' + (a.id === aba ? ' ativa' : '')}
-            aria-current={a.id === aba ? 'page' : undefined}
-          >
-            {a.label}
-          </NavLink>
-        ))}
-      </nav>
-
-      {aba === 'personalizacao' ? <Personalizacao /> : <TotemBanners />}
-    </div>
-  )
-}
-
-// ── Personalização ─────────────────────────────────────────────────────────
 const ROTULOS = {
   fundo: 'Fundo', cartao: 'Cartão', texto: 'Texto',
   textoApoio: 'Texto de apoio', acaoFundo: 'Ação', acaoTexto: 'Texto da ação',
@@ -69,7 +32,7 @@ const AJUDA = {
   acaoTexto: 'O texto escrito em cima dos botões.',
 }
 
-function Personalizacao() {
+export default function TotemPersonalizacao() {
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState(null)
   const [toast, setToast] = useState(null)
@@ -192,6 +155,15 @@ function Personalizacao() {
 
   return (
     <>
+      <div className="page-header">
+        <div>
+          <h1>Personalização</h1>
+          <div className="page-header-sub">
+            Como o totem se apresenta ao cliente: identidade, cores e o lado das categorias.
+          </div>
+        </div>
+      </div>
+
       <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />
 
       {/* ── MARCA ── */}
