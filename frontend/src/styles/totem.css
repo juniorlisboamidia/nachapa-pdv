@@ -456,7 +456,25 @@
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px; padding: 20px; align-content: start;
 }
-@media (min-width: 900px) { .tq-grade { gap: 24px; padding: 28px; } }
+/* No alvo em pé a grade PREENCHE a altura. Com linha de altura fixa e
+   `align-content: start`, uma categoria de quatro produtos deixava metade de
+   uma tela de 1920 em preto — e num totem tela vazia lê como "acabou", não
+   como "role para ver mais". As linhas passam a dividir a altura livre, com
+   PISO para a categoria longa continuar rolando normalmente e TETO no card
+   para uma categoria de um item só não virar pôster. */
+@media (min-width: 900px) {
+  .tq-grade {
+    gap: 24px; padding: 28px;
+    min-height: 100%; align-content: stretch;
+    grid-auto-rows: minmax(520px, 1fr);
+  }
+  .tq-card { max-height: 900px; }
+  /* Quem absorve a sobra é a FOTO. O bloco de texto passa a ter altura
+     natural, e a descrição reserva as duas linhas do clamp para o preço dos
+     cards vizinhos continuar alinhado na mesma base. */
+  .tq-card-txt { flex: 0 0 auto; }
+  .tq-card-desc { min-height: 2.6em; }
+}
 @media (min-width: 1500px) { .tq-grade { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 
 /* Modo de emergência: tablet pequeno improvisado. As categorias voltam a ser
@@ -501,10 +519,12 @@
 
 /* -- Foto ------------------------------------------------------------------ */
 .tq-foto { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--tq-superficie-3); }
-/* No alvo em pé a foto vira QUADRADA: em 4:3, numa coluna de ~435px, o card
-   fica baixo e sobra tela numa altura de 1920. Quadrado enche melhor e é um
-   corte que comida aceita bem. */
-@media (min-width: 900px) { .tq-card .tq-foto { aspect-ratio: 1; } }
+/* No alvo em pé a foto larga a proporção fixa e ESTICA com o card: é ela que
+   absorve a altura que sobra na linha da grade. O piso impede que uma
+   descrição longa a esmague; `cover` continua cuidando do corte. */
+@media (min-width: 900px) {
+  .tq-card .tq-foto { aspect-ratio: auto; flex: 1 1 auto; min-height: 300px; }
+}
 .tq-foto-vazia { display: grid; place-items: center; color: rgba(255, 255, 255, 0.34); }
 
 /* -- Preço ----------------------------------------------------------------- */
@@ -974,15 +994,17 @@
 /* -- "Ainda está aí?" ------------------------------------------------------ */
 /* Aviso antes do reset por inatividade. Nunca aparece durante o envio nem com a
    confirmação em dúvida: nesses dois estados o relógio de reset também não corre. */
+/* Centralizado, não colado no rodapé: numa tela em pé de 1920 o rodapé fica na
+   altura da cintura, e um aviso que pergunta "ainda está aí?" precisa cair na
+   linha dos olhos de quem parou na frente do totem. */
 .tq-sheet-fundo {
   position: absolute; inset: 0; z-index: 50; background: rgba(0, 0, 0, 0.78);
-  display: flex; align-items: flex-end; justify-content: center; padding: 24px;
+  display: flex; align-items: center; justify-content: center; padding: 24px;
 }
 .tq-sheet {
-  width: min(680px, 100%); background: var(--tq-superficie); border-radius: 24px 24px 18px 18px;
-  padding: 28px 28px calc(28px + env(safe-area-inset-bottom, 0px));
+  width: min(680px, 100%); background: var(--tq-superficie); border-radius: 24px;
+  border: 1px solid var(--tq-borda); padding: 32px 28px;
   display: flex; flex-direction: column; gap: 14px; text-align: center;
-  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.3);
 }
 .tq-sheet h2 { font-size: clamp(24px, 3.52vw, 38px); }
 .tq-sheet p { color: var(--tq-texto-2); font-size: clamp(16px, 2.04vw, 22px); }
