@@ -877,6 +877,30 @@ model TotemApresentacao {
   @@index([empresaId])
 }
 
+// Totem › Configurações — o AGREGADO de configurações do canal, uma linha por empresa.
+//
+// Não confundir com os dois vizinhos acima: `TotemApresentacao` e `TotemCategoria` guardam
+// EXCEÇÃO por item e por categoria, e voltar ao padrão APAGA a linha. Aqui é o contrário —
+// esta é a linha de configuração do canal, ela nasce no primeiro salvamento e PERMANECE.
+// Voltar a ociosidade para 90 s não apaga nada: 90 s passa a ser uma escolha registrada, e
+// não a ausência de escolha. A diferença importa no dia em que um campo novo tiver um
+// padrão diferente do que a loja já decidiu para os outros.
+//
+// Tende a crescer: orientação da tela, posição das categorias, logo própria do totem e o
+// Design System do canal moram aqui quando existirem. É por isso que é um agregado e não
+// uma coluna solta em outro lugar.
+//
+// Empresa SEM linha é caso normal, não erro: o GET e o bootstrap respondem os padrões, e o
+// PUT faz upsert. A régua de validação (piso, teto, arredondamento) vive num lugar só,
+// `backend/totemConfiguracao.js` — nunca no cliente.
+model TotemConfiguracao {
+  id                 Int      @id @default(autoincrement())
+  empresaId          Int      @unique
+  ociosidadeSegundos Int      @default(90)
+  criadoEm           DateTime @default(now())
+  atualizadoEm       DateTime @updatedAt
+}
+
 // Ponto Facial › Coletor — batidas que chegaram do coletor mas cujo enrollid
 // ainda não casou com um funcionário. Ficam na fila até o admin vincular
 // (aí viram PontoRegistro). Não perde ponto de quem não foi mapeado ainda.
