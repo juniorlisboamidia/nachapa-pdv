@@ -137,30 +137,41 @@ test('entrada inválida não move a tela', () => {
 });
 
 /* ── catálogo contínuo: qual categoria a sidebar destaca ────────────────── */
+/* `topo` é a posição do TÍTULO de cada categoria (é o que a tela mede) e `alturaTitulo`
+   é o tamanho dele — a régua usa os dois para decidir quando o título "chegou" ao topo. */
 const SECOES = [
-  { id: 'a', topo: 0 },
-  { id: 'b', topo: 1000 },
-  { id: 'c', topo: 2400 },
+  { id: 'a', topo: 0, alturaTitulo: 40 },
+  { id: 'b', topo: 1000, alturaTitulo: 40 },
+  { id: 'c', topo: 2400, alturaTitulo: 40 },
 ]
 
 test('categoriaPorRolagem: no topo vale a primeira', () => {
   assert.equal(categoriaPorRolagem({ secoes: SECOES, scrollAtual: 0, alturaVisivel: 800, alturaTotal: 3000 }), 'a')
 })
 
-test('🔴 o limite é o TÍTULO cruzando a borda de cima', () => {
-  /* `SECOES` carrega a posição do TÍTULO de cada categoria, não a do início da seção — é
-     o que a tela mede. O título de `b` está em 1000: enquanto ele estiver na tela, a
-     categoria acesa é `a`; assim que ele sobe além da borda, `b` assume.
+test('🔴 a categoria acende quando o título CHEGA ao topo, não quando ele sai', () => {
+  /* O título de `b` está em 1000 e mede 40. Com folga de 16, a marca é 56: `b` assume
+     quando o título dela está a 56px ou menos da borda de cima — ou seja, quando ele
+     encosta no topo, ainda inteiro e legível na tela.
 
-     Duas tentativas erraram antes desta. Medindo o topo da SEÇÃO com linha a 24px, o
-     destaque ficava uma categoria atrás (o título tem 30px de respiro acima dele).
-     Empurrar a linha para 28% da altura consertou o atraso e trocou por adiantamento: a
-     categoria nova acendia com o título dela ainda no meio da tela. */
+     TRÊS tentativas erraram antes desta, todas na mesma direção — a régua pedia mais
+     rolagem do que o olho:
+       · topo da SEÇÃO com linha a 24px (o título tem 30px de respiro acima);
+       · linha a 28% da altura, que consertou o atraso e criou adiantamento;
+       · topo do TÍTULO com linha a 8px, que ainda exigia o título sair da tela. */
   assert.equal(categoriaPorRolagem({ secoes: SECOES, scrollAtual: 900, alturaVisivel: 800, alturaTotal: 4000 }), 'a',
-    'o título de `b` ainda está visível, 100px abaixo da borda')
-  assert.equal(categoriaPorRolagem({ secoes: SECOES, scrollAtual: 992, alturaVisivel: 800, alturaTotal: 4000 }), 'b',
-    'o título encostou na borda: `b` assume')
+    'o título de `b` está 100px abaixo da borda: ainda é `a`')
+  assert.equal(categoriaPorRolagem({ secoes: SECOES, scrollAtual: 944, alturaVisivel: 800, alturaTotal: 4000 }), 'b',
+    'a 56px da borda o título chegou, e `b` assume com ele ainda visível')
   assert.equal(categoriaPorRolagem({ secoes: SECOES, scrollAtual: 1500, alturaVisivel: 800, alturaTotal: 4000 }), 'b')
+})
+
+test('🔴 título maior antecipa a troca na mesma medida — a régua sai do conteúdo', () => {
+  /* Numa tela de 1080 o título é maior, e a régua acompanha sem número novo. */
+  const grandes = SECOES.map((s) => ({ ...s, alturaTitulo: 90 }))
+  assert.equal(categoriaPorRolagem({ secoes: grandes, scrollAtual: 894, alturaVisivel: 800, alturaTotal: 4000 }), 'b')
+  assert.equal(categoriaPorRolagem({ secoes: SECOES, scrollAtual: 894, alturaVisivel: 800, alturaTotal: 4000 }), 'a',
+    'com título pequeno, o mesmo scroll ainda não trocou')
 })
 
 test('🔴 no fim da rolagem vale a última — categoria curta no rodapé nunca alcança a linha', () => {
@@ -180,22 +191,7 @@ test('categoriaPorRolagem: entrada torta não derruba a sidebar', () => {
 })
 
 // ── indicador de posição no catálogo ─────────────────────────────────────────
-import { janelaDeRolagem, progressoNaSecao } from './totemFoco.js';
-
-test('🔴 progresso na seção conta pela borda de BAIXO da janela', () => {
-  // O cliente terminou a categoria quando o último card dela sai por cima, não quando o
-  // primeiro entra.
-  const s = { topo: 1000, altura: 2000, alturaVisivel: 800 };
-  assert.equal(progressoNaSecao({ ...s, scrollAtual: 200 }), 0, 'seção ainda abaixo da janela');
-  assert.equal(progressoNaSecao({ ...s, scrollAtual: 1200 }), 0.5);
-  assert.equal(progressoNaSecao({ ...s, scrollAtual: 2200 }), 1);
-  assert.equal(progressoNaSecao({ ...s, scrollAtual: 9000 }), 1, 'nunca passa de 1');
-});
-
-test('seção sem altura não gera progresso', () => {
-  assert.equal(progressoNaSecao({ topo: 0, altura: 0, scrollAtual: 100 }), 0);
-  assert.equal(progressoNaSecao(), 0);
-});
+import { janelaDeRolagem } from './totemFoco.js';
 
 test('a janela: começo no topo, fim no fim', () => {
   const topo = janelaDeRolagem({ scrollAtual: 0, alturaVisivel: 800, alturaTotal: 4000 });

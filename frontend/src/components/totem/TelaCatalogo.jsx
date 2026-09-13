@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { itemOrdenavel, precoDoCard } from '../totemCarrinho'
-import { categoriaPorRolagem, janelaDeRolagem, progressoNaSecao } from '../totemFoco'
+import { categoriaPorRolagem, janelaDeRolagem } from '../totemFoco'
 import SidebarCategorias from './SidebarCategorias'
 import CardProduto from './CardProduto'
 
@@ -45,8 +45,8 @@ export default function TelaCatalogo({ categorias, categoriaId, aoTrocarCategori
   // O que se mede é o TÍTULO, não o início da seção. O título é o limite que o cliente
   // percebe — enquanto "TRADICIONAIS" está escrito na tela, ele está nos tradicionais —,
   // e o início da seção fica 30px acima dele, o que fazia o destaque trocar fora de hora.
-  // `topoSecao` continua junto porque é para ONDE o toque na categoria rola: parar no
-  // título deixaria o respiro dele fora da tela.
+  // A ALTURA do título viaja junto: é ela que define quando ele "chegou" ao topo, e é o
+  // que faz a régua acompanhar a escala da tela sem número mágico.
   const medirSecoes = useCallback(() => {
     const cont = rolagemRef.current
     if (!cont) return []
@@ -56,11 +56,8 @@ export default function TelaCatalogo({ categorias, categoriaId, aoTrocarCategori
     return fora
       .map((el) => {
         const titulo = el.querySelector('.tq-secao-t') ?? el
-        return {
-          id: el.dataset.cat,
-          topo: titulo.getBoundingClientRect().top - base + cont.scrollTop,
-          topoSecao: el.getBoundingClientRect().top - base + cont.scrollTop,
-        }
+        const r = titulo.getBoundingClientRect()
+        return { id: el.dataset.cat, topo: r.top - base + cont.scrollTop, alturaTitulo: r.height }
       })
       .sort((a, b) => a.topo - b.topo)
   }, [])
@@ -86,11 +83,6 @@ export default function TelaCatalogo({ categorias, categoriaId, aoTrocarCategori
         const janela = janelaDeRolagem(medida)
         lado.style.setProperty('--tq-prog-i', String(janela.inicio))
         lado.style.setProperty('--tq-prog-f', String(janela.fracao))
-        const atual = secoes.find((s) => String(s.id) === String(categoriaId))
-        const proxima = atual ? secoes.find((s) => s.topo > atual.topo) : null
-        const inicio = atual?.topoSecao ?? 0
-        const altura = atual ? (proxima ? proxima.topoSecao - inicio : medida.alturaTotal - inicio) : 0
-        lado.style.setProperty('--tq-cat-prog', String(progressoNaSecao({ ...medida, topo: inicio, altura })))
       }
 
       const id = categoriaPorRolagem({ secoes, ...medida })

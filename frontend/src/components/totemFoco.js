@@ -91,25 +91,30 @@ export function destinoDeRolagem({
    A lista vem na ordem da tela.
 
    Duas regras, e a segunda existe por um caso real:
-   1. Vale a ÚLTIMA seção cujo TÍTULO já subiu além da borda de cima.
+   1. Vale a ÚLTIMA seção cujo TÍTULO já CHEGOU ao topo da tela.
 
-      O que entra em `secoes` é a posição do TÍTULO, não a do início da seção — e é essa
-      escolha que faz a régua bater com o que o cliente vê. O título é o limite que ele
-      percebe: enquanto "TRADICIONAIS" está escrito na tela, ele está nos tradicionais.
+      "Chegou" é medido pela altura do próprio título, mais uma folga: a categoria acende
+      quando o título dela encosta na borda de cima, e não quando já saiu por ela. É a
+      diferença entre ler "ARTESANAIS" no alto com "ARTESANAIS" aceso ao lado, e ler
+      "ARTESANAIS" no alto com "COMBOS" aceso.
 
-      Duas tentativas antes desta erraram por medir a coisa errada. Medindo o TOPO DA
-      SEÇÃO com a linha a 24px, o destaque ficava uma categoria atrás: o título tem 30px
-      de respiro acima dele, então quando ele aparecia inteiro o topo da seção ainda não
-      tinha cruzado a linha. Empurrar a linha para 28% da altura consertou o atraso, mas
-      trocou por adiantamento — a categoria nova acendia com o título dela ainda no meio
-      da tela. Medindo o título, o limite é o mesmo que o olho usa.
+      Três tentativas antes desta, e as três erraram na mesma direção — a régua exigia
+      mais rolagem do que o olho:
+        · topo da SEÇÃO com linha a 24px: o título tem 30px de respiro acima, então
+          aparecia inteiro antes de a seção cruzar;
+        · linha a 28% da altura: consertou o atraso e criou adiantamento, acendendo a
+          categoria nova com o título dela ainda no meio da tela;
+        · topo do TÍTULO com linha a 8px: ainda pedia que o título saísse da tela.
+
+      A medida agora sai do conteúdo, não de um número escolhido: a folga é o tamanho do
+      próprio título. Ele muda com a tela, e a régua muda junto.
    2. Chegando ao fim da rolagem, vale a última seção. Sem isto, uma categoria
       curta no rodapé — "SUCOS" com três itens — nunca alcançaria a linha e
       ficaria sem destaque por mais que o cliente rolasse.
 
    Nunca lança: entrada torta devolve `null` e a sidebar fica como está. */
 export function categoriaPorRolagem({
-  secoes, scrollAtual = 0, alturaVisivel = 0, alturaTotal = 0, linha = 8, folgaFim = 24,
+  secoes, scrollAtual = 0, alturaVisivel = 0, alturaTotal = 0, folgaTitulo = 16, folgaFim = 24,
 } = {}) {
   const lista = Array.isArray(secoes)
     ? secoes.filter((s) => s && s.id != null && Number.isFinite(Number(s.topo)))
@@ -122,25 +127,26 @@ export function categoriaPorRolagem({
   const folga = Math.max(0, Number(folgaFim) || 0)
   if (total > 0 && visivel > 0 && y + visivel >= total - folga) return lista[lista.length - 1].id
 
-  // Uma folga pequena, não zero: no limiar exato a troca oscilaria a cada pixel de
-  // rolagem, e a sidebar piscaria entre duas categorias.
-  const marca = y + (Number(linha) || 0)
+  // A linha é POR SEÇÃO, porque ela sai da altura do título daquela seção. `folgaTitulo`
+  // evita que a troca oscile a cada pixel no limiar exato.
   let atual = lista[0].id
   for (const s of lista) {
+    const marca = y + (Number(s.alturaTitulo) || 0) + (Number(folgaTitulo) || 0)
     if (Number(s.topo) <= marca) atual = s.id
     else break
   }
   return atual
 }
 
-/* ── ONDE O CLIENTE ESTÁ NO CATÁLOGO ────────────────────────────────────────────────
-   Dois indicadores, duas perguntas: "quanto falta do cardápio" e "estou no começo ou no
-   fim desta categoria". Puros e sem DOM: quem mede é a tela, quem calcula é aqui.
+/* ── QUANTO FALTA DO CATÁLOGO ───────────────────────────────────────────────────────
+   O tablet não desenha barra de rolagem: sem isto dá para rolar por um minuto num
+   cardápio de noventa cards sem nenhuma pista de quanto falta. Puro e sem DOM: quem mede
+   é a tela, quem calcula é aqui.
 
-   O primeiro chegou a ser removido por eu ter atribuído a ele uma confusão que era de
+   Este indicador chegou a ser removido por eu ter atribuído a ele uma confusão que era de
    outro lugar — o destaque da sidebar estava atrasado, e a culpa pareceu do polegar
-   marcando um ponto que não batia com a categoria acesa. Com o atraso corrigido, o
-   indicador voltou. Fica o registro para ninguém refazer o diagnóstico errado. */
+   marcando um ponto que não batia com a categoria acesa. Com o atraso corrigido, ele
+   voltou. Fica o registro para ninguém refazer o diagnóstico errado. */
 
 /* A janela visível sobre o catálogo inteiro: onde ela começa e que fatia ela cobre.
 
@@ -156,15 +162,4 @@ export function janelaDeRolagem({ scrollAtual = 0, alturaVisivel = 0, alturaTota
   // O início é reescalado para a fração ampliada não estourar o fim da trilha.
   const inicio = (y / (total - visivel)) * (1 - fracao)
   return { inicio, fracao }
-}
-
-/* Quanto da seção ATUAL já passou, de 0 a 1.
-
-   Conta pela borda de baixo da janela: o cliente "terminou" a categoria quando o último
-   card dela sai por cima, não quando o primeiro entra. */
-export function progressoNaSecao({ topo = 0, altura = 0, scrollAtual = 0, alturaVisivel = 0 } = {}) {
-  const h = Number(altura) || 0
-  if (h <= 0) return 0
-  const percorrido = (Number(scrollAtual) || 0) + (Number(alturaVisivel) || 0) - (Number(topo) || 0)
-  return Math.min(1, Math.max(0, percorrido / h))
 }
