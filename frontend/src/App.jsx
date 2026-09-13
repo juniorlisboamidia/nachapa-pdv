@@ -50,6 +50,7 @@ import Aparelhos from './pages/Aparelhos'
 import TotemPedidos from './pages/TotemPedidos'
 import TotemCardapio from './pages/TotemCardapio'
 import TotemConfiguracoes from './pages/TotemConfiguracoes'
+import TotemAparencia from './pages/TotemAparencia'
 import DispositivoPareamento from './pages/DispositivoPareamento'
 
 function TelaCarregando() {
@@ -159,7 +160,7 @@ export default function App() {
             <Route path="totem/aparelhos" element={<Aparelhos />} />
             <Route path="totem/cardapio" element={<TotemCardapio />} />
             <Route path="totem/aparencia" element={<Navigate to="/totem/aparencia/personalizacao" replace />} />
-            <Route path="totem/aparencia/:aba" element={<EmConstrucao titulo="Aparência do totem" descricao="Em breve." />} />
+            <Route path="totem/aparencia/:aba" element={<TotemAparencia />} />
             <Route path="totem/pagamentos" element={<EmConstrucao titulo="Formas de pagamento" descricao="Em breve." />} />
             <Route path="tv-indoor" element={<EmConstrucao titulo="TV Indoor" descricao="Em breve." />} />
             {/* Compatibilidade: os endereços antigos continuam abrindo o lugar novo. Link

@@ -3338,6 +3338,23 @@ body.theme-dark .apr-contagem, body.theme-dark .apr-qr-legenda, body.theme-dark 
    o que acontece ao salvar). Não é `ttm-dica`: aquilo é rodapé de apoio, e 11,5px
    apagados são para quem já entendeu — este texto é para quem ainda vai decidir. */
 .ttm-nota { font-size: 13px; color: var(--app-text-2); margin-top: 8px; max-width: 60ch; line-height: 1.45; }
+/* Abas INTERNAS de uma folha da sidebar (hoje: Totem › Aparência). Existem porque a
+   Sidebar desenha três níveis, e a profundidade extra se resolve dentro da página. */
+.ttm-abas { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--app-border); margin: 0 0 18px; }
+.ttm-aba {
+  text-decoration: none; padding: 9px 14px; border-radius: 8px 8px 0 0;
+  font-size: 12.5px; font-weight: 600; color: var(--app-text-2);
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+  transition: color 0.12s ease, background 0.12s ease;
+}
+.ttm-aba:hover { background: var(--app-surface-2); }
+/* A aba ativa se distingue por COR e por barra — nunca só por cor. */
+/* `--brand-gold-deep`, e NÃO `--brand-gold-ink`: o segundo é branco, feito para texto
+   SOBRE o laranja. Aqui o laranja é a barra de baixo e o fundo é claro — o ink daria
+   branco no branco. */
+.ttm-aba.ativa { color: var(--brand-gold-deep); background: var(--app-surface-2); border-bottom-color: var(--brand-gold); }
+/* Grade dos campos: duas colunas onde couber, uma no resto. */
+.ttm-aparencia-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; }
 /* Código técnico do servidor (ITEM_AUSENTE, GRUPO_SEM_OPCOES…) na tela do admin: ele
    acompanha a frase humana, nunca a substitui — por isso pequeno, monoespaçado e apagado. */
 .ttm-codigo {
