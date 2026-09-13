@@ -43,6 +43,12 @@ import {
   aplicarNomes as aplicarNomesDeCategoria,
   mesclarAdmin as mesclarAdminCategorias,
 } from './totemCategoria.js';
+// Totem › Configurações: a régua da ociosidade mora num lugar só, e o PUT do admin e o
+// bootstrap público leem a MESMA função.
+import {
+  normalizarOciosidade, configuracaoParaJson,
+  OCIOSIDADE_PADRAO, OCIOSIDADE_MIN, OCIOSIDADE_MAX, OCIOSIDADE_SUGERIDA,
+} from './totemConfiguracao.js';
 import { calcularCmvGlobal } from './cmv/calculo.js';
 import { normalizarRelatorio, FONTES } from './relatorios/normalizar.js';
 
@@ -8680,18 +8686,35 @@ function exigirTotem(ap, res) {
 async function comApresentacao(ap, body, resposta) {
   try {
     const escopo = whereDoAparelho(ap, body);
-    const [configuracoes, categorias] = await Promise.all([
+    const [configuracoes, categorias, doCanal] = await Promise.all([
       prisma.totemApresentacao.findMany({ where: escopo }),
       prisma.totemCategoria.findMany({ where: escopo }),
+      // `findFirst` com o MESMO escopo das outras duas: o construtor de where é um só, e
+      // trocá-lo por um findUnique com empresaId solto abriria a porta que o §5.4 fecha.
+      //
+      // `.catch` PRÓPRIO, e ele importa: sem isto, uma falha só desta leitura — deploy que
+      // subiu o código sem rodar a migration, por exemplo — estouraria o Promise.all antes
+      // da projeção e a VITRINE sumiria do totem em silêncio. Aqui o pior caso é o canal
+      // voltar ao relógio padrão, com os produtos intactos.
+      prisma.totemConfiguracao.findFirst({ where: escopo }).catch(() => null),
     ]);
     const { catalogo, avisos } = projetarCatalogo(resposta.catalogo, configuracoes);
     // Nome de exibição por categoria: ADITIVO (`nomeExibido` ao lado de `nome`) e
     // depois da projeção, porque a vitrine mexe em itens e este passo só na string
     // que o cliente lê.
-    return { ...resposta, catalogo: aplicarNomesDeCategoria(catalogo, categorias), avisosApresentacao: avisos };
+    return {
+      ...resposta,
+      catalogo: aplicarNomesDeCategoria(catalogo, categorias),
+      avisosApresentacao: avisos,
+      // Empresa sem linha responde o padrão — ausência de configuração não é erro.
+      configuracao: configuracaoParaJson(doCanal),
+    };
   } catch (err) {
     console.error('[public/aparelho totem apresentacao]', err?.code ?? err?.name ?? 'erro');
-    return { ...resposta, avisosApresentacao: [] };
+    // Banco fora do ar não pode deixar o totem sem relógio: o campo vai SEMPRE, com o
+    // padrão. Quem lê do outro lado também se protege da ausência, mas contar com isso
+    // seria depender de uma versão específica do quiosque.
+    return { ...resposta, avisosApresentacao: [], configuracao: configuracaoParaJson(null) };
   }
 }
 
@@ -9215,6 +9238,56 @@ app.put('/api/totem/categorias/:cwCategoriaId', async (req, res) => {
     });
     res.json({ ok: true, config: { cwCategoriaId: cfg.cwCategoriaId, nomeExibido: cfg.nomeExibido } });
   } catch (err) { console.error('[totem/categorias PUT]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// ── Totem › Configurações do canal ─────────────────────────────────────────
+// Agregado 1:1 por empresa. Empresa sem linha é caso NORMAL: responde os padrões e não
+// cria nada — quem cria é o PUT, e a linha então permanece (voltar a 90 s não apaga).
+//
+// As opções viajam junto de propósito. A tela poderia ter a lista de valores escrita
+// nela, e aí bastaria alguém mexer num limite aqui para o select passar a oferecer o que
+// o servidor recusa. Uma fonte só, e ela é esta.
+app.get('/api/totem/configuracao', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const linha = await prisma.totemConfiguracao.findUnique({ where: { empresaId } });
+    res.json({
+      configuracao: configuracaoParaJson(linha),
+      // `salva` diz se a loja já decidiu alguma vez. A tela usa isto para mostrar
+      // "padrão do sistema" em vez de fingir que 90 s foi escolha de alguém.
+      salva: !!linha,
+      opcoes: {
+        ociosidadeSugerida: OCIOSIDADE_SUGERIDA,
+        ociosidadeMin: OCIOSIDADE_MIN,
+        ociosidadeMax: OCIOSIDADE_MAX,
+        ociosidadePadrao: OCIOSIDADE_PADRAO,
+      },
+    });
+  } catch (err) { console.error('[totem/configuracao]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// Upsert, sempre. Este PUT NUNCA apaga a linha: diferente do apelido de categoria, aqui
+// o padrão não é "ausência de configuração" — 90 s pode ser uma escolha registrada.
+app.put('/api/totem/configuracao', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    // Campo AUSENTE é erro do chamador, e é diferente de campo torto. Normalizar o
+    // `undefined` gravaria 90 s por cima da escolha da loja, e do lado de lá isso
+    // apareceria como "a configuração se redefiniu sozinha".
+    const bruto = req.body?.ociosidadeSegundos;
+    if (bruto === undefined) return res.status(400).json({ erro: 'CAMPO_AUSENTE' });
+    // Valor presente e fora da faixa é GRAMPEADO pela régua, não recusado: a resposta
+    // devolve o que foi realmente gravado, e a tela mostra esse número.
+    const ociosidadeSegundos = normalizarOciosidade(bruto);
+    const linha = await prisma.totemConfiguracao.upsert({
+      where: { empresaId },
+      create: { empresaId, ociosidadeSegundos },
+      update: { ociosidadeSegundos },
+    });
+    res.json({ ok: true, configuracao: configuracaoParaJson(linha), salva: true });
+  } catch (err) { console.error('[totem/configuracao PUT]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
 });
 
 // ── Job do totem (§5.4): 60 s, in-process, com lock ─────────────────────────
