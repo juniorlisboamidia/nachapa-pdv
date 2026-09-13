@@ -47,15 +47,18 @@ import {
   imagemApresentada, descricaoApresentada, substituirLinha,
   linhaDoDetalhe, precoDoCard, precoDoCabecalho,
 } from '../components/totemCarrinho'
+// O relógio de ociosidade: conversão para ms, o instante do aviso e a CAPTURA do valor
+// pela sessão. A régua (piso, teto) é do backend — aqui só há defesa contra ausência.
+import {
+  MS_AVISO_INATIVIDADE, MS_AMBIGUO, msDoAviso, criarRelogioSessao,
+} from '../components/totemOciosidade'
 
 const VERSAO = 'totem-1.0'
 const MS_HEARTBEAT = 60_000
 const MS_BOOTSTRAP = 5 * 60_000
-const MS_INATIVIDADE = 90_000
 const MS_POLL_DISPLAY = 3_000
 const MAX_POLL_DISPLAY = 20        // 20 × 3 s = 60 s
 const MS_LIBERAR_NOVO = 20_000     // no 202, "Novo pedido" só aparece depois disso
-const MS_AVISO_INATIVIDADE = 15_000 // "Ainda está aí?" 15 s antes do reset
 
 const MODOS = {
   onsite: { titulo: 'Comer aqui', sub: 'Vou comer na loja', ico: 'talheres' },
@@ -120,6 +123,11 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
   const cotandoRef = useRef(null)
   const cotarSeqRef = useRef(0)
   const inatividadeRef = useRef(null)
+  // O tempo de ociosidade DESTA sessão, capturado quando ela começa. O bootstrap se refaz
+  // sozinho a cada 5 min: sem capturar, uma troca de configuração no meio do pedido
+  // encurtaria o relógio de quem já estava escolhendo. Ver totemOciosidade.js.
+  const relogioRef = useRef(null)
+  if (relogioRef.current === null) relogioRef.current = criarRelogioSessao()
   // Confirmação em DÚVIDA (timeout/rede/5xx inesperado): o pedido pode existir no Cardápio
   // Web. Enquanto isto for verdade a tela fica travada num único botão e a chave sobrevive.
   const travado = !!erroEnvio?.podeRepetir
@@ -201,6 +209,9 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
   // Volta ao Início zerando TUDO, inclusive a chave de idempotência: o próximo cliente
   // nunca herda a confirmação do anterior.
   const reiniciar = useCallback((recarregar = false) => {
+    // A sessão acabou: o valor capturado é solto, e a PRÓXIMA sessão pega o mais recente
+    // que o bootstrap tiver trazido enquanto isso.
+    relogioRef.current.encerrar()
     chaveRef.current = null
     travadoRef.current = false
     cotandoRef.current = null
@@ -234,16 +245,23 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
     setErroEnvio(null)
   }, [])
 
-  // ── Inatividade: 90 s em qualquer tela que não seja o Início → reset ──────
-  // Os 90 s são folgados de propósito em relação aos 65 s de timeout do axios no POST
-  // /pedido: nenhuma confirmação em voo pode ser interrompida por este relógio. E enquanto
-  // `enviando` ou `travado` (confirmação em dúvida) o reset NÃO é armado — ele zera a chave
-  // de idempotência, e zerar a chave de um pedido que talvez exista é como se cria o segundo.
+  // ── Inatividade: o tempo configurado pela loja, em qualquer tela que não seja o
+  // Início → reset ──────────────────────────────────────────────────────────
+  // O valor é o CAPTURADO pela sessão (`relogioRef`), nunca o que o bootstrap acabou de
+  // trazer: uma troca de configuração no meio do pedido não encurta o relógio de quem já
+  // estava escolhendo.
+  //
+  // O padrão de 90 s é folgado de propósito em relação aos 65 s de timeout do axios no POST
+  // /pedido: nenhuma confirmação em voo pode ser interrompida por este relógio. Com a loja
+  // configurando abaixo disso a folga some — e é por isso que `enviando` continua sendo
+  // guarda absoluta aqui, e não um detalhe. Enquanto `enviando` ou `travado` (confirmação
+  // em dúvida) o reset NÃO é armado: ele zera a chave de idempotência, e zerar a chave de um
+  // pedido que talvez exista é como se cria o segundo.
   useEffect(() => {
     const armar = () => {
       clearTimeout(inatividadeRef.current)
       if (tela === 'inicio' || enviando || travado) return
-      inatividadeRef.current = setTimeout(() => reiniciar(true), MS_INATIVIDADE)
+      inatividadeRef.current = setTimeout(() => reiniciar(true), relogioRef.current.atual())
     }
     armar()
     const eventos = ['pointerdown', 'keydown', 'touchstart', 'wheel']
@@ -262,7 +280,7 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
   // As guardas são as mesmas do reset — enviando ou confirmação em dúvida não têm
   // aviso, porque nesses estados o totem também não volta sozinho ao Início.
   //
-  // A tela de RESULTADO também fica de fora: ali o relógio de 90 s continua
+  // A tela de RESULTADO também fica de fora: ali o relógio de reset continua
   // correndo (é assim que o totem volta ao Início depois do pedido), mas cobrir
   // o número do pedido com "o seu pedido é apagado" seria mentir para quem está
   // justamente anotando esse número.
@@ -273,10 +291,12 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
     const parar = () => { clearTimeout(t); clearInterval(iv); t = null; iv = null }
     const agendar = () => {
       parar()
+      // Os 15 s FINAIS do tempo total da sessão — `msDoAviso` faz essa conta num lugar
+      // só e impede atraso negativo, que dispararia o aviso na hora.
       t = setTimeout(() => {
         setAlertaInatividade(Math.round(MS_AVISO_INATIVIDADE / 1000))
         iv = setInterval(() => setAlertaInatividade((n) => (n === null ? null : n - 1)), 1_000)
-      }, MS_INATIVIDADE - MS_AVISO_INATIVIDADE)
+      }, msDoAviso(relogioRef.current.atual()))
     }
     const aoInteragir = () => { setAlertaInatividade(null); agendar() }
     agendar()
@@ -297,11 +317,11 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
       setResultado({ status: 'AMBIGUO', envioId: null, cwDisplayId: null, referencia: null, total: cotacaoTotal })
       setTela('resultado')
       // A dúvida foi ENTREGUE (a tela manda procurar o balcão, e a linha ambígua já está no
-      // Totem › Pedidos do admin): a trava sai, e daí o reset normal de 90 s pode devolver o
+      // Totem › Pedidos do admin): a trava sai, e daí o reset normal pode devolver o
       // totem ao Início em vez de deixá-lo parado nesta tela para sempre.
       travadoRef.current = false
       setErroEnvio(null)
-    }, MS_INATIVIDADE)
+    }, MS_AMBIGUO)
     return () => clearTimeout(t)
   }, [travado, cotacaoTotal])
 
@@ -340,6 +360,9 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
 
   // ── Navegação ─────────────────────────────────────────────────────────────
   function escolherModo(t) {
+    // COMEÇO DA SESSÃO. Com a Tela de espera (T10) este ponto passa a ser `espera →
+    // inicio`; a captura muda de lugar, não de regra.
+    relogioRef.current.iniciar(boot?.configuracao)
     setOrderType(t)
     setCategoriaId(categorias[0]?.id ?? null)
     invalidarCotacao()
