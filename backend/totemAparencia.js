@@ -288,3 +288,58 @@ export function aparenciaPublica({ config, dispositivo } = {}) {
     temLogoPersonalizada: typeof config?.logoDataUrl === 'string' && config.logoDataUrl.length > 0,
   };
 }
+
+/* ══ Logo do canal ═══════════════════════════════════════════════════════════════════
+   Data URL, como já se faz nas fotos de Checklist e em `Empresa.logoDataUrl`.
+
+   O teto é pequeno de propósito: é uma LOGO, não uma fotografia, e precisa caber com
+   folga no `client_max_body_size` do Nginx — cujo padrão, quando ninguém configurou, é
+   1 MB. 300 KB decodificados dão ~400 KB em base64, e ainda sobra espaço para o resto do
+   corpo da requisição. */
+export const LOGO_MAX_BYTES = 300 * 1024;
+const LOGO_TIPOS = Object.freeze({ 'image/png': true, 'image/jpeg': true, 'image/webp': true });
+const LOGO_DATA_URL = /^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/]+={0,2})$/;
+
+/* Devolve o CÓDIGO do erro, ou `null` quando passa.
+
+   Valida o tipo declarado E o tamanho REAL depois de decodificar. O cabeçalho do data URL
+   é texto que o cliente escreve: confiar nele é confiar em quem manda a requisição, e
+   `data:image/png;base64,` na frente de um megabyte continua sendo um megabyte.
+
+   SVG fica de fora junto com o resto: SVG é documento, não imagem — ele carrega script. */
+export function validarLogoDataUrl(dataUrl) {
+  if (typeof dataUrl !== 'string' || !dataUrl) return 'LOGO_AUSENTE';
+  const m = LOGO_DATA_URL.exec(dataUrl.trim());
+  if (!m) return 'LOGO_FORMATO';
+  if (!LOGO_TIPOS[m[1]]) return 'LOGO_TIPO';
+  let bytes;
+  try { bytes = Buffer.from(m[2], 'base64'); } catch { return 'LOGO_FORMATO'; }
+  if (!bytes.length) return 'LOGO_FORMATO';
+  if (bytes.length > LOGO_MAX_BYTES) return 'LOGO_GRANDE';
+  return null;
+}
+
+/* Data URL guardado → `{ tipo, bytes }`, ou `null`.
+
+   Revalida na LEITURA também, e não só na escrita: dado gravado por uma versão anterior,
+   ou escrito à mão no banco, não pode virar uma resposta com Content-Type inventado. */
+export function decodificarDataUrl(dataUrl) {
+  if (typeof dataUrl !== 'string') return null;
+  const m = LOGO_DATA_URL.exec(dataUrl.trim());
+  if (!m || !LOGO_TIPOS[m[1]]) return null;
+  try {
+    const bytes = Buffer.from(m[2], 'base64');
+    return bytes.length ? { tipo: m[1], bytes } : null;
+  } catch { return null; }
+}
+
+/* A versão sobe quando os bytes mudam, e SÓ então.
+
+   É ela que invalida o cache do tablet — que guarda a imagem por um ano, `immutable`. Por
+   isso a REMOÇÃO também sobe: sem isso o totem continuaria servindo do cache uma logo que
+   a loja acabou de tirar do ar. E reenviar a mesma imagem NÃO sobe, para não obrigar todos
+   os tablets a rebaixar o que já têm. */
+export function proximaVersaoLogo({ atual, mudou } = {}) {
+  const base = Number.isInteger(atual) && atual >= 0 ? atual : 0;
+  return mudou ? base + 1 : base;
+}

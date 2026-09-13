@@ -55,6 +55,7 @@ import {
   CHAVES as CHAVES_APARENCIA, PADROES as PADROES_APARENCIA, POSICOES as POSICOES_CATEGORIAS,
   MOTIVO_POSICAO, validarPatch, aplicarPatch, coresEfetivas, sanitizarTokens,
   normalizarPosicao, aparenciaPublica, diagnosticoDeContraste,
+  LOGO_MAX_BYTES, validarLogoDataUrl, decodificarDataUrl, proximaVersaoLogo,
 } from './totemAparencia.js';
 import { calcularCmvGlobal } from './cmv/calculo.js';
 import { normalizarRelatorio, FONTES } from './relatorios/normalizar.js';
@@ -8735,52 +8736,17 @@ async function comApresentacao(ap, body, resposta) {
   }
 }
 
-// ── Logo do canal: validação, decodificação e resposta ─────────────────────
-// Data URL, como já se faz nas fotos de Checklist e em Empresa.logoDataUrl. O teto é
-// pequeno de propósito: é uma LOGO, não uma fotografia, e precisa caber com folga no
-// `client_max_body_size` do Nginx — cujo padrão, quando ninguém configurou, é 1 MB.
-// 300 KB decodificados dão ~400 KB em base64, e sobra espaço para o resto do corpo.
-const LOGO_MAX_BYTES = 300 * 1024;
-const LOGO_TIPOS = { 'image/png': true, 'image/jpeg': true, 'image/webp': true };
-const LOGO_DATA_URL = /^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/]+={0,2})$/;
-
-// Devolve o CÓDIGO do erro, ou `null` quando passa. Valida o tipo declarado E o tamanho
-// REAL depois de decodificar: o cabeçalho do data URL é texto que o cliente escreve, e
-// confiar nele é confiar em quem manda a requisição.
-function validarLogoDataUrl(dataUrl) {
-  if (typeof dataUrl !== 'string' || !dataUrl) return 'LOGO_AUSENTE';
-  const m = LOGO_DATA_URL.exec(dataUrl.trim());
-  if (!m) return 'LOGO_FORMATO';
-  if (!LOGO_TIPOS[m[1]]) return 'LOGO_TIPO';
-  let bytes;
-  try { bytes = Buffer.from(m[2], 'base64'); } catch { return 'LOGO_FORMATO'; }
-  if (!bytes.length) return 'LOGO_FORMATO';
-  if (bytes.length > LOGO_MAX_BYTES) return 'LOGO_GRANDE';
-  return null;
-}
-
-// Data URL guardado → `{ tipo, bytes }`, ou `null`. Revalida na LEITURA também: dado
-// gravado por uma versão anterior, ou à mão no banco, não pode virar resposta com
-// Content-Type inventado.
-function decodificarDataUrl(dataUrl) {
-  if (typeof dataUrl !== 'string') return null;
-  const m = LOGO_DATA_URL.exec(dataUrl.trim());
-  if (!m || !LOGO_TIPOS[m[1]]) return null;
-  try {
-    const bytes = Buffer.from(m[2], 'base64');
-    return bytes.length ? { tipo: m[1], bytes } : null;
-  } catch { return null; }
-}
-
-// Resposta com cache PRIVADO e versionado.
+// ── Logo do canal: a RESPOSTA ──────────────────────────────────────────────
+// A validação e a decodificação moram no módulo puro (totemAparencia.js) — é o que
+// permite testá-las sem subir servidor, e elas são a parte que decide o Content-Type.
 //
-// `private` é o detalhe que evita vazamento entre lojas: a URL é a mesma para todo mundo
-// (`/logo?v=4`), e um cache COMPARTILHADO poderia entregar a logo da loja A para a loja B
-// só porque as duas estão na versão 4. Com `private`, só o navegador do tablet guarda — e
-// um tablet pertence a uma empresa só. `Vary: Cookie` fecha a porta em qualquer
-// intermediário que ignore o `private`, já que é o cookie que identifica o aparelho.
-//
-// O ETag carrega empresa + versão pelo mesmo motivo: ele nunca colide entre lojas.
+// Cache PRIVADO e versionado, e o `private` é o detalhe que evita vazamento entre lojas:
+// a URL é a mesma para todo mundo (`/logo?v=4`), e um cache COMPARTILHADO poderia
+// entregar a logo da loja A para a loja B só porque as duas estão na versão 4. Com
+// `private`, só o navegador do tablet guarda — e um tablet pertence a uma empresa só.
+// `Vary: Cookie` fecha a porta em qualquer intermediário que ignore o `private`, já que é
+// o cookie que identifica o aparelho. O ETag carrega empresa + versão pelo mesmo motivo:
+// ele nunca colide entre lojas.
 function responderImagem(res, { tipo, bytes }, marca, req) {
   const etag = `W/"logo-${marca}"`;
   res.set('Content-Type', tipo);
@@ -9484,9 +9450,7 @@ app.put('/api/totem/aparencia/logo', async (req, res) => {
     const erro = validarLogoDataUrl(req.body?.dataUrl);
     if (erro) return res.status(400).json({ erro });
     const atual = await prisma.totemConfiguracao.findUnique({ where: { empresaId } });
-    // Reenviar a MESMA imagem não sobe versão: cache do tablet não se invalida à toa.
-    const mudou = atual?.logoDataUrl !== req.body.dataUrl;
-    const versao = (Number.isInteger(atual?.logoVersao) ? atual.logoVersao : 0) + (mudou ? 1 : 0);
+    const versao = proximaVersaoLogo({ atual: atual?.logoVersao, mudou: atual?.logoDataUrl !== req.body.dataUrl });
     const linha = await prisma.totemConfiguracao.upsert({
       where: { empresaId },
       create: { empresaId, logoDataUrl: req.body.dataUrl, logoVersao: 1 },
@@ -9504,7 +9468,7 @@ app.delete('/api/totem/aparencia/logo', async (req, res) => {
   try {
     const atual = await prisma.totemConfiguracao.findUnique({ where: { empresaId } });
     if (!atual?.logoDataUrl) return res.json({ ok: true, logo: { tem: false, versao: atual?.logoVersao ?? 0 } });
-    const versao = (Number.isInteger(atual.logoVersao) ? atual.logoVersao : 0) + 1;
+    const versao = proximaVersaoLogo({ atual: atual.logoVersao, mudou: true });
     const linha = await prisma.totemConfiguracao.update({
       where: { empresaId }, data: { logoDataUrl: null, logoVersao: versao },
     });

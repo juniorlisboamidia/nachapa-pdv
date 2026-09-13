@@ -401,3 +401,83 @@ test('contraste AVISA mas não impede salvar', () => {
   const d = diagnosticoDeContraste(coresEfetivas(ilegivel));
   assert.equal(d.find((p) => p.id === 'texto-fundo').aaNormal, false, 'e o diagnóstico reprova');
 });
+
+// ══ Logo do canal ═══════════════════════════════════════════════════════════
+import { LOGO_MAX_BYTES, validarLogoDataUrl, decodificarDataUrl, proximaVersaoLogo } from './totemAparencia.js';
+
+// Um PNG de 1×1 de verdade — 70 bytes.
+const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+const gerar = (tipo, bytes) => `data:${tipo};base64,${Buffer.alloc(bytes, 1).toString('base64')}`;
+
+test('PNG real passa e decodifica com o tipo certo', () => {
+  assert.equal(validarLogoDataUrl(PNG), null);
+  const d = decodificarDataUrl(PNG);
+  assert.equal(d.tipo, 'image/png');
+  assert.equal(d.bytes.length, 70);
+  assert.ok(Buffer.isBuffer(d.bytes));
+});
+
+test('🔴 a rota devolve o MIME declarado — png, jpeg e webp, e nada mais', () => {
+  for (const tipo of ['image/png', 'image/jpeg', 'image/webp']) {
+    const url = gerar(tipo, 32);
+    assert.equal(validarLogoDataUrl(url), null, tipo);
+    assert.equal(decodificarDataUrl(url).tipo, tipo);
+  }
+});
+
+test('🔴 SVG, GIF e text/html não entram — SVG é documento, e documento carrega script', () => {
+  for (const url of [
+    'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=',
+    'data:image/gif;base64,R0lGODlhAQABAAAAACw=',
+    'data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==',
+    'data:application/pdf;base64,JVBERi0=',
+  ]) {
+    assert.equal(validarLogoDataUrl(url), 'LOGO_FORMATO', url.slice(0, 24));
+    assert.equal(decodificarDataUrl(url), null);
+  }
+});
+
+test('🔴 o tamanho REAL é conferido, não o cabeçalho', () => {
+  // "data:image/png;base64," na frente de um megabyte continua sendo um megabyte.
+  assert.equal(validarLogoDataUrl(gerar('image/png', LOGO_MAX_BYTES)), null, 'no limite passa');
+  assert.equal(validarLogoDataUrl(gerar('image/png', LOGO_MAX_BYTES + 1)), 'LOGO_GRANDE');
+  assert.equal(LOGO_MAX_BYTES, 307200, '300 KB: cabe com folga no 1 MB que o Nginx assume por padrão');
+});
+
+test('entrada torta é recusada com o código certo', () => {
+  assert.equal(validarLogoDataUrl(undefined), 'LOGO_AUSENTE');
+  assert.equal(validarLogoDataUrl(''), 'LOGO_AUSENTE');
+  assert.equal(validarLogoDataUrl(42), 'LOGO_AUSENTE');
+  assert.equal(validarLogoDataUrl('https://cdn/logo.png'), 'LOGO_FORMATO');
+  assert.equal(validarLogoDataUrl('data:image/png;base64,'), 'LOGO_FORMATO');
+});
+
+test('🔴 leitura de dado corrompido não vira resposta com Content-Type inventado', () => {
+  for (const v of [null, undefined, 'lixo', 'data:image/svg+xml;base64,AAA', {}]) {
+    assert.equal(decodificarDataUrl(v), null, String(v));
+  }
+});
+
+test('🔴 trocar a logo INCREMENTA a versão', () => {
+  assert.equal(proximaVersaoLogo({ atual: 0, mudou: true }), 1);
+  assert.equal(proximaVersaoLogo({ atual: 3, mudou: true }), 4);
+});
+
+test('🔴 remover a logo TAMBÉM incrementa', () => {
+  // O tablet guarda a imagem por um ano, `immutable`. Sem subir a versão ele continuaria
+  // servindo do cache uma logo que a loja acabou de tirar do ar.
+  assert.equal(proximaVersaoLogo({ atual: 4, mudou: true }), 5);
+});
+
+test('reenviar a MESMA imagem não sobe versão', () => {
+  // Subir à toa obrigaria todos os tablets a rebaixar o que já têm.
+  assert.equal(proximaVersaoLogo({ atual: 4, mudou: false }), 4);
+  assert.equal(proximaVersaoLogo({ atual: 0, mudou: false }), 0);
+});
+
+test('versão torta no banco vira 0 antes de somar', () => {
+  for (const v of [null, undefined, '3', -2, 1.5, NaN, {}]) {
+    assert.equal(proximaVersaoLogo({ atual: v, mudou: true }), 1, `atual=${String(v)}`);
+  }
+  assert.equal(proximaVersaoLogo(), 0);
+});
