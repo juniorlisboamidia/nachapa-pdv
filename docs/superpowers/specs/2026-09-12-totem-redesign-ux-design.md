@@ -10,6 +10,8 @@
 2. **O amarelo deixou de ser usado como ornamento.** Nove marcas decorativas saíram — filete de botão, sombra deslocada, base de card, réguas de faixa. Amarelo agora indica só ação, seleção, categoria ativa e destaque pontual (§5.1).
 3. **Emoji no nome da categoria: decisão invertida.** A rev. 2 dizia que emoji vindo do Cardápio Web é dado da loja e deve aparecer. Com a tela na frente, o gestor decidiu o contrário para o totem, e a loja passou a controlar o nome exibido por categoria (§9.1).
 
+**Revisão 4 — 2026-09-12, com o totem em 1080 x 1920.** Uma mudança estrutural: **o catálogo passou a ser CONTÍNUO**. Todas as categorias ficam empilhadas num rolar só, e a sidebar deixou de filtrar para virar índice (§9.1 reescrito). Junto vieram três correções de altura que só aparecem no monitor em pé: a casca trava na viewport em vez de crescer com a grade, as categorias dividem a coluna, e o aviso de inatividade saiu do rodapé para o centro.
+
 **Data:** 2026-09-12
 **Repo:** `nachapa-pdv` (PDV "Operação")
 **Escopo:** camada de apresentação visual do Totem do CLIENTE (`/dispositivo`). Nenhuma regra de negócio, nenhum contrato HTTP, nenhuma migration.
@@ -635,7 +637,11 @@ Risco conhecido: um cliente que já rolou manualmente até o fim e então marca 
 - Ativo indicado por **três** sinais simultâneos (fundo, barra amarela, peso) — nunca só cor. `aria-current="true"`.
 - Sem dependência de `hover`; estado `:active` com `transform: scale(.99)`.
 - Transbordo: gradiente de 24px no topo/rodapé quando há conteúdo cortado.
-- Ao trocar de categoria, o grid volta ao topo (`scrollTop = 0`).
+- **A sidebar é índice, não filtro (rev. 4).** O catálogo é um rolar só: rolando para baixo o cliente entra na próxima categoria sem tocar em nada, como já faz no Cardápio Web. A sidebar responde duas perguntas — **onde estou** (acompanha a rolagem) e **como chego lá** (leva no toque). A regra da rev. 1, "ao trocar de categoria o grid volta ao topo", **fica sem efeito**: não há mais troca, há navegação.
+- **Quem decide o destaque é `categoriaPorRolagem`** (`totemFoco.js`, puro, 4 testes): vale a última seção cujo topo passou da linha de leitura e, chegando ao fim da rolagem, vale a última seção — sem essa segunda regra uma categoria curta no rodapé nunca alcançaria a linha e ficaria eternamente sem destaque. As medidas vêm de `getBoundingClientRect`, **nunca de `offsetTop`**: o `offsetParent` aqui é a raiz do quiosque, não o container que rola.
+- **Duas travas contra a tela brigando com o dedo:** enquanto a rolagem programada corre, o vigia cala (senão as três categorias do caminho acendem em sequência), e qualquer toque do cliente cancela a rolagem programada na hora.
+- **Voltar de um produto devolve o cliente ao lugar.** A tela rola até a categoria destacada ao montar; sem isso, fechar um produto jogaria o cliente no topo de uma lista de noventa cards.
+- **Categoria vazia não vira seção** e some também da sidebar: título sem card é pior que ausência, e atalho que não leva a lugar nenhum é defeito.
 - **Sem ícone e sem miniatura.** A sidebar mostra **apenas o nome da categoria**, em caixa alta. O CW não fornece ícone nem imagem de categoria.
 - **Toda categoria que vier do CW aparece**, na ordem do `index`. O que a V1 **não** faz é inventar uma categoria sintética a partir de histórico de vendas: isso não existe no contrato e exigiria dado novo vindo do HUB. Categoria real com esse nome (**🥇 OS MAIS PEDIDOS**) aparece como qualquer outra.
 - **O NOME é da loja (rev. 3).** A rev. 2 dizia que emoji vindo do CW é dado da loja e deve aparecer como está. **Decisão invertida com a tela na frente:** o nome é cadastrado no Cardápio Web pensando no cardápio digital, onde o emoji ajuda a varrer a lista com o polegar; numa coluna estreita e vertical ele come caractere de um nome que já é curto. Ver §9.2.

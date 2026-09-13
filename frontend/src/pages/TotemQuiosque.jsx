@@ -597,7 +597,6 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
 
   const totalLocal = carrinho.reduce((s, l) => s + subtotalLocal(l), 0)
   const itensNoCarrinho = carrinho.reduce((s, l) => s + l.qtd, 0)
-  const categoria = categorias.find((c) => String(c.id) === String(categoriaId)) ?? categorias[0] ?? null
   const metodoEscolhido = metodos.find((m) => String(m.id) === String(metodoId)) ?? null
   const nomeMetodo = (m) => (m.kindAmbiguo ? (m.name || KIND_LABEL[m.kind] || m.kind) : (KIND_LABEL[m.kind] || m.name || m.kind))
 
@@ -634,8 +633,7 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
         {banner}
         <TelaCatalogo
           categorias={categorias}
-          categoria={categoria}
-          categoriaId={categoria?.id}
+          categoriaId={categoriaId ?? categorias[0]?.id}
           aoTrocarCategoria={setCategoriaId}
           aoAbrirProduto={abrirProduto}
           aoAbrirItem={abrirItem}

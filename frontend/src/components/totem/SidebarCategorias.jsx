@@ -14,6 +14,7 @@ import CategoriaNome from './CategoriaNome'
 // caractere de uma coluna estreita.
 export default function SidebarCategorias({ categorias, categoriaId, aoTrocar }) {
   const rolagemRef = useRef(null)
+  const ativoRef = useRef(null)
   const [temMais, setTemMais] = useState(false)
 
   // O tablet não desenha barra de rolagem, então a única pista de que a lista
@@ -33,22 +34,41 @@ export default function SidebarCategorias({ categorias, categoriaId, aoTrocar })
     return () => { el.removeEventListener('scroll', medir); window.removeEventListener('resize', medir) }
   }, [medir, categorias])
 
+  // Com o catálogo contínuo, quem troca a categoria destacada é a ROLAGEM da
+  // grade, não o dedo do cliente nesta coluna: passando de dez categorias, a
+  // destacada pode estar fora de vista. Só rola quando está — e pelo container,
+  // nunca por `scrollIntoView`, que arrastaria a casca inteira junto.
+  useEffect(() => {
+    const cont = rolagemRef.current
+    const el = ativoRef.current
+    if (!cont || !el) return
+    const base = cont.getBoundingClientRect()
+    const r = el.getBoundingClientRect()
+    if (r.top >= base.top - 1 && r.bottom <= base.bottom + 1) return
+    const parado = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
+    cont.scrollTo({ top: Math.max(0, r.top - base.top + cont.scrollTop - 12), behavior: parado ? 'auto' : 'smooth' })
+  }, [categoriaId])
+
   return (
     <nav className="tq-lado" aria-label="Categorias">
       <div className="tq-lado-rolagem" ref={rolagemRef}>
-        {categorias.map((c) => (
+        {categorias.map((c) => {
+          const ativa = String(c.id) === String(categoriaId)
+          return (
           <button
             key={c.id}
             type="button"
             className="tq-cat"
-            aria-current={String(c.id) === String(categoriaId) ? 'true' : undefined}
+            ref={ativa ? ativoRef : null}
+            aria-current={ativa ? 'true' : undefined}
             onClick={() => aoTrocar(c.id)}
           >
             {/* `nomeExibido` é o apelido que a loja deu à categoria no admin;
                 sem ele vale o nome do Cardápio Web, como sempre valeu. */}
-            <CategoriaNome nome={c.nomeExibido || c.nome} ativa={String(c.id) === String(categoriaId)} />
+            <CategoriaNome nome={c.nomeExibido || c.nome} ativa={ativa} />
           </button>
-        ))}
+          )
+        })}
       </div>
       {temMais ? <div className="tq-lado-fade" aria-hidden="true" /> : null}
     </nav>

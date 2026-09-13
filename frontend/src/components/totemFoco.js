@@ -77,3 +77,46 @@ export function destinoDeRolagem({
   if (!permitirVoltar && destino <= Number(scrollAtual || 0)) return null
   return destino
 }
+
+/* QUAL CATEGORIA ESTÁ SENDO LIDA AGORA — o catálogo passou a ser contínuo.
+
+   A grade deixou de mostrar uma categoria por vez: todas ficam empilhadas num
+   rolar só, como no Cardápio Web, e a sidebar deixou de FILTRAR para virar
+   índice — ela diz onde o cliente está e leva até onde ele quer ir.
+
+   `secoes` é `[{ id, topo }]`, e `topo` é medido a partir do início do conteúdo
+   rolável — nunca `offsetTop`, cujo `offsetParent` aqui é a raiz do quiosque e
+   não o container que rola. Foi exatamente essa confusão de sistema de
+   coordenadas que fez o avanço automático parar 96px depois do grupo certo.
+   A lista vem na ordem da tela.
+
+   Duas regras, e a segunda existe por um caso real:
+   1. Vale a ÚLTIMA seção cujo topo já passou da linha de leitura (uma faixa
+      logo abaixo da borda de cima). É a categoria que ocupa o campo de visão.
+   2. Chegando ao fim da rolagem, vale a última seção. Sem isto, uma categoria
+      curta no rodapé — "SUCOS" com três itens — nunca alcançaria a linha e
+      ficaria sem destaque por mais que o cliente rolasse.
+
+   Nunca lança: entrada torta devolve `null` e a sidebar fica como está. */
+export function categoriaPorRolagem({
+  secoes, scrollAtual = 0, alturaVisivel = 0, alturaTotal = 0, linha = 24, folgaFim = 24,
+} = {}) {
+  const lista = Array.isArray(secoes)
+    ? secoes.filter((s) => s && s.id != null && Number.isFinite(Number(s.topo)))
+    : []
+  if (!lista.length) return null
+
+  const y = Number(scrollAtual) || 0
+  const visivel = Number(alturaVisivel) || 0
+  const total = Number(alturaTotal) || 0
+  const folga = Math.max(0, Number(folgaFim) || 0)
+  if (total > 0 && visivel > 0 && y + visivel >= total - folga) return lista[lista.length - 1].id
+
+  const marca = y + (Number(linha) || 0)
+  let atual = lista[0].id
+  for (const s of lista) {
+    if (Number(s.topo) <= marca) atual = s.id
+    else break
+  }
+  return atual
+}

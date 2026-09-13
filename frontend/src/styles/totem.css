@@ -468,6 +468,21 @@
   font-family: var(--tq-fonte-display); font-weight: 900; border-bottom-color: transparent;
 }
 
+/* -- Seção de categoria (catálogo contínuo) -------------------------------- */
+/* O catálogo virou um rolar só: cada categoria é uma seção com o seu título e
+   a sua grade, e a sidebar acompanha a rolagem em vez de filtrar.
+   O título NÃO gruda no topo. A sidebar já responde "onde eu estou" o tempo
+   todo, e um cabeçalho fixo cobraria altura de card em cada rolagem. */
+.tq-secao-t {
+  padding: 22px 20px 0;
+  font-size: clamp(21px, 3.06vw, 33px);
+  line-height: 1.1; letter-spacing: 0.01em; text-transform: uppercase;
+}
+.tq-secao > .tq-grade { padding-top: 12px; }
+@media (min-width: 900px) { .tq-secao-t { padding: 30px 28px 0; } }
+/* A primeira não precisa do respiro que separa uma categoria da anterior. */
+.tq-secao:first-child > .tq-secao-t { padding-top: 14px; }
+
 /* -- Grade ----------------------------------------------------------------- */
 .tq-grade {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -5,7 +5,7 @@
 // que mais incomoda num totem: a tela se mexer sozinha na hora errada.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { atingiuMax, proximoFoco, destinoDeRolagem } from './totemFoco.js';
+import { atingiuMax, proximoFoco, destinoDeRolagem, categoriaPorRolagem } from './totemFoco.js';
 
 const g = (id, extra = {}) => ({ id, nome: `Grupo ${id}`, min: 0, max: null, status: 'ACTIVE', opcoes: [], ...extra });
 const sel = (...ids) => ids.map((id) => ({ opcaoId: id, qtd: 1 }));
@@ -135,3 +135,37 @@ test('entrada inválida não move a tela', () => {
   assert.equal(destinoDeRolagem({ topoRelativo: undefined }), null);
   assert.equal(destinoDeRolagem(), null);
 });
+
+/* ── catálogo contínuo: qual categoria a sidebar destaca ────────────────── */
+const SECOES = [
+  { id: 'a', topo: 0 },
+  { id: 'b', topo: 1000 },
+  { id: 'c', topo: 2400 },
+]
+
+test('categoriaPorRolagem: no topo vale a primeira', () => {
+  assert.equal(categoriaPorRolagem({ secoes: SECOES, scrollAtual: 0, alturaVisivel: 800, alturaTotal: 3000 }), 'a')
+})
+
+test('categoriaPorRolagem: vale a última seção que passou da linha de leitura', () => {
+  assert.equal(categoriaPorRolagem({ secoes: SECOES, scrollAtual: 900, alturaVisivel: 800, alturaTotal: 4000 }), 'a')
+  /* 976 + 24 = 1000: o topo de `b` encosta na linha e ela assume. */
+  assert.equal(categoriaPorRolagem({ secoes: SECOES, scrollAtual: 976, alturaVisivel: 800, alturaTotal: 4000 }), 'b')
+  assert.equal(categoriaPorRolagem({ secoes: SECOES, scrollAtual: 1500, alturaVisivel: 800, alturaTotal: 4000 }), 'b')
+})
+
+test('🔴 no fim da rolagem vale a última — categoria curta no rodapé nunca alcança a linha', () => {
+  /* `c` começa em 2400 e a rolagem só chega a 2200: sem a regra do fim, `b`
+     ficaria destacada com `c` inteira na tela. */
+  assert.equal(categoriaPorRolagem({ secoes: SECOES, scrollAtual: 2200, alturaVisivel: 800, alturaTotal: 3000 }), 'c')
+})
+
+test('categoriaPorRolagem: entrada torta não derruba a sidebar', () => {
+  assert.equal(categoriaPorRolagem(), null)
+  assert.equal(categoriaPorRolagem({ secoes: [] }), null)
+  assert.equal(categoriaPorRolagem({ secoes: [{ id: null, topo: 0 }] }), null)
+  assert.equal(categoriaPorRolagem({ secoes: [{ id: 'x', topo: 'oi' }] }), null)
+  /* Sem medida de altura total a regra do fim não se aplica, e a leitura
+     continua pela linha. */
+  assert.equal(categoriaPorRolagem({ secoes: SECOES, scrollAtual: 1200 }), 'b')
+})
