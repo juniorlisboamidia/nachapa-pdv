@@ -1099,14 +1099,30 @@
   font-size: clamp(24px, 4.2vw, 50px); line-height: 1.05;
   letter-spacing: 0.01em; text-transform: uppercase;
 }
-/* Respiro lento: é o sinal de que o aparelho está VIVO, e não travado numa imagem. Some
-   com `prefers-reduced-motion`, como todo movimento deste projeto. */
+/* BRILHO passando, uma vez a cada 4 segundos — o mesmo efeito do botão principal do
+   modelo Adesivo da Árvore de Links, no HUB (`backend/arvore/kitAdesivo.js`), com os
+   mesmos números.
+   Antes era um respiro de opacidade. Ele dizia "estou vivo", mas apagando e acendendo a
+   única chamada da tela — e um alvo que escurece sozinho lê como indisponível. O brilho
+   diz a mesma coisa sem tirar peso do botão em momento nenhum.
+   Os detalhes que fazem a diferença, e que vieram de lá por isso:
+   · `no-repeat` é o que faz passar UM brilho. Fundo se repete por padrão, e a faixa
+     caminha 440% dentro de um ladrilho de 250% — sobra caminho para a cópia seguinte
+     entrar antes de a primeira sair, e o que se vê são dois brilhos atropelados.
+   · o ciclo INTEIRO é a passagem: os 4s incluem o intervalo até a próxima. */
+.tq-espera-chamada { position: relative; overflow: hidden; }
 @media (prefers-reduced-motion: no-preference) {
-  .tq-espera-chamada { animation: tq-respira 2.8s ease-in-out infinite; }
+  .tq-espera-chamada::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: linear-gradient(115deg, transparent 35%, rgba(255, 255, 255, 0.8) 50%, transparent 65%);
+    background-size: 250% 100%;
+    background-repeat: no-repeat;
+    animation: tq-brilha 4s linear infinite;
+  }
 }
-@keyframes tq-respira {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.72; }
+@keyframes tq-brilha {
+  0% { background-position: 220% 0; }
+  100% { background-position: -220% 0; }
 }
 .tq-espera-ico { flex: 0 0 auto; }
 
