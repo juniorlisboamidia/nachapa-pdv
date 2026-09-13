@@ -394,6 +394,13 @@
 
 /* ═══ V3 — catálogo: sidebar de categorias e grade de produtos ═════════════ */
 
+/* -- Posição das categorias ------------------------------------------------ */
+/* A coluna troca de lado por LAYOUT, não por JSX duplicado: a árvore do React é uma só,
+   e inverter aqui mantém a ordem do DOM — que é a ordem que o leitor de tela lê e a que
+   o teclado percorre. Só `direita` existe além do padrão; `topo` é desenho novo, não
+   configuração, e ficou de fora desta frente. */
+.tq-raiz[data-posicao-categorias='direita'] .tq-corpo { flex-direction: row-reverse; }
+
 /* -- Sidebar --------------------------------------------------------------- */
 /* Preta e fixa: em retrato as categorias precisam estar sempre à vista, e a
    faixa horizontal rolável de antes escondia metade delas sem dar sinal. */

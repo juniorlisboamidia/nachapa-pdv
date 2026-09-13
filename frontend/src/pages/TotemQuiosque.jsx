@@ -59,6 +59,9 @@ import { estadoDoCanal, podeAvancar } from '../components/totemLoja'
 // Repouso × sessão. `emRepouso` é a fonte única de "existe sessão?" — a pergunta que o
 // código fazia comparando `tela === 'inicio'`, quando início e repouso eram a mesma tela.
 import { TELA_REPOUSO, armaReset, armaAviso } from '../components/totemSessao'
+// Aparência do canal: as cores viram custom property, a logo do canal vence a do HUB, e a
+// posição das categorias vira atributo na raiz.
+import { urlDaLogo, posicaoDeCategorias } from '../components/totemTema'
 
 const VERSAO = 'totem-1.0'
 const MS_HEARTBEAT = 60_000
@@ -156,8 +159,16 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
     const a = lojaInicial ?? {}
     const b = boot?.loja ?? {}
     if (!lojaInicial && !boot?.loja) return null
-    return { ...a, ...b, nome: b.nome ?? a.nome ?? null, logo: b.logo ?? a.logo ?? null, logoDataUrl: a.logoDataUrl ?? b.logoDataUrl ?? null }
+    const base = { ...a, ...b, nome: b.nome ?? a.nome ?? null, logo: b.logo ?? a.logo ?? null, logoDataUrl: a.logoDataUrl ?? b.logoDataUrl ?? null }
+    // A logo do CANAL vence a do HUB. A do Cardápio Web é feita para fundo claro — no
+    // vidro preto ela vira uma placa branca —, e quando a loja sobe uma própria é ela que
+    // manda. Sem logo própria, `urlDaLogo` devolve exatamente o que valia antes.
+    return { ...base, logo: urlDaLogo({ aparencia: boot?.aparencia, loja: base }) }
   }, [lojaInicial, boot])
+  // Bloco montado pelo PDV, separado de `loja` (que é do HUB). Ausente = tudo no padrão
+  // embarcado da folha, que é como o totem sempre desenhou.
+  const aparencia = boot?.aparencia ?? null
+  const posicaoCategorias = useMemo(() => posicaoDeCategorias(aparencia), [aparencia])
   const metodos = useMemo(() => (Array.isArray(boot?.metodos) ? boot.metodos : []), [boot])
   const orderTypes = useMemo(() => (Array.isArray(boot?.orderTypes) ? boot.orderTypes.filter((t) => MODOS[t]) : []), [boot])
   const categorias = useMemo(() => (Array.isArray(boot?.catalogo?.categorias) ? boot.catalogo.categorias : []), [boot])
@@ -607,7 +618,7 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
   // ── Estados de bloqueio (nada de pedido) ─────────────────────────────────
   if (carregandoBoot && !boot) {
     return (
-      <Casca>
+      <Casca tokens={aparencia?.tokens} posicaoCategorias={posicaoCategorias}>
         <div className="tq-centrado"><Spinner /><div className="tq-carregando-txt">Carregando o menu…</div></div>
       </Casca>
     )
@@ -623,7 +634,7 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
       </button>
     )
     return (
-      <Casca>
+      <Casca tokens={aparencia?.tokens} posicaoCategorias={posicaoCategorias}>
         <TelaAviso icone="semRede" titulo="Totem indisponível" texto={mensagemErro(bootErro)} acoes={recarregar} />
       </Casca>
     )
@@ -643,7 +654,7 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
   const canal = estadoDoCanal(boot)
   if (canal.bloquearEntrada && tela === 'inicio') {
     return (
-      <Casca>
+      <Casca tokens={aparencia?.tokens} posicaoCategorias={posicaoCategorias}>
         <TelaAviso
           icone="pausa"
           titulo="Pedidos pausados"
@@ -676,7 +687,7 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
 
   if (tela === TELA_REPOUSO) {
     return (
-      <Casca>
+      <Casca tokens={aparencia?.tokens} posicaoCategorias={posicaoCategorias}>
         <TelaEspera loja={loja} aoTocar={comecarSessao} />
       </Casca>
     )
@@ -880,7 +891,7 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
   }
 
   return (
-    <Casca>
+    <Casca tokens={aparencia?.tokens} posicaoCategorias={posicaoCategorias}>
       {conteudo}
       {alertaInatividade !== null && tela !== 'inicio' && tela !== 'resultado' && !enviando && !travado ? (
         <SheetInatividade segundos={Math.max(0, alertaInatividade)} aoContinuar={() => setAlertaInatividade(null)} />

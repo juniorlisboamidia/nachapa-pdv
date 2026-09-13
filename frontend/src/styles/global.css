@@ -3355,6 +3355,29 @@ body.theme-dark .apr-contagem, body.theme-dark .apr-qr-legenda, body.theme-dark 
 .ttm-aba.ativa { color: var(--brand-gold-deep); background: var(--app-surface-2); border-bottom-color: var(--brand-gold); }
 /* Grade dos campos: duas colunas onde couber, uma no resto. */
 .ttm-aparencia-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; }
+.ttm-secao-t { margin: 0 0 6px; font-size: 15px; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; color: var(--app-text-2); }
+/* Cores: seis campos, duas ou três colunas conforme couber. */
+.ttm-cores { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; margin-top: 14px; }
+.ttm-cor-linha { display: flex; gap: 8px; align-items: center; }
+.ttm-cor-picker { width: 46px; height: 38px; padding: 2px; border: 1px solid var(--app-border); border-radius: 8px; background: var(--app-surface); cursor: pointer; }
+.ttm-cor-hex { flex: 1 1 auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: lowercase; }
+.ttm-usar-padrao { padding: 4px 0; font-size: 12px; text-align: left; }
+/* Aviso de contraste: laranja de atenção, não vermelho de erro — a loja PODE salvar. */
+.ttm-aviso-contraste { margin-top: 16px; padding: 12px 14px; border-radius: 10px; background: #fff7ed; border: 1px solid #fdba74; color: #7c2d12; font-size: 13px; line-height: 1.45; }
+.ttm-aviso-contraste ul { margin: 6px 0 0; padding-left: 18px; }
+/* Prévia: onde as seis cores se encontram — um card e um botão. */
+.ttm-previa { margin-top: 18px; padding: 18px; border-radius: 12px; display: flex; flex-direction: column; gap: 14px; }
+.ttm-previa-card { border-radius: 12px; overflow: hidden; padding-bottom: 12px; }
+.ttm-previa-foto { height: 88px; background: linear-gradient(135deg, #3a352c, #221f1b); }
+.ttm-previa-nome { padding: 10px 12px 2px; font-size: 15px; font-weight: 700; }
+.ttm-previa-desc { padding: 0 12px; font-size: 12px; line-height: 1.35; }
+.ttm-previa-preco { padding: 8px 12px 0; font-size: 18px; font-weight: 800; }
+.ttm-previa-botao { padding: 14px; border-radius: 10px; text-align: center; font-weight: 800; text-transform: uppercase; letter-spacing: 0.02em; }
+/* Logo: prévia sobre o fundo escolhido, porque é assim que ela vai aparecer. */
+.ttm-logo-linha { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 14px; }
+.ttm-logo-previa { flex: 0 0 auto; width: 200px; min-height: 110px; border-radius: 12px; display: grid; place-items: center; padding: 14px; border: 1px solid var(--app-border); }
+.ttm-logo-previa img { max-width: 100%; max-height: 90px; object-fit: contain; }
+.ttm-logo-acoes { flex: 1 1 260px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 /* Código técnico do servidor (ITEM_AUSENTE, GRUPO_SEM_OPCOES…) na tela do admin: ele
    acompanha a frase humana, nunca a substitui — por isso pequeno, monoespaçado e apagado. */
 .ttm-codigo {
