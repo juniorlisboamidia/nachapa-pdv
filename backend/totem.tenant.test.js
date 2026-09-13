@@ -106,9 +106,14 @@ test('dispositivoId no bloco público é sempre o id do aparelho do cookie', () 
   assert.ok(usos >= 3, `esperava o filtro por aparelho nas consultas do outbox, achei ${usos}`);
 });
 
-test('req.params no bloco público só existe para o envioId do polling', () => {
+test('req.params no bloco público só existe para ids de RECURSO, nunca de identidade', () => {
+  // A regra não é "não ler params": é que nada em `req.params` pode dizer DE QUEM é o
+  // dado. `envioId` (polling do pedido) e `id` (a arte de um banner) são ids de recurso —
+  // os dois são conferidos CONTRA o escopo do aparelho, e um id de outra loja simplesmente
+  // não é encontrado. Um `empresaId` aqui seria outra coisa, e continua proibido pelo
+  // guarda (b) do aparelhos.tenant.test.js.
   const usos = semComentarios(blocoPublico()).match(/req\.params[^\s;,)]*/g) || [];
-  assert.deepEqual([...new Set(usos)], ['req.params.envioId']);
+  assert.deepEqual([...new Set(usos)].sort(), ['req.params.envioId', 'req.params.id']);
 });
 
 test('toda consulta ao outbox no bloco público é escopada pelo aparelho', () => {
@@ -301,6 +306,14 @@ test('os códigos de erro do totem são os do §7 (nada inventado)', () => {
     'MOTIVO_OBRIGATORIO', 'CW_ORDER_ID_OBRIGATORIO', 'ERRO_INTERNO',
     // Totem › Apresentação (spec §4.3): validação do PUT e do catálogo vivo do admin.
     'MODO_INVALIDO', 'GRUPO_OBRIGATORIO', 'APRESENTACAO_INVALIDA',
+    // Totem › Configurações e Aparência: validação dos PUTs do admin. `CAMPO_AUSENTE`
+    // existe porque campo ausente é erro do chamador e é DIFERENTE de campo torto —
+    // normalizar o `undefined` gravaria o padrão por cima da escolha da loja, e do lado de
+    // lá isso apareceria como configuração se redefinindo sozinha.
+    'CAMPO_AUSENTE', 'ENTRADA_INVALIDA',
+    // Totem › Banners: o recurso pode não existir para ESTA empresa — que é a mesma
+    // resposta que um id de outra loja recebe, de propósito.
+    'NAO_ENCONTRADO',
     // Do pareamento (P2, §3.2), que divide o mesmo bloco público.
     'CODIGO_INVALIDO', 'MUITAS_TENTATIVAS',
   ]);
@@ -434,7 +447,10 @@ test('a leitura da apresentação no bloco público é escopada pelo aparelho', 
     if (/prisma\.totemApresentacao\./.test(linha)) alvos.push({ linha: i + 1, trecho: linhas.slice(i, i + 4).join('\n') });
   });
   assert.equal(alvos.length, 1, `a apresentação é lida uma vez só no bloco público; achei ${alvos.length}`);
-  assert.ok(/whereDoAparelho\(|escopoEmpresa\(/.test(alvos[0].trecho), `leitura da apresentação sem escopo do aparelho:\n${alvos[0].trecho}`);
+  // `where: escopo` conta: a variável é montada uma vez para as leituras em paralelo do
+  // bootstrap, e o guarda de aparelhos.tenant.test.js prova que ela só nasce de
+  // `whereDoAparelho(ap, body)`.
+  assert.ok(/whereDoAparelho\(|escopoEmpresa\(|where:\s*escopo\b/.test(alvos[0].trecho), `leitura da apresentação sem escopo do aparelho:\n${alvos[0].trecho}`);
 });
 
 test('o bootstrap público projeta produtos e NUNCA quebra por causa disso', () => {

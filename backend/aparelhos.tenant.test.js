@@ -131,7 +131,11 @@ test('(b) todo acesso ao Prisma no bloco público passa pelo escopo do aparelho'
   assert.ok(alvos.length >= 5, `esperava várias consultas no bloco, achei ${alvos.length}`);
   const excecoes = [];
   for (const alvo of alvos) {
-    if (/whereDoAparelho\(|filtroAparelhoDoCookie\(/.test(alvo.trecho)) continue;
+    // `where: escopo` conta como escopado: `escopo` é a variável que o bootstrap monta uma
+    // vez para as leituras em paralelo, e o teste logo abaixo prova que ela SÓ nasce de
+    // `whereDoAparelho(ap, body)`. Sem essa amarra, aceitar o nome seria aceitar qualquer
+    // coisa; com ela, o guarda continua tão apertado quanto antes.
+    if (/whereDoAparelho\(|filtroAparelhoDoCookie\(|where:\s*escopo\b|\.\.\.escopo\b/.test(alvo.trecho)) continue;
     // ÚNICA exceção admitida: a busca pelo código de pareamento, global de propósito
     // (o código é @unique no banco inteiro e É a identidade da tentativa — nesse
     // momento ainda não existe aparelho resolvido para dar escopo).
@@ -139,6 +143,17 @@ test('(b) todo acesso ao Prisma no bloco público passa pelo escopo do aparelho'
     excecoes.push(alvo.linha);
   }
   assert.equal(excecoes.length, 1, `a busca por código deve ser a ÚNICA consulta sem escopo (achei ${excecoes.length})`);
+});
+
+test('(b) a variável `escopo` do bloco público só nasce de whereDoAparelho', () => {
+  // A amarra do guarda acima. Se alguém atribuir outra coisa a `escopo` — um empresaId
+  // vindo do corpo, por exemplo —, a permissão que ele concede deixa de valer e este teste
+  // cai antes.
+  const atribuicoes = semComentarios(blocoPublico()).match(/const escopo = [^;]+;/g) || [];
+  assert.ok(atribuicoes.length >= 1, 'nenhuma atribuição de `escopo` no bloco público');
+  for (const a of atribuicoes) {
+    assert.match(a, /whereDoAparelho\(ap, body\)/, `escopo atribuído de outra fonte: ${a}`);
+  }
 });
 
 test('(b) o Set-Cookie do pareamento decide Secure pela função pura', () => {
