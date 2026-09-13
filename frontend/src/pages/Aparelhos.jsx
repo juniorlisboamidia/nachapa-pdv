@@ -1,4 +1,14 @@
-// Ferramentas › Aparelhos — os tablets do totem e da TV da loja (spec §3.2/§3.4).
+// Loja Digital › Totem › Gestão de totens — os tablets DESTE canal (spec §3.2/§3.4).
+//
+// A tela era "Aparelhos" e cuidava de totem e TV indoor juntos. Com a Loja Digital
+// organizada em canais, cada canal cuida dos seus: aqui só entra `tipo: 'TOTEM'`, no GET
+// e no POST. Quando o canal TV Indoor existir, ele terá a tela dele — e ela vai reusar
+// esta infraestrutura inteira, porque `Dispositivo`, pareamento e heartbeat são
+// compartilhados por baixo. O que se separa é a interface, não a fundação.
+//
+// Verificado em produção antes de fechar o filtro: não existia nenhum `TV_INDOOR`
+// cadastrado. Se existisse, filtrar por TOTEM o deixaria sem tela nenhuma — invisível,
+// impossível de renomear, revogar ou excluir — e sem erro algum para denunciar isso.
 //
 // A diferença central em relação aos Aparelhos da cozinha (Etiquetas.jsx) é a
 // credencial: ali o token vai na URL e o link É o segredo; aqui o tablet se identifica
@@ -15,12 +25,6 @@ import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
 import BotaoCopiar from '../components/BotaoCopiar'
 import { matrizQr } from '../lib/qr'
-
-const TIPOS = [
-  { valor: 'TOTEM', label: 'Totem de autoatendimento' },
-  { valor: 'TV_INDOOR', label: 'TV da loja (indoor)' },
-]
-const TIPO_CURTO = { TOTEM: 'TOTEM', TV_INDOOR: 'TV' }
 
 const erroDe = (e, fallback) => {
   const d = e?.response?.data
@@ -81,7 +85,6 @@ export default function Aparelhos() {
   const [carregando, setCarregando] = useState(true)
   const [toast, setToast] = useState(null)
   const [nome, setNome] = useState('')
-  const [tipo, setTipo] = useState('TOTEM')
   const [criando, setCriando] = useState(false)
   // Código de pareamento em cartaz: { aparelhoId, nome, codigo, expiraEm, urlDispositivo }
   const [pareamento, setPareamento] = useState(null)
@@ -95,7 +98,10 @@ export default function Aparelhos() {
 
   function carregar(silencioso = false) {
     if (!silencioso) setCarregando(true)
-    api.get('/aparelhos')
+    // O filtro vai no SERVIDOR, não numa peneira aqui: pedir a lista inteira e esconder
+    // metade dela na tela é como um aparelho de outro canal reaparece num contador, num
+    // "nenhum resultado" errado ou numa ação em lote.
+    api.get('/aparelhos', { params: { tipo: 'TOTEM' } })
       .then((r) => setLista(Array.isArray(r.data?.aparelhos) ? r.data.aparelhos : []))
       .catch((e) => { if (!silencioso) notify(erroDe(e, 'Não foi possível carregar os aparelhos.'), 'error') })
       .finally(() => setCarregando(false))
@@ -117,7 +123,7 @@ export default function Aparelhos() {
     if (!n || criando) return
     setCriando(true)
     try {
-      await api.post('/aparelhos', { nome: n, tipo })
+      await api.post('/aparelhos', { nome: n, tipo: 'TOTEM' })
       setNome('')
       notify('Aparelho criado. Agora use "Parear" para gerar o código do tablet.')
       carregar(true)
@@ -179,11 +185,11 @@ export default function Aparelhos() {
     <div>
       <div className="page-header">
         <div>
-          <h1>Aparelhos</h1>
+          <h1>Gestão de totens</h1>
           <div className="page-header-sub">
-            Tablets da loja: o <strong>totem de autoatendimento</strong> e a <strong>TV indoor</strong>.
-            Cada aparelho é conectado uma única vez, digitando no tablet um código de 6 dígitos gerado aqui —
-            não existe link secreto para vazar. Perdeu o tablet? <strong>Revogue</strong> e ele para na hora.
+            Os tablets que rodam o <strong>totem de autoatendimento</strong>. Cada um é conectado uma única vez,
+            digitando no tablet um código de 6 dígitos gerado aqui — não existe link secreto para vazar.
+            Perdeu o tablet? <strong>Revogue</strong> e ele para na hora.
           </div>
         </div>
       </div>
@@ -202,12 +208,6 @@ export default function Aparelhos() {
               value={nome}
               onChange={(e) => setNome(e.target.value)}
             />
-          </div>
-          <div className="form-group" style={{ margin: 0, flex: '0 1 220px' }}>
-            <label className="form-label" htmlFor="apr-tipo">Tipo</label>
-            <select id="apr-tipo" className="form-input" value={tipo} onChange={(e) => setTipo(e.target.value)}>
-              {TIPOS.map((t) => <option key={t.valor} value={t.valor}>{t.label}</option>)}
-            </select>
           </div>
           <button type="submit" className="btn btn-primary" disabled={criando || !nome.trim()}>
             {criando ? 'Criando…' : 'Criar aparelho'}
@@ -273,8 +273,10 @@ export default function Aparelhos() {
                   <tr key={ap.id} className={ap.ativo ? undefined : 'apr-linha-off'}>
                     <td>
                       <div className="apr-nome">{ap.nome}</div>
+                      {/* Sem selo de tipo: numa tela chamada "Gestão de totens", um selo
+                          "TOTEM" em toda linha não informa nada e disputa espaço com o
+                          selo que importa — o de desativado. */}
                       <div className="apr-meta">
-                        <span className={'badge ' + (ap.tipo === 'TOTEM' ? 'badge-orange' : 'badge-purple')}>{TIPO_CURTO[ap.tipo] ?? ap.tipo}</span>
                         {!ap.ativo && <span className="badge badge-gray">Desativado</span>}
                         <span className="apr-meta-txt">criado em {dataHora(ap.criadoEm)}</span>
                       </div>
