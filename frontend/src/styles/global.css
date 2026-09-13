@@ -3388,6 +3388,12 @@ body.theme-dark .apr-contagem, body.theme-dark .apr-qr-legenda, body.theme-dark 
 .ttm-banner-campos { flex: 1 1 320px; min-width: 280px; }
 .ttm-banner-datas { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
 .ttm-banner-rodape { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
+/* Campo obrigatório e o que falta nele. O asterisco marca ANTES de o gestor tentar; a
+   mensagem aparece DEPOIS, no lugar da dica, e some assim que ele digita. */
+.ttm-obrigatorio { color: #dc2626; font-weight: 700; }
+.ttm-erro-campo { font-size: 12px; color: #b91c1c; margin-top: 6px; line-height: 1.4; }
+.form-input.invalido { border-color: #dc2626; }
+.form-input.invalido:focus { outline-color: #dc2626; }
 /* Código técnico do servidor (ITEM_AUSENTE, GRUPO_SEM_OPCOES…) na tela do admin: ele
    acompanha a frase humana, nunca a substitui — por isso pequeno, monoespaçado e apagado. */
 .ttm-codigo {

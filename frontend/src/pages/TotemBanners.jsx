@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import api from '../services/api'
 import Toast from '../components/Toast'
@@ -264,20 +264,47 @@ export default function TotemBanners() {
 // ── Editor ─────────────────────────────────────────────────────────────────
 function Editor({ valor, limites, ocupado, aoFechar, aoSalvar, aoAvisar }) {
   const [form, setForm] = useState(valor)
-  const campo = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+  // O que FALTA, por campo. Só aparece depois de tentar salvar: cobrar um campo que o
+  // gestor ainda nem chegou a preencher é ruído, não ajuda.
+  const [faltando, setFaltando] = useState({})
+  const nomeRef = useRef(null)
   const medida = limites?.medidas?.[form.tipo] ?? { largura: 1080, altura: 1920 }
+
+  // Digitar limpa o aviso daquele campo na hora. Erro que fica na tela depois de
+  // corrigido ensina o gestor a ignorar aviso.
+  const campo = (k) => (e) => {
+    setForm((f) => ({ ...f, [k]: e.target.value }))
+    setFaltando((x) => (x[k] ? { ...x, [k]: null } : x))
+  }
 
   async function escolherArquivo(arquivo) {
     if (!arquivo) return
     try {
       const dataUrl = await reduzirImagem(arquivo, form.tipo === 'CAPA' ? 1080 : 1920)
       setForm((f) => ({ ...f, imagem: dataUrl, previa: dataUrl }))
+      setFaltando((x) => (x.imagem ? { ...x, imagem: null } : x))
     } catch {
       aoAvisar('Não foi possível ler esse arquivo. Use PNG, JPG ou WEBP.')
     }
   }
 
-  const podeSalvar = form.nome.trim() && (form.id || form.imagem) && !ocupado
+  /* O botão NÃO fica desabilitado por falta de preenchimento.
+
+     Desabilitado é o pior estado possível aqui: o gestor aperta, nada acontece, e a tela
+     não diz o que está errado nem onde. Ele fica enabled, e quem recusa é esta função —
+     que aponta o campo, escreve o que falta e leva o cursor até lá. */
+  function tentarSalvar() {
+    if (ocupado) return
+    const erros = {}
+    if (!String(form.nome ?? '').trim()) erros.nome = 'Dê um nome para achar esta arte na lista.'
+    if (!form.id && !form.imagem) erros.imagem = 'Escolha a imagem que vai aparecer no totem.'
+    if (Object.keys(erros).length) {
+      setFaltando(erros)
+      if (erros.nome) nomeRef.current?.focus()
+      return
+    }
+    aoSalvar(form)
+  }
 
   return (
     // Modal fecha só por botão — regra do projeto. Clique no fundo não descarta trabalho.
@@ -295,14 +322,39 @@ function Editor({ valor, limites, ocupado, aoFechar, aoSalvar, aoAvisar }) {
 
           <div className="ttm-banner-campos">
             <div className="form-group">
-              <label className="form-label" htmlFor="bn-nome">Nome</label>
-              <input id="bn-nome" className="form-input" maxLength={60} value={form.nome} onChange={campo('nome')} placeholder="Ex.: Combo de terça" />
-              <div className="ttm-dica">Só para você se achar na lista. O cliente não vê.</div>
+              <label className="form-label" htmlFor="bn-nome">
+                Nome <span className="ttm-obrigatorio" aria-hidden="true">*</span>
+              </label>
+              <input
+                id="bn-nome"
+                ref={nomeRef}
+                className={'form-input' + (faltando.nome ? ' invalido' : '')}
+                maxLength={60}
+                value={form.nome}
+                onChange={campo('nome')}
+                placeholder="Ex.: Combo de terça"
+                aria-required="true"
+                aria-invalid={faltando.nome ? 'true' : undefined}
+                aria-describedby={faltando.nome ? 'bn-nome-erro' : undefined}
+              />
+              {faltando.nome
+                ? <div id="bn-nome-erro" className="ttm-erro-campo" role="alert">{faltando.nome}</div>
+                : <div className="ttm-dica">Só para você se achar na lista. O cliente não vê.</div>}
             </div>
 
             <div className="form-group">
-              <label className="form-label" htmlFor="bn-img">Imagem</label>
-              <input id="bn-img" type="file" className="form-input" accept="image/png,image/jpeg,image/webp" onChange={(e) => escolherArquivo(e.target.files?.[0])} />
+              <label className="form-label" htmlFor="bn-img">
+                Imagem {!form.id && <span className="ttm-obrigatorio" aria-hidden="true">*</span>}
+              </label>
+              <input
+                id="bn-img"
+                type="file"
+                className={'form-input' + (faltando.imagem ? ' invalido' : '')}
+                accept="image/png,image/jpeg,image/webp"
+                aria-invalid={faltando.imagem ? 'true' : undefined}
+                onChange={(e) => escolherArquivo(e.target.files?.[0])}
+              />
+              {faltando.imagem ? <div className="ttm-erro-campo" role="alert">{faltando.imagem}</div> : null}
               <div className="ttm-dica">
                 Recomendado: <strong>{medida.largura} × {medida.altura} px</strong>{' '}
                 {form.tipo === 'CAPA' ? '(faixa deitada, o topo do catálogo)' : '(retrato, a tela inteira do totem)'}.
@@ -337,7 +389,8 @@ function Editor({ valor, limites, ocupado, aoFechar, aoSalvar, aoAvisar }) {
         </div>
         <div className="ttm-banner-rodape">
           <button type="button" className="btn btn-secondary" onClick={aoFechar} disabled={ocupado}>Cancelar</button>
-          <button type="button" className="btn btn-primary" onClick={() => aoSalvar(form)} disabled={!podeSalvar}>
+          {/* Só desabilita enquanto SALVA — nunca por falta de preenchimento. */}
+          <button type="button" className="btn btn-primary" onClick={tentarSalvar} disabled={ocupado}>
             {ocupado ? 'Salvando…' : 'Salvar'}
           </button>
         </div>
