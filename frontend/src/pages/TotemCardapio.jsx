@@ -1,4 +1,15 @@
-// Loja Digital › Totem › Apresentação (spec §8) — quem decide o que o cliente vê no totem.
+// Loja Digital › Totem › Cardápio (spec §8) — quem decide o que o cliente vê no totem.
+//
+// A DIVISÃO DE PODER, que é a coisa mais importante desta tela: o Cardápio Web continua
+// sendo a fonte de verdade COMERCIAL — itens, preços, disponibilidade, ordem, foto,
+// descrição. Nada disso se edita aqui, e mudar qualquer uma dessas coisas continua sendo
+// no CW. O PDV guarda apenas as EXCEÇÕES DE APRESENTAÇÃO deste canal: como um item aparece
+// (vitrine) e com que nome uma categoria é chamada no vidro do totem. Duas linhas de
+// exceção por empresa, em `TotemApresentacao` e `TotemCategoria`, e nada além disso.
+//
+// A tela chamava-se "Apresentação" e mora em `/totem/cardapio` desde a reorganização da
+// Loja Digital em suíte de canais. `/totem/apresentacao` continua respondendo, por
+// redirect: favorito de navegador não pode virar 404.
 //
 // A ideia em uma frase: alguns itens do Cardápio Web são, na verdade, uma VITRINE. O item
 // "TRADICIONAIS 🍔" custa R$ 0,00 e existe só para segurar um grupo "escolha 1 de 1" com
@@ -62,7 +73,7 @@ const regraDoGrupo = (g) => {
   return `${g.choiceType ?? '—'} · ${g.min}–${max} · ${g.nOpcoes} ${g.nOpcoes === 1 ? 'opção' : 'opções'}`
 }
 
-export default function TotemApresentacao() {
+export default function TotemCardapio() {
   const [dados, setDados] = useState(null)     // { itens, orfas, sugestoes, avisosApresentacao }
   const [carregando, setCarregando] = useState(true)
   const [erroCarga, setErroCarga] = useState(null)
@@ -159,7 +170,12 @@ export default function TotemApresentacao() {
     <div>
       <div className="page-header">
         <div>
-          <h1>Apresentação do totem</h1>
+          <h1>Cardápio do totem</h1>
+          <div className="page-header-sub">
+            Quem manda no cardápio é o <strong>Cardápio Web</strong>: item, preço, foto, disponibilidade e ordem vêm
+            de lá e se editam lá. Aqui ficam só as <strong>exceções de apresentação do totem</strong> — como um item
+            aparece no vidro e com que nome cada categoria é chamada.
+          </div>
           <div className="page-header-sub">
             Alguns itens do cardápio são só uma <strong>capa</strong>: “TRADICIONAIS 🍔” custa R$ 0,00 e guarda nove
             hambúrgueres dentro de um grupo de escolha única. No modo <strong>Vitrine</strong> cada um desses

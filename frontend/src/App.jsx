@@ -48,7 +48,7 @@ import MotoboysConfig from './pages/MotoboysConfig'
 import EscalaMotoboysPublica from './pages/EscalaMotoboysPublica'
 import Aparelhos from './pages/Aparelhos'
 import TotemPedidos from './pages/TotemPedidos'
-import TotemApresentacao from './pages/TotemApresentacao'
+import TotemCardapio from './pages/TotemCardapio'
 import DispositivoPareamento from './pages/DispositivoPareamento'
 
 function TelaCarregando() {
@@ -156,7 +156,7 @@ export default function App() {
             <Route path="totem/pedidos" element={<TotemPedidos />} />
             <Route path="totem/configuracoes" element={<EmConstrucao titulo="Configurações do totem" descricao="Em breve." />} />
             <Route path="totem/aparelhos" element={<Aparelhos />} />
-            <Route path="totem/cardapio" element={<TotemApresentacao />} />
+            <Route path="totem/cardapio" element={<TotemCardapio />} />
             <Route path="totem/aparencia" element={<Navigate to="/totem/aparencia/personalizacao" replace />} />
             <Route path="totem/aparencia/:aba" element={<EmConstrucao titulo="Aparência do totem" descricao="Em breve." />} />
             <Route path="totem/pagamentos" element={<EmConstrucao titulo="Formas de pagamento" descricao="Em breve." />} />
