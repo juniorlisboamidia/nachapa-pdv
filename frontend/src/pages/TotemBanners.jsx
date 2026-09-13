@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useParams } from 'react-router-dom'
 import api from '../services/api'
 import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -32,9 +33,13 @@ const STATUS = {
 }
 
 const TIPOS = [
-  { id: 'CAPA', rotulo: 'Capa', ondeAparece: 'A faixa no topo do catálogo, enquanto o cliente escolhe.' },
-  { id: 'ESPERA', rotulo: 'Tela de espera', ondeAparece: 'A tela inteira, com o totem parado no vidro.' },
+  { id: 'CAPA', rota: 'capa', rotulo: 'Capa', ondeAparece: 'A faixa no topo do catálogo, enquanto o cliente escolhe.' },
+  { id: 'ESPERA', rota: 'espera', rotulo: 'Tela de espera', ondeAparece: 'A tela inteira, com o totem parado no vidro.' },
 ]
+
+/* O tipo vem da URL, e a URL vem da SIDEBAR. Endereço torto cai na capa em vez de mostrar
+   uma lista vazia — a mesma tolerância que o resto do totem tem com dado de fora. */
+const tipoDaRota = (r) => TIPOS.find((t) => t.rota === String(r ?? '').toLowerCase())?.id ?? 'CAPA'
 
 const erroDe = (e, fallback) => {
   const erros = e?.response?.data?.erros
@@ -64,7 +69,8 @@ export default function TotemBanners() {
   const [ocupado, setOcupado] = useState(false)
   const [editando, setEditando] = useState(null)   // { id? , tipo, nome, duracaoSegundos, ... }
   const [excluindo, setExcluindo] = useState(null)
-  const [aba, setAba] = useState('CAPA')
+  const { tipo: tipoRota } = useParams()
+  const aba = tipoDaRota(tipoRota)
 
   const buscar = useCallback(() => api.get('/totem/banners')
     .then((r) => {
@@ -150,30 +156,16 @@ export default function TotemBanners() {
     <>
       <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />
 
+      {/* Sem seletor aqui dentro: quem escolhe entre Capa e Tela de espera é a SIDEBAR,
+          no mesmo drill que o resto do PDV usa. Um seletor na página duplicaria a
+          navegação que já existe ao lado. */}
       <div className="page-header">
         <div>
-          <h1>Banners do totem</h1>
+          <h1>{aba === 'CAPA' ? 'Capa do catálogo' : 'Banners da tela de espera'}</h1>
           <div className="page-header-sub">
-            A arte que o totem mostra ao cliente — na faixa do topo enquanto ele escolhe, e na tela inteira enquanto ninguém está usando.
+            {TIPOS.find((t) => t.id === aba)?.ondeAparece}
           </div>
         </div>
-      </div>
-
-      {/* FILTRO, e não aba: é uma lista só, vista por recorte. O padrão de filtro do PDV
-          (`ttm-filtros` + `ttm-seg-on`) é o mesmo do Cardápio do totem — abas criariam um
-          segundo sistema de navegação dentro de uma página que já tem o dela na sidebar. */}
-      <div className="ttm-filtros" role="group" aria-label="Onde a arte aparece">
-        {TIPOS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            className={'btn btn-secondary' + (t.id === aba ? ' ttm-seg-on' : '')}
-            aria-pressed={t.id === aba}
-            onClick={() => setAba(t.id)}
-          >
-            {t.rotulo} ({lista.filter((b) => b.tipo === t.id).length})
-          </button>
-        ))}
       </div>
 
       <div className="table-card" style={{ padding: 16, marginBottom: 16 }}>

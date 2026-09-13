@@ -142,12 +142,18 @@ export const grupos = [
           { to: '/totem/configuracoes', label: 'Configurações', icon: 'config' },
           { to: '/totem/aparelhos', label: 'Gestão de totens', icon: 'cpu' },
           { to: '/totem/cardapio', label: 'Cardápio', icon: 'ficha' },
-          // Duas FOLHAS, e não uma com abas dentro. Aba dentro de página cria um segundo
-          // sistema de navegação: o operador passa a ter de lembrar se o que ele procura
-          // está na sidebar ou numa aba lá dentro. O PDV inteiro resolve profundidade com
-          // subcategoria, e aqui não é exceção.
+          // Nada de abas dentro de página: aba cria um segundo sistema de navegação, e o
+          // operador passa a ter de lembrar se o que procura está na sidebar ou lá dentro.
+          // O PDV resolve profundidade com subcategoria, e Banners tem DOIS lugares —
+          // então ele é subgrupo, e abre os dois no mesmo drill de sempre.
           { to: '/totem/personalizacao', label: 'Personalização', icon: 'star' },
-          { to: '/totem/banners', label: 'Banners', icon: 'marketing' },
+          {
+            label: 'Banners', icon: 'marketing',
+            itens: [
+              { to: '/totem/banners/capa', label: 'Capa' },
+              { to: '/totem/banners/espera', label: 'Tela de espera' },
+            ],
+          },
           { to: '/totem/pagamentos', label: 'Formas de pagamento', icon: 'financeiro' },
         ],
       },
@@ -180,18 +186,27 @@ export function gruposVisiveis(usuario) {
   return filtrarNos(grupos, new Set(usuario.areas || []), null);
 }
 
-// Casa a rota atual e devolve { grupo, sub } para abrir a sidebar já no nível certo.
+// Casa a rota atual e devolve o CAMINHO até ela, para a sidebar abrir no nível certo.
 const matchLeaf = (it, pathname) => it.to && (it.to === '/' ? pathname === '/' : pathname === it.to || pathname.startsWith(it.to + '/'));
-export function localizarRota(pathname) {
-  for (const g of grupos) {
-    if (!g.itens) continue;
-    for (const it of g.itens) {
-      if (it.itens) {
-        if (it.itens.some((sub) => matchLeaf(sub, pathname))) return { grupo: g.label, sub: it.label };
-      } else if (matchLeaf(it, pathname)) {
-        return { grupo: g.label, sub: null };
-      }
+
+/* Desce a árvore até achar a folha que casa e devolve os rótulos percorridos. Recursivo
+   porque a profundidade é decisão da ÁRVORE, não desta função: enquanto ela sabia contar
+   só até dois, acrescentar um nível ao menu exigia mexer aqui e no componente. */
+function caminhoAte(nos, pathname, acumulado) {
+  for (const n of nos) {
+    if (n.itens) {
+      const achou = caminhoAte(n.itens, pathname, [...acumulado, n.label]);
+      if (achou) return achou;
+    } else if (matchLeaf(n, pathname)) {
+      return acumulado;
     }
   }
-  return { grupo: null, sub: null };
+  return null;
+}
+
+export function localizarRota(pathname) {
+  const caminho = caminhoAte(grupos, pathname, []) ?? [];
+  // `grupo` e `sub` continuam saindo daqui: é o que a Visão Geral e os testes já liam, e
+  // são só os dois primeiros degraus do mesmo caminho.
+  return { caminho, grupo: caminho[0] ?? null, sub: caminho[1] ?? null };
 }

@@ -161,7 +161,8 @@ export default function App() {
             <Route path="totem/aparelhos" element={<Aparelhos />} />
             <Route path="totem/cardapio" element={<TotemCardapio />} />
             <Route path="totem/personalizacao" element={<TotemPersonalizacao />} />
-            <Route path="totem/banners" element={<TotemBanners />} />
+            <Route path="totem/banners" element={<Navigate to="/totem/banners/capa" replace />} />
+            <Route path="totem/banners/:tipo" element={<TotemBanners />} />
             <Route path="totem/pagamentos" element={<EmConstrucao titulo="Formas de pagamento" descricao="Em breve." />} />
             <Route path="tv-indoor" element={<EmConstrucao titulo="TV Indoor" descricao="Em breve." />} />
             {/* Compatibilidade: os endereços antigos continuam abrindo o lugar novo. Link
@@ -170,7 +171,7 @@ export default function App() {
             <Route path="totem/apresentacao" element={<Navigate to="/totem/cardapio" replace />} />
             <Route path="totem/aparencia" element={<Navigate to="/totem/personalizacao" replace />} />
             <Route path="totem/aparencia/personalizacao" element={<Navigate to="/totem/personalizacao" replace />} />
-            <Route path="totem/aparencia/banners" element={<Navigate to="/totem/banners" replace />} />
+            <Route path="totem/aparencia/banners" element={<Navigate to="/totem/banners/capa" replace />} />
             {/* Marketing › Grupo VIP (Automações virou Marketing; rota antiga redireciona) */}
             <Route path="marketing/grupo-vip" element={<GrupoVip />} />
             <Route path="automacoes/grupo-vip" element={<Navigate to="/marketing/grupo-vip" replace />} />
