@@ -172,10 +172,16 @@ export function projetarProduto(item, grupo, opcao) {
     id: `opcao:${it.id}:${g.id}:${op.id}`,
     tipo: 'OPCAO_PRINCIPAL',
     nome: op.nome ?? null,
-    // Identidade apresentada é a da OPÇÃO; imagem/descrição caem para a do item quando a
-    // opção não tem (é o caso de "HMB DOG") e para `null` quando nem o item tem.
+    // Identidade apresentada é a da OPÇÃO. A DESCRIÇÃO cai para a do item quando a opção
+    // não tem — texto genérico do grupo ainda descreve o produto, e é melhor que vazio.
+    //
+    // A FOTO, não. Opção sem foto mostra o marcador de "sem imagem", nunca a do item base.
+    // O item base numa vitrine é a CAPA do grupo — "ARTESANAIS 🍔" é uma arte com três
+    // hambúrgueres —, e carimbá-la num produto que não tem foto própria não é degradar
+    // com elegância: é dizer ao cliente que o HMB PICANTE se parece com aquilo. Foto de
+    // comida é promessa, e o totem não inventa promessa que a loja não fez.
     descricao: op.descricao ?? it.descricao ?? null,
-    imagem: op.imagem ?? it.imagem ?? null,
+    imagem: op.imagem ?? null,
     preco,
     // A promoção é do ITEM BASE (o CW não promove opção): a opção soma por cima dela.
     ...(temPromo ? { precoPromocional } : {}),

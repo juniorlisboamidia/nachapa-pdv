@@ -1025,13 +1025,39 @@ test('projetarCatalogo: DOGS — opção sem imagem cai para a do item (que aqui
   assert.equal(hmb.descricao, 'Salsicha, carne moída e purê de batata');
 });
 
-test('projetarCatalogo: imagem do ITEM entra quando a opção não tem', () => {
-  // CHEDDAR BACON da QUINTA é a única opção sem foto num item… que também não tem foto.
-  // Aqui a variante dá foto ao item para provar o degrau do meio da regra.
+test('🔴 projetarCatalogo: a foto do ITEM NÃO entra quando a opção não tem', () => {
+  // A regra era o contrário e foi revertida com a tela na frente: o item base de uma
+  // vitrine é a CAPA do grupo, e carimbá-la num produto sem foto própria diz ao cliente
+  // que aquele produto se parece com a arte da capa. Foto de comida é promessa.
   const cat = variando((c) => { itemDe(c, CAT_DOGS, IT_DOGS).imagem = `${CDN_ITEM}${IT_DOGS}/capa-dogs.jpg`; });
   const { catalogo: projetado } = projetarCatalogo(cat, [cfg(IT_DOGS, G_DOGS)]);
   const hmb = categoriaDe(projetado, CAT_DOGS).produtos.find((p) => p.origem.opcaoId === OP_HMB_DOG);
-  assert.equal(hmb.imagem, `${CDN_ITEM}${IT_DOGS}/capa-dogs.jpg`);
+  assert.equal(hmb.imagem, null, 'sem foto própria é marcador de sem-imagem, não a capa do item');
+  // A DESCRIÇÃO continua caindo para a do item: texto genérico do grupo ainda descreve o
+  // produto, e some com o vazio sem prometer nada. A distinção é o ponto do teste.
+  const semDesc = variando((c) => {
+    itemDe(c, CAT_DOGS, IT_DOGS).imagem = `${CDN_ITEM}${IT_DOGS}/capa-dogs.jpg`;
+    itemDe(c, CAT_DOGS, IT_DOGS).descricao = 'Dogs da casa';
+    const grupo = itemDe(c, CAT_DOGS, IT_DOGS).grupos.find((g) => g.id === G_DOGS);
+    grupo.opcoes.find((o) => o.id === OP_HMB_DOG).descricao = null;
+  });
+  const { catalogo: proj2 } = projetarCatalogo(semDesc, [cfg(IT_DOGS, G_DOGS)]);
+  const hmb2 = categoriaDe(proj2, CAT_DOGS).produtos.find((p) => p.origem.opcaoId === OP_HMB_DOG);
+  assert.equal(hmb2.imagem, null);
+  assert.equal(hmb2.descricao, 'Dogs da casa');
+});
+
+test('🔴 projetarCatalogo: HMB PICANTE de ARTESANAIS — o caso real que gerou a regra', () => {
+  // No CW, "HMB PICANTE" não tem foto e o item base "ARTESANAIS 🍔" tem: uma arte com três
+  // hambúrgueres. No totem o card dele aparecia com essa arte, como se fosse o produto.
+  const { catalogo: projetado } = projetarCatalogo(catalogo(), [cfg(IT_ARTESANAIS, G_ARTESANAIS)]);
+  const picante = categoriaDe(projetado, CAT_ARTESANAIS).produtos.find((p) => p.nome === 'HMB PICANTE');
+  assert.ok(picante, 'o produto continua na vitrine — o que sai é a foto emprestada, não ele');
+  assert.equal(picante.imagem, null);
+  assert.ok(itemDe(catalogo(), CAT_ARTESANAIS, IT_ARTESANAIS).imagem, 'o item base TEM foto — é ela que não pode vazar');
+  // Os vizinhos com foto própria seguem intactos.
+  const bacon = categoriaDe(projetado, CAT_ARTESANAIS).produtos.find((p) => p.nome === 'HMB BACON');
+  assert.ok(bacon.imagem && bacon.imagem !== itemDe(catalogo(), CAT_ARTESANAIS, IT_ARTESANAIS).imagem);
 });
 
 test('projetarCatalogo: opção MISSING vira produto MISSING (as outras seguem ACTIVE)', () => {
