@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { itemOrdenavel, precoDoCard } from '../totemCarrinho'
-import { categoriaPorRolagem } from '../totemFoco'
+import { categoriaPorRolagem, janelaDeRolagem, progressoNaSecao } from '../totemFoco'
 import SidebarCategorias from './SidebarCategorias'
 import CardProduto from './CardProduto'
 
@@ -21,6 +21,7 @@ import CardProduto from './CardProduto'
 // sempre foi. Nenhum cliente fica sem cardápio por causa de apresentação.
 export default function TelaCatalogo({ categorias, categoriaId, aoTrocarCategoria, aoAbrirProduto, aoAbrirItem }) {
   const rolagemRef = useRef(null)
+  const ladoRef = useRef(null)
   const secoesRef = useRef(new Map())
   // Quem pediu a última troca. Sem isto o efeito que rola até a categoria
   // responderia ao próprio destaque que a rolagem acabou de produzir, e a tela
@@ -57,12 +58,28 @@ export default function TelaCatalogo({ categorias, categoriaId, aoTrocarCategori
       quadroRef.current = 0
       const cont = rolagemRef.current
       if (!cont || Date.now() < navegandoAteRef.current) return
-      const id = categoriaPorRolagem({
-        secoes: medirSecoes(),
+      const secoes = medirSecoes()
+      const medida = {
         scrollAtual: cont.scrollTop,
         alturaVisivel: cont.clientHeight,
         alturaTotal: cont.scrollHeight,
-      })
+      }
+
+      // O INDICADOR DE POSIÇÃO vai por CSS, não por estado. Marcar estado a cada quadro
+      // de rolagem redesenharia noventa cards para mover um risco de 4px — as duas
+      // variáveis são escritas direto no nó da sidebar, que é a única coisa que muda.
+      const lado = ladoRef.current
+      if (lado) {
+        const janela = janelaDeRolagem(medida)
+        lado.style.setProperty('--tq-prog-i', String(janela.inicio))
+        lado.style.setProperty('--tq-prog-f', String(janela.fracao))
+        const atual = secoes.find((s) => String(s.id) === String(categoriaId))
+        const proxima = atual ? secoes.find((s) => s.topo > atual.topo) : null
+        const altura = atual ? (proxima ? proxima.topo - atual.topo : medida.alturaTotal - atual.topo) : 0
+        lado.style.setProperty('--tq-cat-prog', String(progressoNaSecao({ ...medida, topo: atual?.topo ?? 0, altura })))
+      }
+
+      const id = categoriaPorRolagem({ secoes, ...medida })
       if (id == null || String(id) === String(categoriaId)) return
       daRolagemRef.current = String(id)
       aoTrocarCategoria(id)
@@ -119,7 +136,7 @@ export default function TelaCatalogo({ categorias, categoriaId, aoTrocarCategori
 
   return (
     <div className="tq-corpo">
-      <SidebarCategorias categorias={comConteudo} categoriaId={categoriaId} aoTrocar={aoTrocarCategoria} />
+      <SidebarCategorias ref={ladoRef} categorias={comConteudo} categoriaId={categoriaId} aoTrocar={aoTrocarCategoria} />
       <div className="tq-conteudo" ref={rolagemRef}>
         {comConteudo.map((categoria) => (
           <section

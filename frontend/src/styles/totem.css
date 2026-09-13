@@ -432,8 +432,12 @@
    quando sobra: passando de dez categorias elas voltam à altura mínima e a
    coluna rola como antes. */
 @media (min-width: 900px) {
-  .tq-lado-rolagem { display: flex; flex-direction: column; }
-  .tq-cat { flex: 1 0 auto; }
+  /* As linhas crescem para preencher a coluna, mas com TETO: sem ele, dez categorias
+     viravam dez blocos de 170px com 19px de texto perdido no meio de cada um — a coluna
+     ficava alta e vazia ao mesmo tempo. O que sobra depois do teto se distribui em cima e
+     embaixo, e a lista passa a ter ritmo em vez de esticão. */
+  .tq-lado-rolagem { display: flex; flex-direction: column; justify-content: center; }
+  .tq-cat { flex: 1 0 auto; max-height: clamp(92px, 8.2vh, 136px); }
 }
 .tq-lado-rolagem::-webkit-scrollbar { display: none; }
 /* Aviso de que a lista continua — sem depender de barra de rolagem, que o
@@ -1244,3 +1248,41 @@
 }
 
 /* Cancelar pedido pede confirmação: o segundo toque é que apaga. */
+
+/* ── Sidebar: indicador de posição no catálogo ─────────────────────────────
+   O tablet não desenha barra de rolagem, e numa lista contínua de noventa cards isso
+   deixava o cliente sem nenhuma pista de "quanto falta". São dois sinais, e cada um
+   responde uma pergunta diferente:
+
+     · o TRILHO, na borda que encosta na grade, diz onde a janela visível está no
+       catálogo INTEIRO;
+     · a BARRA dentro da pastilha ativa diz o quanto daquela CATEGORIA já passou.
+
+   As duas frações chegam por variável CSS, escritas direto no nó a cada quadro de
+   rolagem — nenhum estado do React se move para desenhar isto. E as duas usam
+   `transform`, que não provoca layout. */
+.tq-lado-trilho {
+  position: absolute; top: 12px; bottom: 12px; right: 0; width: 3px;
+  border-radius: 3px; background: rgba(255, 255, 255, 0.07);
+  overflow: hidden; pointer-events: none;
+}
+.tq-lado-polegar {
+  display: block; width: 100%; height: 100%;
+  border-radius: inherit; background: var(--tq-amarelo);
+  transform-origin: top;
+  transform: translateY(calc(var(--tq-prog-i, 0) * 100%)) scaleY(var(--tq-prog-f, 1));
+}
+/* Progresso DENTRO da categoria ativa: um traço na base da pastilha, em tinta sobre o
+   dourado. Não é decoração — é a resposta de "estou no começo ou no fim dos artesanais".
+   Some quando não há o que medir. */
+.tq-cat[aria-current='true'] { position: relative; overflow: hidden; }
+.tq-cat[aria-current='true']::after {
+  content: ''; position: absolute; left: 16px; right: 16px; bottom: 10px; height: 3px;
+  border-radius: 3px; background: var(--tq-tinta); opacity: 0.28;
+  transform-origin: left; transform: scaleX(var(--tq-cat-prog, 0));
+}
+/* Movimento é informação aqui, então ele fica. O que sai com `reduced-motion` é a
+   suavização: o indicador passa a saltar em vez de deslizar. */
+@media (prefers-reduced-motion: no-preference) {
+  .tq-lado-polegar, .tq-cat[aria-current='true']::after { transition: transform 0.18s ease-out; }
+}

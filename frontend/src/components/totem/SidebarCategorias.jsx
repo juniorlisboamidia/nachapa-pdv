@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useRef, useState } from 'react'
 import CategoriaNome from './CategoriaNome'
 
 // Categorias fixas à esquerda. É o espelho de `catalogo.categorias` do bootstrap,
@@ -12,7 +12,9 @@ import CategoriaNome from './CategoriaNome'
 // O NOME, porém, a loja controla: `nomeExibido` vem de Totem › Apresentação e é
 // o que resolve o emoji cadastrado para o cardápio digital, que aqui só rouba
 // caractere de uma coluna estreita.
-export default function SidebarCategorias({ categorias, categoriaId, aoTrocar }) {
+// `forwardRef` porque o nó da coluna é onde o catálogo escreve as variáveis do indicador
+// de posição — e ele as escreve a cada quadro de rolagem, sem passar por estado.
+const SidebarCategorias = forwardRef(function SidebarCategorias({ categorias, categoriaId, aoTrocar }, ladoRef) {
   const rolagemRef = useRef(null)
   const ativoRef = useRef(null)
   const [temMais, setTemMais] = useState(false)
@@ -50,7 +52,7 @@ export default function SidebarCategorias({ categorias, categoriaId, aoTrocar })
   }, [categoriaId])
 
   return (
-    <nav className="tq-lado" aria-label="Categorias">
+    <nav className="tq-lado" aria-label="Categorias" ref={ladoRef}>
       <div className="tq-lado-rolagem" ref={rolagemRef}>
         {categorias.map((c) => {
           const ativa = String(c.id) === String(categoriaId)
@@ -71,6 +73,16 @@ export default function SidebarCategorias({ categorias, categoriaId, aoTrocar })
         })}
       </div>
       {temMais ? <div className="tq-lado-fade" aria-hidden="true" /> : null}
+
+      {/* ONDE O CLIENTE ESTÁ. O tablet não desenha barra de rolagem, então num cardápio
+          contínuo de noventa cards não havia nenhuma pista de posição: dava para rolar
+          minutos sem saber quanto faltava. O polegar mostra a janela visível sobre o
+          catálogo inteiro; a barra dentro da categoria ativa mostra o quanto DELA já
+          passou. `aria-hidden` porque é reforço visual — quem usa leitor de tela já tem o
+          `aria-current` dizendo onde está. */}
+      <div className="tq-lado-trilho" aria-hidden="true"><span className="tq-lado-polegar" /></div>
     </nav>
   )
-}
+})
+
+export default SidebarCategorias

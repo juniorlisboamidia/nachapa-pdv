@@ -120,3 +120,38 @@ export function categoriaPorRolagem({
   }
   return atual
 }
+
+/* ── ONDE O CLIENTE ESTÁ NO CATÁLOGO ────────────────────────────────────────────────
+   Com rolagem contínua, saber a CATEGORIA ativa responde metade da pergunta. A outra
+   metade — "quanto falta" e "onde estou dentro desta" — o totem não respondia: o tablet
+   não desenha barra de rolagem, então não há nenhuma pista de posição na tela.
+
+   As duas funções abaixo produzem frações 0–1 que viram indicador na sidebar. Puras e
+   sem DOM: quem mede é a tela, quem calcula é aqui. */
+
+/* A janela visível sobre o catálogo inteiro: onde ela começa e que fatia ela cobre.
+
+   `minimo` existe porque num cardápio de noventa cards a janela é ~4% do total, e um
+   polegar de 4% da altura da coluna é um risco de 20px que ninguém enxerga a um metro.
+   Ele passa a ocupar o mínimo legível — o indicador vira posição, não medida exata. */
+export function janelaDeRolagem({ scrollAtual = 0, alturaVisivel = 0, alturaTotal = 0, minimo = 0.08 } = {}) {
+  const total = Number(alturaTotal) || 0
+  const visivel = Number(alturaVisivel) || 0
+  if (total <= 0 || visivel <= 0 || visivel >= total) return { inicio: 0, fracao: 1 }
+  const y = Math.min(Math.max(Number(scrollAtual) || 0, 0), total - visivel)
+  const fracao = Math.min(1, Math.max(minimo, visivel / total))
+  // O início é reescalado para a fração ampliada não estourar o fim da trilha.
+  const inicio = (y / (total - visivel)) * (1 - fracao)
+  return { inicio, fracao }
+}
+
+/* Quanto da seção ATUAL já passou, de 0 a 1.
+
+   Conta pela borda de baixo da janela: o cliente "terminou" a categoria quando o último
+   card dela sai por cima, não quando o primeiro entra. */
+export function progressoNaSecao({ topo = 0, altura = 0, scrollAtual = 0, alturaVisivel = 0 } = {}) {
+  const h = Number(altura) || 0
+  if (h <= 0) return 0
+  const percorrido = (Number(scrollAtual) || 0) + (Number(alturaVisivel) || 0) - (Number(topo) || 0)
+  return Math.min(1, Math.max(0, percorrido / h))
+}

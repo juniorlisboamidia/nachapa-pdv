@@ -169,3 +169,49 @@ test('categoriaPorRolagem: entrada torta não derruba a sidebar', () => {
      continua pela linha. */
   assert.equal(categoriaPorRolagem({ secoes: SECOES, scrollAtual: 1200 }), 'b')
 })
+
+// ── indicador de posição no catálogo ────────────────────────────────────────
+import { janelaDeRolagem, progressoNaSecao } from './totemFoco.js';
+
+test('a janela: começo no topo, fim no fim', () => {
+  const topo = janelaDeRolagem({ scrollAtual: 0, alturaVisivel: 800, alturaTotal: 4000 });
+  assert.equal(topo.inicio, 0);
+  const fim = janelaDeRolagem({ scrollAtual: 3200, alturaVisivel: 800, alturaTotal: 4000 });
+  assert.equal(Math.round((fim.inicio + fim.fracao) * 1000) / 1000, 1, 'o polegar encosta no fim da trilha');
+});
+
+test('🔴 o polegar nunca some num cardápio longo', () => {
+  // 800 de janela em 20000 de catálogo dá 4% — um risco de 20px que ninguém vê a um metro.
+  const j = janelaDeRolagem({ scrollAtual: 0, alturaVisivel: 800, alturaTotal: 20000 });
+  assert.equal(j.fracao, 0.08, 'o mínimo legível manda');
+  // E mesmo ampliado ele não passa do fim.
+  const noFim = janelaDeRolagem({ scrollAtual: 19200, alturaVisivel: 800, alturaTotal: 20000 });
+  assert.ok(noFim.inicio + noFim.fracao <= 1.0001);
+});
+
+test('conteúdo que cabe na tela: trilha cheia, sem indicador para dar', () => {
+  assert.deepEqual(janelaDeRolagem({ scrollAtual: 0, alturaVisivel: 900, alturaTotal: 900 }), { inicio: 0, fracao: 1 });
+  assert.deepEqual(janelaDeRolagem({}), { inicio: 0, fracao: 1 });
+  assert.deepEqual(janelaDeRolagem(), { inicio: 0, fracao: 1 });
+});
+
+test('rolagem fora dos limites é grampeada', () => {
+  assert.equal(janelaDeRolagem({ scrollAtual: -500, alturaVisivel: 800, alturaTotal: 4000 }).inicio, 0);
+  const alem = janelaDeRolagem({ scrollAtual: 99999, alturaVisivel: 800, alturaTotal: 4000 });
+  assert.equal(Math.round((alem.inicio + alem.fracao) * 1000) / 1000, 1);
+});
+
+test('🔴 progresso na seção conta pela borda de BAIXO da janela', () => {
+  // O cliente terminou a categoria quando o último card dela sai por cima, não quando o
+  // primeiro entra.
+  const s = { topo: 1000, altura: 2000, alturaVisivel: 800 };
+  assert.equal(progressoNaSecao({ ...s, scrollAtual: 200 }), 0, 'seção ainda abaixo da janela');
+  assert.equal(progressoNaSecao({ ...s, scrollAtual: 1200 }), 0.5);
+  assert.equal(progressoNaSecao({ ...s, scrollAtual: 2200 }), 1);
+  assert.equal(progressoNaSecao({ ...s, scrollAtual: 9000 }), 1, 'nunca passa de 1');
+});
+
+test('seção sem altura não gera progresso', () => {
+  assert.equal(progressoNaSecao({ topo: 0, altura: 0, scrollAtual: 100 }), 0);
+  assert.equal(progressoNaSecao(), 0);
+});
