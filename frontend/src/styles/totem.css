@@ -155,7 +155,9 @@
 /* A sidebar cresce com a tela, e só com ela. Em 694px de viewport os 190px de
    antes comiam 27% da largura e espremiam os cards; a partir de 900px ela pode
    ocupar o espaço que o alvo de produção tem de sobra. */
-@media (min-width: 900px) { .tq-raiz { --tq-lado-l: clamp(210px, 21vw, 240px); } }
+/* Mais larga no alvo: em 226px "ACOMPANHAMENTOS" quebrava em duas linhas, e
+   uma coluna de dez categorias vista a um metro precisa de linha inteira. */
+@media (min-width: 900px) { .tq-raiz { --tq-lado-l: clamp(230px, 24vw, 280px); } }
 
 /* RESET COM ESPECIFICIDADE ZERO.
    `:where()` existe aqui por um motivo caro: `.tq-raiz button` tem
@@ -397,6 +399,14 @@
   flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain;
   scrollbar-width: none; padding-bottom: 12px;
 }
+/* No alvo em pé as categorias DIVIDEM a coluna inteira em vez de se empilharem
+   no topo e deixarem dois terços de preto embaixo. `flex-grow` só cresce
+   quando sobra: passando de dez categorias elas voltam à altura mínima e a
+   coluna rola como antes. */
+@media (min-width: 900px) {
+  .tq-lado-rolagem { display: flex; flex-direction: column; }
+  .tq-cat { flex: 1 0 auto; }
+}
 .tq-lado-rolagem::-webkit-scrollbar { display: none; }
 /* Aviso de que a lista continua — sem depender de barra de rolagem, que o
    tablet não mostra. */
@@ -456,25 +466,11 @@
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px; padding: 20px; align-content: start;
 }
-/* No alvo em pé a grade PREENCHE a altura. Com linha de altura fixa e
-   `align-content: start`, uma categoria de quatro produtos deixava metade de
-   uma tela de 1920 em preto — e num totem tela vazia lê como "acabou", não
-   como "role para ver mais". As linhas passam a dividir a altura livre, com
-   PISO para a categoria longa continuar rolando normalmente e TETO no card
-   para uma categoria de um item só não virar pôster. */
-@media (min-width: 900px) {
-  .tq-grade {
-    gap: 24px; padding: 28px;
-    min-height: 100%; align-content: stretch;
-    grid-auto-rows: minmax(520px, 1fr);
-  }
-  .tq-card { max-height: 900px; }
-  /* Quem absorve a sobra é a FOTO. O bloco de texto passa a ter altura
-     natural, e a descrição reserva as duas linhas do clamp para o preço dos
-     cards vizinhos continuar alinhado na mesma base. */
-  .tq-card-txt { flex: 0 0 auto; }
-  .tq-card-desc { min-height: 2.6em; }
-}
+/* Esticar as linhas para encher a altura foi tentado e revertido: com quatro
+   produtos o card virava um pôster de 830px, e o que a maioria das categorias
+   precisa (nove itens) é caber mais produto por tela, não menos. A grade
+   alinha no topo; a sobra de uma categoria curta é conteúdo, não desenho. */
+@media (min-width: 900px) { .tq-grade { gap: 24px; padding: 28px; } }
 @media (min-width: 1500px) { .tq-grade { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 
 /* Modo de emergência: tablet pequeno improvisado. As categorias voltam a ser
@@ -500,6 +496,12 @@
 .tq-card:disabled { cursor: not-allowed; }
 .tq-card:disabled .tq-foto { filter: grayscale(1); opacity: 0.6; }
 .tq-card-txt { flex: 1 1 auto; display: flex; flex-direction: column; gap: 6px; padding: 16px 18px 18px; }
+/* Apertado de propósito no alvo: o respiro que sobrava entre a descrição e o
+   preço não era hierarquia, era altura desperdiçada em cada card da grade. */
+@media (min-width: 900px) {
+  .tq-card-txt { padding: 14px 18px 16px; gap: 4px; }
+  .tq-card-rod { padding-top: 6px; }
+}
 /* Nome de produto em CORPO, não display: Montserrat 900 num nome de três
    palavras vira uma barra preta e rouba a leitura da foto e do preço. O preço
    continua em display — é ele que precisa ancorar o card.
@@ -519,12 +521,10 @@
 
 /* -- Foto ------------------------------------------------------------------ */
 .tq-foto { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--tq-superficie-3); }
-/* No alvo em pé a foto larga a proporção fixa e ESTICA com o card: é ela que
-   absorve a altura que sobra na linha da grade. O piso impede que uma
-   descrição longa a esmague; `cover` continua cuidando do corte. */
-@media (min-width: 900px) {
-  .tq-card .tq-foto { aspect-ratio: auto; flex: 1 1 auto; min-height: 300px; }
-}
+/* No alvo a foto fica DEITADA (3:2). Quadrada, numa coluna de ~385px, ela
+   sozinha comia 385px de altura e empurrava nome e preço para fora do campo de
+   leitura — três produtos por tela em vez de seis. */
+@media (min-width: 900px) { .tq-card .tq-foto { aspect-ratio: 3 / 2; } }
 .tq-foto-vazia { display: grid; place-items: center; color: rgba(255, 255, 255, 0.34); }
 
 /* -- Preço ----------------------------------------------------------------- */
@@ -1004,8 +1004,13 @@
 .tq-sheet {
   width: min(680px, 100%); background: var(--tq-superficie); border-radius: 24px;
   border: 1px solid var(--tq-borda); padding: 32px 28px;
-  display: flex; flex-direction: column; gap: 14px; text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center;
 }
+/* O relógio é um SVG de largura fixa: sem isto ele herda o `stretch` do flex e
+   encosta na borda esquerda enquanto o resto do bloco está centralizado. O
+   botão, esse sim, continua ocupando a largura toda. */
+.tq-sheet > .tq-ico { align-self: center; }
+.tq-sheet .tq-btn { align-self: stretch; }
 .tq-sheet h2 { font-size: clamp(24px, 3.52vw, 38px); }
 .tq-sheet p { color: var(--tq-texto-2); font-size: clamp(16px, 2.04vw, 22px); }
 
