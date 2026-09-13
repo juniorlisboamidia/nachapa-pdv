@@ -203,8 +203,22 @@ export function gruposRenderizaveis(linha) {
 export function nomeApresentado(linha) {
   return linha?.apresentado?.nome ?? linha?.item?.nome ?? null;
 }
+// A FOTO não segue a mesma regra do nome e da descrição, e a diferença é deliberada.
+//
+// Produto de VITRINE (`apresentado` presente): a foto é da opção, e SÓ dela. O item base
+// aqui é a capa do grupo — "ARTESANAIS 🍔" é uma arte com três hambúrgueres —, e herdá-la
+// diria ao cliente que o HMB PICANTE se parece com aquilo. Sem foto própria vale o
+// marcador de sem-imagem, que é honesto. Foto de comida é promessa, e o totem não inventa
+// promessa que a loja não fez.
+//
+// Item NORMAL (sem `apresentado`): a foto do item é a foto DELE mesmo, e continua valendo.
+//
+// Mesma regra da projeção do servidor (`backend/totemApresentacao.js`), e as duas precisam
+// concordar: se o card mostra o marcador e o detalhe mostra a capa em tamanho de hero, o
+// cliente vê a foto emprestada MAIOR do que veria antes.
 export function imagemApresentada(linha) {
-  return linha?.apresentado?.imagem ?? linha?.item?.imagem ?? null;
+  if (linha?.apresentado) return linha.apresentado.imagem ?? null;
+  return linha?.item?.imagem ?? null;
 }
 export function descricaoApresentada(linha) {
   return linha?.apresentado?.descricao ?? linha?.item?.descricao ?? null;

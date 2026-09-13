@@ -532,10 +532,28 @@ test('nome/imagem/descrição apresentados: a opção manda; sem ela, o item bas
   assert.equal(nomeApresentado(semApresentacao), 'TRADICIONAIS 🍔');
   assert.equal(imagemApresentada(semApresentacao), 'capa-tradicionais.jpg');
 
-  // Opção sem foto própria: cai para a do item (o mesmo que o backend faz na projeção).
-  const semFoto = { ...linha, apresentado: { ...linha.apresentado, imagem: null } };
-  assert.equal(imagemApresentada(semFoto), 'capa-tradicionais.jpg');
   assert.equal(nomeApresentado(null), null);
+});
+
+test('🔴 produto de vitrine sem foto própria NÃO herda a do item base', () => {
+  // O item base de uma vitrine é a CAPA do grupo. Herdá-la diria que o produto se parece
+  // com a arte da capa — e no detalhe essa foto é o hero, maior do que era no card.
+  // Mesma regra da projeção do servidor; as duas precisam concordar.
+  const linha = linhaDeProduto(produtoXBurguer, indice);
+  const semFoto = { ...linha, apresentado: { ...linha.apresentado, imagem: null } };
+  assert.equal(imagemApresentada(semFoto), null);
+  // O NOME e a DESCRIÇÃO continuam caindo para os do item: texto genérico do grupo ainda
+  // descreve o produto e preenche o vazio sem prometer nada. É só a foto que promete.
+  const semTexto = { ...linha, apresentado: { ...linha.apresentado, imagem: null, nome: null, descricao: null } };
+  assert.equal(nomeApresentado(semTexto), 'TRADICIONAIS 🍔');
+  assert.equal(descricaoApresentada(semTexto), itemTradicionais.descricao ?? null);
+
+  // Item NORMAL (sem apresentação) segue com a foto dele — ali a foto do item É a do
+  // produto, e apagá-la seria consertar o que não estava quebrado.
+  const normal = { item: itemTradicionais, apresentado: null, selecoes: {} };
+  assert.equal(imagemApresentada(normal), 'capa-tradicionais.jpg');
+  assert.equal(imagemApresentada(null), null);
+  assert.equal(imagemApresentada({}), null);
 });
 
 test('opcoesVisiveisDaLinha: complementos sem o principal (X BURGUER não é adicional de si)', () => {
