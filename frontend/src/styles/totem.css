@@ -625,7 +625,14 @@
 
 /* ═══ V5 — detalhe do produto ══════════════════════════════════════════════ */
 
-.tq-hero { display: block; width: 100%; aspect-ratio: 4 / 3; max-height: 46vh; object-fit: cover; background: var(--tq-superficie-3); }
+/* Sem `display` aqui de propósito: `.tq-foto` já dá `block` à imagem, e redeclarar isto
+   depois de `.tq-foto-vazia` (que precisa de `grid` para centralizar o marcador) fazia o
+   ícone do produto sem foto encostar no topo de um bloco de 800px. */
+.tq-hero { width: 100%; aspect-ratio: 4 / 3; max-height: 46vh; object-fit: cover; background: var(--tq-superficie-3); }
+/* Hero SEM foto não precisa da altura de uma foto. Em 4:3 numa tela de 1080 de largura,
+   o marcador ficava sozinho no meio de um vazio de 800px e empurrava nome, preço e a
+   primeira escolha para fora do campo de leitura. Vira uma faixa. */
+.tq-hero.tq-foto-vazia { aspect-ratio: auto; min-height: clamp(150px, 20vh, 280px); }
 /* Foto + faixa = uma peça só. A faixa preta é a placa do cardápio: nome em
    branco à esquerda, preço em amarelo à direita, encostada na imagem. */
 .tq-det-capa { position: relative; }
