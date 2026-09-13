@@ -122,3 +122,35 @@ test('🔴 a variável `escopo` do bootstrap só nasce de whereDoAparelho', () =
     assert.match(a, /whereDoAparelho\(ap, body\)/, `escopo atribuído de outra fonte: ${a}`);
   }
 });
+
+test('🔴 a rota pública exige que o ?v= seja a versão ATUAL da arte', () => {
+  // A resposta é `immutable` por um ano. Servir os bytes atuais sob uma versão antiga
+  // faria dois tablets terem conteúdos diferentes para a mesma URL, e nada distinguiria os
+  // dois casos depois. A versão entra no WHERE — não bateu, não há linha, e o blob nem é
+  // carregado para ser descartado.
+  const i = fonte.indexOf("app.get('/api/public/aparelho/totem/banner/:id/imagem'");
+  // Até a PRÓXIMA rota, e não até o primeiro `});`: o handler tem chamadas multilinha
+  // dentro dele, e recortar no primeiro fecha-parêntese deixaria metade do corpo de fora.
+  // Ate a PROXIMA rota, e nao ate o primeiro `});`: o handler tem chamadas multilinha
+  // dentro dele, e recortar no primeiro fecha-parenteses deixaria metade do corpo de fora.
+  const bloco = fonte.slice(i, fonte.indexOf('\napp.', i + 10));
+  assert.match(bloco, /const versao = Number\(req\.query\?\.v\)/, 'a versão tem de ser lida da query');
+  assert.match(bloco, /Number\.isSafeInteger\(versao\)/, 'versão torta não pode passar');
+  assert.match(bloco, /where: \{ id, imagemVersao: versao, \.\.\.whereDoAparelho/,
+    'a versão precisa estar no WHERE, junto do escopo da empresa');
+  // E o isolamento e o cache continuam de pé.
+  assert.match(bloco, /whereDoAparelho\(ap, \{\}\)/);
+  assert.match(bloco, /responderImagem\(/);
+});
+
+test('🔴 a resposta de imagem é cache PRIVADO, versionado e com ETag por empresa', () => {
+  // `private` porque a URL é a mesma para todas as lojas: um cache COMPARTILHADO poderia
+  // servir a arte da loja A para a B. `Vary: Cookie` fecha a porta em quem ignore o
+  // `private`, e o ETag carrega empresa e versão para nunca colidir.
+  const i = fonte.indexOf('function responderImagem(');
+  const fn = fonte.slice(i, fonte.indexOf('\n}', i));
+  assert.match(fn, /Cache-Control', 'private, max-age=31536000, immutable'/);
+  assert.match(fn, /res\.set\('Vary', 'Cookie'\)/);
+  assert.match(fn, /ETag/);
+  assert.equal(/public,/.test(fn), false, 'cache público vazaria arte entre lojas');
+});

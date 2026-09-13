@@ -8816,8 +8816,24 @@ app.get('/api/public/aparelho/totem/banner/:id/imagem', async (req, res) => {
     if (!exigirTotem(ap, res)) return;
     const id = Number(req.params.id);
     if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).end();
+    // A VERSÃO é parte da identidade do recurso, não enfeite na URL.
+    //
+    // A resposta é `immutable` por um ano: quem guardar `?v=3` nunca mais vai perguntar.
+    // Servir os bytes atuais sob uma versão antiga faria dois tablets terem conteúdos
+    // DIFERENTES para a mesma URL — um com a arte velha em cache, outro baixando a nova —
+    // e nada no sistema conseguiria distinguir os dois casos depois.
+    //
+    // Versão ausente, torta ou de outra geração: o recurso NAQUELA versão não existe, e a
+    // resposta é 404. Consequência aceita: nos minutos entre trocar a arte e o tablet
+    // refazer o bootstrap, ele pede a versão velha e leva 404 — o carrossel pula aquele
+    // banner e o recupera no bootstrap seguinte. Pular por alguns minutos é melhor do que
+    // uma URL imutável servindo coisas diferentes.
+    const versao = Number(req.query?.v);
+    if (!Number.isSafeInteger(versao) || versao < 1) return res.status(404).end();
     const banner = await prisma.totemBanner.findFirst({
-      where: { id, ...whereDoAparelho(ap, {}) },
+      // A versão entra no WHERE: não bateu, não há linha — e o blob nunca é carregado do
+      // banco para ser descartado depois.
+      where: { id, imagemVersao: versao, ...whereDoAparelho(ap, {}) },
       select: { imagemVersao: true, imagemTipo: true, imagem: { select: { dados: true } } },
     });
     if (!banner?.imagem?.dados || !banner.imagemTipo) return res.status(404).end();
