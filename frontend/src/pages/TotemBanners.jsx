@@ -179,6 +179,8 @@ export default function TotemBanners() {
   }
 
   const visiveis = lista.filter((b) => b.tipo === aba)
+  const noAr = visiveis.filter((b) => b.status === 'ATIVO').length
+  const medida = limites?.medidas?.[aba] ?? (aba === 'CAPA' ? { largura: 1200, altura: 400 } : { largura: 1080, altura: 1920 })
 
   if (carregando) return <div className="loading-state">Carregando…</div>
   if (erro) {
@@ -206,16 +208,24 @@ export default function TotemBanners() {
         </div>
       </div>
 
-      <div className="table-card" style={{ padding: 16, marginBottom: 16 }}>
-        <div className="ttm-nota" style={{ marginTop: 0 }}>
-          {TIPOS.find((t) => t.id === aba)?.ondeAparece}{' '}
-          {aba === 'CAPA'
-            ? 'Ela não é tocável — o único alvo daquela faixa é o botão de cancelar. Sem capa no ar, o cabeçalho mostra o título de sempre.'
-            : 'Tocar nela começa o pedido, como tocar em qualquer outro lugar da tela. Sem banner no ar, o totem mostra a tela institucional.'}
-        </div>
+      {/* Uma barra, três informações: o que fazer, o que já está no ar e em que tamanho
+          desenhar a arte.
+
+          Aqui havia um parágrafo que repetia a linha de baixo do título e ainda explicava
+          o comportamento do totem. Explicação que se repete deixa de ser lida — e a que
+          sobrou é a única que muda uma decisão de quem está nesta tela: a medida. */}
+      <div className="ttm-bn-barra">
         <button type="button" className="btn btn-primary" disabled={ocupado} onClick={() => setEditando(vazio(limites, aba))}>
           {aba === 'CAPA' ? 'Nova capa' : 'Novo banner'}
         </button>
+        {/* NO AR, não "cadastradas": conta o status, que já pesa o liga-desliga e a agenda
+            juntos. Uma capa agendada para amanhã está cadastrada e não está aparecendo. */}
+        <span className={'badge ' + (noAr ? 'badge-green' : 'badge-gray')}>
+          {noAr === 0 ? 'Nada no ar' : `${noAr} no ar`}
+        </span>
+        <span className="ttm-bn-medida">
+          Sugestão de tamanho: <strong>{medida.largura} × {medida.altura} px</strong>
+        </span>
       </div>
 
       {visiveis.length === 0 ? (
