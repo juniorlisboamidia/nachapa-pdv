@@ -3378,6 +3378,27 @@ body.theme-dark .apr-contagem, body.theme-dark .apr-qr-legenda, body.theme-dark 
 .ttm-logo-previa { flex: 0 0 auto; width: 200px; min-height: 110px; border-radius: 12px; display: grid; place-items: center; padding: 14px; border: 1px solid var(--app-border); }
 .ttm-logo-previa img { max-width: 100%; max-height: 90px; object-fit: contain; }
 .ttm-logo-acoes { flex: 1 1 260px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+
+/* ── Banners do totem ── */
+/* Miniatura em retrato: é o formato da arte, e vê-la deitada na lista enganaria sobre o
+   enquadramento que o cliente vai ver. */
+.ttm-banner-mini { width: 54px; height: 96px; object-fit: cover; border-radius: 6px; display: block; background: #111; }
+.ttm-ordem { display: flex; gap: 4px; }
+.ttm-ordem .btn { min-width: 34px; padding: 4px 8px; line-height: 1; }
+.ttm-acoes-col { text-align: right; }
+/* O modal é mais largo que o padrão porque a prévia 9:16 fica ao lado dos campos: em
+   coluna, o gestor perderia a arte de vista justamente enquanto a configura. */
+.ttm-banner-modal { max-width: 760px; }
+.ttm-banner-corpo { display: flex; gap: 20px; flex-wrap: wrap; }
+.ttm-banner-previa {
+  flex: 0 0 auto; width: 180px; aspect-ratio: 9 / 16;
+  border-radius: 10px; overflow: hidden; background: #111;
+  display: grid; place-items: center; padding: 10px;
+}
+.ttm-banner-previa img { width: 100%; height: 100%; object-fit: cover; }
+.ttm-banner-campos { flex: 1 1 320px; min-width: 280px; }
+.ttm-banner-datas { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.ttm-banner-rodape { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
 /* Código técnico do servidor (ITEM_AUSENTE, GRUPO_SEM_OPCOES…) na tela do admin: ele
    acompanha a frase humana, nunca a substitui — por isso pequeno, monoespaçado e apagado. */
 .ttm-codigo {

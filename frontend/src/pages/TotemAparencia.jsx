@@ -4,6 +4,7 @@ import api from '../services/api'
 import Toast from '../components/Toast'
 import { ABAS, abaValida } from '../components/totemAparencia'
 import { razaoDeContraste, normalizarHex, AA_NORMAL } from '../components/totemTema'
+import TotemBanners from './TotemBanners'
 
 // Loja Digital › Totem › Aparência do totem.
 //
@@ -49,7 +50,7 @@ export default function TotemAparencia() {
         ))}
       </nav>
 
-      {aba === 'personalizacao' ? <Personalizacao /> : <Banners />}
+      {aba === 'personalizacao' ? <Personalizacao /> : <TotemBanners />}
     </div>
   )
 }
@@ -347,20 +348,4 @@ function reduzirImagem(arquivo, lado = 640) {
     }
     leitor.readAsDataURL(arquivo)
   })
-}
-
-// ── Banners ────────────────────────────────────────────────────────────────
-function Banners() {
-  return (
-    <div className="table-card" style={{ padding: 16 }}>
-      <div className="ttm-nota" style={{ marginTop: 0 }}>
-        Em breve. Aqui vão as imagens que o totem mostra <strong>na tela de espera</strong>, enquanto ninguém
-        está usando — o horário em que ele fica no vidro chamando quem passa.
-      </div>
-      <div className="ttm-dica">
-        Vai ser um domínio próprio do totem, inspirado no Banner/Vídeo/Roleta do HUB mas independente dele.
-        A tela de espera funciona sem banner nenhum, e continua funcionando: os banners a alimentam, não a substituem.
-      </div>
-    </div>
-  )
 }
