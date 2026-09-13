@@ -54,7 +54,7 @@ export default function Cabecalho({ titulo, modo, marca, capa, aoVoltar, aoCance
   // Só o catálogo pede a faixa. As outras telas continuam com o cabeçalho de três zonas.
   if (marca) {
     return (
-      <header className="tq-topo tq-topo-faixa">
+      <header className={'tq-topo tq-topo-faixa' + (capa ? ' com-capa' : '')}>
         <div className="tq-topo-marca">
           {marca.logo
             ? <LogoDaLoja src={marca.logo} propria={marca.logoPropria} alt="" />

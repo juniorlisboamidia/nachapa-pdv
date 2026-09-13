@@ -37,10 +37,18 @@ export const TIPO_PADRAO = 'ESPERA';
 export const MOTIVO_TIPO = 'TIPO_INVALIDO';
 
 /* Proporção recomendada de cada um. A espera ocupa o vidro inteiro; a capa é a faixa entre
-   a logo e o botão de cancelar. */
+   a logo e o botão de cancelar.
+
+   A CAPA é 3:1 de propósito, e não a medida que a faixa tem em pixels: é a MESMA proporção
+   da capa do Cardápio Web (o HUB a renderiza em `aspect-[3/1]`, em
+   `frontend/src/pages/CardapioWebCapas.jsx`). Com isso a loja desenha uma arte e usa nos
+   dois lugares, sem recortar nada.
+
+   No alvo em pé a faixa tem ~821px de largura (1080 menos a coluna de categorias), o que
+   dá ~274px de altura a 3:1 — uma arte de 1200 × 400 cobre isso com sobra. */
 export const MEDIDAS = Object.freeze({
   ESPERA: Object.freeze({ largura: 1080, altura: 1920 }),
-  CAPA: Object.freeze({ largura: 1080, altura: 260 }),
+  CAPA: Object.freeze({ largura: 1200, altura: 400 }),
 });
 
 export function normalizarTipo(valor) {

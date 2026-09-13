@@ -280,7 +280,7 @@ function Editor({ valor, limites, ocupado, aoFechar, aoSalvar, aoAvisar }) {
   async function escolherArquivo(arquivo) {
     if (!arquivo) return
     try {
-      const dataUrl = await reduzirImagem(arquivo, form.tipo === 'CAPA' ? 1080 : 1920)
+      const dataUrl = await reduzirImagem(arquivo, form.tipo === 'CAPA' ? 1200 : 1920)
       setForm((f) => ({ ...f, imagem: dataUrl, previa: dataUrl }))
       setFaltando((x) => (x.imagem ? { ...x, imagem: null } : x))
     } catch {
@@ -357,8 +357,10 @@ function Editor({ valor, limites, ocupado, aoFechar, aoSalvar, aoAvisar }) {
               {faltando.imagem ? <div className="ttm-erro-campo" role="alert">{faltando.imagem}</div> : null}
               <div className="ttm-dica">
                 Recomendado: <strong>{medida.largura} × {medida.altura} px</strong>{' '}
-                {form.tipo === 'CAPA' ? '(faixa deitada, o topo do catálogo)' : '(retrato, a tela inteira do totem)'}.
-                PNG, JPG ou WEBP, até {limites?.imagemKb ?? 700} KB. A imagem é reduzida antes de subir.
+                {form.tipo === 'CAPA'
+                  ? '— a mesma proporção da capa do Cardápio Web, então dá para usar a mesma arte nos dois.'
+                  : '(retrato, a tela inteira do totem).'}
+                {' '}PNG, JPG ou WEBP, até {limites?.imagemKb ?? 700} KB. A imagem é reduzida antes de subir.
               </div>
             </div>
 

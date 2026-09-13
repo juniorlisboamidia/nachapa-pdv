@@ -258,7 +258,9 @@ test('dois tipos, e o padrão é o que já existia', () => {
 test('cada tipo tem a sua medida recomendada', () => {
   // A espera é a tela inteira em retrato; a capa é a faixa entre a logo e o cancelar.
   assert.deepEqual(MEDIDAS.ESPERA, { largura: 1080, altura: 1920 });
-  assert.deepEqual(MEDIDAS.CAPA, { largura: 1080, altura: 260 });
+  // 3:1 — a MESMA proporção da capa do Cardápio Web, para a loja reaproveitar a arte.
+  assert.deepEqual(MEDIDAS.CAPA, { largura: 1200, altura: 400 });
+  assert.equal(MEDIDAS.CAPA.largura / MEDIDAS.CAPA.altura, 3);
   for (const t of TIPOS) assert.ok(MEDIDAS[t], `${t} sem medida`);
 });
 
