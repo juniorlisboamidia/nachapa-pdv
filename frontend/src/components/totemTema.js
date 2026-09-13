@@ -73,12 +73,23 @@ export function propriedadesDe(tokens) {
    uma placa branca. Quando a loja subir uma logo própria, é ela que manda.
 
    `logoVersao` entra na URL para o cache do tablet cair sozinho quando a imagem trocar. */
-export function urlDaLogo({ aparencia, loja } = {}) {
+export function logoDoTotem({ aparencia, loja } = {}) {
   if (aparencia?.temLogoPersonalizada) {
     const v = Number.isInteger(aparencia.logoVersao) ? aparencia.logoVersao : 0
-    return `/api/public/aparelho/totem/logo?v=${v}`
+    // `propria` é o que decide a APRESENTAÇÃO, e por isso sai daqui e não da tela: a logo
+    // do canal foi preparada com transparência para o fundo escuro do totem, e a do
+    // Cardápio Web vem com fundo branco embutido (é feita para o cardápio digital). A
+    // primeira aparece direto sobre o preto; a segunda vira placa, senão fica um retângulo
+    // branco irregular colado na tela.
+    return { url: `/api/public/aparelho/totem/logo?v=${v}`, propria: true }
   }
-  return loja?.logo || loja?.logoDataUrl || null
+  return { url: loja?.logo || loja?.logoDataUrl || null, propria: false }
+}
+
+/* Só a URL. Mantida porque é o que a maior parte do código pede, e implementada sobre a
+   função acima para as duas nunca discordarem sobre qual logo está valendo. */
+export function urlDaLogo(entrada) {
+  return logoDoTotem(entrada).url
 }
 
 /* Posição das categorias que a raiz vai anunciar. Só as duas conhecidas; qualquer outra

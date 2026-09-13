@@ -135,3 +135,36 @@ test('razão inválida é null, e a forma curta é aceita na prévia', () => {
   assert.equal(normalizarHex('#ABC'), '#aabbcc');
   assert.equal(normalizarHex('rgb(0,0,0)'), null);
 });
+
+// ── origem da logo: é ela que decide a apresentação ─────────────────────────
+import { logoDoTotem } from './totemTema.js';
+
+test('🔴 a logo do CANAL vem marcada como própria — e é o que tira a placa', () => {
+  // A do canal foi preparada com transparência para o preto do totem; a do Cardápio Web
+  // vem com o branco embutido no arquivo e precisa da placa. A tela não adivinha isso.
+  const canal = logoDoTotem({ aparencia: { temLogoPersonalizada: true, logoVersao: 3 }, loja: { logo: 'https://cdn.cw/logo.png' } });
+  assert.deepEqual(canal, { url: '/api/public/aparelho/totem/logo?v=3', propria: true });
+});
+
+test('🔴 a logo do HUB continua NÃO própria — o fallback legado mantém a placa', () => {
+  assert.deepEqual(logoDoTotem({ loja: { logo: 'https://cdn.cw/logo.png' } }), { url: 'https://cdn.cw/logo.png', propria: false });
+  assert.deepEqual(logoDoTotem({ aparencia: { temLogoPersonalizada: false }, loja: { logoDataUrl: 'data:image/png;base64,AA' } }),
+    { url: 'data:image/png;base64,AA', propria: false });
+});
+
+test('sem logo nenhuma: url nula e não própria — a tela desenha a inicial', () => {
+  assert.deepEqual(logoDoTotem({}), { url: null, propria: false });
+  assert.deepEqual(logoDoTotem(), { url: null, propria: false });
+});
+
+test('🔴 urlDaLogo e logoDoTotem nunca discordam sobre qual logo está valendo', () => {
+  // Uma é implementada sobre a outra justamente para isso: a precedência canal → HUB →
+  // nada existe em UM lugar só.
+  const casos = [
+    { aparencia: { temLogoPersonalizada: true, logoVersao: 2 }, loja: { logo: 'hub.png' } },
+    { aparencia: { temLogoPersonalizada: false }, loja: { logo: 'hub.png' } },
+    { loja: { logoDataUrl: 'data:image/png;base64,AA' } },
+    {}, undefined,
+  ];
+  for (const c of casos) assert.equal(urlDaLogo(c), logoDoTotem(c).url, JSON.stringify(c));
+});

@@ -1,4 +1,5 @@
 import { Ico } from './icones'
+import LogoDaLoja from './LogoDaLoja'
 
 // Escolha do modo: comer aqui ou levar. NÃO é mais a tela de repouso — quem fica horas no
 // vidro chamando quem passa é a TelaEspera, e o cliente só chega aqui depois de tocar.
@@ -33,7 +34,7 @@ export default function TelaInicio({ loja, modos, aoEscolher }) {
         {/* A logo do cardápio quase sempre vem com fundo branco. Em vez de
             disfarçar, ela vira placa — com aresta amarela, como sinalização. */}
         {logo
-          ? <div className="tq-placa"><img src={logo} alt={loja?.nome ?? ''} /></div>
+          ? <LogoDaLoja src={logo} propria={loja?.logoPropria} alt={loja?.nome ?? ''} />
           : <div className="tq-inicio-marca tq-disp tq-disp-forte" aria-hidden="true">{inicial}</div>}
 
         <div className="tq-inicio-txt">

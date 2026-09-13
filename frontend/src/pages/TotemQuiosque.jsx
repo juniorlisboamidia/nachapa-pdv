@@ -61,7 +61,7 @@ import { estadoDoCanal, podeAvancar } from '../components/totemLoja'
 import { TELA_REPOUSO, armaReset, armaAviso } from '../components/totemSessao'
 // Aparência do canal: as cores viram custom property, a logo do canal vence a do HUB, e a
 // posição das categorias vira atributo na raiz.
-import { urlDaLogo, posicaoDeCategorias } from '../components/totemTema'
+import { logoDoTotem, posicaoDeCategorias } from '../components/totemTema'
 
 const VERSAO = 'totem-1.0'
 const MS_HEARTBEAT = 60_000
@@ -160,10 +160,12 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
     const b = boot?.loja ?? {}
     if (!lojaInicial && !boot?.loja) return null
     const base = { ...a, ...b, nome: b.nome ?? a.nome ?? null, logo: b.logo ?? a.logo ?? null, logoDataUrl: a.logoDataUrl ?? b.logoDataUrl ?? null }
-    // A logo do CANAL vence a do HUB. A do Cardápio Web é feita para fundo claro — no
-    // vidro preto ela vira uma placa branca —, e quando a loja sobe uma própria é ela que
-    // manda. Sem logo própria, `urlDaLogo` devolve exatamente o que valia antes.
-    return { ...base, logo: urlDaLogo({ aparencia: boot?.aparencia, loja: base }) }
+    // A logo do CANAL vence a do HUB, e a ORIGEM viaja junto: é ela que decide se a marca
+    // aparece direto sobre o fundo (logo do canal, preparada com transparência) ou dentro
+    // da placa (logo do Cardápio Web, que vem com o branco embutido no arquivo).
+    // Sem logo própria, o resultado é exatamente o que valia antes.
+    const daLogo = logoDoTotem({ aparencia: boot?.aparencia, loja: base })
+    return { ...base, logo: daLogo.url, logoPropria: daLogo.propria }
   }, [lojaInicial, boot])
   // Bloco montado pelo PDV, separado de `loja` (que é do HUB). Ausente = tudo no padrão
   // embarcado da folha, que é como o totem sempre desenhou.

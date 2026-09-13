@@ -343,9 +343,21 @@
 .tq-inicio-topo { display: flex; align-items: center; gap: clamp(24px, 5.28vw, 57px); }
 @media (max-width: 599px) { .tq-inicio-topo { flex-direction: column; text-align: center; } }
 
+/* A logo PRÓPRIA do canal: direto sobre o fundo, sem placa, sem card, sem moldura e sem
+   sombra. Quem a enviou preparou o arquivo com transparência justamente para o preto do
+   totem — devolver um retângulo branco em volta seria desfazer isso.
+   `contain` preserva a proporção: logo esticada é pior do que logo pequena.
+   Mesma medida nas duas telas, para a marca não mudar de tamanho entre uma e outra. */
+.tq-logo {
+  flex: 0 0 auto; display: block;
+  width: clamp(180px, 32vw, 420px);
+  max-height: 22vh;
+  object-fit: contain;
+}
+
 /* A logo do Cardápio Web quase sempre vem com fundo branco. Em vez de disfarçar,
    assume-se: vira PLACA, com aresta amarela embaixo — sinal de fachada, não
-   arquivo colado sobre o preto. */
+   arquivo colado sobre o preto. Isto vale SÓ para ela: a do canal usa `.tq-logo`. */
 .tq-placa {
   flex: 0 0 auto; background: var(--tq-branco); border-radius: 22px;
   padding: clamp(16px, 3.06vw, 33px); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);

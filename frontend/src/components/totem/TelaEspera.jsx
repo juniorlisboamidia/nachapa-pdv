@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Ico } from './icones'
+import LogoDaLoja from './LogoDaLoja'
 import {
   desvioDoRelogio, paraExibir, duracaoMs, proximoIndice, assinatura, proximaParaPrecarregar,
 } from '../totemBanners'
@@ -125,7 +126,7 @@ export default function TelaEspera({ loja, banners, aoTocar }) {
       ) : (
         <div className="tq-espera-marca">
           {logo
-            ? <div className="tq-placa"><img src={logo} alt="" /></div>
+            ? <LogoDaLoja src={logo} propria={loja?.logoPropria} />
             : <div className="tq-espera-inicial tq-disp tq-disp-forte" aria-hidden="true">{inicial}</div>}
           {loja?.nome ? <div className="tq-espera-loja tq-rotulo">{loja.nome}</div> : null}
         </div>
