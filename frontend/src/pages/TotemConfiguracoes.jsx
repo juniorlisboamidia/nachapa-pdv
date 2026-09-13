@@ -62,7 +62,10 @@ export default function TotemConfiguracoes() {
       setGravado(seg)
       setEscolha(seg)
       setSalva(true)
-      setToast({ message: 'Tempo de ociosidade salvo. Os totens aplicam na próxima vez que carregarem o cardápio.', type: 'success' })
+      // A semântica exata (T8): o valor é CAPTURADO quando uma sessão começa. Um cliente
+      // no meio do pedido termina com o tempo que valia quando ele começou — trocar isso
+      // encurtaria o relógio de quem já estava escolhendo.
+      setToast({ message: 'Configuração salva. Será usada nas próximas sessões do totem.', type: 'success' })
     } catch {
       setToast({ message: 'Não foi possível salvar. Tente de novo.', type: 'error' })
     } finally {
