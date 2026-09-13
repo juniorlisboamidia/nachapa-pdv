@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { itemOrdenavel, precoDoCard } from '../totemCarrinho'
-import { categoriaPorRolagem, janelaDeRolagem, progressoNaSecao } from '../totemFoco'
+import { categoriaPorRolagem, progressoNaSecao } from '../totemFoco'
 import SidebarCategorias from './SidebarCategorias'
 import CardProduto from './CardProduto'
 
@@ -65,14 +65,11 @@ export default function TelaCatalogo({ categorias, categoriaId, aoTrocarCategori
         alturaTotal: cont.scrollHeight,
       }
 
-      // O INDICADOR DE POSIÇÃO vai por CSS, não por estado. Marcar estado a cada quadro
-      // de rolagem redesenharia noventa cards para mover um risco de 4px — as duas
-      // variáveis são escritas direto no nó da sidebar, que é a única coisa que muda.
+      // O PROGRESSO vai por CSS, não por estado. Marcar estado a cada quadro de rolagem
+      // redesenharia noventa cards para mover um traço de 3px — a variável é escrita
+      // direto no nó da sidebar, que é a única coisa que muda.
       const lado = ladoRef.current
       if (lado) {
-        const janela = janelaDeRolagem(medida)
-        lado.style.setProperty('--tq-prog-i', String(janela.inicio))
-        lado.style.setProperty('--tq-prog-f', String(janela.fracao))
         const atual = secoes.find((s) => String(s.id) === String(categoriaId))
         const proxima = atual ? secoes.find((s) => s.topo > atual.topo) : null
         const altura = atual ? (proxima ? proxima.topo - atual.topo : medida.alturaTotal - atual.topo) : 0

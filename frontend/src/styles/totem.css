@@ -1249,40 +1249,40 @@
 
 /* Cancelar pedido pede confirmação: o segundo toque é que apaga. */
 
-/* ── Sidebar: indicador de posição no catálogo ─────────────────────────────
-   O tablet não desenha barra de rolagem, e numa lista contínua de noventa cards isso
-   deixava o cliente sem nenhuma pista de "quanto falta". São dois sinais, e cada um
-   responde uma pergunta diferente:
+/* ── Sidebar: onde o cliente está ──────────────────────────────────────────
+   Havia aqui um trilho vertical com um polegar deslizante. Saiu, e o motivo vale
+   registro: desenhado ao lado da lista de categorias, ele convidava a ser lido como
+   alinhado a elas — mas marcava progresso do CATÁLOGO. Parava na altura de "cachorro
+   quente" enquanto a tela mostrava "tradicionais", e um indicador que precisa de
+   explicação para não enganar é pior do que nenhum.
 
-     · o TRILHO, na borda que encosta na grade, diz onde a janela visível está no
-       catálogo INTEIRO;
-     · a BARRA dentro da pastilha ativa diz o quanto daquela CATEGORIA já passou.
+   No lugar dele, dois sinais que não têm como mentir, porque nascem grudados na própria
+   categoria ativa:
 
-   As duas frações chegam por variável CSS, escritas direto no nó a cada quadro de
-   rolagem — nenhum estado do React se move para desenhar isto. E as duas usam
-   `transform`, que não provoca layout. */
-.tq-lado-trilho {
-  position: absolute; top: 12px; bottom: 12px; right: 0; width: 3px;
-  border-radius: 3px; background: rgba(255, 255, 255, 0.07);
-  overflow: hidden; pointer-events: none;
-}
-.tq-lado-polegar {
-  display: block; width: 100%; height: 100%;
-  border-radius: inherit; background: var(--tq-amarelo);
-  transform-origin: top;
-  transform: translateY(calc(var(--tq-prog-i, 0) * 100%)) scaleY(var(--tq-prog-f, 1));
+     · o TRIÂNGULO, apontando da coluna para a grade — discreto, e alinhado por
+       construção com a linha que ele marca;
+     · a BARRA na base da pastilha, que diz o quanto DAQUELA categoria já passou. */
+.tq-cat[aria-current='true'] { position: relative; }
+/* O triângulo é a pastilha continuando para dentro do conteúdo: mesma cor, encostado
+   nela, ponta na borda da coluna. Nada de seta desenhada por cima. */
+.tq-cat[aria-current='true']::before {
+  /* 1px + 8px = 9px, e a coluna tem 10px de respiro: a ponta chega perto da borda sem
+     ser cortada pela rolagem, que clipa no eixo X junto com o Y. */
+  content: ''; position: absolute; left: 100%; top: 50%; margin-left: 1px;
+  width: 0; height: 0;
+  border: 8px solid transparent; border-left-color: var(--tq-amarelo);
+  transform: translateY(-50%);
 }
 /* Progresso DENTRO da categoria ativa: um traço na base da pastilha, em tinta sobre o
    dourado. Não é decoração — é a resposta de "estou no começo ou no fim dos artesanais".
-   Some quando não há o que medir. */
-.tq-cat[aria-current='true'] { position: relative; overflow: hidden; }
+   Nasce em zero e cresce; some quando não há o que medir. */
 .tq-cat[aria-current='true']::after {
   content: ''; position: absolute; left: 16px; right: 16px; bottom: 10px; height: 3px;
-  border-radius: 3px; background: var(--tq-tinta); opacity: 0.28;
+  border-radius: 3px; background: var(--tq-tinta); opacity: 0.3;
   transform-origin: left; transform: scaleX(var(--tq-cat-prog, 0));
 }
 /* Movimento é informação aqui, então ele fica. O que sai com `reduced-motion` é a
-   suavização: o indicador passa a saltar em vez de deslizar. */
+   suavização: o traço passa a saltar em vez de deslizar. */
 @media (prefers-reduced-motion: no-preference) {
-  .tq-lado-polegar, .tq-cat[aria-current='true']::after { transition: transform 0.18s ease-out; }
+  .tq-cat[aria-current='true']::after { transition: transform 0.18s ease-out; }
 }

@@ -147,10 +147,18 @@ test('categoriaPorRolagem: no topo vale a primeira', () => {
   assert.equal(categoriaPorRolagem({ secoes: SECOES, scrollAtual: 0, alturaVisivel: 800, alturaTotal: 3000 }), 'a')
 })
 
-test('categoriaPorRolagem: vale a última seção que passou da linha de leitura', () => {
-  assert.equal(categoriaPorRolagem({ secoes: SECOES, scrollAtual: 900, alturaVisivel: 800, alturaTotal: 4000 }), 'a')
-  /* 976 + 24 = 1000: o topo de `b` encosta na linha e ela assume. */
-  assert.equal(categoriaPorRolagem({ secoes: SECOES, scrollAtual: 976, alturaVisivel: 800, alturaTotal: 4000 }), 'b')
+test('🔴 a linha de leitura fica a 28% da altura, não colada no topo', () => {
+  /* O DEFEITO que essa fração conserta: com a linha a 24px do topo, o título da seção
+     nova aparecia inteiro na tela e a sidebar continuava acesa na anterior — o título tem
+     30px de respiro acima dele, então quando ele fica visível o topo da seção ainda está
+     abaixo dos 24px. O cliente lia "TRADICIONAIS" com "ARTESANAIS" aceso ao lado.
+
+     Com 800 de altura visível a linha cai em 224. Em 776 o topo de `b` (1000) encosta
+     nela, e `b` assume — bem antes de o título dela sair da tela. */
+  assert.equal(categoriaPorRolagem({ secoes: SECOES, scrollAtual: 700, alturaVisivel: 800, alturaTotal: 4000 }), 'a')
+  assert.equal(categoriaPorRolagem({ secoes: SECOES, scrollAtual: 776, alturaVisivel: 800, alturaTotal: 4000 }), 'b')
+  assert.equal(categoriaPorRolagem({ secoes: SECOES, scrollAtual: 900, alturaVisivel: 800, alturaTotal: 4000 }), 'b',
+    'com o título de `b` no alto da tela, quem acende é `b`')
   assert.equal(categoriaPorRolagem({ secoes: SECOES, scrollAtual: 1500, alturaVisivel: 800, alturaTotal: 4000 }), 'b')
 })
 
@@ -170,36 +178,8 @@ test('categoriaPorRolagem: entrada torta não derruba a sidebar', () => {
   assert.equal(categoriaPorRolagem({ secoes: SECOES, scrollAtual: 1200 }), 'b')
 })
 
-// ── indicador de posição no catálogo ────────────────────────────────────────
-import { janelaDeRolagem, progressoNaSecao } from './totemFoco.js';
-
-test('a janela: começo no topo, fim no fim', () => {
-  const topo = janelaDeRolagem({ scrollAtual: 0, alturaVisivel: 800, alturaTotal: 4000 });
-  assert.equal(topo.inicio, 0);
-  const fim = janelaDeRolagem({ scrollAtual: 3200, alturaVisivel: 800, alturaTotal: 4000 });
-  assert.equal(Math.round((fim.inicio + fim.fracao) * 1000) / 1000, 1, 'o polegar encosta no fim da trilha');
-});
-
-test('🔴 o polegar nunca some num cardápio longo', () => {
-  // 800 de janela em 20000 de catálogo dá 4% — um risco de 20px que ninguém vê a um metro.
-  const j = janelaDeRolagem({ scrollAtual: 0, alturaVisivel: 800, alturaTotal: 20000 });
-  assert.equal(j.fracao, 0.08, 'o mínimo legível manda');
-  // E mesmo ampliado ele não passa do fim.
-  const noFim = janelaDeRolagem({ scrollAtual: 19200, alturaVisivel: 800, alturaTotal: 20000 });
-  assert.ok(noFim.inicio + noFim.fracao <= 1.0001);
-});
-
-test('conteúdo que cabe na tela: trilha cheia, sem indicador para dar', () => {
-  assert.deepEqual(janelaDeRolagem({ scrollAtual: 0, alturaVisivel: 900, alturaTotal: 900 }), { inicio: 0, fracao: 1 });
-  assert.deepEqual(janelaDeRolagem({}), { inicio: 0, fracao: 1 });
-  assert.deepEqual(janelaDeRolagem(), { inicio: 0, fracao: 1 });
-});
-
-test('rolagem fora dos limites é grampeada', () => {
-  assert.equal(janelaDeRolagem({ scrollAtual: -500, alturaVisivel: 800, alturaTotal: 4000 }).inicio, 0);
-  const alem = janelaDeRolagem({ scrollAtual: 99999, alturaVisivel: 800, alturaTotal: 4000 });
-  assert.equal(Math.round((alem.inicio + alem.fracao) * 1000) / 1000, 1);
-});
+// ── progresso dentro da categoria ────────────────────────────────────────────
+import { progressoNaSecao } from './totemFoco.js';
 
 test('🔴 progresso na seção conta pela borda de BAIXO da janela', () => {
   // O cliente terminou a categoria quando o último card dela sai por cima, não quando o
