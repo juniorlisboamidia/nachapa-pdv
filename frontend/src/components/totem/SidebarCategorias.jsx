@@ -73,6 +73,12 @@ const SidebarCategorias = forwardRef(function SidebarCategorias({ categorias, ca
         })}
       </div>
       {temMais ? <div className="tq-lado-fade" aria-hidden="true" /> : null}
+
+      {/* ONDE O CLIENTE ESTÁ NO CATÁLOGO. O tablet não desenha barra de rolagem: sem isto
+          dá para rolar por um minuto num cardápio de noventa cards sem nenhuma pista de
+          quanto falta. `aria-hidden` porque é reforço visual — quem usa leitor de tela já
+          tem o `aria-current` dizendo em que categoria está. */}
+      <div className="tq-lado-trilho" aria-hidden="true"><span className="tq-lado-polegar" /></div>
     </nav>
   )
 })

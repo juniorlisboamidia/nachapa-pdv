@@ -147,18 +147,19 @@ test('categoriaPorRolagem: no topo vale a primeira', () => {
   assert.equal(categoriaPorRolagem({ secoes: SECOES, scrollAtual: 0, alturaVisivel: 800, alturaTotal: 3000 }), 'a')
 })
 
-test('🔴 a linha de leitura fica a 28% da altura, não colada no topo', () => {
-  /* O DEFEITO que essa fração conserta: com a linha a 24px do topo, o título da seção
-     nova aparecia inteiro na tela e a sidebar continuava acesa na anterior — o título tem
-     30px de respiro acima dele, então quando ele fica visível o topo da seção ainda está
-     abaixo dos 24px. O cliente lia "TRADICIONAIS" com "ARTESANAIS" aceso ao lado.
+test('🔴 o limite é o TÍTULO cruzando a borda de cima', () => {
+  /* `SECOES` carrega a posição do TÍTULO de cada categoria, não a do início da seção — é
+     o que a tela mede. O título de `b` está em 1000: enquanto ele estiver na tela, a
+     categoria acesa é `a`; assim que ele sobe além da borda, `b` assume.
 
-     Com 800 de altura visível a linha cai em 224. Em 776 o topo de `b` (1000) encosta
-     nela, e `b` assume — bem antes de o título dela sair da tela. */
-  assert.equal(categoriaPorRolagem({ secoes: SECOES, scrollAtual: 700, alturaVisivel: 800, alturaTotal: 4000 }), 'a')
-  assert.equal(categoriaPorRolagem({ secoes: SECOES, scrollAtual: 776, alturaVisivel: 800, alturaTotal: 4000 }), 'b')
-  assert.equal(categoriaPorRolagem({ secoes: SECOES, scrollAtual: 900, alturaVisivel: 800, alturaTotal: 4000 }), 'b',
-    'com o título de `b` no alto da tela, quem acende é `b`')
+     Duas tentativas erraram antes desta. Medindo o topo da SEÇÃO com linha a 24px, o
+     destaque ficava uma categoria atrás (o título tem 30px de respiro acima dele).
+     Empurrar a linha para 28% da altura consertou o atraso e trocou por adiantamento: a
+     categoria nova acendia com o título dela ainda no meio da tela. */
+  assert.equal(categoriaPorRolagem({ secoes: SECOES, scrollAtual: 900, alturaVisivel: 800, alturaTotal: 4000 }), 'a',
+    'o título de `b` ainda está visível, 100px abaixo da borda')
+  assert.equal(categoriaPorRolagem({ secoes: SECOES, scrollAtual: 992, alturaVisivel: 800, alturaTotal: 4000 }), 'b',
+    'o título encostou na borda: `b` assume')
   assert.equal(categoriaPorRolagem({ secoes: SECOES, scrollAtual: 1500, alturaVisivel: 800, alturaTotal: 4000 }), 'b')
 })
 
@@ -178,8 +179,8 @@ test('categoriaPorRolagem: entrada torta não derruba a sidebar', () => {
   assert.equal(categoriaPorRolagem({ secoes: SECOES, scrollAtual: 1200 }), 'b')
 })
 
-// ── progresso dentro da categoria ────────────────────────────────────────────
-import { progressoNaSecao } from './totemFoco.js';
+// ── indicador de posição no catálogo ─────────────────────────────────────────
+import { janelaDeRolagem, progressoNaSecao } from './totemFoco.js';
 
 test('🔴 progresso na seção conta pela borda de BAIXO da janela', () => {
   // O cliente terminou a categoria quando o último card dela sai por cima, não quando o
@@ -194,4 +195,31 @@ test('🔴 progresso na seção conta pela borda de BAIXO da janela', () => {
 test('seção sem altura não gera progresso', () => {
   assert.equal(progressoNaSecao({ topo: 0, altura: 0, scrollAtual: 100 }), 0);
   assert.equal(progressoNaSecao(), 0);
+});
+
+test('a janela: começo no topo, fim no fim', () => {
+  const topo = janelaDeRolagem({ scrollAtual: 0, alturaVisivel: 800, alturaTotal: 4000 });
+  assert.equal(topo.inicio, 0);
+  const fim = janelaDeRolagem({ scrollAtual: 3200, alturaVisivel: 800, alturaTotal: 4000 });
+  assert.equal(Math.round((fim.inicio + fim.fracao) * 1000) / 1000, 1, 'o polegar encosta no fim da trilha');
+});
+
+test('🔴 o polegar nunca some num cardápio longo', () => {
+  // 800 de janela em 20000 de catálogo dá 4% — um risco que ninguém vê a um metro.
+  const j = janelaDeRolagem({ scrollAtual: 0, alturaVisivel: 800, alturaTotal: 20000 });
+  assert.equal(j.fracao, 0.06, 'o mínimo legível manda');
+  const noFim = janelaDeRolagem({ scrollAtual: 19200, alturaVisivel: 800, alturaTotal: 20000 });
+  assert.ok(noFim.inicio + noFim.fracao <= 1.0001, 'e o mínimo não estoura o fim da trilha');
+});
+
+test('conteúdo que cabe na tela: trilha cheia, sem indicador para dar', () => {
+  assert.deepEqual(janelaDeRolagem({ scrollAtual: 0, alturaVisivel: 900, alturaTotal: 900 }), { inicio: 0, fracao: 1 });
+  assert.deepEqual(janelaDeRolagem({}), { inicio: 0, fracao: 1 });
+  assert.deepEqual(janelaDeRolagem(), { inicio: 0, fracao: 1 });
+});
+
+test('rolagem fora dos limites é grampeada', () => {
+  assert.equal(janelaDeRolagem({ scrollAtual: -500, alturaVisivel: 800, alturaTotal: 4000 }).inicio, 0);
+  const alem = janelaDeRolagem({ scrollAtual: 99999, alturaVisivel: 800, alturaTotal: 4000 });
+  assert.equal(Math.round((alem.inicio + alem.fracao) * 1000) / 1000, 1);
 });

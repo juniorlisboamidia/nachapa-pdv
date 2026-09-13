@@ -91,24 +91,25 @@ export function destinoDeRolagem({
    A lista vem na ordem da tela.
 
    Duas regras, e a segunda existe por um caso real:
-   1. Vale a ÚLTIMA seção cujo topo já passou da LINHA DE LEITURA — uma linha imaginária
-      a 28% da altura visível, não uma faixa colada na borda de cima.
+   1. Vale a ÚLTIMA seção cujo TÍTULO já subiu além da borda de cima.
 
-      A fração importa e custou um defeito para ficar clara. Com a linha a 24px do topo, o
-      título da seção nova aparecia inteiro na tela e a sidebar continuava acesa na
-      anterior: o título tem 30px de respiro ACIMA dele, então quando ele fica visível o
-      topo da seção ainda está abaixo dos 24px. O destaque ficava uma categoria atrás por
-      construção, e o cliente lia "TRADICIONAIS" com "ARTESANAIS" aceso ao lado.
+      O que entra em `secoes` é a posição do TÍTULO, não a do início da seção — e é essa
+      escolha que faz a régua bater com o que o cliente vê. O título é o limite que ele
+      percebe: enquanto "TRADICIONAIS" está escrito na tela, ele está nos tradicionais.
 
-      A 28% a pergunta que a régua responde passa a ser a certa: não "qual seção começou",
-      e sim "qual seção domina o que estou vendo".
+      Duas tentativas antes desta erraram por medir a coisa errada. Medindo o TOPO DA
+      SEÇÃO com a linha a 24px, o destaque ficava uma categoria atrás: o título tem 30px
+      de respiro acima dele, então quando ele aparecia inteiro o topo da seção ainda não
+      tinha cruzado a linha. Empurrar a linha para 28% da altura consertou o atraso, mas
+      trocou por adiantamento — a categoria nova acendia com o título dela ainda no meio
+      da tela. Medindo o título, o limite é o mesmo que o olho usa.
    2. Chegando ao fim da rolagem, vale a última seção. Sem isto, uma categoria
       curta no rodapé — "SUCOS" com três itens — nunca alcançaria a linha e
       ficaria sem destaque por mais que o cliente rolasse.
 
    Nunca lança: entrada torta devolve `null` e a sidebar fica como está. */
 export function categoriaPorRolagem({
-  secoes, scrollAtual = 0, alturaVisivel = 0, alturaTotal = 0, linhaFracao = 0.28, folgaFim = 24,
+  secoes, scrollAtual = 0, alturaVisivel = 0, alturaTotal = 0, linha = 8, folgaFim = 24,
 } = {}) {
   const lista = Array.isArray(secoes)
     ? secoes.filter((s) => s && s.id != null && Number.isFinite(Number(s.topo)))
@@ -121,7 +122,9 @@ export function categoriaPorRolagem({
   const folga = Math.max(0, Number(folgaFim) || 0)
   if (total > 0 && visivel > 0 && y + visivel >= total - folga) return lista[lista.length - 1].id
 
-  const marca = y + (visivel * (Number(linhaFracao) || 0))
+  // Uma folga pequena, não zero: no limiar exato a troca oscilaria a cada pixel de
+  // rolagem, e a sidebar piscaria entre duas categorias.
+  const marca = y + (Number(linha) || 0)
   let atual = lista[0].id
   for (const s of lista) {
     if (Number(s.topo) <= marca) atual = s.id
@@ -130,15 +133,30 @@ export function categoriaPorRolagem({
   return atual
 }
 
-/* ── ONDE O CLIENTE ESTÁ DENTRO DA CATEGORIA ────────────────────────────────────────
-   Saber QUAL categoria está ativa responde metade da pergunta; a outra metade é "estou no
-   começo ou no fim dela". Puro e sem DOM: quem mede é a tela, quem calcula é aqui.
+/* ── ONDE O CLIENTE ESTÁ NO CATÁLOGO ────────────────────────────────────────────────
+   Dois indicadores, duas perguntas: "quanto falta do cardápio" e "estou no começo ou no
+   fim desta categoria". Puros e sem DOM: quem mede é a tela, quem calcula é aqui.
 
-   Houve aqui também um indicador de posição GLOBAL — um polegar numa trilha vertical, ao
-   lado da lista. Saiu, e o motivo vale registro: desenhado junto das categorias, ele
-   convidava a ser lido como alinhado a elas, e não era. Ele marcava progresso do catálogo,
-   então parava na altura de "cachorro quente" enquanto a tela mostrava "tradicionais". Um
-   indicador que precisa de explicação para não enganar é pior do que nenhum. */
+   O primeiro chegou a ser removido por eu ter atribuído a ele uma confusão que era de
+   outro lugar — o destaque da sidebar estava atrasado, e a culpa pareceu do polegar
+   marcando um ponto que não batia com a categoria acesa. Com o atraso corrigido, o
+   indicador voltou. Fica o registro para ninguém refazer o diagnóstico errado. */
+
+/* A janela visível sobre o catálogo inteiro: onde ela começa e que fatia ela cobre.
+
+   `minimo` existe porque num cardápio de noventa cards a janela é ~4% do total, e um
+   polegar de 4% da altura da coluna é um risco que ninguém enxerga a um metro. Ele passa
+   a ocupar o mínimo legível — o indicador vira posição, não medida exata. */
+export function janelaDeRolagem({ scrollAtual = 0, alturaVisivel = 0, alturaTotal = 0, minimo = 0.06 } = {}) {
+  const total = Number(alturaTotal) || 0
+  const visivel = Number(alturaVisivel) || 0
+  if (total <= 0 || visivel <= 0 || visivel >= total) return { inicio: 0, fracao: 1 }
+  const y = Math.min(Math.max(Number(scrollAtual) || 0, 0), total - visivel)
+  const fracao = Math.min(1, Math.max(minimo, visivel / total))
+  // O início é reescalado para a fração ampliada não estourar o fim da trilha.
+  const inicio = (y / (total - visivel)) * (1 - fracao)
+  return { inicio, fracao }
+}
 
 /* Quanto da seção ATUAL já passou, de 0 a 1.
 
