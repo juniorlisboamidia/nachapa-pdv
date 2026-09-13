@@ -787,6 +787,12 @@ model Dispositivo {
   ultimoHeartbeatEm    DateTime?
   heartbeatJson        Json?
 
+  // Aparência POR APARELHO. A régua: se dois totens da mesma loja podem legitimamente
+  // divergir, é do aparelho. A posição das categorias pode — um totem encostado numa
+  // parede à direita pede a coluna do outro lado. A MARCA não pode, e por isso cores e
+  // logo ficam só no canal. `null` = segue o padrão da loja.
+  posicaoCategoriasOverride String?
+
   envios PedidoTotemEnvio[]
 
   @@index([empresaId])
@@ -897,6 +903,27 @@ model TotemConfiguracao {
   id                 Int      @id @default(autoincrement())
   empresaId          Int      @unique
   ociosidadeSegundos Int      @default(90)
+
+  // ── Aparência do canal ──
+  // A logo PRÓPRIA do totem, como data URL (mesmo formato de Empresa.logoDataUrl e das
+  // fotos de Checklist). Quando existe, VENCE a logo que vem do HUB/CW: a do cardápio é
+  // feita para fundo claro, e o totem é preto.
+  //
+  // Ela nunca viaja no bootstrap — é servida por rota própria, com bytes reais e cache
+  // versionado. `logoVersao` sobe a cada troca E a cada remoção; é ela que invalida o
+  // cache do tablet sem depender de o navegador reconsultar.
+  logoDataUrl        String?
+  logoVersao         Int      @default(0)
+
+  // Overrides ESPARSOS das cores, em chaves de DOMÍNIO (fundo, cartao, texto…), nunca
+  // `--ds-*`: o banco não pode conhecer nome de custom property, senão renomear um token
+  // da folha invalidaria a configuração de todas as lojas. A paleta inteira não é
+  // obrigatória — o que não está aqui vale o padrão embarcado. Régua em totemAparencia.js.
+  tokens             Json?
+
+  // Padrão da LOJA. O aparelho pode divergir (Dispositivo.posicaoCategoriasOverride).
+  posicaoCategoriasPadrao String @default("esquerda")
+
   criadoEm           DateTime @default(now())
   atualizadoEm       DateTime @updatedAt
 }
