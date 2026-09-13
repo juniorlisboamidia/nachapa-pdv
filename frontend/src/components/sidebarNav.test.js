@@ -23,10 +23,11 @@ test('subitens de Ferramentas e Loja Digital com identidade própria', () => {
   assert.equal(icone('Ferramentas', 'Checklist'), 'clipboardCheck');
   assert.equal(icone('Ferramentas', 'Etiquetas'), 'tag');
   assert.equal(icone('Loja Digital', 'Totem'), 'tablet');
-  assert.equal(icone('Loja Digital', 'Aparelhos'), 'cpu');
-  // As duas folhas do Totem também se distinguem entre si.
+  assert.equal(icone('Loja Digital', 'TV Indoor'), 'megaphone');
+  // As folhas do Totem também se distinguem entre si: numa lista de seis, ícone
+  // repetido faz duas telas diferentes parecerem a mesma de relance.
   const totem = grupo(grupo(grupos, 'Loja Digital').itens, 'Totem').itens;
-  assert.deepEqual(totem.map((n) => n.icon), ['relatorios', 'ficha']);
+  assert.deepEqual(totem.map((n) => n.icon), ['relatorios', 'config', 'cpu', 'ficha', 'star', 'financeiro']);
   assert.equal(new Set(totem.map((n) => n.icon)).size, totem.length);
 });
 
@@ -80,28 +81,41 @@ test('Ferramentas volta a ter só Checklist e Etiquetas', () => {
   assert.deepEqual(labels(grupo(grupos, 'Ferramentas').itens), ['Checklist', 'Etiquetas']);
 });
 
-test('Loja Digital na ordem Totem, Aparelhos — Totem é subgrupo (Pedidos, Apresentação)', () => {
+test('Loja Digital é suíte de canais: Totem (seis folhas) e TV Indoor', () => {
   const ld = grupo(grupos, 'Loja Digital').itens;
-  assert.deepEqual(ld.map((n) => n.label), ['Totem', 'Aparelhos']);
+  assert.deepEqual(ld.map((n) => n.label), ['Totem', 'TV Indoor']);
   const totem = grupo(ld, 'Totem');
-  // A área continua sendo a MESMA das duas telas (`aparelhos`): virar subgrupo é
+  // A área continua sendo a MESMA de todas as telas (`aparelhos`): reorganizar é
   // agrupamento visual, não mudança de permissão.
   assert.equal(totem.area, 'aparelhos');
   assert.equal(totem.to, undefined, 'o subgrupo não é link: quem tem rota são as folhas');
   assert.deepEqual(totem.itens.map((n) => [n.label, n.to]), [
     ['Pedidos', '/totem/pedidos'],
-    ['Apresentação', '/totem/apresentacao'],
+    ['Configurações', '/totem/configuracoes'],
+    ['Gestão de totens', '/totem/aparelhos'],
+    ['Cardápio', '/totem/cardapio'],
+    ['Aparência do totem', '/totem/aparencia'],
+    ['Formas de pagamento', '/totem/pagamentos'],
   ]);
+  // Pedidos PRIMEIRO, e isto não é ordem alfabética nem gosto: a `primeiraFolha` da
+  // Visão Geral e o redirect de `/totem` apontam para a primeira folha. Trocar a
+  // ordem mudaria o destino dos dois em silêncio.
+  assert.equal(totem.itens[0].to, '/totem/pedidos');
+  // A folha da Aparência aponta para a RAIZ da seção, não para a aba: é assim que
+  // `matchLeaf` (prefixo) reconhece `/totem/aparencia/banners` como sendo dela.
+  assert.equal(totem.itens.find((n) => n.label === 'Aparência do totem').to, '/totem/aparencia');
   // Folha sem `area` herda a do pai — é o que faz o filtro do operador funcionar.
   assert.ok(totem.itens.every((n) => n.area === undefined));
-  assert.deepEqual(grupo(ld, 'Aparelhos'), { to: '/aparelhos', label: 'Aparelhos', icon: 'cpu', area: 'aparelhos' });
+  assert.deepEqual(grupo(ld, 'TV Indoor'), { to: '/tv-indoor', label: 'TV Indoor', icon: 'megaphone', area: 'aparelhos' });
 });
 
-test('operador com aparelhos vê só Loja Digital, com Totem (as duas telas) e Aparelhos', () => {
+test('operador com aparelhos vê só Loja Digital, com as duas suítes', () => {
   const v = gruposVisiveis({ tipo: 'operador', areas: ['aparelhos'] });
   assert.deepEqual(labels(v), ['Loja Digital']);
-  assert.deepEqual(labels(grupo(v, 'Loja Digital').itens), ['Totem', 'Aparelhos']);
-  assert.deepEqual(labels(grupo(grupo(v, 'Loja Digital').itens, 'Totem').itens), ['Pedidos', 'Apresentação']);
+  assert.deepEqual(labels(grupo(v, 'Loja Digital').itens), ['Totem', 'TV Indoor']);
+  assert.deepEqual(labels(grupo(grupo(v, 'Loja Digital').itens, 'Totem').itens), [
+    'Pedidos', 'Configurações', 'Gestão de totens', 'Cardápio', 'Aparência do totem', 'Formas de pagamento',
+  ]);
 });
 
 test('operador com etiquetas vê Ferramentas com Etiquetas e NÃO vê Loja Digital', () => {
@@ -120,8 +134,12 @@ test('localizarRota abre o nível certo', () => {
   assert.deepEqual(localizarRota('/estoque'), { grupo: 'Produtos', sub: null });
   assert.deepEqual(localizarRota('/relatorios/meta'), { grupo: 'Relatórios', sub: null });
   assert.deepEqual(localizarRota('/checklist/painel'), { grupo: 'Ferramentas', sub: 'Checklist' });
-  assert.deepEqual(localizarRota('/aparelhos'), { grupo: 'Loja Digital', sub: null });
+  assert.deepEqual(localizarRota('/tv-indoor'), { grupo: 'Loja Digital', sub: null });
   assert.deepEqual(localizarRota('/totem/pedidos'), { grupo: 'Loja Digital', sub: 'Totem' });
-  assert.deepEqual(localizarRota('/totem/apresentacao'), { grupo: 'Loja Digital', sub: 'Totem' });
+  assert.deepEqual(localizarRota('/totem/cardapio'), { grupo: 'Loja Digital', sub: 'Totem' });
+  assert.deepEqual(localizarRota('/totem/aparelhos'), { grupo: 'Loja Digital', sub: 'Totem' });
+  // As duas abas da Aparência abrem o mesmo nível da sidebar.
+  assert.deepEqual(localizarRota('/totem/aparencia/personalizacao'), { grupo: 'Loja Digital', sub: 'Totem' });
+  assert.deepEqual(localizarRota('/totem/aparencia/banners'), { grupo: 'Loja Digital', sub: 'Totem' });
   assert.deepEqual(localizarRota('/'), { grupo: null, sub: null });
 });

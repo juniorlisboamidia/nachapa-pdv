@@ -29,11 +29,11 @@ const DESCRICOES = {
   '/rh/banco-de-talentos/banco': 'Recrutamento e seleção',
   '/checklist/painel': 'Checklists da operação',
   '/etiquetas/config': 'Etiquetas ANVISA e impressão',
-  '/aparelhos': 'Tablets pareados: totem e TV',
-  // Uma descrição para as DUAS telas do Totem: o card da Visão Geral do subgrupo aponta
-  // para a primeira folha (/totem/pedidos), então uma chave /totem/apresentacao nunca seria
-  // lida — ficaria só enganando quem viesse mexer aqui depois.
-  '/totem/pedidos': 'Pedidos do totem e apresentação da vitrine',
+  // Uma descrição para o canal INTEIRO: o card da Visão Geral aponta para a primeira folha
+  // (/totem/pedidos), então uma chave por tela nunca seria lida — ficaria só enganando quem
+  // viesse mexer aqui depois.
+  '/totem/pedidos': 'Pedidos, cardápio, aparelhos e aparência do totem',
+  '/tv-indoor': 'Canal de TV indoor (em breve)',
   '/relatorios/meta': 'Resultados dos anúncios no Meta',
   '/relatorios/cardapio': 'Vendas e faltas do cardápio',
 }

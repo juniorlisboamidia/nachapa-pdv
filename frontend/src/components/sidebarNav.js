@@ -123,24 +123,39 @@ export const grupos = [
     ],
   },
   {
-    // Loja Digital: o que a loja expõe ao cliente por tela (totem hoje; TV Indoor entra
-    // entre Totem e Aparelhos quando existir). Totem e Aparelhos dividem a MESMA área
-    // (`aparelhos`, acessos/areas.js): quem cadastra o tablet é quem audita o que ele
-    // mandou ao cardápio. Rotas e permissões não mudam — só o agrupamento.
+    // Loja Digital: a SUÍTE DE CANAIS que a loja expõe ao cliente por tela. Totem e TV
+    // Indoor são produtos distintos aqui em cima; por baixo dividem a mesma infraestrutura
+    // de Dispositivo, pareamento e heartbeat. Tudo continua na área `aparelhos`
+    // (acessos/areas.js): quem cadastra o tablet é quem audita o que ele mandou ao cardápio.
     label: 'Loja Digital', icon: 'monitorSmartphone',
     itens: [
       {
-        // Totem virou subgrupo: são duas telas de naturezas diferentes — "Pedidos" audita o
-        // que o tablet mandou ao cardápio, "Apresentação" decide o que ele MOSTRA. Área e
-        // rotas não mudaram; a de cima (`/totem/pedidos`) segue sendo a primeira folha, que
-        // é para onde o card da Visão Geral e o /totem apontam.
+        // O Totem é um canal com telas de naturezas bem diferentes — auditoria, cadastro de
+        // aparelho, apresentação do catálogo, configuração — e por isso é subgrupo.
+        //
+        // A ORDEM importa mais do que parece: `primeiraFolha` (Visão Geral) e o redirect de
+        // `/totem` apontam para a PRIMEIRA folha. Pedidos fica em cima, e trocar isso muda o
+        // destino dos dois sem que nada acuse.
         label: 'Totem', icon: 'tablet', area: 'aparelhos',
         itens: [
           { to: '/totem/pedidos', label: 'Pedidos', icon: 'relatorios' },
-          { to: '/totem/apresentacao', label: 'Apresentação', icon: 'ficha' },
+          { to: '/totem/configuracoes', label: 'Configurações', icon: 'config' },
+          { to: '/totem/aparelhos', label: 'Gestão de totens', icon: 'cpu' },
+          { to: '/totem/cardapio', label: 'Cardápio', icon: 'ficha' },
+          // FOLHA, e não subgrupo: a Sidebar desenha três níveis, e Personalização/Banners
+          // são ABAS dentro da página (`/totem/aparencia/:aba`), como Etiquetas, Checklist e
+          // Ponto Facial já fazem. Aprofundar o render do menu inteiro para servir um caso
+          // só sairia caro em toda a aplicação.
+          //
+          // O `to` aponta para a RAIZ da seção, não para a aba: `matchLeaf` casa por
+          // prefixo, e é o que faz `/totem/aparencia/banners` continuar sendo esta folha.
+          { to: '/totem/aparencia', label: 'Aparência do totem', icon: 'star' },
+          { to: '/totem/pagamentos', label: 'Formas de pagamento', icon: 'financeiro' },
         ],
       },
-      { to: '/aparelhos', label: 'Aparelhos', icon: 'cpu', area: 'aparelhos' },
+      // Canal irmão, ainda placeholder: sem banco, sem endpoint, sem tela. Megafone porque
+      // TV indoor é mídia — e o `monitorSmartphone` já é a marca do grupo inteiro.
+      { to: '/tv-indoor', label: 'TV Indoor', icon: 'megaphone', area: 'aparelhos' },
     ],
   },
 ];

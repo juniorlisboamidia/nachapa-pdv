@@ -152,10 +152,19 @@ export default function App() {
             {/* Aparelhos (tablets do totem/TV), a auditoria do que o totem mandou ao CW e a
                 configuração do que ele MOSTRA. As três telas vivem na área `aparelhos`
                 (backend/acessos/areas.js) — o prefixo /totem já mapeia para ela. */}
-            <Route path="aparelhos" element={<Aparelhos />} />
             <Route path="totem" element={<Navigate to="/totem/pedidos" replace />} />
             <Route path="totem/pedidos" element={<TotemPedidos />} />
-            <Route path="totem/apresentacao" element={<TotemApresentacao />} />
+            <Route path="totem/configuracoes" element={<EmConstrucao titulo="Configurações do totem" descricao="Em breve." />} />
+            <Route path="totem/aparelhos" element={<Aparelhos />} />
+            <Route path="totem/cardapio" element={<TotemApresentacao />} />
+            <Route path="totem/aparencia" element={<Navigate to="/totem/aparencia/personalizacao" replace />} />
+            <Route path="totem/aparencia/:aba" element={<EmConstrucao titulo="Aparência do totem" descricao="Em breve." />} />
+            <Route path="totem/pagamentos" element={<EmConstrucao titulo="Formas de pagamento" descricao="Em breve." />} />
+            <Route path="tv-indoor" element={<EmConstrucao titulo="TV Indoor" descricao="Em breve." />} />
+            {/* Compatibilidade: os endereços antigos continuam abrindo o lugar novo. Link
+                anotado, favorito do navegador e aba esquecida aberta não podem virar 404. */}
+            <Route path="aparelhos" element={<Navigate to="/totem/aparelhos" replace />} />
+            <Route path="totem/apresentacao" element={<Navigate to="/totem/cardapio" replace />} />
             {/* Marketing › Grupo VIP (Automações virou Marketing; rota antiga redireciona) */}
             <Route path="marketing/grupo-vip" element={<GrupoVip />} />
             <Route path="automacoes/grupo-vip" element={<Navigate to="/marketing/grupo-vip" replace />} />

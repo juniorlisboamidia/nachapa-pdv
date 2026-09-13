@@ -10,13 +10,13 @@ test('seções na ordem da sidebar, uma por grupo raiz com itens', () => {
   assert.deepEqual(atalhosDaArvore(grupos).map((s) => s.titulo), ['Relatórios', 'Produtos', 'Gestão', 'Marketing', 'Dep. Pessoal', 'Ferramentas', 'Loja Digital']);
 });
 
-test('Visão Geral herda Loja Digital com Totem (pedidos) e Aparelhos, e Ferramentas sem eles', () => {
+test('Visão Geral herda Loja Digital com Totem (pedidos) e TV Indoor, e Ferramentas sem eles', () => {
   const s = atalhosDaArvore(grupos);
-  // Totem virou SUBGRUPO (Pedidos, Apresentação): continua UM card na Visão Geral, e ele
-  // aponta para a primeira folha — `/totem/pedidos`, a mesma rota de antes.
+  // O Totem tem seis folhas e continua sendo UM card na Visão Geral: ele aponta para a
+  // primeira folha — `/totem/pedidos`, a mesma rota de sempre.
   const ld = s.find((x) => x.titulo === 'Loja Digital');
   assert.deepEqual(ld.itens.map((i) => [i.label, i.to]), [
-    ['Totem', '/totem/pedidos'], ['Aparelhos', '/aparelhos'],
+    ['Totem', '/totem/pedidos'], ['TV Indoor', '/tv-indoor'],
   ]);
   assert.equal(ld.itens.find((i) => i.label === 'Totem').icon, 'tablet');
   assert.deepEqual(s.find((x) => x.titulo === 'Ferramentas').itens.map((i) => i.label), ['Checklist', 'Etiquetas']);
