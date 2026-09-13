@@ -8,11 +8,16 @@
 // produto. Emoji que faz parte do NOME de uma categoria vinda do Cardápio Web
 // continua aparecendo — aquilo é dado da loja, não interface (spec §5.4/§9.1).
 const ICONES = {
-  mesa: (
+  // Comer na loja. O desenho de MESA (tampo + pernas) vira um banquinho quando
+  // cresce; talher é o símbolo que todo mundo lê de longe, e faz par com a
+  // sacola do "levar".
+  talheres: (
     <>
-      <path d="M3 11h18" />
-      <path d="M5 11l1.4-5.2A2 2 0 0 1 8.3 4h7.4a2 2 0 0 1 1.9 1.8L19 11" />
-      <path d="M7 11v9M17 11v9" />
+      <path d="M5 3v4.6a3 3 0 0 0 6 0V3" />
+      <path d="M8 3v5.6" />
+      <path d="M8 9.6V21" />
+      <path d="M17.5 21V3" />
+      <path d="M17.5 3c-1.9 1.6-2.9 4-2.9 6.9 0 1.4 1 2.1 2.9 2.1" />
     </>
   ),
   sacola: (

@@ -329,7 +329,7 @@
 .tq-inicio {
   flex: 1 1 auto; position: relative; background: var(--tq-preto); color: var(--tq-branco);
   display: flex; flex-direction: column; justify-content: center;
-  gap: clamp(28px, 5vh, 110px); padding: clamp(36px, 4vh, 88px) clamp(36px, 5vw, 72px);
+  gap: clamp(28px, 6vh, 130px); padding: clamp(36px, 4vh, 88px) clamp(36px, 5vw, 72px);
 }
 .tq-inicio-topo { display: flex; align-items: center; gap: clamp(24px, 4vw, 48px); }
 @media (max-width: 599px) { .tq-inicio-topo { flex-direction: column; text-align: center; } }
@@ -355,11 +355,13 @@
 .tq-inicio-tit span { display: block; }
 .tq-inicio-sub { font-size: clamp(17px, 2.4vw, 32px); color: var(--tq-texto-claro); }
 
-/* Ocupa a sobra da coluna, com teto para não virar um paredão numa tela muito
-   alta. É isto que enche o retrato, sem esticar tipografia. */
+/* Alvo grande, não paredão. 46vh (880px em 1920) deixava o ícone e o texto
+   boiando num campo amarelo vazio; 30vh dá um bloco alto e ainda preenchido. O
+   resto da altura vira respiro do conjunto, que é o que uma tela de repouso
+   pede. */
 .tq-modos {
   flex: 0 1 auto; display: grid; grid-template-columns: 1fr 1fr;
-  gap: clamp(16px, 2.4vw, 32px); height: clamp(240px, 46vh, 880px);
+  gap: clamp(16px, 2.4vw, 32px); height: clamp(230px, 30vh, 560px);
 }
 .tq-modos.um { grid-template-columns: minmax(0, 1fr); }
 .tq-modo {
@@ -378,7 +380,7 @@
 .tq-modo-s { font-size: clamp(15px, 1.9vw, 26px); opacity: 0.66; }
 /* O ícone acompanha a altura do cartão: em 96px fixos ele sumia dentro de um
    bloco de 800px. O CSS vence o atributo width do SVG. */
-.tq-modo .tq-ico { width: clamp(72px, 10vh, 168px); height: auto; }
+.tq-modo .tq-ico { width: clamp(72px, 8vh, 140px); height: auto; }
 
 
 /* ═══ V3 — catálogo: sidebar de categorias e grade de produtos ═════════════ */

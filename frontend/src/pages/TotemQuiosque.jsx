@@ -58,7 +58,7 @@ const MS_LIBERAR_NOVO = 20_000     // no 202, "Novo pedido" só aparece depois d
 const MS_AVISO_INATIVIDADE = 15_000 // "Ainda está aí?" 15 s antes do reset
 
 const MODOS = {
-  onsite: { titulo: 'Comer aqui', sub: 'Vou comer na loja', ico: 'mesa' },
+  onsite: { titulo: 'Comer aqui', sub: 'Vou comer na loja', ico: 'talheres' },
   takeout: { titulo: 'Levar', sub: 'Vou levar para viagem', ico: 'sacola' },
 }
 const KIND_LABEL = { money: 'Dinheiro', debit_card: 'Cartão de débito', credit_card: 'Cartão de crédito' }
