@@ -3334,6 +3334,10 @@ body.theme-dark .apr-contagem, body.theme-dark .apr-qr-legenda, body.theme-dark 
 .ttm-acoes { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .ttm-acoes .btn { min-height: 34px; }
 .ttm-dica { font-size: 11.5px; color: var(--app-text-3); margin-top: 6px; }
+/* Explicação que MUDA a escolha de quem está no formulário (o que o número significa,
+   o que acontece ao salvar). Não é `ttm-dica`: aquilo é rodapé de apoio, e 11,5px
+   apagados são para quem já entendeu — este texto é para quem ainda vai decidir. */
+.ttm-nota { font-size: 13px; color: var(--app-text-2); margin-top: 8px; max-width: 60ch; line-height: 1.45; }
 /* Código técnico do servidor (ITEM_AUSENTE, GRUPO_SEM_OPCOES…) na tela do admin: ele
    acompanha a frase humana, nunca a substitui — por isso pequeno, monoespaçado e apagado. */
 .ttm-codigo {

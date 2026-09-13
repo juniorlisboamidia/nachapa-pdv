@@ -49,6 +49,7 @@ import EscalaMotoboysPublica from './pages/EscalaMotoboysPublica'
 import Aparelhos from './pages/Aparelhos'
 import TotemPedidos from './pages/TotemPedidos'
 import TotemCardapio from './pages/TotemCardapio'
+import TotemConfiguracoes from './pages/TotemConfiguracoes'
 import DispositivoPareamento from './pages/DispositivoPareamento'
 
 function TelaCarregando() {
@@ -154,7 +155,7 @@ export default function App() {
                 (backend/acessos/areas.js) — o prefixo /totem já mapeia para ela. */}
             <Route path="totem" element={<Navigate to="/totem/pedidos" replace />} />
             <Route path="totem/pedidos" element={<TotemPedidos />} />
-            <Route path="totem/configuracoes" element={<EmConstrucao titulo="Configurações do totem" descricao="Em breve." />} />
+            <Route path="totem/configuracoes" element={<TotemConfiguracoes />} />
             <Route path="totem/aparelhos" element={<Aparelhos />} />
             <Route path="totem/cardapio" element={<TotemCardapio />} />
             <Route path="totem/aparencia" element={<Navigate to="/totem/aparencia/personalizacao" replace />} />
