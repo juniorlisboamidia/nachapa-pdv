@@ -27,6 +27,7 @@ import { aparelhoApi } from '../services/api'
 import Casca from '../components/totem/Casca'
 import Cabecalho from '../components/totem/Cabecalho'
 import TelaInicio from '../components/totem/TelaInicio'
+import TelaEspera from '../components/totem/TelaEspera'
 import TelaCatalogo from '../components/totem/TelaCatalogo'
 import BarraPedido from '../components/totem/BarraPedido'
 import TelaItem from '../components/totem/TelaItem'
@@ -55,6 +56,9 @@ import {
 // Loja fechada × canal sem modo: dois estados que estavam na mesma condição e têm
 // consequências opostas. Ver totemLoja.js.
 import { estadoDoCanal, podeAvancar } from '../components/totemLoja'
+// Repouso × sessão. `emRepouso` é a fonte única de "existe sessão?" — a pergunta que o
+// código fazia comparando `tela === 'inicio'`, quando início e repouso eram a mesma tela.
+import { TELA_REPOUSO, armaReset, armaAviso } from '../components/totemSessao'
 
 const VERSAO = 'totem-1.0'
 const MS_HEARTBEAT = 60_000
@@ -90,7 +94,9 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
   const [carregandoBoot, setCarregandoBoot] = useState(true)
 
   // Fluxo
-  const [tela, setTela] = useState('inicio')
+  // Monta em REPOUSO: o totem passa a maior parte da vida nesta tela, e abrir direto na
+  // escolha do modo diria que há uma sessão que ninguém começou.
+  const [tela, setTela] = useState(TELA_REPOUSO)
   const [orderType, setOrderType] = useState(null)
   const [carrinho, setCarrinho] = useState([])
   const [aberto, setAberto] = useState(null)     // { item, apresentado, qtd, observacao, selecoes, uid? }
@@ -231,7 +237,12 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
     setCategoriaId(null)
     setAviso(null)
     setAlertaInatividade(null)
-    setTela('inicio')
+    // TODA volta ao início é abandono de sessão — cancelar no cabeçalho, "começar de novo"
+    // depois de um erro, "novo pedido" depois do comprovante, e o próprio estouro do
+    // relógio. Nenhuma delas significa "voltar a escolher o modo", então todas vão para o
+    // REPOUSO. Não existe hoje um caminho de volta a `inicio` dentro da sessão; se um dia
+    // existir, ele chama `setTela('inicio')` e não passa por aqui.
+    setTela(TELA_REPOUSO)
     if (recarregar) carregarBoot(true)
   }, [carregarBoot])
 
@@ -263,7 +274,7 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
   useEffect(() => {
     const armar = () => {
       clearTimeout(inatividadeRef.current)
-      if (tela === 'inicio' || enviando || travado) return
+      if (!armaReset({ tela, enviando, travado })) return
       inatividadeRef.current = setTimeout(() => reiniciar(true), relogioRef.current.atual())
     }
     armar()
@@ -288,7 +299,7 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
   // o número do pedido com "o seu pedido é apagado" seria mentir para quem está
   // justamente anotando esse número.
   useEffect(() => {
-    if (tela === 'inicio' || tela === 'resultado' || enviando || travado) return undefined
+    if (!armaAviso({ tela, enviando, travado })) return undefined
     let t = null
     let iv = null
     const parar = () => { clearTimeout(t); clearInterval(iv); t = null; iv = null }
@@ -362,10 +373,15 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
   }, [tela, statusResultado, displayResultado, desistiuDoNumero, envioIdResultado])
 
   // ── Navegação ─────────────────────────────────────────────────────────────
-  function escolherModo(t) {
-    // COMEÇO DA SESSÃO. Com a Tela de espera (T10) este ponto passa a ser `espera →
-    // inicio`; a captura muda de lugar, não de regra.
+  // COMEÇO DA SESSÃO: o toque na espera. A captura do relógio é aqui, e não na escolha do
+  // modo, porque quem tocou já iniciou — mesmo sem ter dito ainda se come na loja ou leva.
+  // Sem isto, um cliente que tocasse e fosse embora deixaria o totem parado na escolha.
+  function comecarSessao() {
     relogioRef.current.iniciar(boot?.configuracao)
+    setTela('inicio')
+  }
+
+  function escolherModo(t) {
     setOrderType(t)
     setCategoriaId(categorias[0]?.id ?? null)
     invalidarCotacao()
@@ -657,6 +673,14 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
 
   // ── Telas ─────────────────────────────────────────────────────────────────
   let conteudo = null
+
+  if (tela === TELA_REPOUSO) {
+    return (
+      <Casca>
+        <TelaEspera loja={loja} aoTocar={comecarSessao} />
+      </Casca>
+    )
+  }
 
   if (tela === 'inicio') {
     conteudo = (

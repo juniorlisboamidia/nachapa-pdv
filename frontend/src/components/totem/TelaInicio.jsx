@@ -1,6 +1,11 @@
 import { Ico } from './icones'
 
-// Tela de repouso do totem — é ela que fica horas no vidro chamando quem passa.
+// Escolha do modo: comer aqui ou levar. NÃO é mais a tela de repouso — quem fica horas no
+// vidro chamando quem passa é a TelaEspera, e o cliente só chega aqui depois de tocar.
+//
+// A separação tem uma consequência que não é visual: a partir daqui já existe SESSÃO, e o
+// relógio de ociosidade já corre. Quem tocou, viu as duas opções e foi embora não deixa
+// mais o totem parado nesta tela — ele volta sozinho ao repouso.
 //
 // A primeira versão empilhava tudo no centro e sobrava preto: linguagem de página
 // web, não de fachada. Aqui a composição é assimétrica (placa e texto lado a
