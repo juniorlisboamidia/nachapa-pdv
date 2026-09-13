@@ -245,3 +245,159 @@ test('uma paleta ilegível é DIAGNOSTICADA, não bloqueada — quem decide é a
   // Mas a paleta continua VÁLIDA para gravar: contraste não bloqueia nesta task.
   assert.equal(validarEntrada({ ...PALETA, texto: '#111111' }).ok, true);
 });
+
+// ══ Operações de contrato (A3) ══════════════════════════════════════════════
+import {
+  PADROES, POSICOES, POSICAO_PADRAO,
+  normalizarPosicao, posicaoEfetiva, validarPatch, aplicarPatch, coresEfetivas, aparenciaPublica,
+} from './totemAparencia.js';
+
+test('os padrões são as seis chaves, e batem com o que a folha desenha', () => {
+  assert.deepEqual(Object.keys(PADROES).sort(), [...CHAVES].sort());
+  assert.ok(Object.isFrozen(PADROES));
+  // Estes seis também estão em frontend/src/styles/totem.css. Mudar um sem o outro faz a
+  // tela de configuração mentir sobre o que o cliente está vendo.
+  assert.deepEqual(PADROES, {
+    fundo: '#000000', cartao: '#131211', texto: '#ffffff',
+    textoApoio: '#d79e00', acaoFundo: '#d79e00', acaoTexto: '#000000',
+  });
+  for (const v of Object.values(PADROES)) assert.equal(normalizarCor(v), v, 'padrão tem de ser hex canônico');
+});
+
+test('🔴 instalação sem configuração = a aparência de hoje, idêntica', () => {
+  assert.deepEqual(coresEfetivas(null), PADROES);
+  assert.deepEqual(coresEfetivas(undefined), PADROES);
+  assert.deepEqual(coresEfetivas({}), PADROES);
+  const pub = aparenciaPublica({});
+  assert.deepEqual(pub.tokens, {}, 'nenhum override viaja');
+  assert.equal(pub.posicaoCategorias, 'esquerda');
+  assert.equal(pub.temLogoPersonalizada, false);
+  assert.equal(pub.logoVersao, 0);
+});
+
+// -- posição -----------------------------------------------------------------
+test('só esquerda e direita', () => {
+  assert.deepEqual(POSICOES, ['esquerda', 'direita']);
+  assert.equal(POSICAO_PADRAO, 'esquerda');
+  assert.equal(normalizarPosicao('direita'), 'direita');
+  for (const v of ['topo', 'Direita', 'DIREITA', ' direita', '', null, undefined, 0, {}]) {
+    assert.equal(normalizarPosicao(v), null, `aceitou ${String(v)}`);
+  }
+});
+
+test('🔴 override do APARELHO vence o padrão da loja', () => {
+  assert.equal(posicaoEfetiva({ override: 'direita', padrao: 'esquerda' }), 'direita');
+  assert.equal(posicaoEfetiva({ override: 'esquerda', padrao: 'direita' }), 'esquerda');
+  assert.equal(posicaoEfetiva({ override: null, padrao: 'direita' }), 'direita');
+  assert.equal(posicaoEfetiva({ padrao: 'direita' }), 'direita');
+  // Cada degrau é sanitizado: lixo guardado cai para o degrau seguinte.
+  assert.equal(posicaoEfetiva({ override: 'topo', padrao: 'direita' }), 'direita');
+  assert.equal(posicaoEfetiva({ override: 'topo', padrao: 'topo' }), 'esquerda');
+  assert.equal(posicaoEfetiva(), 'esquerda');
+});
+
+// -- patch -------------------------------------------------------------------
+test('🔴 null REMOVE o override — e continua não sendo cor válida', () => {
+  const p = validarPatch({ fundo: null });
+  assert.equal(p.ok, true);
+  assert.deepEqual(p.remover, ['fundo']);
+  assert.deepEqual(p.definir, {});
+  // A camada de cor não mudou: para ela, null segue sendo inválido.
+  assert.equal(normalizarCor(null), null);
+  assert.equal(validarEntrada({ fundo: null }).ok, false);
+});
+
+test('🔴 chave omitida não é tocada — PUT parcial não apaga o resto', () => {
+  const guardados = { fundo: '#111111', texto: '#eeeeee', acaoFundo: '#f9d900' };
+  const novo = aplicarPatch(guardados, validarPatch({ texto: '#ffffff' }));
+  assert.deepEqual(novo, { fundo: '#111111', texto: '#ffffff', acaoFundo: '#f9d900' });
+});
+
+test('🔴 remover tira a chave do objeto, não guarda null', () => {
+  const novo = aplicarPatch({ fundo: '#111111', texto: '#eeeeee' }, validarPatch({ fundo: null }));
+  assert.deepEqual(novo, { texto: '#eeeeee' });
+  assert.equal('fundo' in novo, false, 'override removido some do objeto');
+  assert.equal(coresEfetivas(novo).fundo, PADROES.fundo, 'e a cor volta ao padrão');
+});
+
+test('patch mistura definir, remover e erro na mesma chamada', () => {
+  const p = validarPatch({ fundo: '#FFF', cartao: null, texto: 'branco', borda: '#000' });
+  assert.equal(p.ok, false);
+  assert.deepEqual(p.definir, { fundo: '#ffffff' });
+  assert.deepEqual(p.remover, ['cartao']);
+  assert.deepEqual(p.erros, [{ chave: 'texto', motivo: MOTIVO_COR }, { chave: 'borda', motivo: MOTIVO_CHAVE }]);
+});
+
+test('🔴 remover chave desconhecida é erro, não silêncio', () => {
+  const p = validarPatch({ borda: null });
+  assert.equal(p.ok, false);
+  assert.deepEqual(p.erros, [{ chave: 'borda', motivo: MOTIVO_CHAVE }]);
+  assert.deepEqual(p.remover, []);
+});
+
+test('patch de corpo que não é objeto é recusado inteiro', () => {
+  for (const v of [null, 'x', 3, []]) {
+    const p = validarPatch(v);
+    assert.equal(p.ok, false);
+    assert.deepEqual(p.erros, [{ chave: null, motivo: MOTIVO_FORMATO }]);
+  }
+});
+
+// -- overrides esparsos e dado corrompido ------------------------------------
+test('🔴 overrides ESPARSOS: uma cor trocada, cinco no padrão', () => {
+  const efetivas = coresEfetivas({ acaoFundo: '#ff0000' });
+  assert.equal(efetivas.acaoFundo, '#ff0000');
+  assert.equal(efetivas.fundo, PADROES.fundo);
+  assert.equal(Object.keys(efetivas).length, 6, 'sempre completo para a tela e o contraste');
+});
+
+test('🔴 dado persistido inválido degrada para o padrão', () => {
+  const podre = { fundo: 'rgb(0,0,0)', cartao: null, borda: '#fff', texto: '#00ff00' };
+  const efetivas = coresEfetivas(podre);
+  assert.equal(efetivas.texto, '#00ff00', 'o que presta vale');
+  assert.equal(efetivas.fundo, PADROES.fundo);
+  assert.equal(efetivas.cartao, PADROES.cartao);
+  assert.equal('borda' in efetivas, false, 'chave desconhecida não vira cor');
+  assert.deepEqual(aparenciaPublica({ config: { tokens: podre } }).tokens, { texto: '#00ff00' });
+});
+
+// -- o bloco do bootstrap ----------------------------------------------------
+test('🔴 a logo NUNCA vai no bootstrap', () => {
+  const pub = aparenciaPublica({
+    config: { logoDataUrl: 'data:image/png;base64,AAAA', logoVersao: 4, tokens: { fundo: '#111111' } },
+  });
+  assert.equal(pub.temLogoPersonalizada, true);
+  assert.equal(pub.logoVersao, 4);
+  const serializado = JSON.stringify(pub);
+  assert.equal(serializado.includes('base64'), false, 'base64 no bootstrap é desperdício a cada 5 min');
+  assert.equal(serializado.includes('data:image'), false);
+  assert.equal('logoDataUrl' in pub, false);
+});
+
+test('bloco público tem só o que o quiosque desenha', () => {
+  const pub = aparenciaPublica({ config: { tokens: { fundo: '#111111' }, posicaoCategoriasPadrao: 'direita' } });
+  assert.deepEqual(Object.keys(pub).sort(), ['logoVersao', 'posicaoCategorias', 'temLogoPersonalizada', 'tokens']);
+  assert.equal(pub.posicaoCategorias, 'direita');
+});
+
+test('logoVersao torta vira 0', () => {
+  for (const v of [null, undefined, '3', 3.5, NaN, {}]) {
+    assert.equal(aparenciaPublica({ config: { logoVersao: v } }).logoVersao, 0, `versão ${String(v)}`);
+  }
+});
+
+test('🔴 duas empresas não se misturam — cada bloco sai da sua config', () => {
+  const a = aparenciaPublica({ config: { tokens: { fundo: '#aa0000' }, logoVersao: 1, logoDataUrl: 'data:image/png;base64,A' } });
+  const b = aparenciaPublica({ config: { tokens: { fundo: '#0000bb' }, logoVersao: 7 } });
+  assert.equal(a.tokens.fundo, '#aa0000');
+  assert.equal(b.tokens.fundo, '#0000bb');
+  assert.equal(a.temLogoPersonalizada, true);
+  assert.equal(b.temLogoPersonalizada, false, 'versão igual não implica logo igual');
+});
+
+test('contraste AVISA mas não impede salvar', () => {
+  const ilegivel = { texto: '#111111', fundo: '#000000' };
+  assert.equal(validarPatch(ilegivel).ok, true, 'salvar é permitido');
+  const d = diagnosticoDeContraste(coresEfetivas(ilegivel));
+  assert.equal(d.find((p) => p.id === 'texto-fundo').aaNormal, false, 'e o diagnóstico reprova');
+});

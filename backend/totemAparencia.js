@@ -180,3 +180,111 @@ export function diagnosticoDeContraste(tokens) {
 
 const ehObjeto = (v) => typeof v === 'object' && v !== null && !Array.isArray(v);
 const round2 = (n) => Math.round(n * 100) / 100;
+
+/* ══ Operações de CONTRATO ═══════════════════════════════════════════════════════════
+   O que vem acima é o domínio puro das cores. O que vem daqui para baixo é o contrato do
+   endpoint administrativo — e a diferença mais importante é o `null`.
+
+   Para a validação de cor, `null` NÃO é cor: `normalizarCor(null)` é `null` e
+   `validarEntrada({ fundo: null })` é erro. Isso continua valendo e não mudou.
+
+   No PATCH do PUT, `null` é uma OPERAÇÃO: "remova este override e volte ao padrão". São
+   camadas diferentes, e é por isso que a operação mora numa função separada em vez de
+   afrouxar a régua de cor — afrouxar faria um campo vazio enviado por acidente apagar a
+   escolha da loja sem que nada acusasse. */
+
+/* Os PADRÕES do canal, que é o que a tela mostra quando não há override.
+
+   ⚠️ Estes seis valores também existem em `frontend/src/styles/totem.css`, e é de
+   propósito: lá eles são o que o quiosque desenha quando NADA chega (bootstrap velho,
+   rede caindo, aparência corrompida), aqui são o que o admin vê como "padrão". Os dois
+   têm de concordar, e há teste para isso. Mudar um sem o outro faz a tela de configuração
+   mentir sobre o que o cliente está vendo. */
+export const PADROES = Object.freeze({
+  fundo: '#000000',       // --ds-fundo
+  cartao: '#131211',      // --tq-superficie (e não --ds-cartao: o marrom da marca lê como
+                          //   sujeira sob foto de comida — desvio consciente da spec §5.2)
+  texto: '#ffffff',       // --ds-texto
+  textoApoio: '#d79e00',  // --ds-texto-apoio
+  acaoFundo: '#d79e00',   // --ds-botao-fundo
+  acaoTexto: '#000000',   // --ds-botao-texto
+});
+
+export const POSICOES = Object.freeze(['esquerda', 'direita']);
+export const POSICAO_PADRAO = 'esquerda';
+export const MOTIVO_POSICAO = 'POSICAO_INVALIDA';
+
+/* Posição válida, ou `null`. Não normaliza caixa nem acento: isto vem de um seletor com
+   duas opções, não de texto digitado — aceitar "Direita" seria aceitar que o cliente
+   inventa valores. */
+export function normalizarPosicao(valor) {
+  return POSICOES.includes(valor) ? valor : null;
+}
+
+/* Qual posição vale para ESTE aparelho: override dele, senão o padrão da loja, senão
+   esquerda. Cada degrau é sanitizado — um valor inválido guardado no banco não desce para
+   o quiosque, ele cai para o degrau seguinte. */
+export function posicaoEfetiva({ override, padrao } = {}) {
+  return normalizarPosicao(override) ?? normalizarPosicao(padrao) ?? POSICAO_PADRAO;
+}
+
+/* O PATCH do PUT administrativo.
+
+   Devolve `{ ok, definir, remover, erros }`:
+     definir  — `{ chave: '#rrggbb' }` a gravar
+     remover  — `['chave']` cujo override sai (volta ao padrão)
+
+   Chave OMITIDA não aparece em nenhum dos dois: não mexer é diferente de voltar ao padrão,
+   e um PUT parcial não pode apagar o que ele não mencionou.
+
+   Chave desconhecida é erro mesmo com valor `null`: remover algo que não existe é engano
+   do chamador, e responder "ok" a isso esconde um typo. */
+export function validarPatch(bruto) {
+  if (!ehObjeto(bruto)) return { ok: false, definir: {}, remover: [], erros: [{ chave: null, motivo: MOTIVO_FORMATO }] };
+  const definir = {};
+  const remover = [];
+  const erros = [];
+  for (const chave of Object.keys(bruto)) {
+    if (!CHAVES.includes(chave)) { erros.push({ chave, motivo: MOTIVO_CHAVE }); continue; }
+    if (bruto[chave] === null) { remover.push(chave); continue; }
+    const cor = normalizarCor(bruto[chave]);
+    if (cor === null) { erros.push({ chave, motivo: MOTIVO_COR }); continue; }
+    definir[chave] = cor;
+  }
+  return { ok: erros.length === 0, definir, remover, erros };
+}
+
+/* Os overrides guardados + o patch = os overrides novos. O que sai fica FORA do objeto —
+   não vira `null` guardado, que seria um override de valor nulo em vez da ausência dele. */
+export function aplicarPatch(guardados, patch) {
+  const { tokens } = sanitizarTokens(guardados);
+  const novos = { ...tokens, ...(patch?.definir ?? {}) };
+  for (const chave of (patch?.remover ?? [])) delete novos[chave];
+  return novos;
+}
+
+/* As seis cores que o quiosque vai realmente desenhar: padrão por baixo, override por
+   cima. Sempre completo — a tela e o diagnóstico de contraste nunca recebem meia paleta. */
+export function coresEfetivas(guardados) {
+  const { tokens } = sanitizarTokens(guardados);
+  return { ...PADROES, ...tokens };
+}
+
+/* O bloco `aparencia` do bootstrap público.
+
+   Só o que o quiosque precisa para desenhar: os overrides (o padrão ele já tem embarcado
+   na folha), a posição efetiva DESTE aparelho, e o estado da logo. A logo em si NUNCA vai
+   aqui — o bootstrap é relido a cada 5 min por aparelho, e 200 KB de base64 nessa
+   frequência é desperdício puro. Vai a versão, e o tablet busca os bytes uma vez. */
+export function aparenciaPublica({ config, dispositivo } = {}) {
+  const { tokens } = sanitizarTokens(config?.tokens);
+  return {
+    tokens,
+    posicaoCategorias: posicaoEfetiva({
+      override: dispositivo?.posicaoCategoriasOverride,
+      padrao: config?.posicaoCategoriasPadrao,
+    }),
+    logoVersao: Number.isInteger(config?.logoVersao) ? config.logoVersao : 0,
+    temLogoPersonalizada: typeof config?.logoDataUrl === 'string' && config.logoDataUrl.length > 0,
+  };
+}

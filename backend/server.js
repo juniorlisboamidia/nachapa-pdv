@@ -49,6 +49,13 @@ import {
   normalizarOciosidade, configuracaoParaJson,
   OCIOSIDADE_PADRAO, OCIOSIDADE_MIN, OCIOSIDADE_MAX, OCIOSIDADE_SUGERIDA,
 } from './totemConfiguracao.js';
+// Totem › Aparência: cores em chaves de DOMÍNIO, posição das categorias e o estado da
+// logo. A régua é toda pura e mora num lugar só.
+import {
+  CHAVES as CHAVES_APARENCIA, PADROES as PADROES_APARENCIA, POSICOES as POSICOES_CATEGORIAS,
+  MOTIVO_POSICAO, validarPatch, aplicarPatch, coresEfetivas, sanitizarTokens,
+  normalizarPosicao, aparenciaPublica, diagnosticoDeContraste,
+} from './totemAparencia.js';
 import { calcularCmvGlobal } from './cmv/calculo.js';
 import { normalizarRelatorio, FONTES } from './relatorios/normalizar.js';
 
@@ -8708,15 +8715,103 @@ async function comApresentacao(ap, body, resposta) {
       avisosApresentacao: avisos,
       // Empresa sem linha responde o padrão — ausência de configuração não é erro.
       configuracao: configuracaoParaJson(doCanal),
+      // Bloco PRÓPRIO do PDV, nunca dentro de `loja` (território do HUB). A logo não vem
+      // aqui: vai só a versão, e o tablet busca os bytes uma vez pela rota dedicada.
+      aparencia: aparenciaPublica({ config: doCanal, dispositivo: ap }),
     };
   } catch (err) {
     console.error('[public/aparelho totem apresentacao]', err?.code ?? err?.name ?? 'erro');
     // Banco fora do ar não pode deixar o totem sem relógio: o campo vai SEMPRE, com o
     // padrão. Quem lê do outro lado também se protege da ausência, mas contar com isso
     // seria depender de uma versão específica do quiosque.
-    return { ...resposta, avisosApresentacao: [], configuracao: configuracaoParaJson(null) };
+    return {
+      ...resposta,
+      avisosApresentacao: [],
+      configuracao: configuracaoParaJson(null),
+      // Falha na leitura não pode deixar o quiosque sem aparência: os campos vão sempre,
+      // com os padrões, e a folha embarcada continua sendo o chão de tudo.
+      aparencia: aparenciaPublica({}),
+    };
   }
 }
+
+// ── Logo do canal: validação, decodificação e resposta ─────────────────────
+// Data URL, como já se faz nas fotos de Checklist e em Empresa.logoDataUrl. O teto é
+// pequeno de propósito: é uma LOGO, não uma fotografia, e precisa caber com folga no
+// `client_max_body_size` do Nginx — cujo padrão, quando ninguém configurou, é 1 MB.
+// 300 KB decodificados dão ~400 KB em base64, e sobra espaço para o resto do corpo.
+const LOGO_MAX_BYTES = 300 * 1024;
+const LOGO_TIPOS = { 'image/png': true, 'image/jpeg': true, 'image/webp': true };
+const LOGO_DATA_URL = /^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/]+={0,2})$/;
+
+// Devolve o CÓDIGO do erro, ou `null` quando passa. Valida o tipo declarado E o tamanho
+// REAL depois de decodificar: o cabeçalho do data URL é texto que o cliente escreve, e
+// confiar nele é confiar em quem manda a requisição.
+function validarLogoDataUrl(dataUrl) {
+  if (typeof dataUrl !== 'string' || !dataUrl) return 'LOGO_AUSENTE';
+  const m = LOGO_DATA_URL.exec(dataUrl.trim());
+  if (!m) return 'LOGO_FORMATO';
+  if (!LOGO_TIPOS[m[1]]) return 'LOGO_TIPO';
+  let bytes;
+  try { bytes = Buffer.from(m[2], 'base64'); } catch { return 'LOGO_FORMATO'; }
+  if (!bytes.length) return 'LOGO_FORMATO';
+  if (bytes.length > LOGO_MAX_BYTES) return 'LOGO_GRANDE';
+  return null;
+}
+
+// Data URL guardado → `{ tipo, bytes }`, ou `null`. Revalida na LEITURA também: dado
+// gravado por uma versão anterior, ou à mão no banco, não pode virar resposta com
+// Content-Type inventado.
+function decodificarDataUrl(dataUrl) {
+  if (typeof dataUrl !== 'string') return null;
+  const m = LOGO_DATA_URL.exec(dataUrl.trim());
+  if (!m || !LOGO_TIPOS[m[1]]) return null;
+  try {
+    const bytes = Buffer.from(m[2], 'base64');
+    return bytes.length ? { tipo: m[1], bytes } : null;
+  } catch { return null; }
+}
+
+// Resposta com cache PRIVADO e versionado.
+//
+// `private` é o detalhe que evita vazamento entre lojas: a URL é a mesma para todo mundo
+// (`/logo?v=4`), e um cache COMPARTILHADO poderia entregar a logo da loja A para a loja B
+// só porque as duas estão na versão 4. Com `private`, só o navegador do tablet guarda — e
+// um tablet pertence a uma empresa só. `Vary: Cookie` fecha a porta em qualquer
+// intermediário que ignore o `private`, já que é o cookie que identifica o aparelho.
+//
+// O ETag carrega empresa + versão pelo mesmo motivo: ele nunca colide entre lojas.
+function responderImagem(res, { tipo, bytes }, marca, req) {
+  const etag = `W/"logo-${marca}"`;
+  res.set('Content-Type', tipo);
+  res.set('Cache-Control', 'private, max-age=31536000, immutable');
+  res.set('Vary', 'Cookie');
+  res.set('ETag', etag);
+  if (req?.headers?.['if-none-match'] === etag) return res.status(304).end();
+  return res.send(bytes);
+}
+
+// A LOGO do canal, em bytes. Fora do bootstrap de propósito: ele é relido a cada 5 min
+// por aparelho, e 200 KB de base64 nessa frequência é desperdício puro.
+//
+// Cache PRIVADO e versionado. `private` importa mais do que parece: a URL é a mesma para
+// todas as lojas (`/logo?v=4`), e um cache COMPARTILHADO poderia servir a logo da loja A
+// para a loja B só porque as duas estão na versão 4. Com `private` só o navegador do
+// tablet guarda, e um tablet pertence a uma empresa só. `Vary: Cookie` fecha a porta em
+// qualquer intermediário que ignore isso.
+app.get('/api/public/aparelho/totem/logo', async (req, res) => {
+  try {
+    const ap = await exigirAparelho(req, res); if (!ap) return;
+    if (!exigirTotem(ap, res)) return;
+    const cfg = await prisma.totemConfiguracao.findFirst({ where: whereDoAparelho(ap, {}) });
+    const bytes = decodificarDataUrl(cfg?.logoDataUrl);
+    if (!bytes) return res.status(404).end();
+    responderImagem(res, bytes, `${ap.empresaId}-${cfg?.logoVersao ?? 0}`, req);
+  } catch (err) {
+    console.error('[public/aparelho totem logo]', err?.code ?? err?.name ?? 'erro');
+    res.status(500).end();
+  }
+});
 
 // Bootstrap: loja, catálogo, métodos de pagamento e modos ativos.
 app.get('/api/public/aparelho/totem/bootstrap', async (req, res) => {
@@ -9288,6 +9383,133 @@ app.put('/api/totem/configuracao', async (req, res) => {
     });
     res.json({ ok: true, configuracao: configuracaoParaJson(linha), salva: true });
   } catch (err) { console.error('[totem/configuracao PUT]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// ── Totem › Aparência do canal ─────────────────────────────────────────────
+// Endpoint PRÓPRIO, e não um campo a mais na configuração de ociosidade: são domínios
+// diferentes, com telas diferentes e vidas diferentes. Enfiar cor num objeto genérico de
+// "configurações" é como nasce o endpoint que ninguém mais consegue mudar.
+app.get('/api/totem/aparencia', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const cfg = await prisma.totemConfiguracao.findUnique({ where: { empresaId } });
+    const { tokens: overrides } = sanitizarTokens(cfg?.tokens);
+    const efetivas = coresEfetivas(cfg?.tokens);
+    const versao = Number.isInteger(cfg?.logoVersao) ? cfg.logoVersao : 0;
+    res.json({
+      // Os três estados que a tela precisa distinguir: o que é padrão, o que a loja
+      // escolheu, e o que o cliente vê. Sem os três ela teria de copiar hexadecimal para
+      // dentro do React, e aí o padrão passaria a existir em dois lugares.
+      chaves: CHAVES_APARENCIA,
+      padroes: PADROES_APARENCIA,
+      overrides,
+      efetivas,
+      contraste: diagnosticoDeContraste(efetivas),
+      posicaoCategoriasPadrao: normalizarPosicao(cfg?.posicaoCategoriasPadrao) ?? 'esquerda',
+      posicoes: POSICOES_CATEGORIAS,
+      logo: {
+        tem: typeof cfg?.logoDataUrl === 'string' && cfg.logoDataUrl.length > 0,
+        versao,
+        url: `/api/totem/aparencia/logo?v=${versao}`,
+      },
+      limiteLogoKb: Math.round(LOGO_MAX_BYTES / 1024),
+    });
+  } catch (err) { console.error('[totem/aparencia]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// PUT parcial. Chave omitida não é tocada; `null` remove o override e volta ao padrão.
+// Entrada é RIGOROSA: chave desconhecida e cor inválida são 400, com a lista do que
+// falhou — sumir com o campo e responder "salvo" é a mentira que o suporte descobre
+// três semanas depois.
+app.put('/api/totem/aparencia', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const corpo = req.body ?? {};
+    const erros = [];
+    let patch = null;
+    if (corpo.tokens !== undefined) {
+      patch = validarPatch(corpo.tokens);
+      erros.push(...patch.erros);
+    }
+    let posicao;
+    if (corpo.posicaoCategoriasPadrao !== undefined) {
+      posicao = normalizarPosicao(corpo.posicaoCategoriasPadrao);
+      if (posicao === null) erros.push({ chave: 'posicaoCategoriasPadrao', motivo: MOTIVO_POSICAO });
+    }
+    if (erros.length) return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros });
+
+    const atual = await prisma.totemConfiguracao.findUnique({ where: { empresaId } });
+    const dados = {};
+    // `aplicarPatch` parte do que está GUARDADO: o PUT não precisa reenviar as seis cores
+    // para mexer numa, e o que ele não menciona continua exatamente como estava.
+    if (patch) dados.tokens = aplicarPatch(atual?.tokens, patch);
+    if (posicao) dados.posicaoCategoriasPadrao = posicao;
+
+    const linha = await prisma.totemConfiguracao.upsert({
+      where: { empresaId },
+      create: { empresaId, ...dados },
+      update: dados,
+    });
+    const efetivas = coresEfetivas(linha.tokens);
+    res.json({
+      ok: true,
+      overrides: sanitizarTokens(linha.tokens).tokens,
+      efetivas,
+      contraste: diagnosticoDeContraste(efetivas),
+      posicaoCategoriasPadrao: linha.posicaoCategoriasPadrao,
+    });
+  } catch (err) { console.error('[totem/aparencia PUT]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// A logo, para a PRÉVIA do admin. Mesma função de resposta da rota do aparelho.
+app.get('/api/totem/aparencia/logo', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const cfg = await prisma.totemConfiguracao.findUnique({ where: { empresaId } });
+    const bytes = decodificarDataUrl(cfg?.logoDataUrl);
+    if (!bytes) return res.status(404).end();
+    responderImagem(res, bytes, `${empresaId}-${cfg?.logoVersao ?? 0}`, req);
+  } catch (err) { console.error('[totem/aparencia logo]', err); res.status(500).end(); }
+});
+
+// Trocar a logo. A versão sobe SEMPRE que os bytes mudam — é ela que invalida o cache do
+// tablet sem depender de o navegador reconsultar.
+app.put('/api/totem/aparencia/logo', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const erro = validarLogoDataUrl(req.body?.dataUrl);
+    if (erro) return res.status(400).json({ erro });
+    const atual = await prisma.totemConfiguracao.findUnique({ where: { empresaId } });
+    // Reenviar a MESMA imagem não sobe versão: cache do tablet não se invalida à toa.
+    const mudou = atual?.logoDataUrl !== req.body.dataUrl;
+    const versao = (Number.isInteger(atual?.logoVersao) ? atual.logoVersao : 0) + (mudou ? 1 : 0);
+    const linha = await prisma.totemConfiguracao.upsert({
+      where: { empresaId },
+      create: { empresaId, logoDataUrl: req.body.dataUrl, logoVersao: 1 },
+      update: { logoDataUrl: req.body.dataUrl, logoVersao: versao },
+    });
+    res.json({ ok: true, logo: { tem: true, versao: linha.logoVersao, url: `/api/totem/aparencia/logo?v=${linha.logoVersao}` } });
+  } catch (err) { console.error('[totem/aparencia logo PUT]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// Remover também SOBE a versão: sem isso o tablet continuaria servindo do cache uma logo
+// que a loja acabou de tirar do ar.
+app.delete('/api/totem/aparencia/logo', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const atual = await prisma.totemConfiguracao.findUnique({ where: { empresaId } });
+    if (!atual?.logoDataUrl) return res.json({ ok: true, logo: { tem: false, versao: atual?.logoVersao ?? 0 } });
+    const versao = (Number.isInteger(atual.logoVersao) ? atual.logoVersao : 0) + 1;
+    const linha = await prisma.totemConfiguracao.update({
+      where: { empresaId }, data: { logoDataUrl: null, logoVersao: versao },
+    });
+    res.json({ ok: true, logo: { tem: false, versao: linha.logoVersao } });
+  } catch (err) { console.error('[totem/aparencia logo DELETE]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
 });
 
 // ── Job do totem (§5.4): 60 s, in-process, com lock ─────────────────────────
