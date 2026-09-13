@@ -28,6 +28,7 @@ import Casca from '../components/totem/Casca'
 import Cabecalho from '../components/totem/Cabecalho'
 import TelaInicio from '../components/totem/TelaInicio'
 import TelaEspera from '../components/totem/TelaEspera'
+import useCarrossel from '../components/totem/useCarrossel'
 import TelaCatalogo from '../components/totem/TelaCatalogo'
 import BarraPedido from '../components/totem/BarraPedido'
 import TelaItem from '../components/totem/TelaItem'
@@ -170,6 +171,14 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
   // Bloco montado pelo PDV, separado de `loja` (que é do HUB). Ausente = tudo no padrão
   // embarcado da folha, que é como o totem sempre desenhou.
   const aparencia = boot?.aparencia ?? null
+  const inicialDaLoja = String(boot?.loja?.nome ?? '').trim().charAt(0).toUpperCase() || '•'
+  // A CAPA do catálogo: mesmo rodízio da tela de espera, outro tipo. Vive aqui porque o
+  // cabeçalho é compartilhado por cinco telas e não pode carregar um temporizador que só
+  // uma delas usa.
+  const capa = useCarrossel({ itens: boot?.banners?.itens, agoraServidor: boot?.banners?.agoraServidor, tipo: 'CAPA' })
+  const capaAtual = capa.atual
+    ? { ...capa.atual, aoFalhar: () => capa.marcarFalha(capa.atual.id) }
+    : null
   const posicaoCategorias = useMemo(() => posicaoDeCategorias(aparencia), [aparencia])
   const metodos = useMemo(() => (Array.isArray(boot?.metodos) ? boot.metodos : []), [boot])
   const orderTypes = useMemo(() => (Array.isArray(boot?.orderTypes) ? boot.orderTypes.filter((t) => MODOS[t]) : []), [boot])
@@ -708,7 +717,13 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
   if (tela === 'catalogo') {
     conteudo = (
       <>
-        <Cabecalho key="cab-catalogo" modo={MODOS[orderType]?.titulo ?? 'Menu'} aoCancelar={() => reiniciar()} />
+        <Cabecalho
+          key="cab-catalogo"
+          modo={MODOS[orderType]?.titulo ?? 'Menu'}
+          marca={{ logo: loja?.logo ?? null, logoPropria: loja?.logoPropria, inicial: inicialDaLoja }}
+          capa={capaAtual}
+          aoCancelar={() => reiniciar()}
+        />
         {banner}
         <TelaCatalogo
           categorias={categorias}

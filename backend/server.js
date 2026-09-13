@@ -62,13 +62,14 @@ import {
   DURACAO_MIN as BANNER_DUR_MIN, DURACAO_MAX as BANNER_DUR_MAX, DURACAO_PADRAO as BANNER_DUR_PADRAO,
   IMAGEM_MAX_BYTES as BANNER_IMG_MAX, validarEntrada as validarBanner, conferirJanela,
   lerImagem as lerImagemBanner, proximaVersaoImagem, bannerParaAdmin, bannersPublicos,
+  TIPOS as BANNER_TIPOS, TIPO_PADRAO as BANNER_TIPO_PADRAO, MEDIDAS as BANNER_MEDIDAS,
 } from './totemBanner.js';
 
 // Campos do banner SEM a arte. Existe como constante para que nenhuma consulta esqueça o
 // `select` e arraste blobs — a arte mora em outra tabela justamente por isso, e este
 // objeto é o lembrete de que a listagem nunca precisa dela.
 const BANNER_CAMPOS = {
-  id: true, nome: true, ativo: true, ordem: true, duracaoSegundos: true,
+  id: true, nome: true, tipo: true, ativo: true, ordem: true, duracaoSegundos: true,
   inicioEm: true, fimEm: true, imagemVersao: true, imagemTipo: true, imagemBytes: true,
 };
 import { calcularCmvGlobal } from './cmv/calculo.js';
@@ -9561,7 +9562,10 @@ app.get('/api/totem/banners', async (req, res) => {
     res.json({
       banners: linhas.map((b) => bannerParaAdmin(b, agora)),
       agoraServidor: new Date(agora).toISOString(),
-      limites: { duracaoMin: BANNER_DUR_MIN, duracaoMax: BANNER_DUR_MAX, duracaoPadrao: BANNER_DUR_PADRAO, imagemKb: Math.round(BANNER_IMG_MAX / 1024) },
+      limites: {
+        duracaoMin: BANNER_DUR_MIN, duracaoMax: BANNER_DUR_MAX, duracaoPadrao: BANNER_DUR_PADRAO,
+        imagemKb: Math.round(BANNER_IMG_MAX / 1024), tipos: BANNER_TIPOS, medidas: BANNER_MEDIDAS,
+      },
     });
   } catch (err) { console.error('[totem/banners]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
 });
@@ -9579,11 +9583,15 @@ app.post('/api/totem/banners', async (req, res) => {
     if (img.erro) erros.push({ campo: 'imagem', motivo: img.erro });
     if (erros.length) return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros });
 
-    const ultimo = await prisma.totemBanner.findFirst({ where: { empresaId }, orderBy: { ordem: 'desc' }, select: { ordem: true } });
+    // A ordem é POR TIPO: as duas listas giram separadas, e uma capa nova não pode nascer
+    // atrás de dez banners da tela de espera.
+    const tipo = v.dados.tipo ?? BANNER_TIPO_PADRAO;
+    const ultimo = await prisma.totemBanner.findFirst({ where: { empresaId, tipo }, orderBy: { ordem: 'desc' }, select: { ordem: true } });
     const criado = await prisma.totemBanner.create({
       data: {
         empresaId,
         ...v.dados,
+        tipo,
         ordem: (ultimo?.ordem ?? -1) + 1,
         imagemVersao: 1,
         imagemTipo: img.tipo,

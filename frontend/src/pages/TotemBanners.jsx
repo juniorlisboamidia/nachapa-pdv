@@ -5,12 +5,18 @@ import ConfirmDialog from '../components/ConfirmDialog'
 
 // Loja Digital › Totem › Aparência › Banners.
 //
-// A arte que o totem mostra na TELA DE ESPERA, enquanto ninguém está usando. No V1 o banner
-// não tem CTA: tocar nele começa uma sessão, exatamente como tocar em qualquer outro lugar
-// da espera já fazia. Não existe pular para produto ou categoria — isso é outro produto.
+// DOIS lugares, um cadastro só:
 //
-// Sem banner elegível, a espera institucional continua sendo o que aparece. Ela não é o
-// caso degradado: é o padrão.
+//   CAPA   — a faixa no topo do catálogo, enquanto o cliente escolhe. Não é tocável; o
+//            único alvo daquela faixa continua sendo o Cancelar.
+//   BANNER — a tela inteira, com o totem parado no vidro. Tocar nele começa uma sessão,
+//            exatamente como tocar em qualquer outro lugar da espera já fazia.
+//
+// Nenhum dos dois tem CTA no V1: não existe pular para produto ou categoria a partir de
+// uma arte — isso é outro produto.
+//
+// Sem arte elegível, cada lugar tem o seu padrão: a espera institucional e o cabeçalho com
+// o título. Nenhum dos dois é caso degradado — os dois são o normal.
 //
 // ── ORDENAÇÃO SEM BIBLIOTECA ──────────────────────────────────────────────────────────
 // Subir/descer, e não arrastar. O projeto não tem infraestrutura de drag-and-drop, e trazer
@@ -25,6 +31,11 @@ const STATUS = {
   INATIVO: { texto: 'Inativo', cor: 'badge-gray' },
 }
 
+const TIPOS = [
+  { id: 'CAPA', rotulo: 'Capa', ondeAparece: 'A faixa no topo do catálogo, enquanto o cliente escolhe.' },
+  { id: 'ESPERA', rotulo: 'Tela de espera', ondeAparece: 'A tela inteira, com o totem parado no vidro.' },
+]
+
 const erroDe = (e, fallback) => {
   const erros = e?.response?.data?.erros
   if (erros?.length) {
@@ -32,6 +43,7 @@ const erroDe = (e, fallback) => {
       NOME_OBRIGATORIO: 'Dê um nome ao banner.',
       DURACAO_INVALIDA: 'A duração está fora da faixa permitida.',
       DATA_INVALIDA: 'A data informada não é válida.',
+      TIPO_INVALIDO: 'Escolha onde a arte vai aparecer.',
       JANELA_INVALIDA: 'O fim precisa ser depois do início.',
       IMAGEM_AUSENTE: 'Escolha uma imagem.',
       IMAGEM_FORMATO: 'Arquivo inválido. Use PNG, JPG ou WEBP.',
@@ -50,8 +62,9 @@ export default function TotemBanners() {
   const [lista, setLista] = useState([])
   const [limites, setLimites] = useState(null)
   const [ocupado, setOcupado] = useState(false)
-  const [editando, setEditando] = useState(null)   // { id? , nome, duracaoSegundos, inicioEm, fimEm, imagem?, previa? }
+  const [editando, setEditando] = useState(null)   // { id? , tipo, nome, duracaoSegundos, ... }
   const [excluindo, setExcluindo] = useState(null)
+  const [aba, setAba] = useState('CAPA')
 
   const buscar = useCallback(() => api.get('/totem/banners')
     .then((r) => {
@@ -73,9 +86,13 @@ export default function TotemBanners() {
   }
 
   async function mover(indice, passo) {
+    // A reordenação é DENTRO do tipo: só os ids da aba visível são enviados, e o servidor
+    // reescreve a ordem por posição. Misturar os dois tipos numa lista só faria uma capa
+    // trocar de lugar com um banner da espera.
+    const doTipo = lista.filter((b) => b.tipo === aba)
     const destino = indice + passo
-    if (destino < 0 || destino >= lista.length) return
-    const ids = lista.map((b) => b.id)
+    if (destino < 0 || destino >= doTipo.length) return
+    const ids = doTipo.map((b) => b.id)
     ;[ids[indice], ids[destino]] = [ids[destino], ids[indice]]
     setOcupado(true)
     try {
@@ -100,6 +117,7 @@ export default function TotemBanners() {
     try {
       const corpo = {
         nome: form.nome,
+        tipo: form.tipo,
         duracaoSegundos: Number(form.duracaoSegundos),
         inicioEm: paraIso(form.inicioEm),
         fimEm: paraIso(form.fimEm),
@@ -116,6 +134,8 @@ export default function TotemBanners() {
     } catch (e) { setToast({ message: erroDe(e, 'Não foi possível salvar.'), type: 'error' }) } finally { setOcupado(false) }
   }
 
+  const visiveis = lista.filter((b) => b.tipo === aba)
+
   if (carregando) return <div className="loading-state">Carregando…</div>
   if (erro) {
     return (
@@ -130,19 +150,39 @@ export default function TotemBanners() {
     <>
       <Toast message={toast?.message} type={toast?.type} onClose={() => setToast(null)} />
 
+      <nav className="ttm-abas" aria-label="Onde a arte aparece">
+        {TIPOS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            className={'ttm-aba' + (t.id === aba ? ' ativa' : '')}
+            aria-current={t.id === aba ? 'true' : undefined}
+            onClick={() => setAba(t.id)}
+          >
+            {t.rotulo}
+            <span className="ttm-aba-conta">{lista.filter((b) => b.tipo === t.id).length}</span>
+          </button>
+        ))}
+      </nav>
+
       <div className="table-card" style={{ padding: 16, marginBottom: 16 }}>
         <div className="ttm-nota" style={{ marginTop: 0 }}>
-          A arte que o totem mostra <strong>na tela de espera</strong>, enquanto ninguém está usando.
-          Tocar no banner começa o pedido, como tocar em qualquer outro lugar da tela — ele não leva a um produto.
-          Sem banner no ar, o totem mostra a tela institucional de sempre.
+          {TIPOS.find((t) => t.id === aba)?.ondeAparece}{' '}
+          {aba === 'CAPA'
+            ? 'Ela não é tocável — o único alvo daquela faixa é o botão de cancelar. Sem capa no ar, o cabeçalho mostra o título de sempre.'
+            : 'Tocar nela começa o pedido, como tocar em qualquer outro lugar da tela. Sem banner no ar, o totem mostra a tela institucional.'}
         </div>
-        <button type="button" className="btn btn-primary" disabled={ocupado} onClick={() => setEditando(vazio(limites))}>
-          Novo banner
+        <button type="button" className="btn btn-primary" disabled={ocupado} onClick={() => setEditando(vazio(limites, aba))}>
+          {aba === 'CAPA' ? 'Nova capa' : 'Novo banner'}
         </button>
       </div>
 
-      {lista.length === 0 ? (
-        <div className="empty-state">Nenhum banner cadastrado. O totem está mostrando a tela institucional.</div>
+      {visiveis.length === 0 ? (
+        <div className="empty-state">
+          {aba === 'CAPA'
+            ? 'Nenhuma capa cadastrada. O cabeçalho do catálogo está mostrando o título.'
+            : 'Nenhum banner cadastrado. O totem está mostrando a tela institucional.'}
+        </div>
       ) : (
         <div className="table-card">
           <table className="hb-table hb-table-compact">
@@ -158,7 +198,7 @@ export default function TotemBanners() {
               </tr>
             </thead>
             <tbody>
-              {lista.map((b, i) => (
+              {visiveis.map((b, i) => (
                 <tr key={b.id}>
                   <td>
                     <img className="ttm-banner-mini" src={b.imagemUrl} alt="" />
@@ -173,7 +213,7 @@ export default function TotemBanners() {
                   <td>
                     <div className="ttm-ordem">
                       <button type="button" className="btn btn-secondary" disabled={ocupado || i === 0} onClick={() => mover(i, -1)} aria-label="Subir">↑</button>
-                      <button type="button" className="btn btn-secondary" disabled={ocupado || i === lista.length - 1} onClick={() => mover(i, 1)} aria-label="Descer">↓</button>
+                      <button type="button" className="btn btn-secondary" disabled={ocupado || i === visiveis.length - 1} onClick={() => mover(i, 1)} aria-label="Descer">↓</button>
                     </div>
                   </td>
                   <td>
@@ -222,11 +262,12 @@ export default function TotemBanners() {
 function Editor({ valor, limites, ocupado, aoFechar, aoSalvar, aoAvisar }) {
   const [form, setForm] = useState(valor)
   const campo = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+  const medida = limites?.medidas?.[form.tipo] ?? { largura: 1080, altura: 1920 }
 
   async function escolherArquivo(arquivo) {
     if (!arquivo) return
     try {
-      const dataUrl = await reduzirImagem(arquivo)
+      const dataUrl = await reduzirImagem(arquivo, form.tipo === 'CAPA' ? 1080 : 1920)
       setForm((f) => ({ ...f, imagem: dataUrl, previa: dataUrl }))
     } catch {
       aoAvisar('Não foi possível ler esse arquivo. Use PNG, JPG ou WEBP.')
@@ -240,10 +281,10 @@ function Editor({ valor, limites, ocupado, aoFechar, aoSalvar, aoAvisar }) {
     <div className="modal-overlay">
       <div className="modal ttm-banner-modal">
         <div className="modal-header">
-          <h2>{form.id ? 'Editar banner' : 'Novo banner'}</h2>
+          <h2>{(form.id ? 'Editar ' : 'Nova ') + (form.tipo === 'CAPA' ? 'capa' : 'arte da tela de espera')}</h2>
         </div>
         <div className="ttm-banner-corpo">
-          <div className="ttm-banner-previa">
+          <div className={'ttm-banner-previa' + (form.tipo === 'CAPA' ? ' capa' : '')}>
             {form.previa
               ? <img src={form.previa} alt="" />
               : <div className="ttm-dica" style={{ margin: 0, textAlign: 'center' }}>A prévia aparece aqui</div>}
@@ -260,8 +301,9 @@ function Editor({ valor, limites, ocupado, aoFechar, aoSalvar, aoAvisar }) {
               <label className="form-label" htmlFor="bn-img">Imagem</label>
               <input id="bn-img" type="file" className="form-input" accept="image/png,image/jpeg,image/webp" onChange={(e) => escolherArquivo(e.target.files?.[0])} />
               <div className="ttm-dica">
-                Recomendado: <strong>1080 × 1920 px</strong> (retrato, a tela inteira do totem). PNG, JPG ou WEBP,
-                até {limites?.imagemKb ?? 700} KB. A imagem é reduzida antes de subir.
+                Recomendado: <strong>{medida.largura} × {medida.altura} px</strong>{' '}
+                {form.tipo === 'CAPA' ? '(faixa deitada, o topo do catálogo)' : '(retrato, a tela inteira do totem)'}.
+                PNG, JPG ou WEBP, até {limites?.imagemKb ?? 700} KB. A imagem é reduzida antes de subir.
               </div>
             </div>
 
@@ -302,9 +344,9 @@ function Editor({ valor, limites, ocupado, aoFechar, aoSalvar, aoAvisar }) {
 }
 
 // ── auxiliares ─────────────────────────────────────────────────────────────
-const vazio = (limites) => ({ id: null, nome: '', duracaoSegundos: limites?.duracaoPadrao ?? 6, inicioEm: '', fimEm: '', imagem: null, previa: null })
+const vazio = (limites, tipo) => ({ id: null, tipo, nome: '', duracaoSegundos: limites?.duracaoPadrao ?? 6, inicioEm: '', fimEm: '', imagem: null, previa: null })
 const deBanner = (b) => ({
-  id: b.id, nome: b.nome, duracaoSegundos: b.duracaoSegundos,
+  id: b.id, tipo: b.tipo, nome: b.nome, duracaoSegundos: b.duracaoSegundos,
   inicioEm: paraCampo(b.inicioEm), fimEm: paraCampo(b.fimEm),
   imagem: null, previa: b.imagemUrl,
 })

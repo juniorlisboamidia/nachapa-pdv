@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Ico } from './icones'
+import LogoDaLoja from './LogoDaLoja'
 
 // Cabeçalho compacto do quiosque: 96px de altura, três zonas fixas.
 //
@@ -18,7 +19,19 @@ import { Ico } from './icones'
 // `aoVoltar` ausente não é enfeite: na revisão com confirmação em dúvida NÃO pode
 // existir Voltar — voltar recotaria, recotar geraria chave nova, e chave nova
 // criaria um segundo pedido no Cardápio Web (spec §12, R2).
-export default function Cabecalho({ titulo, modo, aoVoltar, aoCancelar }) {
+// ── A FAIXA DO CATÁLOGO ───────────────────────────────────────────────────────────────
+// Com `marca` e `capa`, o cabeçalho vira outra coisa: logo à esquerda, alinhada com a
+// coluna de categorias, a capa ocupando a faixa, e o cancelar por cima dela.
+//
+// A logo alinhada com a sidebar não é detalhe: é o que faz as duas colunas da tela
+// parecerem uma grade em vez de dois blocos encostados. A capa preenche o resto, e o
+// cliente ganha um lugar de comunicação que não existia — sem tirar espaço do cardápio,
+// porque o cabeçalho já ocupava aquela faixa.
+//
+// A CAPA NÃO É TOCÁVEL. O único alvo daquela região continua sendo o Cancelar. Uma arte
+// que responde ao toque no meio de um fluxo de pedido é um jeito de o cliente sair de onde
+// estava sem querer.
+export default function Cabecalho({ titulo, modo, marca, capa, aoVoltar, aoCancelar }) {
   // Cancelar joga fora o pedido inteiro e não tem desfazer. Com a casca nova o
   // botão passou a existir em cinco telas, inclusive com um combo montado na
   // mão — então ele pede dois toques, como o remover do carrinho, e a
@@ -37,6 +50,37 @@ export default function Cabecalho({ titulo, modo, aoVoltar, aoCancelar }) {
   }
 
   const sobrelinha = titulo ? modo : null
+
+  // Só o catálogo pede a faixa. As outras telas continuam com o cabeçalho de três zonas.
+  if (marca) {
+    return (
+      <header className="tq-topo tq-topo-faixa">
+        <div className="tq-topo-marca">
+          {marca.logo
+            ? <LogoDaLoja src={marca.logo} propria={marca.logoPropria} alt="" />
+            : <span className="tq-topo-inicial tq-disp tq-disp-forte" aria-hidden="true">{marca.inicial}</span>}
+        </div>
+
+        <div className="tq-topo-capa">
+          {/* Sem capa configurada, a faixa mostra o título — que é o que ela mostrava
+              antes de a capa existir. O padrão não é tela vazia. */}
+          {capa
+            ? <img key={capa.id} className="tq-topo-capa-img" src={capa.imagemUrl} alt={capa.nome || ''} onError={capa.aoFalhar} />
+            : <h1 className="tq-topo-tit tq-disp">{titulo ?? modo}</h1>}
+        </div>
+
+        {aoCancelar ? (
+          <button
+            type="button"
+            className={'tq-topo-cancelar sobre-capa' + (confirmando ? ' confirmando' : '')}
+            onClick={tocarCancelar}
+          >
+            {confirmando ? 'Apagar pedido?' : 'Cancelar'}
+          </button>
+        ) : null}
+      </header>
+    )
+  }
 
   return (
     <header className="tq-topo">

@@ -29,6 +29,24 @@ export const DURACAO_MAX = 60;
 
 export const NOME_MAX = 60;
 
+/* Os dois lugares onde uma arte pode aparecer. São formatos diferentes — a espera é a tela
+   inteira em retrato, a capa é uma faixa deitada no topo do catálogo — e por isso o tipo
+   entra também na recomendação de tamanho que o admin mostra. */
+export const TIPOS = Object.freeze(['ESPERA', 'CAPA']);
+export const TIPO_PADRAO = 'ESPERA';
+export const MOTIVO_TIPO = 'TIPO_INVALIDO';
+
+/* Proporção recomendada de cada um. A espera ocupa o vidro inteiro; a capa é a faixa entre
+   a logo e o botão de cancelar. */
+export const MEDIDAS = Object.freeze({
+  ESPERA: Object.freeze({ largura: 1080, altura: 1920 }),
+  CAPA: Object.freeze({ largura: 1080, altura: 260 }),
+});
+
+export function normalizarTipo(valor) {
+  return TIPOS.includes(valor) ? valor : null;
+}
+
 export const MOTIVO_NOME = 'NOME_OBRIGATORIO';
 export const MOTIVO_DURACAO = 'DURACAO_INVALIDA';
 export const MOTIVO_DATA = 'DATA_INVALIDA';
@@ -119,6 +137,11 @@ export function validarEntrada(bruto, { exigirNome = false } = {}) {
     else dados.nome = nome;
   }
   if (corpo.ativo !== undefined) dados.ativo = corpo.ativo === true;
+  if (corpo.tipo !== undefined) {
+    const t = normalizarTipo(corpo.tipo);
+    if (t === null) erros.push({ campo: 'tipo', motivo: MOTIVO_TIPO });
+    else dados.tipo = t;
+  }
   if (corpo.duracaoSegundos !== undefined) {
     const n = Number(corpo.duracaoSegundos);
     // Aqui é ESCRITA: fora da faixa é recusa, e não grampeio silencioso. O gestor escolheu
@@ -153,7 +176,7 @@ export function conferirJanela(dados, atual) {
    corpo. O cliente reduz antes de subir; isto é o teto do servidor. */
 export const IMAGEM_MAX_BYTES = 700 * 1024;
 
-const TIPOS = Object.freeze({ 'image/png': true, 'image/jpeg': true, 'image/webp': true });
+const TIPOS_IMAGEM = Object.freeze({ 'image/png': true, 'image/jpeg': true, 'image/webp': true });
 const DATA_URL = /^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/]+={0,2})$/;
 
 /* O tipo REAL, lido dos primeiros bytes.
@@ -180,7 +203,7 @@ export function lerImagem(dataUrl) {
   if (typeof dataUrl !== 'string' || !dataUrl) return { erro: 'IMAGEM_AUSENTE' };
   const m = DATA_URL.exec(dataUrl.trim());
   if (!m) return { erro: 'IMAGEM_FORMATO' };
-  if (!TIPOS[m[1]]) return { erro: 'IMAGEM_TIPO' };
+  if (!TIPOS_IMAGEM[m[1]]) return { erro: 'IMAGEM_TIPO' };
   let bytes;
   try { bytes = Buffer.from(m[2], 'base64'); } catch { return { erro: 'IMAGEM_FORMATO' }; }
   if (!bytes.length) return { erro: 'IMAGEM_FORMATO' };
@@ -207,6 +230,7 @@ export function bannerParaAdmin(b, agoraMs) {
   return {
     id: b.id,
     nome: b.nome,
+    tipo: normalizarTipo(b.tipo) ?? TIPO_PADRAO,
     ativo: b.ativo,
     ordem: b.ordem,
     duracaoSegundos: normalizarDuracao(b.duracaoSegundos),
@@ -239,6 +263,9 @@ export function bannersPublicos(lista, agoraMs) {
     .map((b) => ({
       id: b.id,
       nome: b.nome,
+      // O TIPO viaja: o quiosque separa as duas listas com a MESMA régua de
+      // elegibilidade, em vez de manter duas.
+      tipo: normalizarTipo(b.tipo) ?? TIPO_PADRAO,
       // Redundante à primeira vista — só ativo viaja — e é de propósito: com o campo
       // presente, `elegivel()` decide igual nos DOIS lados. Sem ele o quiosque precisaria
       // de uma segunda régua de elegibilidade, e duas réguas divergem.

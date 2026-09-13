@@ -938,6 +938,11 @@ model TotemBanner {
   id              Int       @id @default(autoincrement())
   empresaId       Int
   nome            String
+  // ESPERA = a tela inteira, com o totem parado no vidro.
+  // CAPA   = a faixa no topo do catálogo, com o cliente escolhendo.
+  // São dois lugares, dois formatos e duas agendas; o que compartilham é o cadastro.
+  // Default ESPERA para o que já existe continuar exatamente onde está.
+  tipo            String    @default("ESPERA")
   ativo           Boolean   @default(true)
   // Ordem de exibição no carrossel. Inteiro esparso — reordenar reescreve a coluna inteira
   // em transação, que é mais simples de acertar do que fração entre vizinhos.
@@ -958,7 +963,7 @@ model TotemBanner {
 
   imagem TotemBannerImagem?
 
-  @@index([empresaId, ordem])
+  @@index([empresaId, tipo, ordem])
 }
 
 // A ARTE, em tabela própria. Não é purismo: a listagem do admin lê `TotemBanner` a cada

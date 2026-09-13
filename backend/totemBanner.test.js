@@ -205,7 +205,7 @@ test('🔴 o bootstrap não carrega NENHUM byte', () => {
   assert.equal(s.includes('data:image'), false);
   assert.equal(s.includes('dados'), false);
   assert.deepEqual(Object.keys(bloco.itens[0]).sort(),
-    ['ativo', 'duracaoSegundos', 'fimEm', 'id', 'imagemUrl', 'imagemVersao', 'inicioEm', 'nome', 'ordem']);
+    ['ativo', 'duracaoSegundos', 'fimEm', 'id', 'imagemUrl', 'imagemVersao', 'inicioEm', 'nome', 'ordem', 'tipo']);
 });
 
 test('🔴 agoraServidor viaja — é o que corrige o relógio do tablet', () => {
@@ -239,4 +239,46 @@ test('🔴 empresa sem banners: bloco vazio, e o quiosque cai no fallback', () =
   assert.equal(typeof bloco.agoraServidor, 'string');
   assert.deepEqual(elegiveis(bloco.itens, AGORA), []);
   assert.deepEqual(bannersPublicos(null, AGORA).itens, []);
+});
+
+// ── tipo: capa × tela de espera ─────────────────────────────────────────────
+import { TIPOS, TIPO_PADRAO, MEDIDAS, MOTIVO_TIPO, normalizarTipo } from './totemBanner.js';
+
+test('dois tipos, e o padrão é o que já existia', () => {
+  assert.deepEqual(TIPOS, ['ESPERA', 'CAPA']);
+  // ESPERA é o default no banco: os banners cadastrados antes do tipo existir continuam
+  // exatamente onde estavam.
+  assert.equal(TIPO_PADRAO, 'ESPERA');
+  assert.equal(normalizarTipo('CAPA'), 'CAPA');
+  for (const v of ['capa', 'Capa', 'TOPO', '', null, undefined, 0, {}]) {
+    assert.equal(normalizarTipo(v), null, `aceitou ${String(v)}`);
+  }
+});
+
+test('cada tipo tem a sua medida recomendada', () => {
+  // A espera é a tela inteira em retrato; a capa é a faixa entre a logo e o cancelar.
+  assert.deepEqual(MEDIDAS.ESPERA, { largura: 1080, altura: 1920 });
+  assert.deepEqual(MEDIDAS.CAPA, { largura: 1080, altura: 260 });
+  for (const t of TIPOS) assert.ok(MEDIDAS[t], `${t} sem medida`);
+});
+
+test('🔴 tipo inválido na entrada é RECUSADO', () => {
+  assert.equal(validarEntrada({ tipo: 'CAPA' }).dados.tipo, 'CAPA');
+  const r = validarEntrada({ tipo: 'RODAPE' });
+  assert.equal(r.ok, false);
+  assert.deepEqual(r.erros, [{ campo: 'tipo', motivo: MOTIVO_TIPO }]);
+  // Omitir o tipo numa edição não o altera.
+  assert.equal('tipo' in validarEntrada({ nome: 'x' }).dados, false);
+});
+
+test('🔴 o tipo viaja no bootstrap — o quiosque separa as listas com UMA régua', () => {
+  const bloco = bannersPublicos([
+    banner({ id: 1, tipo: 'ESPERA' }),
+    banner({ id: 2, tipo: 'CAPA' }),
+    banner({ id: 3 }),
+  ], AGORA);
+  assert.deepEqual(bloco.itens.map((b) => [b.id, b.tipo]), [[1, 'ESPERA'], [2, 'CAPA'], [3, 'ESPERA']]);
+  // Linha antiga sem tipo lê como ESPERA, nunca como indefinida.
+  assert.equal(bannerParaAdmin(banner({ tipo: undefined }), AGORA).tipo, 'ESPERA');
+  assert.equal(bannerParaAdmin(banner({ tipo: 'lixo' }), AGORA).tipo, 'ESPERA');
 });

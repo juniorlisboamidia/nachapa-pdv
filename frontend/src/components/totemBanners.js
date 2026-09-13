@@ -41,10 +41,12 @@ export function noAr(banner, agoraMs) {
 /* Os banners que o carrossel deve girar agora, na ordem, já sem os que falharam ao
    carregar. `falhados` é um Set de ids: uma arte que não abriu é PULADA em vez de deixar
    um retângulo preto no vidro. */
-export function paraExibir({ itens, agoraMs, falhados } = {}) {
+export function paraExibir({ itens, agoraMs, falhados, tipo = 'ESPERA' } = {}) {
   const lista = Array.isArray(itens) ? itens : []
   const fora = falhados instanceof Set ? falhados : new Set()
   return lista
+    // Linha antiga sem tipo é da tela de espera: era o único lugar que existia.
+    .filter((b) => b && (b.tipo ?? 'ESPERA') === tipo)
     .filter((b) => b && !fora.has(b.id) && b.imagemUrl && noAr(b, agoraMs))
     .slice()
     .sort((a, b) => (a.ordem - b.ordem) || (a.id - b.id))

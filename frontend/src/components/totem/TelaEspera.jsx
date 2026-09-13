@@ -1,9 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
 import { Ico } from './icones'
 import LogoDaLoja from './LogoDaLoja'
-import {
-  desvioDoRelogio, paraExibir, duracaoMs, proximoIndice, assinatura, proximaParaPrecarregar,
-} from '../totemBanners'
+import useCarrossel from './useCarrossel'
 
 // Tela de ESPERA — o repouso do totem, e a única tela sem sessão.
 //
@@ -34,71 +31,12 @@ export default function TelaEspera({ loja, banners, aoTocar }) {
   const logo = loja?.logo || loja?.logoDataUrl || null
   const inicial = String(loja?.nome ?? '').trim().charAt(0).toUpperCase() || '•'
 
-  // Arte que não abriu fica de fora até o componente ser remontado. Não é estado de fluxo:
-  // é "esta imagem quebrou", da mesma natureza do que o componente Foto já guarda.
-  const [falhados, setFalhados] = useState(() => new Set())
-  const [indice, setIndice] = useState(0)
-  // O tempo CORRIGIDO pelo desvio do servidor. Um segundo de granularidade basta para uma
-  // agenda, e é o que faz um banner marcado para as 18:00 entrar às 18:00 sem depender do
-  // próximo bootstrap.
-  const [agoraMs, setAgoraMs] = useState(() => Date.now())
+  // O rodízio é o mesmo da capa do catálogo e mora num lugar só: `useCarrossel`. Este
+  // componente só decide o DESENHO — arte em tela cheia, véu e chamada.
+  const { atual, total, indice, lista, marcarFalha } = useCarrossel({
+    itens: banners?.itens, agoraServidor: banners?.agoraServidor, tipo: 'ESPERA',
+  })
 
-  const lista = useMemo(
-    () => paraExibir({ itens: banners?.itens, agoraMs, falhados }),
-    [banners?.itens, agoraMs, falhados],
-  )
-
-  // A ASSINATURA é o que impede a arte de piscar a cada 5 minutos. O bootstrap se refaz
-  // sozinho; se o índice zerasse a cada resposta igual, o cliente veria a primeira imagem
-  // voltar sem parar. Só uma mudança real — banner novo, arte nova, duração nova —
-  // reinicia o carrossel.
-  const chave = assinatura(lista)
-  const chaveRef = useRef(chave)
-  useEffect(() => {
-    if (chaveRef.current === chave) return
-    chaveRef.current = chave
-    setIndice(0)
-  }, [chave])
-
-  // O relógio da agenda. Só existe enquanto houver banner COM janela: sem agenda não há o
-  // que reavaliar, e um intervalo eterno numa tela que fica horas ligada é trabalho à toa.
-  //
-  // O desvio é medido AQUI DENTRO, e não em render: `Date.now()` durante o render é chamada
-  // impura, e ler uma ref em render também é proibido — as duas regras estão certas, dois
-  // renders do mesmo estado não podem dar resultados diferentes. Quem escreve o tempo é o
-  // temporizador, que é o único lugar onde ler o relógio é legítimo.
-  //
-  // Consequência aceita: com o tablet fora de hora, a primeira avaliação (a da montagem)
-  // usa o relógio local e a correção entra um segundo depois. Numa tela que fica horas
-  // parada, um segundo não muda nada.
-  const temAgenda = (banners?.itens ?? []).some((b) => b?.inicioEm || b?.fimEm)
-  useEffect(() => {
-    if (!temAgenda) return undefined
-    const desvio = desvioDoRelogio(banners?.agoraServidor, Date.now())
-    const iv = setInterval(() => setAgoraMs(Date.now() + desvio), 1000)
-    return () => clearInterval(iv)
-  }, [temAgenda, banners?.agoraServidor])
-
-  // A rotação. Um `setTimeout` por vez, com a duração DAQUELE banner — não um intervalo
-  // fixo, senão a duração por banner não significaria nada.
-  const total = lista.length
-  const atual = lista[Math.min(indice, Math.max(0, total - 1))] ?? null
-  useEffect(() => {
-    if (total < 2 || !atual) return undefined
-    const t = setTimeout(() => setIndice((i) => proximoIndice(i, total)), duracaoMs(atual))
-    return () => clearTimeout(t)
-  }, [atual, total])
-
-  // Pré-carrega SÓ a próxima: o que importa é que a troca não mostre um quadro vazio, e o
-  // tablet não tem memória para a lista inteira.
-  const proxima = proximaParaPrecarregar(lista, indice)
-  useEffect(() => {
-    if (!proxima) return
-    const img = new Image()
-    img.src = proxima
-  }, [proxima])
-
-  const marcarFalha = (id) => setFalhados((s) => (s.has(id) ? s : new Set(s).add(id)))
   const reduzido = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
 
   return (
