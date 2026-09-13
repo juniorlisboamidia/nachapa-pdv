@@ -1,6 +1,7 @@
 import LinhaCarrinho from './LinhaCarrinho'
 import { moeda } from './formato'
 import { Ico } from './icones'
+import { acaoDoCarrinho } from '../totemLoja'
 
 // O pedido montado. Vazio deixa de ser um parágrafo solto e passa a oferecer a
 // saída — o cliente que chega aqui sem nada precisa de um caminho de volta ao
@@ -9,7 +10,11 @@ import { Ico } from './icones'
 // A linha é chaveada por `uid`, nunca por itemId: duas linhas do MESMO item base
 // (X BURGUER e X BACON, ambos "TRADICIONAIS 🍔") são normais na vitrine, e
 // remover ou editar uma não pode encostar na outra.
-export default function TelaCarrinho({ linhas, total, aoEditar, aoRemover, aoMudarQtd, aoContinuar, aoAdicionarMais }) {
+export default function TelaCarrinho({ linhas, total, fechada = false, aoEditar, aoRemover, aoMudarQtd, aoContinuar, aoAdicionarMais }) {
+  // Loja fechada troca o RÓTULO da ação em vez de acrescentar um aviso ao lado: o espaço é
+  // o mesmo, o layout não muda, e a razão de não dar para avançar está escrita exatamente
+  // onde o dedo ia tocar. A decisão é do módulo puro — aqui só se desenha.
+  const acao = acaoDoCarrinho({ fechada, qtdLinhas: linhas.length })
   return (
     <>
       <div className="tq-conteudo">
@@ -43,14 +48,24 @@ export default function TelaCarrinho({ linhas, total, aoEditar, aoRemover, aoMud
           <span>Subtotal<small>o valor final é confirmado na revisão</small></span>
           <strong className="tq-disp tq-disp-forte tq-num">{moeda(total)}</strong>
         </div>
-        <button
-          type="button"
-          className="tq-btn tq-btn-primario tq-btn-largo"
-          disabled={linhas.length === 0}
-          onClick={aoContinuar}
-        >
-          Ir para o pagamento
-        </button>
+        {/* Fechado NÃO é um botão desabilitado: é um bloco de estado, sem `onClick` e sem
+            `<button>`. Botão apagado convida ao toque repetido — e um totem não tem como
+            explicar por que o toque não fez nada. `aria-disabled` conta a mesma coisa a
+            quem usa leitor de tela. */}
+        {acao.fechada ? (
+          <div className="tq-estado-largo" role="status" aria-disabled="true">
+            {acao.rotulo}
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="tq-btn tq-btn-primario tq-btn-largo"
+            disabled={!acao.habilitado}
+            onClick={aoContinuar}
+          >
+            {acao.rotulo}
+          </button>
+        )}
       </footer>
     </>
   )

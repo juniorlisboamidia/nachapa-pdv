@@ -1013,6 +1013,24 @@
 .tq-novo { flex: 0 0 auto; width: auto; min-width: 260px; max-width: 340px; }
 .tq-espera { color: var(--tq-texto-3); font-size: clamp(14px, 1.85vw, 20px); }
 
+/* -- Bloco de ESTADO no lugar de uma ação ---------------------------------- */
+/* Loja fechada no rodapé do carrinho. Ocupa a mesma altura do botão para o layout não
+   pular, e é deliberadamente NEUTRO: dourado aqui é ação, e não há ação nenhuma.
+   Sem sombra, sem borda de destaque, sem afundar ao toque — nada que sugira que
+   insistir resolve. O texto é o que precisa ser lido de longe, então ele fica em
+   display, no mesmo corpo do rótulo do botão. */
+.tq-estado-largo {
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  width: 100%; min-height: 84px; padding: 16px 20px;
+  border-radius: 16px;
+  background: var(--tq-superficie-3);
+  color: var(--tq-branco);
+  font-family: var(--tq-fonte-display); font-weight: 900;
+  font-size: clamp(18px, 2.5vw, 27px); line-height: 1.15;
+  letter-spacing: 0.02em; text-transform: uppercase;
+  cursor: default; user-select: none;
+}
+
 /* -- "Ainda está aí?" ------------------------------------------------------ */
 /* Aviso antes do reset por inatividade. Nunca aparece durante o envio nem com a
    confirmação em dúvida: nesses dois estados o relógio de reset também não corre. */

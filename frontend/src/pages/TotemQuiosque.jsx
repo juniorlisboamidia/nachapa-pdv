@@ -52,6 +52,9 @@ import {
 import {
   MS_AVISO_INATIVIDADE, MS_AMBIGUO, msDoAviso, criarRelogioSessao,
 } from '../components/totemOciosidade'
+// Loja fechada × canal sem modo: dois estados que estavam na mesma condição e têm
+// consequências opostas. Ver totemLoja.js.
+import { estadoDoCanal, podeAvancar } from '../components/totemLoja'
 
 const VERSAO = 'totem-1.0'
 const MS_HEARTBEAT = 60_000
@@ -369,6 +372,17 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
     setTela('catalogo')
   }
 
+  // Carrinho → pagamento. A guarda vive AQUI, e não só no `disabled` do rodapé: aparência
+  // é metade da proteção, e uma regressão de markup ou de CSS não pode reabrir o caminho.
+  //
+  // Isto é UX, não autoridade: o HUB/CW continuam recusando com LOJA_FECHADA na cotação e
+  // na confirmação, inclusive quando a loja fecha DEPOIS de o cliente já ter passado
+  // daqui. Nenhuma validação de servidor foi afrouxada porque a tela passou a cuidar.
+  function irParaPagamento() {
+    if (!podeAvancar({ fechada: estadoDoCanal(boot).fechada, qtdLinhas: carrinho.length })) return
+    setTela('pagamento')
+  }
+
   function abrirItem(item) {
     // Item em falta, ou com um grupo OBRIGATÓRIO em falta, não abre: não há como montá-lo,
     // e deixar o cliente tentar só adiaria a recusa para a tela de revisão.
@@ -599,20 +613,25 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
     )
   }
 
-  // Loja fechada / sem modo disponível só barra no Início. Quem já está escolhendo segue
-  // até Revisar, e lá quem recusa é o HUB (com a razão certa: LOJA_FECHADA, MODO_INDISPONIVEL)
-  // — apagar o carrinho de quem está no meio do pedido seria pior do que deixar o servidor
-  // dizer não.
-  const fechada = boot?.operacional?.abertaAgora === false
-  if ((fechada || orderTypes.length === 0) && tela === 'inicio') {
+  // O canal tem DOIS estados de bloqueio, e eles eram um só até aqui.
+  //
+  // LOJA FECHADA não barra mais nada além do pagamento: o cliente entra, navega o cardápio
+  // inteiro, abre produto, escolhe complemento e monta o carrinho — como no Cardápio Web.
+  // A recusa aparece no rodapé do carrinho, onde ele ia tocar. Esconder a loja inteira por
+  // causa do relógio era o comportamento errado: quem está em pé na frente do totem, com a
+  // vitrine acesa ao lado, não entende uma tela preta.
+  //
+  // SEM MODO DISPONÍVEL continua barrando na entrada, e é outra coisa: o fluxo COMEÇA
+  // escolhendo "comer aqui" ou "levar", e sem nenhum dos dois o cliente ficaria preso numa
+  // tela inicial que não leva a lugar nenhum.
+  const canal = estadoDoCanal(boot)
+  if (canal.bloquearEntrada && tela === 'inicio') {
     return (
       <Casca>
         <TelaAviso
-          icone={fechada ? 'lua' : 'pausa'}
-          titulo={fechada ? 'Estamos fechados' : 'Pedidos pausados'}
-          texto={fechada
-            ? 'A loja não está aceitando pedidos neste momento. Fale com um atendente no balcão.'
-            : 'Nenhuma forma de retirada está disponível agora. Fale com um atendente no balcão.'}
+          icone="pausa"
+          titulo="Pedidos pausados"
+          texto="Nenhuma forma de retirada está disponível agora. Fale com um atendente no balcão."
         />
       </Casca>
     )
@@ -738,7 +757,8 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
           aoEditar={editarLinha}
           aoRemover={removerLinha}
           aoMudarQtd={mudarQtdLinha}
-          aoContinuar={() => setTela('pagamento')}
+          fechada={canal.fechada}
+          aoContinuar={irParaPagamento}
           aoAdicionarMais={() => setTela('catalogo')}
         />
       </>
