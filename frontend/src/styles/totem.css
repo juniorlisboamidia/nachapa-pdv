@@ -130,7 +130,14 @@
   --tq-lado-l: 152px;
 
   position: relative;
-  min-height: 100dvh;
+  /* ALTURA TRAVADA na viewport, e não `min-height`. Com mínimo, uma categoria
+     de dez produtos fazia a CASCA INTEIRA crescer: a barra do pedido caía
+     abaixo da dobra, a página passava a rolar por fora e a coluna de
+     categorias esticava junto com a grade. Quem rola é sempre o
+     `.tq-conteudo` de cada tela — as cinco telas longas já têm o dela. */
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   background: var(--tq-fundo);
