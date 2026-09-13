@@ -425,7 +425,11 @@
 }
 .tq-lado-rolagem {
   flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain;
-  scrollbar-width: none; padding: 10px 10px 16px;
+  scrollbar-width: none;
+  /* Sem respiro em cima: a primeira categoria começa EXATAMENTE abaixo da linha que
+     separa a logo da capa, e as duas colunas passam a partir do mesmo ponto. Um respiro
+     ali fazia a lista flutuar em relação ao catálogo, que começa colado. */
+  padding: 0 10px 16px;
 }
 /* No alvo em pé as categorias DIVIDEM a coluna inteira em vez de se empilharem
    no topo e deixarem dois terços de preto embaixo. `flex-grow` só cresce
@@ -434,9 +438,12 @@
 @media (min-width: 900px) {
   /* As linhas crescem para preencher a coluna, mas com TETO: sem ele, dez categorias
      viravam dez blocos de 170px com 19px de texto perdido no meio de cada um — a coluna
-     ficava alta e vazia ao mesmo tempo. O que sobra depois do teto se distribui em cima e
-     embaixo, e a lista passa a ter ritmo em vez de esticão. */
-  .tq-lado-rolagem { display: flex; flex-direction: column; justify-content: center; }
+     ficava alta e vazia ao mesmo tempo.
+     O que sobra depois do teto vai todo para BAIXO, e não dividido em cima e embaixo:
+     centrado, o topo da lista descolava da linha do cabeçalho enquanto o catálogo ao lado
+     começava colado nela, e as duas colunas pareciam desalinhadas. Sobra no fim lê como
+     "a lista acabou"; sobra no começo lê como erro. */
+  .tq-lado-rolagem { display: flex; flex-direction: column; justify-content: flex-start; }
   .tq-cat { flex: 1 0 auto; max-height: clamp(92px, 8.2vh, 136px); }
 }
 .tq-lado-rolagem::-webkit-scrollbar { display: none; }
