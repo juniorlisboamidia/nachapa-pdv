@@ -928,6 +928,53 @@ model TotemConfiguracao {
   atualizadoEm       DateTime @updatedAt
 }
 
+// Totem › Banners — a arte que a loja mostra na TELA DE ESPERA, enquanto ninguém está
+// usando o totem. Domínio PRÓPRIO do canal: nenhuma FK, import ou chamada para o HUB, que
+// entrou só como referência de produto (nome, ativo, ordem, agenda, prévia).
+//
+// No V1 o banner não tem CTA. Tocar nele significa exatamente o que tocar em qualquer
+// outro lugar da espera já significava: começar uma sessão.
+model TotemBanner {
+  id              Int       @id @default(autoincrement())
+  empresaId       Int
+  nome            String
+  ativo           Boolean   @default(true)
+  // Ordem de exibição no carrossel. Inteiro esparso — reordenar reescreve a coluna inteira
+  // em transação, que é mais simples de acertar do que fração entre vizinhos.
+  ordem           Int       @default(0)
+  duracaoSegundos Int       @default(6)
+  // Agenda em INSTANTE ABSOLUTO. O PDV não tem fuso por loja, e assumir o do VPS seria
+  // inventar um: o admin converte a hora local do navegador antes de mandar.
+  inicioEm        DateTime?
+  fimEm           DateTime?
+  // Sobe SÓ quando os bytes mudam. É ela que invalida o cache do tablet, que guarda a
+  // imagem por um ano com `immutable`.
+  imagemVersao    Int       @default(0)
+  imagemTipo      String?
+  // Tamanho em bytes, para a tela mostrar sem precisar carregar o blob.
+  imagemBytes     Int?
+  criadoEm        DateTime  @default(now())
+  atualizadoEm    DateTime  @updatedAt
+
+  imagem TotemBannerImagem?
+
+  @@index([empresaId, ordem])
+}
+
+// A ARTE, em tabela própria. Não é purismo: a listagem do admin lê `TotemBanner` a cada
+// abertura, e um `findMany` sem `select` numa tabela com blob traria vinte artes de 400 KB
+// para a memória de uma vez. Separada, esse erro é IMPOSSÍVEL em vez de improvável.
+//
+// `onDelete: Cascade` é a estratégia de consistência entre registro e mídia: apagar o
+// banner apaga a arte na mesma transação. Não existe arquivo órfão porque não existe
+// arquivo — foi um dos motivos de guardar bytes no banco em vez de em disco.
+model TotemBannerImagem {
+  bannerId Int   @id
+  dados    Bytes
+
+  banner TotemBanner @relation(fields: [bannerId], references: [id], onDelete: Cascade)
+}
+
 // Ponto Facial › Coletor — batidas que chegaram do coletor mas cujo enrollid
 // ainda não casou com um funcionário. Ficam na fila até o admin vincular
 // (aí viram PontoRegistro). Não perde ponto de quem não foi mapeado ainda.

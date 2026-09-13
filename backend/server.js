@@ -57,6 +57,20 @@ import {
   normalizarPosicao, aparenciaPublica, diagnosticoDeContraste,
   LOGO_MAX_BYTES, validarLogoDataUrl, decodificarDataUrl, proximaVersaoLogo,
 } from './totemAparencia.js';
+// Totem › Banners: agenda, duração, imagem e as duas projeções (admin e pública).
+import {
+  DURACAO_MIN as BANNER_DUR_MIN, DURACAO_MAX as BANNER_DUR_MAX, DURACAO_PADRAO as BANNER_DUR_PADRAO,
+  IMAGEM_MAX_BYTES as BANNER_IMG_MAX, validarEntrada as validarBanner, conferirJanela,
+  lerImagem as lerImagemBanner, proximaVersaoImagem, bannerParaAdmin, bannersPublicos,
+} from './totemBanner.js';
+
+// Campos do banner SEM a arte. Existe como constante para que nenhuma consulta esqueça o
+// `select` e arraste blobs — a arte mora em outra tabela justamente por isso, e este
+// objeto é o lembrete de que a listagem nunca precisa dela.
+const BANNER_CAMPOS = {
+  id: true, nome: true, ativo: true, ordem: true, duracaoSegundos: true,
+  inicioEm: true, fimEm: true, imagemVersao: true, imagemTipo: true, imagemBytes: true,
+};
 import { calcularCmvGlobal } from './cmv/calculo.js';
 import { normalizarRelatorio, FONTES } from './relatorios/normalizar.js';
 
@@ -8694,7 +8708,7 @@ function exigirTotem(ap, res) {
 async function comApresentacao(ap, body, resposta) {
   try {
     const escopo = whereDoAparelho(ap, body);
-    const [configuracoes, categorias, doCanal] = await Promise.all([
+    const [configuracoes, categorias, doCanal, banners] = await Promise.all([
       prisma.totemApresentacao.findMany({ where: escopo }),
       prisma.totemCategoria.findMany({ where: escopo }),
       // `findFirst` com o MESMO escopo das outras duas: o construtor de where é um só, e
@@ -8705,6 +8719,11 @@ async function comApresentacao(ap, body, resposta) {
       // da projeção e a VITRINE sumiria do totem em silêncio. Aqui o pior caso é o canal
       // voltar ao relógio padrão, com os produtos intactos.
       prisma.totemConfiguracao.findFirst({ where: escopo }).catch(() => null),
+      // `.catch` próprio, pelo mesmo motivo da configuração: falha só desta leitura não
+      // pode estourar o Promise.all antes da projeção e fazer a VITRINE sumir em silêncio.
+      prisma.totemBanner.findMany({
+        where: { ...escopo, ativo: true }, select: BANNER_CAMPOS, orderBy: [{ ordem: 'asc' }, { id: 'asc' }],
+      }).catch(() => []),
     ]);
     const { catalogo, avisos } = projetarCatalogo(resposta.catalogo, configuracoes);
     // Nome de exibição por categoria: ADITIVO (`nomeExibido` ao lado de `nome`) e
@@ -8719,6 +8738,10 @@ async function comApresentacao(ap, body, resposta) {
       // Bloco PRÓPRIO do PDV, nunca dentro de `loja` (território do HUB). A logo não vem
       // aqui: vai só a versão, e o tablet busca os bytes uma vez pela rota dedicada.
       aparencia: aparenciaPublica({ config: doCanal, dispositivo: ap }),
+      // Banners da tela de espera: metadados e `agoraServidor`, nenhum byte. Quem decide a
+      // elegibilidade temporal é o CLIENTE, com o relógio corrigido pelo desvio — é assim
+      // que um banner das 18:00 entra às 18:00 em vez de esperar o próximo bootstrap.
+      banners: bannersPublicos(banners, Date.now()),
     };
   } catch (err) {
     console.error('[public/aparelho totem apresentacao]', err?.code ?? err?.name ?? 'erro');
@@ -8732,6 +8755,9 @@ async function comApresentacao(ap, body, resposta) {
       // Falha na leitura não pode deixar o quiosque sem aparência: os campos vão sempre,
       // com os padrões, e a folha embarcada continua sendo o chão de tudo.
       aparencia: aparenciaPublica({}),
+      // Sem banner, a espera institucional é o fallback — que é exatamente o que se quer
+      // quando algo deu errado.
+      banners: bannersPublicos([], Date.now()),
     };
   }
 }
@@ -8775,6 +8801,34 @@ app.get('/api/public/aparelho/totem/logo', async (req, res) => {
     responderImagem(res, bytes, `${ap.empresaId}-${cfg?.logoVersao ?? 0}`, req);
   } catch (err) {
     console.error('[public/aparelho totem logo]', err?.code ?? err?.name ?? 'erro');
+    res.status(500).end();
+  }
+});
+
+// A ARTE de um banner, em bytes. Fora do bootstrap pelo mesmo motivo da logo.
+//
+// A empresa vem do COOKIE do aparelho, nunca do pedido: o `id` na URL é conferido CONTRA
+// o escopo, e um id de outra loja simplesmente não é encontrado. Não existe caminho em
+// que o navegador escolha de quem é a imagem.
+app.get('/api/public/aparelho/totem/banner/:id/imagem', async (req, res) => {
+  try {
+    const ap = await exigirAparelho(req, res); if (!ap) return;
+    if (!exigirTotem(ap, res)) return;
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).end();
+    const banner = await prisma.totemBanner.findFirst({
+      where: { id, ...whereDoAparelho(ap, {}) },
+      select: { imagemVersao: true, imagemTipo: true, imagem: { select: { dados: true } } },
+    });
+    if (!banner?.imagem?.dados || !banner.imagemTipo) return res.status(404).end();
+    responderImagem(
+      res,
+      { tipo: banner.imagemTipo, bytes: banner.imagem.dados },
+      `b${id}-${ap.empresaId}-${banner.imagemVersao}`,
+      req,
+    );
+  } catch (err) {
+    console.error('[public/aparelho totem banner imagem]', err?.code ?? err?.name ?? 'erro');
     res.status(500).end();
   }
 });
@@ -9474,6 +9528,158 @@ app.delete('/api/totem/aparencia/logo', async (req, res) => {
     });
     res.json({ ok: true, logo: { tem: false, versao: linha.logoVersao } });
   } catch (err) { console.error('[totem/aparencia logo DELETE]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// ── Totem › Banners (admin) ────────────────────────────────────────────────
+// TODA consulta leva `empresaId` no `where`, inclusive as que já recebem um `id` na URL.
+// Não é redundância: é o que faz um id adulterado devolver "não encontrado" em vez da
+// linha de outra loja. O `empresaId` sai SEMPRE da sessão, nunca do corpo.
+app.get('/api/totem/banners', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const linhas = await prisma.totemBanner.findMany({
+      where: { empresaId }, select: BANNER_CAMPOS, orderBy: [{ ordem: 'asc' }, { id: 'asc' }],
+    });
+    const agora = Date.now();
+    res.json({
+      banners: linhas.map((b) => bannerParaAdmin(b, agora)),
+      agoraServidor: new Date(agora).toISOString(),
+      limites: { duracaoMin: BANNER_DUR_MIN, duracaoMax: BANNER_DUR_MAX, duracaoPadrao: BANNER_DUR_PADRAO, imagemKb: Math.round(BANNER_IMG_MAX / 1024) },
+    });
+  } catch (err) { console.error('[totem/banners]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// Criar. Nome e imagem são obrigatórios: banner sem arte só existiria para falhar na tela.
+// Nasce no FIM da fila — quem cadastra depois não passa na frente sem pedir.
+app.post('/api/totem/banners', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const v = validarBanner(req.body, { exigirNome: true });
+    const janela = conferirJanela(v.dados, null);
+    const erros = [...v.erros, ...(janela ? [janela] : [])];
+    const img = lerImagemBanner(req.body?.imagem);
+    if (img.erro) erros.push({ campo: 'imagem', motivo: img.erro });
+    if (erros.length) return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros });
+
+    const ultimo = await prisma.totemBanner.findFirst({ where: { empresaId }, orderBy: { ordem: 'desc' }, select: { ordem: true } });
+    const criado = await prisma.totemBanner.create({
+      data: {
+        empresaId,
+        ...v.dados,
+        ordem: (ultimo?.ordem ?? -1) + 1,
+        imagemVersao: 1,
+        imagemTipo: img.tipo,
+        imagemBytes: img.bytes.length,
+        imagem: { create: { dados: img.bytes } },
+      },
+      select: BANNER_CAMPOS,
+    });
+    res.status(201).json({ ok: true, banner: bannerParaAdmin(criado, Date.now()) });
+  } catch (err) { console.error('[totem/banners POST]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// ⚠️ ANTES do `/:id`: o Express casa na ORDEM de declaração, e com esta rota embaixo o
+// caminho `/banners/ordem` cairia no parâmetro, viraria `Number('ordem')` = NaN e
+// responderia 400 — um bug que só aparece ao arrastar, nunca ao editar.
+// Reordenar em lote. A lista chega inteira e a ordem é reescrita por POSIÇÃO — nada de
+// trocar dois vizinhos, que deixa buracos e empates quando duas abas mexem juntas.
+//
+// `updateMany` com empresaId no where, dentro de uma transação: um id de outra loja não
+// atualiza nada em vez de reordenar o carrossel dela.
+app.put('/api/totem/banners/ordem', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number) : null;
+    if (!ids || !ids.length || ids.some((n) => !Number.isSafeInteger(n) || n <= 0)) {
+      return res.status(400).json({ erro: 'ENTRADA_INVALIDA' });
+    }
+    await prisma.$transaction(ids.map((id, i) => prisma.totemBanner.updateMany({ where: { id, empresaId }, data: { ordem: i } })));
+    const linhas = await prisma.totemBanner.findMany({ where: { empresaId }, select: BANNER_CAMPOS, orderBy: [{ ordem: 'asc' }, { id: 'asc' }] });
+    const agora = Date.now();
+    res.json({ ok: true, banners: linhas.map((b) => bannerParaAdmin(b, agora)) });
+  } catch (err) { console.error('[totem/banners ordem]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// Editar nome, ativo, duração e agenda. NÃO toca na imagem nem na versão dela: corrigir um
+// título não pode obrigar todos os tablets a rebaixar a arte que já têm em cache.
+app.put('/api/totem/banners/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ erro: 'ID_INVALIDO' });
+    const atual = await prisma.totemBanner.findFirst({ where: { id, empresaId }, select: BANNER_CAMPOS });
+    if (!atual) return res.status(404).json({ erro: 'NAO_ENCONTRADO' });
+
+    const v = validarBanner(req.body);
+    const janela = conferirJanela(v.dados, atual);
+    const erros = [...v.erros, ...(janela ? [janela] : [])];
+    if (erros.length) return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros });
+
+    const linha = await prisma.totemBanner.update({ where: { id }, data: v.dados, select: BANNER_CAMPOS });
+    res.json({ ok: true, banner: bannerParaAdmin(linha, Date.now()) });
+  } catch (err) { console.error('[totem/banners PUT]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// Substituir a arte. É a ÚNICA rota que incrementa `imagemVersao` — é ela que invalida o
+// cache de um ano dos tablets.
+app.put('/api/totem/banners/:id/imagem', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ erro: 'ID_INVALIDO' });
+    const atual = await prisma.totemBanner.findFirst({ where: { id, empresaId }, select: { id: true, imagemVersao: true } });
+    if (!atual) return res.status(404).json({ erro: 'NAO_ENCONTRADO' });
+    const img = lerImagemBanner(req.body?.imagem);
+    if (img.erro) return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros: [{ campo: 'imagem', motivo: img.erro }] });
+
+    const linha = await prisma.totemBanner.update({
+      where: { id },
+      data: {
+        imagemVersao: proximaVersaoImagem(atual.imagemVersao),
+        imagemTipo: img.tipo,
+        imagemBytes: img.bytes.length,
+        imagem: { upsert: { create: { dados: img.bytes }, update: { dados: img.bytes } } },
+      },
+      select: BANNER_CAMPOS,
+    });
+    res.json({ ok: true, banner: bannerParaAdmin(linha, Date.now()) });
+  } catch (err) { console.error('[totem/banners imagem PUT]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// Excluir. `deleteMany` com empresaId: id adulterado apaga ZERO linhas em vez da de outra
+// loja. A arte vai junto por CASCADE, na mesma transação do banco — não há passo separado
+// de mídia que possa falhar pela metade.
+app.delete('/api/totem/banners/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ erro: 'ID_INVALIDO' });
+    const { count } = await prisma.totemBanner.deleteMany({ where: { id, empresaId } });
+    if (!count) return res.status(404).json({ erro: 'NAO_ENCONTRADO' });
+    res.json({ ok: true });
+  } catch (err) { console.error('[totem/banners DELETE]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// A arte, para a PRÉVIA e a miniatura do admin.
+app.get('/api/totem/banners/:id/imagem', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).end();
+    const banner = await prisma.totemBanner.findFirst({
+      where: { id, empresaId },
+      select: { imagemVersao: true, imagemTipo: true, imagem: { select: { dados: true } } },
+    });
+    if (!banner?.imagem?.dados || !banner.imagemTipo) return res.status(404).end();
+    responderImagem(res, { tipo: banner.imagemTipo, bytes: banner.imagem.dados }, `b${id}-${empresaId}-${banner.imagemVersao}`, req);
+  } catch (err) { console.error('[totem/banners imagem]', err); res.status(500).end(); }
 });
 
 // ── Job do totem (§5.4): 60 s, in-process, com lock ─────────────────────────
