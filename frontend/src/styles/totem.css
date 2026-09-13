@@ -136,7 +136,7 @@
   background: var(--tq-fundo);
   color: var(--tq-texto);
   font-family: var(--tq-fonte-corpo);
-  font-size: clamp(17px, 1.7vw, 20px);
+  font-size: clamp(17px, 2.22vw, 24px);
   line-height: 1.45;
   overflow-x: hidden;
   touch-action: manipulation;
@@ -193,7 +193,7 @@
 .tq-rotulo {
   font-family: var(--tq-fonte-display);
   font-weight: 900;
-  font-size: clamp(13px, 1.3vw, 15px);
+  font-size: clamp(13px, 1.67vw, 18px);
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
@@ -213,7 +213,7 @@
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 18px; text-align: center; padding: 40px 32px;
 }
-.tq-carregando-txt { font-size: clamp(18px, 1.8vw, 22px); color: var(--tq-texto-2); font-weight: 600; }
+.tq-carregando-txt { font-size: clamp(18px, 2.41vw, 26px); color: var(--tq-texto-2); font-weight: 600; }
 
 /* -- Spinner --------------------------------------------------------------- */
 .tq-spinner {
@@ -248,7 +248,7 @@
   min-height: 64px; padding: 0 28px; border: none; border-radius: 16px;
   display: inline-flex; align-items: center; justify-content: center; gap: 12px;
   font-family: var(--tq-fonte-display);
-  font-weight: 900; font-size: clamp(18px, 1.9vw, 22px); letter-spacing: 0.04em; text-transform: uppercase;
+  font-weight: 900; font-size: clamp(18px, 2.41vw, 26px); letter-spacing: 0.04em; text-transform: uppercase;
   transition: background 0.14s ease, transform 0.1s ease, border-color 0.14s ease;
 }
 /* CTA = bloco amarelo sólido. Nada de aresta inferior nem de sombra colorida:
@@ -279,7 +279,7 @@
   min-height: 56px; min-width: 56px; padding: 0 20px; border-radius: 14px;
   border: 2px solid var(--tq-borda); background: var(--tq-superficie);
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  font-family: var(--tq-fonte-display); font-weight: 900; font-size: clamp(15px, 1.5vw, 17px);
+  font-family: var(--tq-fonte-display); font-weight: 900; font-size: clamp(15px, 1.85vw, 20px);
 }
 .tq-topo-btn:active { transform: scale(0.98); }
 /* A logo NÃO entra aqui. O arquivo do cardápio vem com fundo branco, e no
@@ -287,9 +287,9 @@
    já se apresenta inteira na tela de repouso; aqui basta o nome da loja como
    sobrelinha. */
 .tq-topo-meio { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.tq-topo-sup { color: var(--tq-texto-2); font-size: clamp(11px, 1.1vw, 13px); }
+.tq-topo-sup { color: var(--tq-texto-2); font-size: clamp(11px, 1.39vw, 15px); }
 .tq-topo-tit {
-  font-size: clamp(19px, 2.1vw, 26px); line-height: 1.15;
+  font-size: clamp(19px, 2.87vw, 31px); line-height: 1.15;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .tq-topo-vaga { flex: 0 0 auto; width: 40px; }
@@ -298,7 +298,7 @@
 .tq-topo-cancelar {
   flex: 0 0 auto; min-height: 56px; padding: 0 14px; border-radius: 12px;
   background: none; border: none; color: rgba(255, 255, 255, 0.62);
-  font-family: var(--tq-fonte-corpo); font-weight: 400; font-size: clamp(14px, 1.4vw, 16px);
+  font-family: var(--tq-fonte-corpo); font-weight: 400; font-size: clamp(14px, 1.76vw, 19px);
 }
 .tq-topo-cancelar:active { color: var(--tq-branco); }
 .tq-topo-cancelar.confirmando {
@@ -331,7 +331,7 @@
   display: flex; flex-direction: column; justify-content: center;
   gap: clamp(28px, 6vh, 130px); padding: clamp(36px, 4vh, 88px) clamp(36px, 5vw, 72px);
 }
-.tq-inicio-topo { display: flex; align-items: center; gap: clamp(24px, 4vw, 48px); }
+.tq-inicio-topo { display: flex; align-items: center; gap: clamp(24px, 5.28vw, 57px); }
 @media (max-width: 599px) { .tq-inicio-topo { flex-direction: column; text-align: center; } }
 
 /* A logo do Cardápio Web quase sempre vem com fundo branco. Em vez de disfarçar,
@@ -339,7 +339,7 @@
    arquivo colado sobre o preto. */
 .tq-placa {
   flex: 0 0 auto; background: var(--tq-branco); border-radius: 22px;
-  padding: clamp(16px, 2.2vw, 28px); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
+  padding: clamp(16px, 3.06vw, 33px); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
   display: grid; place-items: center;
 }
 .tq-placa img { display: block; width: clamp(150px, 26vw, 340px); max-height: 20vh; object-fit: contain; }
@@ -350,10 +350,10 @@
 }
 
 .tq-inicio-txt { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
-.tq-inicio-loja { color: var(--tq-amarelo); font-size: clamp(15px, 2vw, 26px); letter-spacing: 0.24em; }
+.tq-inicio-loja { color: var(--tq-amarelo); font-size: clamp(15px, 2.87vw, 31px); letter-spacing: 0.24em; }
 .tq-inicio-tit { font-size: clamp(44px, 8.6vw, 128px); line-height: 0.94; letter-spacing: -0.02em; }
 .tq-inicio-tit span { display: block; }
-.tq-inicio-sub { font-size: clamp(17px, 2.4vw, 32px); color: var(--tq-texto-claro); }
+.tq-inicio-sub { font-size: clamp(17px, 3.52vw, 38px); color: var(--tq-texto-claro); }
 
 /* Alvo grande, não paredão. 46vh (880px em 1920) deixava o ícone e o texto
    boiando num campo amarelo vazio; 30vh dá um bloco alto e ainda preenchido. O
@@ -361,12 +361,12 @@
    pede. */
 .tq-modos {
   flex: 0 1 auto; display: grid; grid-template-columns: 1fr 1fr;
-  gap: clamp(16px, 2.4vw, 32px); height: clamp(230px, 30vh, 560px);
+  gap: clamp(16px, 3.52vw, 38px); height: clamp(230px, 30vh, 560px);
 }
 .tq-modos.um { grid-template-columns: minmax(0, 1fr); }
 .tq-modo {
   background: var(--tq-amarelo); color: var(--tq-tinta); border-radius: 26px;
-  height: 100%; padding: clamp(24px, 3vw, 44px) 20px;
+  height: 100%; padding: clamp(24px, 4.81vw, 52px) 20px;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
   transition: background 0.14s ease, transform 0.1s ease;
 }
@@ -374,10 +374,10 @@
 /* A frase agora é a do cliente e é mais longa: quebra em duas linhas
    equilibradas em vez de espremer o corpo do cartão. */
 .tq-modo-t {
-  font-size: clamp(23px, 3.6vw, 52px); letter-spacing: 0.01em; text-transform: uppercase;
+  font-size: clamp(23px, 5.65vw, 61px); letter-spacing: 0.01em; text-transform: uppercase;
   line-height: 1.05; text-wrap: balance; max-width: 12ch;
 }
-.tq-modo-s { font-size: clamp(15px, 1.9vw, 26px); opacity: 0.66; }
+.tq-modo-s { font-size: clamp(15px, 2.87vw, 31px); opacity: 0.66; }
 /* O ícone acompanha a altura do cartão: em 96px fixos ele sumia dentro de um
    bloco de 800px. O CSS vence o atributo width do SVG. */
 .tq-modo .tq-ico { width: clamp(72px, 8vh, 140px); height: auto; }
@@ -405,13 +405,13 @@
   background: linear-gradient(to top, var(--tq-preto), rgba(0, 0, 0, 0));
 }
 .tq-cat {
-  width: 100%; min-height: 76px; padding: 14px 14px; text-align: left;
+  width: 100%; min-height: clamp(76px, 5vh, 104px); padding: 16px; text-align: left;
   display: flex; align-items: center;
   color: var(--tq-branco);
   /* Corpo, não display: em Montserrat 900 a lista virava um bloco de texto
      grosso sem respiro, e nome de categoria é ITEM DE LISTA, não título. */
   font-family: var(--tq-fonte-display);
-  font-weight: 600; font-size: clamp(13px, 1.4vw, 16px); line-height: 1.2;
+  font-weight: 600; font-size: clamp(13px, 1.76vw, 19px); line-height: 1.2;
   letter-spacing: 0.02em; text-transform: uppercase;
   border-bottom: 1px solid rgba(255, 255, 255, 0.10);
   transition: background 0.12s ease, color 0.12s ease;
@@ -456,6 +456,7 @@
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px; padding: 20px; align-content: start;
 }
+@media (min-width: 900px) { .tq-grade { gap: 24px; padding: 28px; } }
 @media (min-width: 1500px) { .tq-grade { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 
 /* Modo de emergência: tablet pequeno improvisado. As categorias voltam a ser
@@ -488,11 +489,11 @@
    "X CALA BURGUER" virava uma coluna de letras. */
 .tq-card-nome {
   font-family: var(--tq-fonte-display); font-weight: 600;
-  font-size: clamp(20px, 2.1vw, 26px); line-height: 1.15; letter-spacing: 0.005em;
+  font-size: clamp(20px, 2.87vw, 31px); line-height: 1.15; letter-spacing: 0.005em;
   word-break: normal; overflow-wrap: normal; hyphens: none;
 }
 .tq-card-desc {
-  font-size: clamp(14px, 1.5vw, 17px); color: var(--tq-texto-2); line-height: 1.3;
+  font-size: clamp(14px, 1.85vw, 20px); color: var(--tq-texto-2); line-height: 1.3;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
   word-break: normal; overflow-wrap: normal;
 }
@@ -500,21 +501,25 @@
 
 /* -- Foto ------------------------------------------------------------------ */
 .tq-foto { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--tq-superficie-3); }
+/* No alvo em pé a foto vira QUADRADA: em 4:3, numa coluna de ~435px, o card
+   fica baixo e sobra tela numa altura de 1920. Quadrado enche melhor e é um
+   corte que comida aceita bem. */
+@media (min-width: 900px) { .tq-card .tq-foto { aspect-ratio: 1; } }
 .tq-foto-vazia { display: grid; place-items: center; color: rgba(255, 255, 255, 0.34); }
 
 /* -- Preço ----------------------------------------------------------------- */
 .tq-preco { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
-.tq-preco-valor { font-size: clamp(24px, 2.7vw, 34px); line-height: 1.05; }
+.tq-preco-valor { font-size: clamp(24px, 3.7vw, 40px); line-height: 1.05; }
 /* "a partir de" é rótulo, não preço: pequeno, acima do número, em cinza escuro
    de alto contraste (8,8:1). Sem etiqueta colorida — o destaque é o valor. */
 .tq-apartir { color: var(--tq-texto-2); line-height: 1.1; }
-.tq-preco-de { font-size: clamp(14px, 1.4vw, 16px); color: var(--tq-texto-3); text-decoration: line-through; font-weight: 700; }
+.tq-preco-de { font-size: clamp(14px, 1.76vw, 19px); color: var(--tq-texto-3); text-decoration: line-through; font-weight: 700; }
 .tq-preco-por { color: var(--ds-destaque); }
 .tq-selo {
   align-self: flex-start; padding: 7px 16px; border-radius: 8px;
   background: var(--tq-preto); color: var(--tq-branco);
   font-family: var(--tq-fonte-display);
-  font-weight: 800; font-size: clamp(13px, 1.3vw, 15px); letter-spacing: 0.06em; text-transform: uppercase;
+  font-weight: 800; font-size: clamp(13px, 1.67vw, 18px); letter-spacing: 0.06em; text-transform: uppercase;
 }
 
 /* -- Catálogo vazio -------------------------------------------------------- */
@@ -522,8 +527,8 @@
   flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 16px; text-align: center; padding: clamp(48px, 12vh, 120px) 32px; color: var(--tq-texto-3);
 }
-.tq-vazio-t { font-size: clamp(26px, 3.4vw, 40px); color: var(--tq-texto); }
-.tq-vazio p { font-size: clamp(17px, 1.7vw, 20px); max-width: 460px; }
+.tq-vazio-t { font-size: clamp(26px, 4.35vw, 47px); color: var(--tq-texto); }
+.tq-vazio p { font-size: clamp(17px, 2.22vw, 24px); max-width: 460px; }
 
 /* ═══ V4 — barra do pedido e aviso passageiro ══════════════════════════════ */
 
@@ -538,19 +543,19 @@
   padding: 14px 24px calc(18px + env(safe-area-inset-bottom, 0px));
   display: flex; flex-direction: column; justify-content: center; gap: 10px;
 }
-.tq-barra-linha { display: flex; align-items: center; gap: 12px; font-size: clamp(15px, 1.6vw, 19px); color: var(--tq-texto-claro); }
-.tq-barra-total { margin-left: auto; font-size: clamp(22px, 2.6vw, 32px); color: var(--tq-amarelo); }
+.tq-barra-linha { display: flex; align-items: center; gap: 12px; font-size: clamp(15px, 2.04vw, 22px); color: var(--tq-texto-claro); }
+.tq-barra-total { margin-left: auto; font-size: clamp(22px, 3.52vw, 38px); color: var(--tq-amarelo); }
 .tq-barra-vazia {
   display: flex; align-items: center; justify-content: center; gap: 12px;
   min-height: calc(var(--tq-barra-h) - 32px); color: rgba(255, 255, 255, 0.55);
-  font-size: clamp(15px, 1.6vw, 19px); text-align: center;
+  font-size: clamp(15px, 2.04vw, 22px); text-align: center;
 }
 .tq-qtd {
   min-width: 40px; height: 40px; padding: 0 10px; border-radius: 999px;
   background: var(--tq-amarelo); color: var(--tq-tinta);
   display: inline-grid; place-items: center;
   font-family: var(--tq-fonte-display);
-  font-weight: 900; font-size: clamp(17px, 1.8vw, 20px);
+  font-weight: 900; font-size: clamp(17px, 2.22vw, 24px);
   animation: tq-pulso 0.45s ease;
 }
 @keyframes tq-pulso { 0% { transform: scale(1); } 40% { transform: scale(1.14); } 100% { transform: scale(1); } }
@@ -565,7 +570,7 @@
   display: flex; align-items: center; gap: 12px;
   padding: 16px 24px; border-radius: 14px;
   background: var(--tq-preto); color: var(--tq-branco);
-  font-size: clamp(16px, 1.7vw, 19px); font-weight: 700; text-align: left;
+  font-size: clamp(16px, 2.04vw, 22px); font-weight: 700; text-align: left;
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.55);
 }
 .tq-toast-ico {
@@ -585,13 +590,13 @@
 .tq-det-faixa {
   display: flex; align-items: flex-end; justify-content: space-between; gap: 20px;
   background: var(--tq-preto); color: var(--tq-branco);
-  padding: clamp(18px, 2.4vw, 28px) clamp(20px, 4vw, 40px);
+  padding: clamp(18px, 3.06vw, 33px) clamp(20px, 4.35vw, 47px);
 }
 .tq-det-faixa-txt { min-width: 0; }
-.tq-det-nome { font-size: clamp(28px, 4vw, 52px); line-height: 1.02; letter-spacing: -0.015em; }
-.tq-det-desc { font-size: clamp(16px, 1.8vw, 21px); color: var(--tq-texto-claro); margin-top: 8px; }
+.tq-det-nome { font-size: clamp(28px, 5.65vw, 61px); line-height: 1.02; letter-spacing: -0.015em; }
+.tq-det-desc { font-size: clamp(16px, 2.31vw, 25px); color: var(--tq-texto-claro); margin-top: 8px; }
 .tq-det-preco { flex: 0 0 auto; align-items: flex-end; text-align: right; }
-.tq-det-preco .tq-preco-valor { font-size: clamp(28px, 3.6vw, 46px); color: var(--tq-amarelo); }
+.tq-det-preco .tq-preco-valor { font-size: clamp(28px, 5vw, 54px); color: var(--tq-amarelo); }
 .tq-det-preco .tq-preco-de { color: var(--tq-texto-claro); }
 .tq-det-preco .tq-preco-por { color: var(--tq-amarelo); }
 .tq-det { width: min(920px, 92%); margin: 0 auto; padding: 26px 0 40px; }
@@ -604,7 +609,7 @@
   min-height: 56px; padding: 0 20px; border-radius: 999px;
   background: var(--tq-amarelo); color: var(--tq-tinta);
   font-family: var(--tq-fonte-display);
-  font-weight: 800; font-size: clamp(13px, 1.4vw, 15px); letter-spacing: 0.05em; text-transform: uppercase;
+  font-weight: 800; font-size: clamp(13px, 1.67vw, 18px); letter-spacing: 0.05em; text-transform: uppercase;
 }
 .tq-pend:active { background: var(--tq-amarelo-2); }
 .tq-pend.ok { background: var(--tq-ok-fraco); color: var(--tq-ok); }
@@ -621,11 +626,11 @@
    inteira, que virava mais uma faixa decorativa na tela. */
 .tq-grupo-cab {
   display: flex; align-items: baseline; gap: 6px 16px; flex-wrap: wrap;
-  padding: 16px clamp(16px, 2.2vw, 22px) 14px;
+  padding: 16px clamp(16px, 2.41vw, 26px) 14px;
   border-bottom: 1px solid var(--tq-borda);
 }
 .tq-grupo-nome {
-  flex: 1 1 auto; min-width: 0; font-size: clamp(19px, 2.1vw, 26px); line-height: 1.15;
+  flex: 1 1 auto; min-width: 0; font-size: clamp(19px, 2.87vw, 31px); line-height: 1.15;
   word-break: normal; overflow-wrap: normal;
 }
 .tq-grupo-regra { flex: 0 0 auto; margin-left: auto; color: var(--tq-texto-2); }
@@ -633,10 +638,10 @@
   display: inline-block; padding: 4px 10px; border-radius: 6px; margin-right: 4px;
   background: var(--tq-amarelo); color: var(--tq-tinta); letter-spacing: 0.06em;
 }
-.tq-grupo-corpo { padding: clamp(14px, 2vw, 20px) clamp(16px, 2.2vw, 22px) clamp(16px, 2.2vw, 22px); }
-.tq-grupo-contagem { margin-bottom: 12px; color: var(--tq-texto-3); font-weight: 700; font-size: clamp(14px, 1.4vw, 16px); }
-.tq-grupo-indisponivel { font-size: clamp(16px, 1.6vw, 18px); font-weight: 700; color: var(--tq-texto-2); }
-.tq-grupo-falta { margin-top: 14px; font-family: var(--tq-fonte-display); font-weight: 900; color: var(--ds-destaque); font-size: clamp(15px, 1.5vw, 17px); }
+.tq-grupo-corpo { padding: clamp(14px, 2.22vw, 24px) clamp(16px, 2.41vw, 26px) clamp(16px, 2.41vw, 26px); }
+.tq-grupo-contagem { margin-bottom: 12px; color: var(--tq-texto-3); font-weight: 700; font-size: clamp(14px, 1.76vw, 19px); }
+.tq-grupo-indisponivel { font-size: clamp(16px, 1.94vw, 21px); font-weight: 700; color: var(--tq-texto-2); }
+.tq-grupo-falta { margin-top: 14px; font-family: var(--tq-fonte-display); font-weight: 900; color: var(--ds-destaque); font-size: clamp(15px, 1.85vw, 20px); }
 
 /* -- Opção de complemento -------------------------------------------------- */
 /* Card HORIZONTAL sempre: miniatura fixa, texto elástico com `min-width: 0`,
@@ -662,16 +667,16 @@
 /* Quebra só por palavra, no máximo três linhas. */
 .tq-op-nome {
   font-family: var(--tq-fonte-display); font-weight: 600;
-  font-size: clamp(15px, 1.6vw, 18px); line-height: 1.25; letter-spacing: 0.01em;
+  font-size: clamp(15px, 1.94vw, 21px); line-height: 1.25; letter-spacing: 0.01em;
   word-break: normal; overflow-wrap: normal; hyphens: none;
   display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
 }
 .tq-op-desc {
-  font-size: clamp(13px, 1.4vw, 16px); color: var(--tq-texto-2); line-height: 1.3;
+  font-size: clamp(13px, 1.76vw, 19px); color: var(--tq-texto-2); line-height: 1.3;
   word-break: normal; overflow-wrap: normal;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
-.tq-op-preco { font-family: var(--tq-fonte-display); font-weight: 900; color: var(--tq-texto); font-size: clamp(14px, 1.6vw, 17px); }
+.tq-op-preco { font-family: var(--tq-fonte-display); font-weight: 900; color: var(--tq-texto); font-size: clamp(14px, 1.85vw, 20px); }
 .tq-op-lado { flex: 0 0 auto; display: flex; align-items: center; }
 
 /* Miniatura fixa. No grupo em modo foto, a opção sem imagem mantém o slot com o
@@ -710,7 +715,7 @@
   display: inline-flex; align-items: center; gap: 10px; margin-top: 22px;
   min-height: 56px; padding: 0 20px; border-radius: 14px;
   border: 2px dashed var(--tq-borda-forte); background: transparent; color: var(--tq-texto-2);
-  font-weight: 700; font-size: clamp(15px, 1.6vw, 18px);
+  font-weight: 700; font-size: clamp(15px, 1.94vw, 21px);
 }
 .tq-obs-abrir:active { background: var(--tq-superficie); }
 .tq-obs-bloco {
@@ -719,12 +724,12 @@
 }
 .tq-obs-cab { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; }
 .tq-obs-cab .tq-rotulo { color: var(--tq-texto-3); }
-.tq-obs-contador { margin-left: auto; color: var(--tq-texto-3); font-size: clamp(13px, 1.3vw, 15px); font-weight: 700; }
+.tq-obs-contador { margin-left: auto; color: var(--tq-texto-3); font-size: clamp(13px, 1.67vw, 18px); font-weight: 700; }
 .tq-obs {
   width: 100%; min-height: 96px; padding: 12px 14px; resize: none;
   border: 2px solid var(--tq-borda); border-radius: var(--tq-raio-2);
   background: var(--tq-superficie); color: var(--tq-texto);
-  font: inherit; font-size: clamp(16px, 1.7vw, 19px);
+  font: inherit; font-size: clamp(16px, 2.04vw, 22px);
   /* Único ponto de digitação livre do quiosque: aqui a seleção volta a valer. */
   user-select: text; -webkit-user-select: text;
 }
@@ -745,12 +750,12 @@
 }
 .tq-step:active:not(:disabled) { transform: scale(0.97); }
 .tq-step:disabled { opacity: 0.35; cursor: not-allowed; }
-.tq-step-v { min-width: 48px; text-align: center; font-size: clamp(20px, 2.2vw, 26px); }
+.tq-step-v { min-width: 48px; text-align: center; font-size: clamp(20px, 2.87vw, 31px); }
 /* Bloco de recado dentro de uma tela (item indisponível, recusa de cotação). */
 .tq-aviso-bloco {
   background: var(--tq-perigo-fraco); border: 2px solid rgba(255, 122, 110, 0.5); border-radius: var(--tq-raio-2);
   padding: 14px 16px; margin-bottom: 18px; color: #ffd9d5;
-  font-size: clamp(16px, 1.6vw, 18px); line-height: 1.45;
+  font-size: clamp(16px, 1.94vw, 21px); line-height: 1.45;
 }
 
 /* ═══ Grade das opções ═════════════════════════════════════════════════════ */
@@ -762,7 +767,7 @@
    sozinha, sem media query. */
 .tq-opcoes.grade { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
 
-.tq-grupo-limite { margin-bottom: 12px; color: var(--ds-destaque); font-weight: 700; font-size: clamp(14px, 1.4vw, 16px); }
+.tq-grupo-limite { margin-bottom: 12px; color: var(--ds-destaque); font-weight: 700; font-size: clamp(14px, 1.76vw, 19px); }
 
 /* ═══ V7 — avanço automático ═══════════════════════════════════════════════ */
 /* Último grupo concluído: além de rolar até o rodapé, o botão pisca uma vez.
@@ -773,9 +778,9 @@
 
 .tq-rodape.coluna { flex-direction: column; align-items: stretch; gap: 12px; }
 .tq-subtotal { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-.tq-subtotal span { font-size: clamp(17px, 1.8vw, 20px); color: var(--tq-texto); font-weight: 700; }
-.tq-subtotal small { display: block; font-size: clamp(13px, 1.3vw, 15px); color: var(--tq-texto-3); font-weight: 600; }
-.tq-subtotal strong { font-size: clamp(26px, 3vw, 38px); }
+.tq-subtotal span { font-size: clamp(17px, 2.22vw, 24px); color: var(--tq-texto); font-weight: 700; }
+.tq-subtotal small { display: block; font-size: clamp(13px, 1.67vw, 18px); color: var(--tq-texto-3); font-weight: 600; }
+.tq-subtotal strong { font-size: clamp(26px, 4.17vw, 45px); }
 .tq-rodape-botoes { display: flex; gap: 12px; }
 .tq-rodape-botoes > * { flex: 1 1 0; }
 
@@ -794,16 +799,16 @@
 .tq-linha-corpo { flex: 1 1 auto; min-width: 0; }
 .tq-linha-nome {
   font-family: var(--tq-fonte-display); font-weight: 600;
-  font-size: clamp(18px, 2vw, 24px); line-height: 1.25;
+  font-size: clamp(18px, 2.59vw, 28px); line-height: 1.25;
 }
 /* A quantidade abre o nome, sem ficha nem cor: é leitura de comanda. */
 .tq-linha-qtd { margin-right: 6px; }
-.tq-linha-ops { margin-top: 8px; font-size: clamp(15px, 1.6vw, 18px); color: var(--tq-texto-2); line-height: 1.5; }
+.tq-linha-ops { margin-top: 8px; font-size: clamp(15px, 1.94vw, 21px); color: var(--tq-texto-2); line-height: 1.5; }
 .tq-linha-ops li::before { content: '• '; color: rgba(255, 255, 255, 0.45); }
-.tq-linha-obs { margin-top: 8px; font-size: clamp(14px, 1.5vw, 16px); font-style: italic; color: var(--tq-texto-2); }
-.tq-linha-mudou { margin-top: 8px; font-weight: 800; font-size: clamp(13px, 1.4vw, 15px); letter-spacing: 0.06em; text-transform: uppercase; }
+.tq-linha-obs { margin-top: 8px; font-size: clamp(14px, 1.76vw, 19px); font-style: italic; color: var(--tq-texto-2); }
+.tq-linha-mudou { margin-top: 8px; font-weight: 800; font-size: clamp(13px, 1.67vw, 18px); letter-spacing: 0.06em; text-transform: uppercase; }
 .tq-linha-lado { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 14px; }
-.tq-linha-valor { font-size: clamp(21px, 2.3vw, 28px); white-space: nowrap; }
+.tq-linha-valor { font-size: clamp(21px, 3.06vw, 33px); white-space: nowrap; }
 /* Editar e remover afastados: destrutivo colado em ação comum, num vidro tocado
    em pé, é erro de toque garantido. */
 .tq-linha-acoes { display: flex; align-items: center; gap: 32px; }
@@ -811,7 +816,7 @@
   min-height: 56px; padding: 0 16px; border-radius: 12px;
   border: 2px solid var(--tq-borda); background: var(--tq-superficie);
   display: inline-flex; align-items: center; gap: 8px;
-  font-family: var(--tq-fonte-display); font-weight: 900; font-size: clamp(14px, 1.5vw, 16px);
+  font-family: var(--tq-fonte-display); font-weight: 900; font-size: clamp(14px, 1.76vw, 19px);
 }
 .tq-mini:active { transform: scale(0.98); }
 .tq-mini.perigo { border-color: rgba(255, 122, 110, 0.5); color: var(--tq-perigo); }
@@ -832,21 +837,21 @@
   background: var(--tq-amarelo); border-color: var(--tq-amarelo-3); border-width: 3px; padding: 17px 21px;
 }
 .tq-metodo[aria-pressed='true'] .tq-op-marca { background: var(--tq-preto); border-color: var(--tq-preto); color: var(--tq-amarelo); }
-.tq-metodo-nome { flex: 1 1 auto; font-family: var(--tq-fonte-display); font-weight: 600; font-size: clamp(21px, 2.3vw, 28px); }
+.tq-metodo-nome { flex: 1 1 auto; font-family: var(--tq-fonte-display); font-weight: 600; font-size: clamp(21px, 3.06vw, 33px); }
 
 /* O recado de que nada é cobrado aqui deixa de ser rodapé e vira a primeira
    coisa da tela: é a dúvida número um de quem usa um totem pela primeira vez. */
 .tq-aviso-forte {
   background: var(--tq-preto); border: none;
-  border-radius: var(--tq-raio); padding: clamp(20px, 2.6vw, 28px);
-  color: var(--tq-branco); font-size: clamp(16px, 1.8vw, 21px); line-height: 1.45;
+  border-radius: var(--tq-raio); padding: clamp(20px, 3.06vw, 33px);
+  color: var(--tq-branco); font-size: clamp(16px, 2.31vw, 25px); line-height: 1.45;
   display: flex; gap: 18px; align-items: flex-start;
 }
 .tq-aviso-forte > svg { color: var(--tq-amarelo); }
 .tq-aviso-forte b {
   display: block; color: var(--tq-amarelo);
   font-family: var(--tq-fonte-display);
-  font-weight: 900; font-size: clamp(19px, 2.2vw, 26px); letter-spacing: 0.04em;
+  font-weight: 900; font-size: clamp(19px, 2.87vw, 31px); letter-spacing: 0.04em;
   text-transform: uppercase; margin-bottom: 6px; line-height: 1.1;
 }
 
@@ -855,19 +860,19 @@
   display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 10px;
   background: var(--tq-preto); color: var(--tq-branco);
   font-family: var(--tq-fonte-display);
-  font-weight: 800; font-size: clamp(14px, 1.5vw, 17px); letter-spacing: 0.06em; text-transform: uppercase;
+  font-weight: 800; font-size: clamp(14px, 1.85vw, 20px); letter-spacing: 0.06em; text-transform: uppercase;
 }
 .tq-link {
   background: none; border: none; padding: 12px 10px; min-height: 56px;
   color: var(--ds-destaque); font-family: var(--tq-fonte-display); font-weight: 900;
-  text-decoration: underline; font-size: clamp(15px, 1.5vw, 17px);
+  text-decoration: underline; font-size: clamp(15px, 1.85vw, 20px);
 }
 .tq-link:disabled { opacity: 0.5; cursor: not-allowed; }
 .tq-precos-mudaram {
   background: var(--tq-aviso-fundo); border: 2px solid var(--tq-amarelo); border-radius: var(--tq-raio);
-  padding: 16px 18px; color: var(--tq-aviso-tinta); font-size: clamp(16px, 1.7vw, 19px); line-height: 1.45;
+  padding: 16px 18px; color: var(--tq-aviso-tinta); font-size: clamp(16px, 2.04vw, 22px); line-height: 1.45;
 }
-.tq-pagar-balcao { color: var(--tq-texto-3); font-weight: 700; font-size: clamp(15px, 1.6vw, 18px); }
+.tq-pagar-balcao { color: var(--tq-texto-3); font-weight: 700; font-size: clamp(15px, 1.94vw, 21px); }
 
 /* Faixa preta de fechamento: marca o ponto sem volta. Só a revisão tem. */
 .tq-fechamento {
@@ -876,25 +881,25 @@
   display: flex; flex-direction: column; gap: 16px;
 }
 .tq-fechamento-l { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-.tq-fechamento-l span { letter-spacing: 0.14em; color: var(--tq-texto-claro); font-size: clamp(15px, 1.7vw, 19px); }
-.tq-fechamento-l strong { font-size: clamp(36px, 4.6vw, 56px); color: var(--tq-amarelo); }
+.tq-fechamento-l span { letter-spacing: 0.14em; color: var(--tq-texto-claro); font-size: clamp(15px, 2.04vw, 22px); }
+.tq-fechamento-l strong { font-size: clamp(36px, 6.11vw, 66px); color: var(--tq-amarelo); }
 .tq-fechamento-l strong.mudou { color: var(--tq-branco); }
 
 /* Confirmação em dúvida: um único caminho na tela, e um texto que diz por que
    tocar de novo é seguro. */
 .tq-travado {
   background: #2a1d0b; border: 2px solid var(--tq-amarelo); border-radius: var(--tq-raio);
-  padding: 18px 20px; color: #f6e6b8; font-size: clamp(16px, 1.7vw, 19px); line-height: 1.45;
+  padding: 18px 20px; color: #f6e6b8; font-size: clamp(16px, 2.04vw, 22px); line-height: 1.45;
 }
 .tq-travado b { color: var(--tq-branco); }
-.tq-travado-nota { text-align: center; color: var(--tq-texto-claro); font-size: clamp(14px, 1.5vw, 16px); }
+.tq-travado-nota { text-align: center; color: var(--tq-texto-claro); font-size: clamp(14px, 1.76vw, 19px); }
 
 .tq-erro-bloco {
   background: var(--tq-superficie); border: 2px solid rgba(255, 122, 110, 0.5); border-radius: var(--tq-raio); padding: 20px;
 }
-.tq-erro-titulo { font-size: clamp(20px, 2.2vw, 26px); margin-bottom: 8px; }
-.tq-erro-texto { font-size: clamp(16px, 1.7vw, 19px); color: var(--tq-texto-2); line-height: 1.5; }
-.tq-erro-lista { margin: 14px 0 18px; padding-left: 22px; font-size: clamp(15px, 1.6vw, 18px); color: var(--tq-texto-2); line-height: 1.6; }
+.tq-erro-titulo { font-size: clamp(20px, 2.87vw, 31px); margin-bottom: 8px; }
+.tq-erro-texto { font-size: clamp(16px, 2.04vw, 22px); color: var(--tq-texto-2); line-height: 1.5; }
+.tq-erro-lista { margin: 14px 0 18px; padding-left: 22px; font-size: clamp(15px, 1.94vw, 21px); color: var(--tq-texto-2); line-height: 1.6; }
 .tq-erro-lista li { list-style: disc; }
 
 /* Enquanto o pedido está sendo criado, NADA mais é tocável: um segundo toque em
@@ -904,8 +909,8 @@
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
   text-align: center; padding: 32px;
 }
-.tq-enviando-t { font-size: clamp(24px, 3vw, 34px); }
-.tq-enviando-p { font-size: clamp(16px, 1.7vw, 20px); color: var(--tq-texto-claro); max-width: 460px; }
+.tq-enviando-t { font-size: clamp(24px, 3.7vw, 40px); }
+.tq-enviando-p { font-size: clamp(16px, 2.22vw, 24px); color: var(--tq-texto-claro); max-width: 460px; }
 
 /* ═══ V10 — resultado, avisos de tela cheia e inatividade ══════════════════ */
 
@@ -920,8 +925,8 @@
   background: var(--tq-preto-2); color: var(--tq-amarelo);
   display: grid; place-items: center; margin-bottom: 8px;
 }
-.tq-tela-aviso h1 { font-size: clamp(32px, 4.4vw, 52px); text-wrap: balance; }
-.tq-tela-aviso p { font-size: clamp(18px, 2vw, 23px); color: var(--tq-texto-claro); max-width: 660px; line-height: 1.45; }
+.tq-tela-aviso h1 { font-size: clamp(32px, 5.65vw, 61px); text-wrap: balance; }
+.tq-tela-aviso p { font-size: clamp(18px, 2.5vw, 27px); color: var(--tq-texto-claro); max-width: 660px; line-height: 1.45; }
 .tq-tela-aviso .tq-erro-lista { color: var(--tq-texto-claro); text-align: left; max-width: 640px; }
 .tq-tela-aviso .tq-btn-claro { background: transparent; color: var(--tq-branco); border-color: var(--tq-superficie-3); }
 .tq-acoes-aviso { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; margin-top: 8px; }
@@ -933,38 +938,38 @@
    com espaço livre, então CRESCIA na vertical e tomava meia tela. */
 .tq-result {
   flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 20px; padding: clamp(32px, 5vw, 56px); text-align: center;
+  gap: 20px; padding: clamp(32px, 6.11vw, 66px); text-align: center;
 }
 .tq-painel-num {
   position: relative; width: 100%; max-width: 820px; overflow: hidden;
   background: var(--tq-preto); color: var(--tq-branco);
-  border-radius: 26px; padding: clamp(30px, 3.6vw, 46px) 24px clamp(32px, 4.4vw, 52px);
+  border-radius: 26px; padding: clamp(30px, 5vw, 54px) 24px clamp(32px, 5.65vw, 61px);
   background-image: repeating-linear-gradient(
     135deg,
     rgba(255, 255, 255, 0) 0 26px,
     rgba(255, 255, 255, 0.032) 26px 52px
   );
 }
-.tq-painel-rot { color: var(--tq-texto-claro); font-size: clamp(17px, 2vw, 26px); letter-spacing: 0.32em; }
+.tq-painel-rot { color: var(--tq-texto-claro); font-size: clamp(17px, 2.87vw, 31px); letter-spacing: 0.32em; }
 .tq-numero {
   font-size: clamp(104px, 19vw, 260px); line-height: 0.88; color: var(--tq-amarelo);
   letter-spacing: -0.03em; word-break: break-word; margin-top: 6px;
 }
 .tq-numero.ref { font-size: clamp(40px, 6vw, 76px); letter-spacing: 0.04em; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-.tq-numero.buscando { font-size: clamp(24px, 3vw, 34px); display: inline-flex; align-items: center; gap: 14px; color: var(--tq-branco); }
-.tq-result-tx { font-size: clamp(19px, 2.2vw, 28px); color: var(--tq-texto); max-width: 660px; line-height: 1.35; }
-.tq-result-total { color: var(--tq-texto-3); font-size: clamp(15px, 1.7vw, 19px); letter-spacing: 0.06em; }
+.tq-numero.buscando { font-size: clamp(24px, 3.7vw, 40px); display: inline-flex; align-items: center; gap: 14px; color: var(--tq-branco); }
+.tq-result-tx { font-size: clamp(19px, 3.06vw, 33px); color: var(--tq-texto); max-width: 660px; line-height: 1.35; }
+.tq-result-total { color: var(--tq-texto-3); font-size: clamp(15px, 2.04vw, 22px); letter-spacing: 0.06em; }
 .tq-codigo-balcao {
   display: flex; flex-direction: column; align-items: center; gap: 6px;
   background: var(--tq-superficie); border: 1px solid var(--tq-borda); border-radius: var(--tq-raio);
-  padding: 14px 22px; color: var(--tq-texto-2); font-size: clamp(15px, 1.6vw, 18px);
+  padding: 14px 22px; color: var(--tq-texto-2); font-size: clamp(15px, 1.94vw, 21px);
 }
 .tq-codigo-balcao strong {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.04em;
-  font-size: clamp(22px, 2.4vw, 28px); color: var(--tq-texto);
+  font-size: clamp(22px, 3.06vw, 33px); color: var(--tq-texto);
 }
 .tq-novo { flex: 0 0 auto; width: auto; min-width: 260px; max-width: 340px; }
-.tq-espera { color: var(--tq-texto-3); font-size: clamp(14px, 1.5vw, 17px); }
+.tq-espera { color: var(--tq-texto-3); font-size: clamp(14px, 1.85vw, 20px); }
 
 /* -- "Ainda está aí?" ------------------------------------------------------ */
 /* Aviso antes do reset por inatividade. Nunca aparece durante o envio nem com a
@@ -979,8 +984,8 @@
   display: flex; flex-direction: column; gap: 14px; text-align: center;
   box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.3);
 }
-.tq-sheet h2 { font-size: clamp(24px, 3vw, 32px); }
-.tq-sheet p { color: var(--tq-texto-2); font-size: clamp(16px, 1.7vw, 19px); }
+.tq-sheet h2 { font-size: clamp(24px, 3.52vw, 38px); }
+.tq-sheet p { color: var(--tq-texto-2); font-size: clamp(16px, 2.04vw, 22px); }
 
 /* ═══ V11 — pareamento do aparelho (/dispositivo) ══════════════════════════ */
 /* Mesma casca e mesmos tokens do quiosque: é a primeira tela que a equipe vê no
@@ -988,12 +993,12 @@
 .tq-pareamento {
   flex: 1 1 auto; background: var(--tq-preto); color: var(--tq-branco);
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 20px; padding: clamp(28px, 4vw, 56px); text-align: center;
+  gap: 20px; padding: clamp(28px, 6.11vw, 66px); text-align: center;
 }
 .tq-pareamento-cabeca { max-width: 520px; display: flex; flex-direction: column; gap: 8px; }
 .tq-pareamento-rot { color: var(--tq-amarelo); }
-.tq-pareamento-tit { font-size: clamp(26px, 3.4vw, 38px); line-height: 1.15; }
-.tq-pareamento-sub { color: var(--tq-texto-claro); font-size: clamp(16px, 1.7vw, 19px); line-height: 1.5; }
+.tq-pareamento-tit { font-size: clamp(26px, 4.17vw, 45px); line-height: 1.15; }
+.tq-pareamento-sub { color: var(--tq-texto-claro); font-size: clamp(16px, 2.04vw, 22px); line-height: 1.5; }
 .tq-pareamento-status { display: flex; align-items: center; gap: 12px; min-height: 32px; font-weight: 700; color: var(--tq-texto-claro); }
 .tq-pareamento-erro {
   background: #3a1210; border: 2px solid #b3564f; border-radius: var(--tq-raio-2);
@@ -1003,7 +1008,7 @@
 .tq-caixa {
   width: clamp(52px, 6vw, 68px); height: clamp(68px, 8vw, 88px); border-radius: 14px;
   border: 2px solid var(--tq-borda); background: var(--tq-preto-2); color: var(--tq-branco);
-  display: grid; place-items: center; font-size: clamp(28px, 3.4vw, 38px);
+  display: grid; place-items: center; font-size: clamp(28px, 4.17vw, 45px);
 }
 .tq-caixa.cheia { border-color: var(--tq-branco); }
 .tq-caixa.ativa { border-color: var(--tq-amarelo); box-shadow: 0 0 0 4px rgba(215, 158, 0, 0.3); }
@@ -1011,11 +1016,11 @@
 .tq-tecla {
   min-height: clamp(74px, 8vh, 92px); border-radius: 16px;
   border: 2px solid var(--tq-borda); background: var(--tq-preto-2); color: var(--tq-branco);
-  font-size: clamp(26px, 3vw, 32px);
+  font-size: clamp(26px, 3.52vw, 38px);
 }
 .tq-tecla:active:not(:disabled) { background: var(--tq-superficie-3); transform: scale(0.97); }
 .tq-tecla:disabled { opacity: 0.35; cursor: not-allowed; }
-.tq-tecla.apagar { font-family: var(--tq-fonte-display); font-weight: 900; font-size: clamp(15px, 1.7vw, 19px); }
+.tq-tecla.apagar { font-family: var(--tq-fonte-display); font-weight: 900; font-size: clamp(15px, 2.04vw, 22px); }
 .tq-tecla.vazia { visibility: hidden; }
 .tq-pareamento .tq-link { color: var(--tq-amarelo); }
 
@@ -1024,7 +1029,7 @@
 .tq-banner {
   flex: 0 0 auto; background: var(--tq-aviso-fundo); border-bottom: 1px solid var(--ds-destaque);
   padding: 10px 16px; text-align: center; color: var(--tq-aviso-tinta);
-  font-weight: 600; font-size: clamp(14px, 1.5vw, 17px);
+  font-weight: 600; font-size: clamp(14px, 1.85vw, 20px);
 }
 
 /* Cancelar pedido pede confirmação: o segundo toque é que apaga. */
