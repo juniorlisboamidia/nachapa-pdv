@@ -20,10 +20,16 @@ import ConfirmDialog from '../components/ConfirmDialog'
 // o título. Nenhum dos dois é caso degradado — os dois são o normal.
 //
 // ── ORDENAÇÃO SEM BIBLIOTECA ──────────────────────────────────────────────────────────
-// Subir/descer, e não arrastar. O projeto não tem infraestrutura de drag-and-drop, e trazer
-// uma dependência para ordenar uma lista de cinco itens custaria mais do que resolve. A
-// ordem é reescrita por POSIÇÃO no servidor, não por troca de vizinhos — trocar dois deixa
-// buracos e empates quando duas abas mexem juntas.
+// Arrastar a linha, com o HTML5 nativo (draggable + dragover + drop). Nenhuma biblioteca:
+// trazer uma dependência de drag-and-drop para ordenar uma lista de cinco itens custaria
+// mais do que resolve.
+//
+// Arrastar NÃO pode ser o único caminho — num tablet, e para quem navega por teclado, ele
+// simplesmente não existe. A alça é um botão focalizável que responde a ↑/↓, e é esse
+// caminho que a lista garante.
+//
+// Os dois terminam no mesmo lugar: a ordem é reescrita por POSIÇÃO no servidor, e não por
+// troca de vizinhos — trocar dois deixa buracos e empates quando duas abas mexem juntas.
 
 const STATUS = {
   ATIVO: { texto: 'Ativo', cor: 'badge-green' },
@@ -40,6 +46,17 @@ const TIPOS = [
 /* O tipo vem da URL, e a URL vem da SIDEBAR. Endereço torto cai na capa em vez de mostrar
    uma lista vazia — a mesma tolerância que o resto do totem tem com dado de fora. */
 const tipoDaRota = (r) => TIPOS.find((t) => t.rota === String(r ?? '').toLowerCase())?.id ?? 'CAPA'
+
+/* SVG inline, sem biblioteca — mesma técnica de `components/totem/icones.jsx`. São três
+   desenhos usados só nesta tela; um pacote inteiro para isso seria peso sem uso. */
+function IconeBn({ nome }) {
+  const d = {
+    alca: <><circle cx="9" cy="6" r="1.4" /><circle cx="15" cy="6" r="1.4" /><circle cx="9" cy="12" r="1.4" /><circle cx="15" cy="12" r="1.4" /><circle cx="9" cy="18" r="1.4" /><circle cx="15" cy="18" r="1.4" /></>,
+    olho: <><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z" fill="none" stroke="currentColor" strokeWidth="1.7" /><circle cx="12" cy="12" r="2.8" fill="none" stroke="currentColor" strokeWidth="1.7" /></>,
+    lixeira: <g fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><path d="M4 7h16" /><path d="M9.5 7V5h5v2" /><path d="M6.5 7l1 12.5h9L17.5 7" /><path d="M10 11v5.5M14 11v5.5" /></g>,
+  }[nome]
+  return <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">{d}</svg>
+}
 
 const erroDe = (e, fallback) => {
   const erros = e?.response?.data?.erros
@@ -69,6 +86,9 @@ export default function TotemBanners() {
   const [ocupado, setOcupado] = useState(false)
   const [editando, setEditando] = useState(null)   // { id? , tipo, nome, duracaoSegundos, ... }
   const [excluindo, setExcluindo] = useState(null)
+  const [vendo, setVendo] = useState(null)
+  const [arrastando, setArrastando] = useState(null)
+  const [sobre, setSobre] = useState(null)
   const { tipo: tipoRota } = useParams()
   const aba = tipoDaRota(tipoRota)
 
@@ -91,20 +111,38 @@ export default function TotemBanners() {
     } catch (e) { setToast({ message: erroDe(e, 'Não foi possível alterar.'), type: 'error' }) } finally { setOcupado(false) }
   }
 
-  async function mover(indice, passo) {
-    // A reordenação é DENTRO do tipo: só os ids da aba visível são enviados, e o servidor
-    // reescreve a ordem por posição. Misturar os dois tipos numa lista só faria uma capa
-    // trocar de lugar com um banner da espera.
-    const doTipo = lista.filter((b) => b.tipo === aba)
-    const destino = indice + passo
-    if (destino < 0 || destino >= doTipo.length) return
-    const ids = doTipo.map((b) => b.id)
-    ;[ids[indice], ids[destino]] = [ids[destino], ids[indice]]
+  /* A reordenação é DENTRO do tipo: só os ids da aba visível são enviados, e o servidor
+     reescreve a ordem por POSIÇÃO. Misturar os dois tipos numa lista só faria uma capa
+     trocar de lugar com um banner da tela de espera. */
+  async function reordenar(ids) {
     setOcupado(true)
     try {
       const r = await api.put('/totem/banners/ordem', { ids })
       setLista(r.data?.banners ?? lista)
     } catch (e) { setToast({ message: erroDe(e, 'Não foi possível reordenar.'), type: 'error' }) } finally { setOcupado(false) }
+  }
+
+  // Um passo, para o teclado. Arrastar usa `soltarEm`, que move para a posição de destino.
+  async function mover(indice, passo) {
+    const doTipo = lista.filter((b) => b.tipo === aba)
+    const destino = indice + passo
+    if (destino < 0 || destino >= doTipo.length) return
+    const ids = doTipo.map((b) => b.id)
+    ;[ids[indice], ids[destino]] = [ids[destino], ids[indice]]
+    await reordenar(ids)
+  }
+
+  /* Arrastar move a linha PARA a posição de destino, e não troca com o vizinho: trocar
+     dois é o que o botão de subir faz, e num arrasto de três posições o resultado seria
+     outro. `mover` continua existindo porque é ele que o teclado usa. */
+  async function soltarEm(destino) {
+    const origem = arrastando
+    setArrastando(null)
+    if (origem === null || origem === destino) return
+    const doTipo = visiveis.map((b) => b.id)
+    const [movido] = doTipo.splice(origem, 1)
+    doTipo.splice(destino, 0, movido)
+    await reordenar(doTipo)
   }
 
   async function excluir() {
@@ -187,51 +225,102 @@ export default function TotemBanners() {
             : 'Nenhum banner cadastrado. O totem está mostrando a tela institucional.'}
         </div>
       ) : (
-        <div className="table-card">
-          <table className="hb-table hb-table-compact">
-            <thead>
-              <tr>
-                <th style={{ width: 90 }}>Arte</th>
-                <th>Nome</th>
-                <th>Status</th>
-                <th>Agenda</th>
-                <th>Duração</th>
-                <th style={{ width: 90 }}>Ordem</th>
-                <th className="ttm-acoes-col">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visiveis.map((b, i) => (
-                <tr key={b.id}>
-                  <td>
-                    <img className="ttm-banner-mini" src={b.imagemUrl} alt="" />
-                  </td>
-                  <td>
-                    <div className="apr-nome">{b.nome}</div>
-                    {b.imagemBytes ? <div className="ttm-meta-txt">{Math.round(b.imagemBytes / 1024)} KB</div> : null}
-                  </td>
-                  <td><span className={'badge ' + STATUS[b.status].cor}>{STATUS[b.status].texto}</span></td>
-                  <td className="ttm-meta-txt">{textoAgenda(b)}</td>
-                  <td className="ttm-nowrap">{b.duracaoSegundos}s</td>
-                  <td>
-                    <div className="ttm-ordem">
-                      <button type="button" className="btn btn-secondary" disabled={ocupado || i === 0} onClick={() => mover(i, -1)} aria-label="Subir">↑</button>
-                      <button type="button" className="btn btn-secondary" disabled={ocupado || i === visiveis.length - 1} onClick={() => mover(i, 1)} aria-label="Descer">↓</button>
-                    </div>
-                  </td>
-                  <td>
-                    <div className="ttm-acoes">
-                      <button type="button" className="btn btn-secondary" disabled={ocupado} onClick={() => alternar(b)}>
-                        {b.ativo ? 'Desativar' : 'Ativar'}
-                      </button>
-                      <button type="button" className="btn btn-secondary" disabled={ocupado} onClick={() => setEditando(deBanner(b))}>Editar</button>
-                      <button type="button" className="btn btn-danger" disabled={ocupado} onClick={() => setExcluindo(b)}>Excluir</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        /* Lista de CARTÕES, não tabela. A arte é o assunto da linha, e numa tabela ela
+           virava uma célula do lado de cinco colunas de texto. Aqui ela ocupa a linha e o
+           resto se organiza em volta.
+           A ORDEM é o número à esquerda, e ele só significa alguma coisa quando há mais de
+           uma arte no ar ao mesmo tempo — é a sequência do rodízio. */
+        <ul className="ttm-bn-lista">
+          {visiveis.map((b, i) => (
+            <li
+              key={b.id}
+              className={'ttm-bn' + (b.ativo ? '' : ' desligado')
+                + (arrastando === i ? ' arrastando' : '')
+                + (sobre === i && arrastando !== null && arrastando !== i ? ' sobre' : '')}
+              draggable={!ocupado}
+              onDragStart={(e) => { setArrastando(i); e.dataTransfer.effectAllowed = 'move' }}
+              onDragEnd={() => { setArrastando(null); setSobre(null) }}
+              /* `preventDefault` no dragover é o que AUTORIZA o drop — sem ele o navegador
+                 recusa a soltura e o arrasto volta sozinho para o lugar. */
+              onDragOver={(e) => { e.preventDefault(); if (sobre !== i) setSobre(i) }}
+              onDrop={(e) => { e.preventDefault(); setSobre(null); soltarEm(i) }}
+            >
+              {/* A alça é BOTÃO, e responde às setas do teclado: arrastar não pode ser o
+                  único jeito de reordenar, senão quem não usa mouse fica de fora. */}
+              <button
+                type="button"
+                className="ttm-bn-alca"
+                disabled={ocupado}
+                aria-label={`Reordenar ${b.nome}. Posição ${i + 1} de ${visiveis.length}. Use as setas para cima e para baixo.`}
+                onKeyDown={(e) => {
+                  if (e.key === 'ArrowUp') { e.preventDefault(); mover(i, -1) }
+                  if (e.key === 'ArrowDown') { e.preventDefault(); mover(i, 1) }
+                }}
+              >
+                <IconeBn nome="alca" />
+              </button>
+              <span className="ttm-bn-num">{i + 1}</span>
+
+              {/* A arte abre a edição: é o alvo grande e óbvio da linha. */}
+              <button
+                type="button"
+                className={'ttm-bn-arte' + (aba === 'CAPA' ? ' capa' : '')}
+                disabled={ocupado}
+                onClick={() => setEditando(deBanner(b))}
+                title="Editar"
+              >
+                {/* A imagem tem arrasto próprio no navegador: sem isto, puxar pela arte
+                    arrastaria a FIGURA em vez da linha. */}
+                <img src={b.imagemUrl} alt="" draggable={false} />
+              </button>
+
+              <div className="ttm-bn-info">
+                <button type="button" className="ttm-bn-nome" disabled={ocupado} onClick={() => setEditando(deBanner(b))}>
+                  {b.nome}
+                </button>
+                <div className="ttm-bn-meta">
+                  <span className={'badge ' + STATUS[b.status].cor}>{STATUS[b.status].texto}</span>
+                  <span>{textoAgenda(b)}</span>
+                  <span>{b.duracaoSegundos}s</span>
+                </div>
+              </div>
+
+              <div className="ttm-bn-acoes">
+                <button type="button" className="ttm-bn-ico" disabled={ocupado} title="Visualizar" aria-label={`Visualizar ${b.nome}`} onClick={() => setVendo(b)}>
+                  <IconeBn nome="olho" />
+                </button>
+                {/* Toggle de verdade, com semântica de interruptor — o rótulo diz o que ele
+                    faz, e não só o estado em que está. */}
+                <button
+                  type="button"
+                  className={'intel-switch' + (b.ativo ? ' on' : '')}
+                  role="switch"
+                  aria-checked={b.ativo}
+                  aria-label={`${b.ativo ? 'Desativar' : 'Ativar'} ${b.nome}`}
+                  disabled={ocupado}
+                  onClick={() => alternar(b)}
+                />
+                <button type="button" className="ttm-bn-ico perigo" disabled={ocupado} title="Excluir" aria-label={`Excluir ${b.nome}`} onClick={() => setExcluindo(b)}>
+                  <IconeBn nome="lixeira" />
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {vendo && (
+        /* Visualizar é só ver: nenhuma ação, e fecha por botão como todo modal do PDV. */
+        <div className="modal-overlay">
+          <div className="modal ttm-bn-ver">
+            <div className="modal-header"><h2>{vendo.nome}</h2></div>
+            <div className={'ttm-bn-ver-arte' + (vendo.tipo === 'CAPA' ? ' capa' : '')}>
+              <img src={vendo.imagemUrl} alt="" />
+            </div>
+            <div className="ttm-banner-rodape">
+              <button type="button" className="btn btn-secondary" onClick={() => setVendo(null)}>Fechar</button>
+            </div>
+          </div>
         </div>
       )}
 
