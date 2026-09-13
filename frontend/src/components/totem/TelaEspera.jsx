@@ -104,7 +104,7 @@ export default function TelaEspera({ loja, banners, aoTocar }) {
   return (
     <button
       type="button"
-      className={'tq-espera' + (atual ? ' com-banner' : ' tq-textura')}
+      className={'tq-espera' + (atual ? ' com-banner' : '')}
       onClick={aoTocar}
       aria-label="Toque para começar o seu pedido"
     >
@@ -124,11 +124,13 @@ export default function TelaEspera({ loja, banners, aoTocar }) {
           <div className="tq-espera-veu" aria-hidden="true" />
         </>
       ) : (
+        // A logo basta para identificar a loja. O nome escrito embaixo dela repetia a
+        // mesma informação em dois formatos, e numa tela de abertura repetição lê como
+        // insegurança — a marca já está ali.
         <div className="tq-espera-marca">
           {logo
             ? <LogoDaLoja src={logo} propria={loja?.logoPropria} />
             : <div className="tq-espera-inicial tq-disp tq-disp-forte" aria-hidden="true">{inicial}</div>}
-          {loja?.nome ? <div className="tq-espera-loja tq-rotulo">{loja.nome}</div> : null}
         </div>
       )}
 

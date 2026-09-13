@@ -318,13 +318,10 @@
 /* Textura do fundo preto: listras duras a 3% de branco. Não é gradiente (não há
    transição), é padrão — serve só para o preto deixar de ser uma chapa morta em
    telas grandes. */
-.tq-textura {
-  background-image: repeating-linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0) 0 26px,
-    rgba(255, 255, 255, 0.032) 26px 52px
-  );
-}
+/* A textura de listras diagonais saiu. Ela existia para "preencher" o preto das telas
+   de abertura, e preencher vazio com padrão é o oposto de resolver composição: o que
+   dava a sensação de tela solta era a proporção entre marca, chamada e respiro, não a
+   ausência de ruído. Sem ela o preto volta a ser preto, e a marca fica sozinha em cena. */
 
 /* -- Início ---------------------------------------------------------------- */
 /* A tela que fica horas no vidro chamando quem passa. Três correções em relação
@@ -371,7 +368,6 @@
 }
 
 .tq-inicio-txt { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
-.tq-inicio-loja { color: var(--tq-amarelo); font-size: clamp(15px, 2.87vw, 31px); letter-spacing: 0.24em; }
 .tq-inicio-tit { font-size: clamp(44px, 8.6vw, 128px); line-height: 0.94; letter-spacing: -0.02em; }
 .tq-inicio-tit span { display: block; }
 .tq-inicio-sub { font-size: clamp(17px, 3.52vw, 38px); color: var(--tq-texto-claro); }
@@ -380,15 +376,17 @@
    boiando num campo amarelo vazio; 30vh dá um bloco alto e ainda preenchido. O
    resto da altura vira respiro do conjunto, que é o que uma tela de repouso
    pede. */
+/* Os dois cartões são o assunto da tela, e crescem para dizer isso. */
 .tq-modos {
   flex: 0 1 auto; display: grid; grid-template-columns: 1fr 1fr;
-  gap: clamp(16px, 3.52vw, 38px); height: clamp(230px, 30vh, 560px);
+  gap: clamp(16px, 3.52vw, 38px); height: clamp(240px, 34vh, 620px);
 }
 .tq-modos.um { grid-template-columns: minmax(0, 1fr); }
 .tq-modo {
-  background: var(--tq-amarelo); color: var(--tq-tinta); border-radius: 26px;
+  background: var(--tq-amarelo); color: var(--tq-tinta); border-radius: 28px;
   height: 100%; padding: clamp(24px, 4.81vw, 52px) 20px;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: clamp(18px, 3vh, 40px);
   transition: background 0.14s ease, transform 0.1s ease;
 }
 .tq-modo:active { background: var(--tq-amarelo-2); transform: scale(0.985); }
@@ -415,15 +413,19 @@
 
 /* -- Sidebar --------------------------------------------------------------- */
 /* Preta e fixa: em retrato as categorias precisam estar sempre à vista, e a
-   faixa horizontal rolável de antes escondia metade delas sem dar sinal. */
+   faixa horizontal rolável de antes escondia metade delas sem dar sinal.
+   A coluna e a grade são as duas pretas, e sem nada entre elas a sidebar não era uma
+   REGIÃO — era texto flutuando na borda. O fio vertical de 1px é o que a separa; um
+   painel de outra cor teria criado o "marrom sujo" que a marca não quer. */
 .tq-lado {
   position: relative; flex: 0 0 var(--tq-lado-l);
   background: var(--tq-preto); min-width: 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.09);
   display: flex; flex-direction: column;
 }
 .tq-lado-rolagem {
   flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain;
-  scrollbar-width: none; padding-bottom: 12px;
+  scrollbar-width: none; padding: 10px 10px 16px;
 }
 /* No alvo em pé as categorias DIVIDEM a coluna inteira em vez de se empilharem
    no topo e deixarem dois terços de preto embaixo. `flex-grow` só cresce
@@ -440,18 +442,28 @@
   position: absolute; left: 0; right: 0; bottom: 0; height: 40px; pointer-events: none;
   background: linear-gradient(to top, var(--tq-preto), rgba(0, 0, 0, 0));
 }
+/* Cada categoria é uma LINHA INSCRITA, não um bloco colado na borda: raio próprio e
+   margem lateral. Foi a troca que mais mudou a percepção da coluna — item que encosta
+   nos dois lados lê como tabela; item com respiro lê como navegação.
+   As divisórias de 1px em cada item saíram junto. Elas empilhavam a lista num bloco
+   listrado; quem separa agora é o espaço, e quem marca o lugar é o preenchimento. */
 .tq-cat {
-  width: 100%; min-height: clamp(76px, 5vh, 104px); padding: 16px; text-align: left;
+  width: 100%; min-height: clamp(72px, 4.8vh, 100px);
+  padding: 14px 16px; text-align: left;
   display: flex; align-items: center;
-  color: var(--tq-branco);
-  /* Corpo, não display: em Montserrat 900 a lista virava um bloco de texto
-     grosso sem respiro, e nome de categoria é ITEM DE LISTA, não título. */
+  border-radius: 14px;
+  /* Não é branco puro: a lista inteira em #fff competia com o nome do produto na grade,
+     que é o texto que o cliente veio ler. 82% ainda passa folgado em legibilidade
+     (17,1:1 sobre o preto) e devolve a hierarquia. */
+  color: rgba(255, 255, 255, 0.82);
   font-family: var(--tq-fonte-display);
   font-weight: 600; font-size: clamp(13px, 1.76vw, 19px); line-height: 1.2;
   letter-spacing: 0.02em; text-transform: uppercase;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
-  transition: background 0.12s ease, color 0.12s ease;
+  transition: background 0.14s ease, color 0.14s ease;
 }
+/* Respiro entre as linhas, no lugar das divisórias. */
+.tq-cat + .tq-cat { margin-top: 4px; }
+.tq-cat:hover { background: rgba(255, 255, 255, 0.05); color: var(--tq-branco); }
 /* O nome da categoria SEMPRE aparece, e quebra por palavra. O `anywhere` de
    antes partia "ACOMPANHAMENTOS" letra a letra numa coluna estreita e deixava
    categorias reduzidas praticamente ao emoji do nome. */
@@ -478,14 +490,16 @@
   82%, 100% { transform: translateX(var(--tq-anda, 0)); }
 }
 .tq-cat:active { background: var(--tq-superficie-2); }
-/* Ativo é BLOCO AMARELO com texto preto — não uma barrinha lateral. Numa lista
-   de dez categorias vista a dois metros, seis pixels de borda não respondem
-   "onde eu estou". Preto sobre amarelo dá 13,3:1; branco sobre preto, 17,4:1. */
-/* Ativa: bloco dourado e, aí sim, display — é a única linha que precisa gritar. */
+/* Ativo é BLOCO AMARELO com texto preto — não uma barrinha lateral. Numa lista de dez
+   categorias vista a dois metros, seis pixels de borda não respondem "onde eu estou".
+   Preto sobre amarelo dá 13,3:1.
+   Agora o bloco é INSCRITO, com o mesmo raio das demais linhas: em vez de uma faixa
+   atravessando a coluna, uma pastilha sólida que marca a posição sem cortar o desenho. */
 .tq-cat[aria-current='true'] {
   background: var(--tq-amarelo); color: var(--tq-tinta);
-  font-family: var(--tq-fonte-display); font-weight: 900; border-bottom-color: transparent;
+  font-family: var(--tq-fonte-display); font-weight: 900;
 }
+.tq-cat[aria-current='true']:hover { background: var(--tq-amarelo); color: var(--tq-tinta); }
 
 /* -- Seção de categoria (catálogo contínuo) -------------------------------- */
 /* O catálogo virou um rolar só: cada categoria é uma seção com o seu título e
@@ -527,9 +541,13 @@
 }
 
 /* -- Card de produto ------------------------------------------------------- */
+/* Sem contorno. A borda branca a 34% existia de quando o card não tinha superfície
+   própria; com o fundo definido ela virou um fio que "quase some" — o pior dos dois
+   mundos, visível o bastante para desenhar um wireframe e fraco demais para separar
+   alguma coisa. Quem separa o card do preto é a superfície dele. */
 .tq-card {
   position: relative; display: flex; flex-direction: column; text-align: left; overflow: hidden;
-  background: var(--tq-superficie); border: 1px solid var(--tq-borda); border-radius: 18px;
+  background: var(--tq-superficie); border-radius: 18px;
   transition: transform 0.1s ease, box-shadow 0.15s ease;
 }
 .tq-card:active:not(:disabled) { transform: scale(0.99); }
@@ -1042,32 +1060,39 @@
 /* -- Tela de ESPERA (repouso) ---------------------------------------------- */
 /* A tela INTEIRA é o alvo. Quem passa na frente não mira num botão — encosta a mão em
    qualquer lugar. Por isso o `button` ocupa tudo e não tem cara de botão: o convite é a
-   composição, não uma caixa amarela no meio do preto. */
+   composição, não uma caixa amarela no meio do preto.
+   A composição é de ABERTURA, não de diálogo: a marca ocupa o campo superior e a chamada
+   assenta embaixo, onde a mão chega. Tudo centralizado com um respiro entre as duas
+   deixava a tela parecendo um aviso no meio do vidro. */
 .tq-espera {
   flex: 1 1 auto; width: 100%;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: clamp(40px, 7vh, 96px);
-  padding: clamp(32px, 6vw, 72px);
+  display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+  gap: clamp(32px, 5vh, 72px);
+  padding: clamp(48px, 8vh, 132px) clamp(32px, 6vw, 72px) clamp(40px, 6vh, 96px);
   background: var(--tq-preto); color: var(--tq-branco);
   text-align: center; cursor: pointer;
 }
 .tq-espera:active { background: var(--tq-preto-2); }
-.tq-espera-marca { display: flex; flex-direction: column; align-items: center; gap: 24px; }
+/* A marca toma o espaço que sobra e se centra nele: é ela que segura o campo visual. */
+.tq-espera-marca { flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; }
 .tq-espera-inicial {
   width: clamp(140px, 22vw, 260px); aspect-ratio: 1; border-radius: 28px;
   display: grid; place-items: center;
   background: var(--tq-amarelo); color: var(--tq-tinta);
   font-size: clamp(72px, 12vw, 140px); line-height: 1;
 }
-.tq-espera-loja { color: var(--tq-texto-2); font-size: clamp(16px, 2.2vw, 24px); }
 /* A chamada é a única coisa amarela da tela: aqui o dourado indica ação, como em todo o
    resto do quiosque. */
+/* Larga e alta de propósito: numa tela sem mais nada para tocar, a chamada É a
+   interface. Meia largura fazia dela um botão no meio do preto. */
 .tq-espera-chamada {
+  flex: 0 0 auto;
   display: flex; align-items: center; justify-content: center; gap: 18px;
-  min-height: 96px; padding: 20px clamp(28px, 5vw, 56px);
-  border-radius: 18px;
+  width: min(760px, 100%);
+  min-height: clamp(96px, 12vh, 168px); padding: 20px clamp(28px, 5vw, 56px);
+  border-radius: 20px;
   background: var(--tq-amarelo); color: var(--tq-tinta);
-  font-size: clamp(24px, 4vw, 46px); line-height: 1.05;
+  font-size: clamp(24px, 4.2vw, 50px); line-height: 1.05;
   letter-spacing: 0.01em; text-transform: uppercase;
 }
 /* Respiro lento: é o sinal de que o aparelho está VIVO, e não travado numa imagem. Some

@@ -71,7 +71,7 @@ const MAX_POLL_DISPLAY = 20        // 20 × 3 s = 60 s
 const MS_LIBERAR_NOVO = 20_000     // no 202, "Novo pedido" só aparece depois disso
 
 const MODOS = {
-  onsite: { titulo: 'Comer aqui', sub: 'Vou comer na loja', ico: 'talheres' },
+  onsite: { titulo: 'Comer aqui', sub: 'Vou comer na loja', ico: 'prato' },
   takeout: { titulo: 'Levar', sub: 'Vou levar para viagem', ico: 'sacola' },
 }
 const KIND_LABEL = { money: 'Dinheiro', debit_card: 'Cartão de débito', credit_card: 'Cartão de crédito' }
@@ -708,7 +708,7 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
   if (tela === 'catalogo') {
     conteudo = (
       <>
-        <Cabecalho key="cab-catalogo" loja={loja} modo={MODOS[orderType]?.titulo ?? 'Menu'} aoCancelar={() => reiniciar()} />
+        <Cabecalho key="cab-catalogo" modo={MODOS[orderType]?.titulo ?? 'Menu'} aoCancelar={() => reiniciar()} />
         {banner}
         <TelaCatalogo
           categorias={categorias}
@@ -752,7 +752,6 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
       <>
         <Cabecalho
           key="cab-item"
-          loja={loja}
           titulo={nomeNaTela}
           aoVoltar={() => { setAberto(null); setTela(carrinho.length ? 'carrinho' : 'catalogo') }}
           aoCancelar={() => reiniciar()}
@@ -786,7 +785,7 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
   if (tela === 'carrinho') {
     conteudo = (
       <>
-        <Cabecalho key="cab-carrinho" loja={loja} titulo="Seu pedido" aoVoltar={() => setTela('catalogo')} aoCancelar={() => reiniciar()} />
+        <Cabecalho key="cab-carrinho" titulo="Seu pedido" aoVoltar={() => setTela('catalogo')} aoCancelar={() => reiniciar()} />
         {banner}
         <TelaCarrinho
           linhas={carrinho}
@@ -805,7 +804,7 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
   if (tela === 'pagamento') {
     conteudo = (
       <>
-        <Cabecalho key="cab-pagamento" loja={loja} titulo="Como você vai pagar?" aoVoltar={() => setTela('carrinho')} aoCancelar={() => reiniciar()} />
+        <Cabecalho key="cab-pagamento" titulo="Como você vai pagar?" aoVoltar={() => setTela('carrinho')} aoCancelar={() => reiniciar()} />
         {banner}
         <TelaPagamento
           metodos={metodos}
@@ -827,7 +826,6 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
             SEGUNDO pedido. */}
         <Cabecalho
           key="cab-revisar"
-          loja={loja}
           titulo="Confira seu pedido"
           aoVoltar={(enviando || travado) ? undefined : () => setTela('carrinho')}
           aoCancelar={(enviando || travado) ? undefined : () => reiniciar()}

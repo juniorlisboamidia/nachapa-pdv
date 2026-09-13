@@ -29,28 +29,29 @@ export default function TelaInicio({ loja, modos, aoEscolher }) {
   const inicial = String(loja?.nome ?? '').trim().charAt(0).toUpperCase() || '•'
 
   return (
-    <div className="tq-inicio tq-textura">
+    <div className="tq-inicio">
+      {/* Duas coisas saíram daqui, e as duas por serem repetição:
+          · o NOME da loja, que a logo ao lado já diz;
+          · o subtítulo "escolha como você vai comer", que descrevia em voz de sistema
+            exatamente o que os dois cartões abaixo perguntam em voz de cliente.
+          Sobrou o que a tela precisa: a marca e a pergunta. */}
       <div className="tq-inicio-topo">
-        {/* A logo do cardápio quase sempre vem com fundo branco. Em vez de
-            disfarçar, ela vira placa — com aresta amarela, como sinalização. */}
         {logo
           ? <LogoDaLoja src={logo} propria={loja?.logoPropria} alt={loja?.nome ?? ''} />
           : <div className="tq-inicio-marca tq-disp tq-disp-forte" aria-hidden="true">{inicial}</div>}
 
         <div className="tq-inicio-txt">
-          <div className="tq-inicio-loja tq-rotulo">{loja?.nome ?? 'Bem-vindo'}</div>
           <h1 className="tq-inicio-tit tq-disp tq-disp-forte">
             <span>Faça seu</span>
             <span>pedido aqui</span>
           </h1>
-          <p className="tq-inicio-sub">Escolha como você vai comer e monte o seu pedido.</p>
         </div>
       </div>
 
       <div className={'tq-modos' + (um ? ' um' : '')}>
         {modos.map((m) => (
           <button key={m.id} type="button" className="tq-modo" onClick={() => aoEscolher(m.id)}>
-            <Ico nome={m.ico} tam={96} traco={1.6} />
+            <Ico nome={m.ico} tam={96} traco={1.5} />
             {/* UMA frase por cartão, na voz do cliente. "COMER AQUI" com
                 "Vou comer na loja" embaixo dizia a mesma coisa duas vezes, só
                 trocando de linguagem — e a que decide é a do cliente.

@@ -8,22 +8,27 @@
 // produto. Emoji que faz parte do NOME de uma categoria vinda do Cardápio Web
 // continua aparecendo — aquilo é dado da loja, não interface (spec §5.4/§9.1).
 const ICONES = {
-  // Comer na loja. O desenho de MESA (tampo + pernas) vira um banquinho quando
-  // cresce; talher é o símbolo que todo mundo lê de longe, e faz par com a
-  // sacola do "levar".
-  talheres: (
+  // Comer na loja: PRATO visto de cima, dois círculos concêntricos.
+  //
+  // Antes eram garfo e faca soltos. A dupla de talheres é legível, mas a 140px num
+  // cartão amarelo ela vira dois riscos verticais desequilibrados — muito traço, pouca
+  // forma. O prato é uma silhueta fechada, geométrica, e faz par de verdade com a
+  // silhueta fechada da sacola: as duas escolhas passam a ter o mesmo peso visual.
+  //
+  // Abstrato demais sozinho? Não neste lugar: ele vem com "Vou comer na loja" escrito
+  // embaixo, e o par prato/sacola é o vocabulário que qualquer praça de alimentação usa.
+  prato: (
     <>
-      <path d="M5 3v4.6a3 3 0 0 0 6 0V3" />
-      <path d="M8 3v5.6" />
-      <path d="M8 9.6V21" />
-      <path d="M17.5 21V3" />
-      <path d="M17.5 3c-1.9 1.6-2.9 4-2.9 6.9 0 1.4 1 2.1 2.9 2.1" />
+      <circle cx="12" cy="12" r="8" />
+      <circle cx="12" cy="12" r="3.2" />
     </>
   ),
+  // Cantos arredondados no fundo e a alça um pouco mais alta: mesma família geométrica
+  // do prato, em vez do trapézio de cantos vivos de antes.
   sacola: (
     <>
-      <path d="M6 8h12l-1 12H7L6 8z" />
-      <path d="M9 8V6a3 3 0 0 1 6 0v2" />
+      <path d="M5.6 7.6h12.8l-1.1 12.3a1.7 1.7 0 0 1-1.7 1.5H8.4a1.7 1.7 0 0 1-1.7-1.5L5.6 7.6z" />
+      <path d="M9 7.6V5.9a3 3 0 0 1 6 0v1.7" />
     </>
   ),
   carrinho: (

@@ -7,17 +7,18 @@ import { Ico } from './icones'
 //
 // A LOGO não entra aqui. O arquivo que o Cardápio Web devolve vem com fundo
 // branco, e num cabeçalho escuro ele virava um selo branco encostado no canto.
-// A marca já se apresenta inteira na tela de repouso; aqui o que dá contexto é
-// o nome da loja, como sobrelinha — texto, não asset.
+// A marca já se apresenta inteira na tela de repouso.
 //
-// A sobrelinha é sempre a informação de contexto: no catálogo é o nome da loja
-// (o modo é o próprio título); nas demais telas é o modo escolhido, que é o que
-// o cliente esquece no meio do pedido.
+// O NOME DA LOJA também não entra. Ele estava como sobrelinha no catálogo, e ali era
+// repetição pura: o cliente acabou de ver a marca em tela cheia duas telas atrás, e
+// ninguém precisa ser lembrado de onde está enquanto escolhe um hambúrguer. A sobrelinha
+// ficou só com o que o cliente ESQUECE no meio do pedido — o modo escolhido —, e aparece
+// apenas nas telas que já têm título próprio.
 //
 // `aoVoltar` ausente não é enfeite: na revisão com confirmação em dúvida NÃO pode
 // existir Voltar — voltar recotaria, recotar geraria chave nova, e chave nova
 // criaria um segundo pedido no Cardápio Web (spec §12, R2).
-export default function Cabecalho({ loja, titulo, modo, aoVoltar, aoCancelar }) {
+export default function Cabecalho({ titulo, modo, aoVoltar, aoCancelar }) {
   // Cancelar joga fora o pedido inteiro e não tem desfazer. Com a casca nova o
   // botão passou a existir em cinco telas, inclusive com um combo montado na
   // mão — então ele pede dois toques, como o remover do carrinho, e a
@@ -35,7 +36,7 @@ export default function Cabecalho({ loja, titulo, modo, aoVoltar, aoCancelar }) 
     timerRef.current = setTimeout(() => setConfirmando(false), 4_000)
   }
 
-  const sobrelinha = titulo ? (modo ?? loja?.nome) : loja?.nome
+  const sobrelinha = titulo ? modo : null
 
   return (
     <header className="tq-topo">
