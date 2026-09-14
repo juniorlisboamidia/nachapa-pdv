@@ -34,7 +34,6 @@ test('subitens de Ferramentas e Loja Digital com identidade própria', () => {
   assert.deepEqual(banners.itens.map((n) => [n.label, n.to]), [
     ['Capa', '/totem/banners/capa'],
     ['Tela de espera', '/totem/banners/espera'],
-    ['Fundo da vitrine', '/totem/banners/fundo'],
   ]);
   assert.equal(new Set(totem.map((n) => n.icon)).size, totem.length);
 });

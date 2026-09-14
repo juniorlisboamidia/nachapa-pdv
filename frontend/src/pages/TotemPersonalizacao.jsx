@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import api from '../services/api'
 import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
+import PreviaVitrine from '../components/PreviaVitrine'
 import { razaoDeContraste, normalizarHex, AA_NORMAL } from '../components/totemTema'
 
 // Loja Digital › Totem › Personalização.
@@ -71,6 +72,7 @@ export default function TotemPersonalizacao() {
   const [titulo, setTitulo] = useState('')
   const [subtitulo, setSubtitulo] = useState('')
   const arquivoRef = useRef(null)
+  const fundoRef = useRef(null)
 
   // Não marca estado de forma síncrona: o efeito de montagem só AGENDA o trabalho.
   const buscar = useCallback(() => api.get('/totem/aparencia')
@@ -229,6 +231,40 @@ export default function TotemPersonalizacao() {
     }
   }
 
+  /* A foto de fundo sobe NA HORA, como a logo — não espera o Salvar. Uma foto é escolha
+     terminada no momento em que se escolhe o arquivo; deixar pendurada no botão junto com
+     os textos faria o gestor achar que subiu quando não subiu.
+     JPEG a 1920 de lado maior: é fotografia, e PNG guardaria a mesma imagem em três vezes o
+     tamanho — o teto de 700 KB é do servidor, não do arquivo que vem do celular. */
+  async function enviarFundo(arquivo) {
+    if (!arquivo) return
+    setSalvando(true)
+    try {
+      const dataUrl = await reduzirImagem(arquivo, 1920, 'image/jpeg')
+      const r = await api.put('/totem/aparencia/fundo', { dataUrl })
+      setDados((d) => ({ ...d, fundo: r.data.fundo }))
+      setToast({ message: 'Foto de fundo atualizada.', type: 'success' })
+    } catch (e) {
+      const cod = e?.response?.data?.erro
+      const msg = cod === 'IMAGEM_GRANDE' ? `A imagem ficou acima de ${dados?.fundo?.limiteKb ?? 700} KB mesmo depois de reduzida.`
+        : cod === 'IMAGEM_TIPO' || cod === 'IMAGEM_FORMATO' ? 'Use um arquivo PNG, JPG ou WEBP.'
+          : 'Não foi possível enviar a foto.'
+      setToast({ message: msg, type: 'error' })
+    } finally {
+      setSalvando(false)
+      if (fundoRef.current) fundoRef.current.value = ''
+    }
+  }
+  async function removerFundo() {
+    setSalvando(true)
+    try {
+      const r = await api.delete('/totem/aparencia/fundo')
+      setDados((d) => ({ ...d, fundo: r.data.fundo }))
+      setToast({ message: 'A tela de espera voltou a usar o fundo do template.', type: 'success' })
+    } catch {
+      setToast({ message: 'Não foi possível tirar a foto.', type: 'error' })
+    } finally { setSalvando(false) }
+  }
   async function removerLogo() {
     setSalvando(true)
     try {
@@ -282,6 +318,111 @@ export default function TotemPersonalizacao() {
                 Voltar à logo do Cardápio Web
               </button>
             )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── TELA DE ESPERA (a vitrine) ──
+          Logo depois da Marca, e não lá embaixo: é a segunda coisa que identifica a loja no
+          vidro, e é a tela que fica horas acesa. Tudo EXPOSTO, sem modal e sem lista — é UMA
+          foto, UM título, UM subtítulo e UM botão, o padrão da loja. Um modal com lista
+          faria parecer que haveria vários fundos, e não há. */}
+      <div className="table-card" style={{ padding: 16, marginBottom: 16 }}>
+        <h2 className="ttm-secao-t">Tela de espera</h2>
+        <div className="ttm-nota" style={{ marginTop: 0, marginBottom: 16 }}>
+          É a tela <strong>padrão</strong> do totem: fica no vidro sempre que não há banner no ar. Deixe em
+          branco o que não quiser mostrar — a tela se compõe sem.
+        </div>
+
+        <div className="ttm-vit-split">
+          <div>
+            <div className="form-group">
+              <label className="form-label" htmlFor="apa-fundo">Foto de fundo</label>
+              <input
+                ref={fundoRef}
+                id="apa-fundo"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="form-input"
+                disabled={salvando}
+                onChange={(e) => enviarFundo(e.target.files?.[0])}
+              />
+              <div className="ttm-dica">
+                Recomendado <strong>1080 × 1920 px</strong> — a tela usa a metade de cima e recorta o resto.
+                PNG, JPG ou WEBP, até {dados?.fundo?.limiteKb ?? 700} KB; a imagem é reduzida antes de subir.
+              </div>
+              {dados?.fundo?.tem ? (
+                <button type="button" className="btn btn-secondary" style={{ marginTop: 8 }} onClick={removerFundo} disabled={salvando}>
+                  Tirar a foto
+                </button>
+              ) : null}
+            </div>
+
+            <div className="form-group" style={{ maxWidth: 460 }}>
+              <label className="form-label" htmlFor="apa-titulo">Título</label>
+              <input
+                id="apa-titulo"
+                className={'form-input' + (tituloLongo ? ' invalido' : '')}
+                value={titulo}
+                disabled={salvando}
+                placeholder="Ex.: Bateu a fome?"
+                onChange={(e) => setTitulo(e.target.value)}
+                aria-invalid={tituloLongo ? 'true' : undefined}
+              />
+              <div className={tituloLongo ? 'ttm-erro-campo' : 'ttm-dica'} role={tituloLongo ? 'alert' : undefined}>
+                {tituloLongo ? `Passou de ${tituloMax} caracteres.` : `Até ${tituloMax} caracteres. Em branco, a tela não mostra título.`}
+              </div>
+            </div>
+
+            <div className="form-group" style={{ maxWidth: 560 }}>
+              <label className="form-label" htmlFor="apa-subtitulo">Subtítulo</label>
+              <input
+                id="apa-subtitulo"
+                className={'form-input' + (subtituloLongo ? ' invalido' : '')}
+                value={subtitulo}
+                disabled={salvando}
+                placeholder="Ex.: Monte seu pedido em poucos toques e retire no balcão"
+                onChange={(e) => setSubtitulo(e.target.value)}
+                aria-invalid={subtituloLongo ? 'true' : undefined}
+              />
+              <div className={subtituloLongo ? 'ttm-erro-campo' : 'ttm-dica'} role={subtituloLongo ? 'alert' : undefined}>
+                {subtituloLongo ? `Passou de ${subtituloMax} caracteres.` : `Até ${subtituloMax} caracteres.`}
+              </div>
+            </div>
+
+            <div className="form-group" style={{ margin: 0, maxWidth: 460 }}>
+              <label className="form-label" htmlFor="apa-chamada">Texto do botão</label>
+              <input
+                id="apa-chamada"
+                className={'form-input' + (chamadaLonga ? ' invalido' : '')}
+                value={chamada}
+                disabled={salvando}
+                placeholder={dados?.chamadaPadrao ?? 'Toque para começar'}
+                onChange={(e) => setChamada(e.target.value)}
+                aria-invalid={chamadaLonga ? 'true' : undefined}
+                aria-describedby="apa-chamada-ajuda"
+              />
+              <div id="apa-chamada-ajuda" className={chamadaLonga ? 'ttm-erro-campo' : 'ttm-dica'} role={chamadaLonga ? 'alert' : undefined}>
+                {chamadaLonga
+                  ? `Passou de ${chamadaMax} caracteres. Mais que isso quebra em duas linhas e o botão cresce por cima da foto.`
+                  : `Deixe em branco para usar “${dados?.chamadaPadrao ?? 'Toque para começar'}”. Até ${chamadaMax} caracteres — o totem escreve em caixa alta.`}
+              </div>
+            </div>
+          </div>
+
+          {/* A prévia usa o RASCUNHO (cores e textos ainda não salvos) e a foto já gravada:
+              a foto sobe na hora, os textos esperam o Salvar — e a prévia mostra os dois
+              como vão ficar juntos. Os produtos da esteira são blocos neutros: eles se
+              escolhem em Destaques da vitrine, não aqui. */}
+          <div className="ttm-vit-lado">
+            <div className="ttm-pv-cab"><h3 className="ttm-pv-tit">Prévia</h3></div>
+            <PreviaVitrine
+              cores={rascunho}
+              fundoUrl={dados?.fundo?.tem ? dados.fundo.url : null}
+              titulo={tituloLimpo}
+              subtitulo={subtituloLimpo}
+              chamada={chamadaLimpa || dados?.chamadaPadrao}
+            />
           </div>
         </div>
       </div>
@@ -344,72 +485,6 @@ export default function TotemPersonalizacao() {
         )}
 
         <Previa cores={rascunho} padroes={padroes} />
-      </div>
-
-      {/* ── TELA DE ESPERA ── */}
-      <div className="table-card" style={{ padding: 16, marginBottom: 16 }}>
-        <h2 className="ttm-secao-t">Tela de espera</h2>
-        <div className="ttm-nota" style={{ marginTop: 0, marginBottom: 16 }}>
-          Estes textos aparecem na <strong>vitrine</strong> — a tela de espera padrão, que fica no vidro
-          sempre que não há banner no ar. Deixe em branco o que não quiser mostrar: a tela se compõe sem.
-        </div>
-
-        <div className="form-group" style={{ maxWidth: 460 }}>
-          <label className="form-label" htmlFor="apa-titulo">Título</label>
-          <input
-            id="apa-titulo"
-            className={'form-input' + (tituloLongo ? ' invalido' : '')}
-            value={titulo}
-            disabled={salvando}
-            placeholder="Ex.: Bateu a fome?"
-            onChange={(e) => setTitulo(e.target.value)}
-            aria-invalid={tituloLongo ? 'true' : undefined}
-          />
-          <div className={tituloLongo ? 'ttm-erro-campo' : 'ttm-dica'} role={tituloLongo ? 'alert' : undefined}>
-            {tituloLongo ? `Passou de ${tituloMax} caracteres.` : `Até ${tituloMax} caracteres. Em branco, a tela não mostra título.`}
-          </div>
-        </div>
-
-        <div className="form-group" style={{ maxWidth: 560 }}>
-          <label className="form-label" htmlFor="apa-subtitulo">Subtítulo</label>
-          <input
-            id="apa-subtitulo"
-            className={'form-input' + (subtituloLongo ? ' invalido' : '')}
-            value={subtitulo}
-            disabled={salvando}
-            placeholder="Ex.: Monte seu pedido em poucos toques e retire no balcão"
-            onChange={(e) => setSubtitulo(e.target.value)}
-            aria-invalid={subtituloLongo ? 'true' : undefined}
-          />
-          <div className={subtituloLongo ? 'ttm-erro-campo' : 'ttm-dica'} role={subtituloLongo ? 'alert' : undefined}>
-            {subtituloLongo ? `Passou de ${subtituloMax} caracteres.` : `Até ${subtituloMax} caracteres.`}
-          </div>
-        </div>
-
-        <div className="form-group" style={{ margin: 0, maxWidth: 460 }}>
-          <label className="form-label" htmlFor="apa-chamada">Texto do botão</label>
-          <input
-            id="apa-chamada"
-            className={'form-input' + (chamadaLonga ? ' invalido' : '')}
-            value={chamada}
-            disabled={salvando}
-            placeholder={dados?.chamadaPadrao ?? 'Toque para começar'}
-            onChange={(e) => setChamada(e.target.value)}
-            aria-invalid={chamadaLonga ? 'true' : undefined}
-            aria-describedby="apa-chamada-ajuda"
-          />
-          {/* A prévia mostra em CAIXA ALTA porque é assim que o totem escreve — a folha
-              aplica `text-transform`. Sem ela o gestor digita em minúsculas e leva um
-              susto no vidro. E mostra SÓ o texto: o botão não desenha mais nada além dele. */}
-          <div className="ttm-chamada-previa" aria-hidden="true">
-            {(chamadaLimpa || dados?.chamadaPadrao || 'Toque para começar').toUpperCase()}
-          </div>
-          <div id="apa-chamada-ajuda" className={chamadaLonga ? 'ttm-erro-campo' : 'ttm-dica'} role={chamadaLonga ? 'alert' : undefined}>
-            {chamadaLonga
-              ? `Passou de ${chamadaMax} caracteres. Mais que isso quebra em duas linhas e o botão cresce por cima da arte.`
-              : `Deixe em branco para usar “${dados?.chamadaPadrao ?? 'Toque para começar'}”. Até ${chamadaMax} caracteres — o totem escreve em caixa alta.`}
-          </div>
-        </div>
       </div>
 
       {/* ── LAYOUT ── */}
@@ -500,7 +575,7 @@ function Previa({ cores, padroes }) {
 
 // Reduz no CLIENTE antes de subir: 300 KB é teto de servidor, não de logo. Uma imagem de
 // 4000px vinda do celular do gestor passaria do limite sem necessidade nenhuma.
-function reduzirImagem(arquivo, lado = 640) {
+function reduzirImagem(arquivo, lado = 640, formato = 'image/png') {
   return new Promise((resolve, reject) => {
     const leitor = new FileReader()
     leitor.onerror = () => reject(new Error('leitura'))
@@ -515,8 +590,9 @@ function reduzirImagem(arquivo, lado = 640) {
         canvas.width = w
         canvas.height = h
         canvas.getContext('2d').drawImage(img, 0, 0, w, h)
-        // PNG preserva a transparência, que é o que uma logo costuma precisar.
-        resolve(canvas.toDataURL('image/png'))
+        // PNG preserva a transparência, que é o que uma logo costuma precisar. A foto de
+        // fundo pede JPEG: é fotografia, e transparência ali não serve para nada.
+        resolve(formato === 'image/jpeg' ? canvas.toDataURL('image/jpeg', 0.88) : canvas.toDataURL('image/png'))
       }
       img.src = leitor.result
     }

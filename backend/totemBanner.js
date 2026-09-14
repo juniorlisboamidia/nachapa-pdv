@@ -32,20 +32,17 @@ export const NOME_MAX = 60;
 /* Os dois lugares onde uma arte pode aparecer. São formatos diferentes — a espera é a tela
    inteira em retrato, a capa é uma faixa deitada no topo do catálogo — e por isso o tipo
    entra também na recomendação de tamanho que o admin mostra. */
-/* Três lugares onde uma arte da loja aparece, e cada um é um contrato diferente:
+/* Dois lugares onde uma arte da loja aparece, e cada um é um contrato diferente:
 
      ESPERA — o vidro inteiro, com o totem parado. Tocar começa uma sessão.
      CAPA   — a faixa entre a logo e o cancelar, no topo do catálogo. Não é tocável.
-     FUNDO  — a metade de cima da tela de espera PADRÃO (a vitrine), atrás do título.
 
-   FUNDO entrou como tipo de BANNER em vez de virar coluna de imagem em
-   `TotemConfiguracao`, e o motivo é de performance, não de arrumação: `logoDataUrl` mora
-   como data URL na linha de configuração, e essa linha é lida em TODO bootstrap
-   (`comApresentacao`). Uma logo de 300KB ali já é discutível; uma foto de tela cheia seria
-   regressão. Como banner, ela usa a tabela de bytes separada, a rota dedicada e o cache
-   versionado que já existem — e ganha agenda de graça, então dá para programar o fundo de
-   Natal em novembro. */
-export const TIPOS = Object.freeze(['ESPERA', 'CAPA', 'FUNDO']);
+   A foto de fundo da VITRINE (a tela de espera padrão) NÃO é banner. Chegou a ser um
+   terceiro tipo aqui por um dia, e saiu: banner é uma LISTA — várias artes, cada uma com
+   agenda e rodízio —, e a vitrine tem uma foto só, que é o padrão da loja. Modelar o padrão
+   como item de lista fazia o admin parecer que haveria vários fundos. Ela mora em
+   Personalização, com bytes em tabela própria (`TotemEsperaFundo`). */
+export const TIPOS = Object.freeze(['ESPERA', 'CAPA']);
 export const TIPO_PADRAO = 'ESPERA';
 export const MOTIVO_TIPO = 'TIPO_INVALIDO';
 
@@ -62,10 +59,6 @@ export const MOTIVO_TIPO = 'TIPO_INVALIDO';
 export const MEDIDAS = Object.freeze({
   ESPERA: Object.freeze({ largura: 1080, altura: 1920 }),
   CAPA: Object.freeze({ largura: 1200, altura: 400 }),
-  // O fundo cobre a METADE de cima da espera, mas a medida recomendada é a tela inteira:
-  // o recorte é `cover`, e mandar 1080 × 960 obrigaria a loja a pensar em enquadramento
-  // que a tela já resolve. Mesma arte da espera serve nos dois.
-  FUNDO: Object.freeze({ largura: 1080, altura: 1920 }),
 });
 
 export function normalizarTipo(valor) {

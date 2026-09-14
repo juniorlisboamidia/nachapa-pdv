@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import useCarrossel from './useCarrossel'
 
 // Tela de ESPERA — o repouso do totem, e a única tela sem sessão.
@@ -30,7 +31,7 @@ import useCarrossel from './useCarrossel'
 // O carrossel gira imagem numa tela onde, por definição, não existe sessão. Ociosidade,
 // MS_AMBIGUO e o relógio capturado são outro domínio e não se encostam. Este componente só
 // existe enquanto `tela === 'espera'`: sair desmonta e limpa tudo, voltar remonta.
-export default function TelaEspera({ banners, chamada, titulo, subtitulo, destaques, aoTocar }) {
+export default function TelaEspera({ banners, chamada, titulo, subtitulo, fundo, destaques, aoTocar }) {
   /* O texto do botão vem de Personalização, já resolvido pelo servidor. O literal aqui é
      a última rede: bootstrap de uma versão anterior não manda o campo, e um botão sem
      texto na tela que fica horas no vidro seria o pior lugar possível para descobrir. */
@@ -41,11 +42,13 @@ export default function TelaEspera({ banners, chamada, titulo, subtitulo, destaq
   const { atual, total, indice, lista, marcarFalha } = useCarrossel({
     itens: banners?.itens, agoraServidor: banners?.agoraServidor, tipo: 'ESPERA',
   })
-  // A foto de fundo da vitrine é outro TIPO de arte, com a mesma mecânica de ativo, agenda e
-  // rodízio — por isso ela é um banner e não uma coluna de imagem na configuração. Só a
-  // primeira elegível é usada: um fundo trocando atrás de um título parado seria inquietação
-  // sem propósito, e a metade de baixo já tem movimento de sobra.
-  const fundo = useCarrossel({ itens: banners?.itens, agoraServidor: banners?.agoraServidor, tipo: 'FUNDO' })
+  // A foto de fundo NÃO é banner: é UMA foto, o padrão da loja, vinda de Personalização
+  // como URL versionada (`fundoDaEspera`). Um fundo trocando atrás de um título parado seria
+  // inquietação sem propósito, e a metade de baixo já tem movimento de sobra.
+  // Uma foto que não abrir (URL velha no cache, rede caindo) some em vez de deixar um
+  // retângulo quebrado atrás do título — a metade de cima continua de pé sobre o chão.
+  const [fundoQuebrou, setFundoQuebrou] = useState(false)
+  const fundoUrl = typeof fundo === 'string' && fundo && !fundoQuebrou ? fundo : null
 
   const reduzido = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
 
@@ -84,13 +87,13 @@ export default function TelaEspera({ banners, chamada, titulo, subtitulo, destaq
         <>
           {/* ── METADE DE CIMA ─────────────────────────────────────────────── */}
           <div className="tq-vit-alto">
-            {fundo.atual ? (
+            {fundoUrl ? (
               <>
                 <img
                   className="tq-vit-fundo"
-                  src={fundo.atual.imagemUrl}
+                  src={fundoUrl}
                   alt=""
-                  onError={() => fundo.marcarFalha(fundo.atual.id)}
+                  onError={() => setFundoQuebrou(true)}
                 />
                 {/* Mesmo véu do banner, e pelo mesmo motivo: o título tem de continuar
                     legível sobre uma foto que a loja escolheu e que ninguém revisou. */}

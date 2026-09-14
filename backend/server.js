@@ -8718,7 +8718,7 @@ function exigirTotem(ap, res) {
 async function comApresentacao(ap, body, resposta) {
   try {
     const escopo = whereDoAparelho(ap, body);
-    const [configuracoes, categorias, doCanal, banners, destaques] = await Promise.all([
+    const [configuracoes, categorias, doCanal, banners, destaques, fundo] = await Promise.all([
       prisma.totemApresentacao.findMany({ where: escopo }),
       prisma.totemCategoria.findMany({ where: escopo }),
       // `findFirst` com o MESMO escopo das outras duas: o construtor de where é um só, e
@@ -8740,6 +8740,9 @@ async function comApresentacao(ap, body, resposta) {
       prisma.totemDestaque.findMany({
         where: escopo, select: { cwItemId: true, ordem: true }, orderBy: [{ ordem: 'asc' }, { cwItemId: 'asc' }],
       }).catch(() => []),
+      // Só a PRESENÇA da foto de fundo: `select` na chave, nunca em `dados`. É a razão de
+      // os bytes morarem em tabela própria — este bootstrap roda a cada 5 min por aparelho.
+      prisma.totemEsperaFundo.findFirst({ where: escopo, select: { empresaId: true } }).catch(() => null),
     ]);
     const { catalogo, avisos } = projetarCatalogo(resposta.catalogo, configuracoes);
     // Nome de exibição por categoria: ADITIVO (`nomeExibido` ao lado de `nome`) e
@@ -8753,7 +8756,7 @@ async function comApresentacao(ap, body, resposta) {
       configuracao: configuracaoParaJson(doCanal),
       // Bloco PRÓPRIO do PDV, nunca dentro de `loja` (território do HUB). A logo não vem
       // aqui: vai só a versão, e o tablet busca os bytes uma vez pela rota dedicada.
-      aparencia: aparenciaPublica({ config: doCanal, dispositivo: ap }),
+      aparencia: aparenciaPublica({ config: doCanal, dispositivo: ap, temFundoEspera: fundo !== null }),
       // Banners da tela de espera: metadados e `agoraServidor`, nenhum byte. Quem decide a
       // elegibilidade temporal é o CLIENTE, com o relógio corrigido pelo desvio — é assim
       // que um banner das 18:00 entra às 18:00 em vez de esperar o próximo bootstrap.
@@ -8821,6 +8824,33 @@ app.get('/api/public/aparelho/totem/logo', async (req, res) => {
     responderImagem(res, bytes, `${ap.empresaId}-${cfg?.logoVersao ?? 0}`, req);
   } catch (err) {
     console.error('[public/aparelho totem logo]', err?.code ?? err?.name ?? 'erro');
+    res.status(500).end();
+  }
+});
+
+// A FOTO DE FUNDO da vitrine, em bytes. Mesma disciplina da logo e dos banners: fora do
+// bootstrap, cache privado e versionado, empresa vinda do COOKIE.
+//
+// A versão entra no WHERE como nos banners: `?v=` que não bate com a versão atual é 404,
+// nunca os bytes atuais sob um número velho — a resposta é `immutable` por um ano, e servir
+// coisas diferentes sob a mesma URL deixaria dois tablets com fundos diferentes sem que nada
+// no sistema conseguisse distinguir os casos.
+app.get('/api/public/aparelho/totem/fundo', async (req, res) => {
+  try {
+    const ap = await exigirAparelho(req, res); if (!ap) return;
+    if (!exigirTotem(ap, res)) return;
+    const versao = Number(req.query?.v);
+    if (!Number.isSafeInteger(versao) || versao < 1) return res.status(404).end();
+    // `whereDoAparelho` chamado inline nas duas leituras, como a rota da logo faz — a
+    // variável `escopo` é reservada ao bootstrap, e a guarda estática só a aceita nascendo
+    // de `whereDoAparelho(ap, body)`.
+    const cfg = await prisma.totemConfiguracao.findFirst({ where: whereDoAparelho(ap, {}), select: { fundoEsperaVersao: true } });
+    if ((cfg?.fundoEsperaVersao ?? 0) !== versao) return res.status(404).end();
+    const fundo = await prisma.totemEsperaFundo.findFirst({ where: whereDoAparelho(ap, {}), select: { tipo: true, dados: true } });
+    if (!fundo?.dados || !fundo.tipo) return res.status(404).end();
+    responderImagem(res, { tipo: fundo.tipo, bytes: fundo.dados }, `fundo-${ap.empresaId}-${versao}`, req);
+  } catch (err) {
+    console.error('[public/aparelho totem fundo]', err?.code ?? err?.name ?? 'erro');
     res.status(500).end();
   }
 });
@@ -9504,6 +9534,7 @@ app.get('/api/totem/aparencia', async (req, res) => {
   const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
   try {
     const cfg = await prisma.totemConfiguracao.findUnique({ where: { empresaId } });
+    const temFundo = (await prisma.totemEsperaFundo.findUnique({ where: { empresaId }, select: { empresaId: true } })) !== null;
     // O FUNDO primeiro: é ele que diz qual conjunto de overrides e quais padrões valem.
     // Ler os overrides sem ele devolveria a paleta escura enquanto a tela está clara.
     const layoutFundo = layoutEfetivo(cfg?.layoutFundo);
@@ -9543,6 +9574,7 @@ app.get('/api/totem/aparencia', async (req, res) => {
         versao,
         url: `/api/totem/aparencia/logo?v=${versao}`,
       },
+      fundo: estadoDoFundo(cfg, temFundo),
       limiteLogoKb: Math.round(LOGO_MAX_BYTES / 1024),
     });
   } catch (err) { console.error('[totem/aparencia]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
@@ -9644,6 +9676,75 @@ app.get('/api/totem/aparencia/logo', async (req, res) => {
     if (!bytes) return res.status(404).end();
     responderImagem(res, bytes, `${empresaId}-${cfg?.logoVersao ?? 0}`, req);
   } catch (err) { console.error('[totem/aparencia logo]', err); res.status(500).end(); }
+});
+
+// ── A foto de fundo da vitrine ──
+// Mesmo trio da logo (ver, trocar, remover), com uma diferença que é o motivo de existir
+// separado: os bytes moram em TotemEsperaFundo, e não na linha de configuração.
+const estadoDoFundo = (cfg, tem) => {
+  const versao = Number.isInteger(cfg?.fundoEsperaVersao) && cfg.fundoEsperaVersao >= 0 ? cfg.fundoEsperaVersao : 0;
+  return { tem: tem === true, versao, url: `/api/totem/aparencia/fundo?v=${versao}`, limiteKb: Math.round(BANNER_IMG_MAX / 1024) };
+};
+
+app.get('/api/totem/aparencia/fundo', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const [cfg, fundo] = await Promise.all([
+      prisma.totemConfiguracao.findUnique({ where: { empresaId }, select: { fundoEsperaVersao: true } }),
+      prisma.totemEsperaFundo.findUnique({ where: { empresaId } }),
+    ]);
+    if (!fundo?.dados) return res.status(404).end();
+    responderImagem(res, { tipo: fundo.tipo, bytes: fundo.dados }, `fundo-${empresaId}-${cfg?.fundoEsperaVersao ?? 0}`, req);
+  } catch (err) { console.error('[totem/aparencia fundo]', err); res.status(500).end(); }
+});
+
+// A mesma régua dos banners (`lerImagem`): tipo REAL pelos bytes, teto de 700 KB. A versão
+// sobe sempre — trocar a foto é trocar os bytes, e é ela que invalida o cache do tablet.
+app.put('/api/totem/aparencia/fundo', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const lida = lerImagemBanner(req.body?.dataUrl);
+    if (lida.erro) return res.status(400).json({ erro: lida.erro });
+    const atual = await prisma.totemConfiguracao.findUnique({ where: { empresaId }, select: { fundoEsperaVersao: true } });
+    const versao = proximaVersaoImagem(atual?.fundoEsperaVersao);
+    // Transação: os bytes e a versão precisam mudar juntos, senão um tablet pode ler a
+    // versão nova e ainda receber os bytes velhos (ou o contrário) na janela entre os dois.
+    const [linha] = await prisma.$transaction([
+      prisma.totemConfiguracao.upsert({
+        where: { empresaId },
+        create: { empresaId, fundoEsperaVersao: versao },
+        update: { fundoEsperaVersao: versao },
+      }),
+      prisma.totemEsperaFundo.upsert({
+        where: { empresaId },
+        create: { empresaId, tipo: lida.tipo, dados: lida.bytes },
+        update: { tipo: lida.tipo, dados: lida.bytes },
+      }),
+    ]);
+    res.json({ ok: true, fundo: estadoDoFundo(linha, true) });
+  } catch (err) { console.error('[totem/aparencia fundo PUT]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// Remover também SOBE a versão, como na logo: sem isso o tablet seguiria servindo do cache
+// uma foto que a loja acabou de tirar.
+app.delete('/api/totem/aparencia/fundo', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const atual = await prisma.totemConfiguracao.findUnique({ where: { empresaId }, select: { fundoEsperaVersao: true } });
+    const versao = proximaVersaoImagem(atual?.fundoEsperaVersao);
+    const [linha] = await prisma.$transaction([
+      prisma.totemConfiguracao.upsert({
+        where: { empresaId },
+        create: { empresaId, fundoEsperaVersao: versao },
+        update: { fundoEsperaVersao: versao },
+      }),
+      prisma.totemEsperaFundo.deleteMany({ where: { empresaId } }),
+    ]);
+    res.json({ ok: true, fundo: estadoDoFundo(linha, false) });
+  } catch (err) { console.error('[totem/aparencia fundo DELETE]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
 });
 
 // Trocar a logo. A versão sobe SEMPRE que os bytes mudam — é ela que invalida o cache do

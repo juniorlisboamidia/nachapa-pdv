@@ -62,7 +62,7 @@ import { estadoDoCanal, podeAvancar } from '../components/totemLoja'
 import { TELA_REPOUSO, armaReset, armaAviso } from '../components/totemSessao'
 // Aparência do canal: as cores viram custom property, a logo do canal vence a do HUB, e a
 // posição das categorias vira atributo na raiz.
-import { fundoDoTotem, logoDoTotem, posicaoDeCategorias } from '../components/totemTema'
+import { fundoDaEspera, fundoDoTotem, logoDoTotem, posicaoDeCategorias } from '../components/totemTema'
 
 const VERSAO = 'totem-1.0'
 const MS_HEARTBEAT = 60_000
@@ -708,6 +708,7 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
           chamada={aparencia?.chamadaEspera}
           titulo={aparencia?.tituloEspera}
           subtitulo={aparencia?.subtituloEspera}
+          fundo={fundoDaEspera(aparencia)}
           destaques={boot?.destaques}
           aoTocar={comecarSessao}
         />

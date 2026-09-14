@@ -466,6 +466,19 @@ test('texto longo guardado no banco vira ausência, não vira tela quebrada', ()
   assert.equal(aparenciaPublica({ config: { tituloEspera: '  Bom apetite ' } }).tituloEspera, 'Bom apetite');
 });
 
+test('a foto de fundo viaja como versão + presença, nunca como bytes', () => {
+  const pub = aparenciaPublica({ config: { fundoEsperaVersao: 3 }, temFundoEspera: true });
+  assert.equal(pub.fundoEsperaVersao, 3);
+  assert.equal(pub.temFundoEspera, true);
+  assert.equal(JSON.stringify(pub).includes('base64'), false);
+  // Presença é um boolean estrito: "1" ou {} vindos de uma query torta não viram foto.
+  assert.equal(aparenciaPublica({ config: {}, temFundoEspera: 'sim' }).temFundoEspera, false);
+  assert.equal(aparenciaPublica({}).temFundoEspera, false);
+  for (const v of [null, undefined, -1, 2.5, 'x']) {
+    assert.equal(aparenciaPublica({ config: { fundoEsperaVersao: v } }).fundoEsperaVersao, 0, String(v));
+  }
+});
+
 test('fundo inválido cai no padrão, nunca derruba a tela', () => {
   assert.equal(normalizarLayout('CLARO'), 'CLARO');
   assert.equal(normalizarLayout('claro'), null, 'não normaliza caixa: vem de um seletor');
@@ -622,7 +635,7 @@ test('🔴 a logo NUNCA vai no bootstrap', () => {
 
 test('bloco público tem só o que o quiosque desenha', () => {
   const pub = aparenciaPublica({ config: { tokens: { fundo: '#111111' }, posicaoCategoriasPadrao: 'direita' } });
-  assert.deepEqual(Object.keys(pub).sort(), ['chamadaEspera', 'layoutFundo', 'logoVersao', 'posicaoCategorias', 'subtituloEspera', 'temLogoPersonalizada', 'tituloEspera', 'tokens']);
+  assert.deepEqual(Object.keys(pub).sort(), ['chamadaEspera', 'fundoEsperaVersao', 'layoutFundo', 'logoVersao', 'posicaoCategorias', 'subtituloEspera', 'temFundoEspera', 'temLogoPersonalizada', 'tituloEspera', 'tokens']);
   assert.equal(pub.posicaoCategorias, 'direita');
 });
 

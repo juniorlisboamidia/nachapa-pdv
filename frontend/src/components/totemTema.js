@@ -116,6 +116,22 @@ export function logoDoTotem({ aparencia, loja } = {}) {
   return { url: loja?.logo || loja?.logoDataUrl || null, propria: false }
 }
 
+/* A foto de fundo da vitrine — a tela de espera padrão.
+
+   Mesma mecânica da logo: o bootstrap manda presença e versão, os bytes têm rota própria,
+   e a versão entra na URL para o cache do tablet cair sozinho quando a foto trocar. Sem
+   foto, `null` — e a tela desenha a metade de cima sobre o chão do template, que é
+   composição válida, não caso degradado. */
+export function fundoDaEspera(aparencia) {
+  if (aparencia?.temFundoEspera !== true) return null
+  const v = Number.isInteger(aparencia.fundoEsperaVersao) && aparencia.fundoEsperaVersao > 0
+    ? aparencia.fundoEsperaVersao
+    : null
+  // Versão zero com "tem" verdadeiro é contradição de dado: a rota devolveria 404 e a tela
+  // mostraria um retângulo quebrado. Melhor sem foto do que com foto quebrada.
+  return v === null ? null : `/api/public/aparelho/totem/fundo?v=${v}`
+}
+
 /* Só a URL. Mantida porque é o que a maior parte do código pede, e implementada sobre a
    função acima para as duas nunca discordarem sobre qual logo está valendo. */
 export function urlDaLogo(entrada) {

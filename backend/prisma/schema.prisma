@@ -870,6 +870,18 @@ model TotemCategoria {
   @@index([empresaId])
 }
 
+/* A foto de fundo da vitrine — UMA por loja, em bytes, fora da linha de configuração.
+
+   Não é banner: banner é lista, com agenda e rodízio; isto é o padrão da loja, e o padrão
+   tem uma foto só. A chave é o próprio empresaId — não existe "segundo fundo". Remover é
+   apagar a linha e subir `TotemConfiguracao.fundoEsperaVersao`. */
+model TotemEsperaFundo {
+  empresaId    Int      @id
+  tipo         String                       // image/png, image/jpeg ou image/webp — o tipo REAL, pelos bytes
+  dados        Bytes
+  atualizadoEm DateTime @updatedAt
+}
+
 /* Os produtos que a esteira da tela de espera mostra.
 
    Mesma forma de `TotemApresentacao`: uma linha por item do Cardápio Web, com o id DELE
@@ -954,6 +966,12 @@ model TotemConfiguracao {
   // linha, e isso é uma escolha de desenho legítima — não têm padrão de fábrica.
   tituloEspera            String?
   subtituloEspera         String?
+
+  // Versão da FOTO DE FUNDO da vitrine. Os bytes NÃO estão aqui: estão em TotemEsperaFundo,
+  // porque esta linha é lida em todo bootstrap e uma foto de tela cheia dentro dela seria
+  // regressão (a logo, de 300KB, já é o limite do aceitável). A versão fica aqui pelo mesmo
+  // motivo da logoVersao: é o que invalida o cache do tablet, e sobe também na REMOÇÃO.
+  fundoEsperaVersao       Int      @default(0)
 
   // O FUNDO: 'PADRAO' (carvão) ou 'CLARO'. Não é uma sétima cor — é a RELAÇÃO entre as
   // seis, e por isso `tokens` guarda um conjunto de overrides POR fundo. Escolha da LOJA;

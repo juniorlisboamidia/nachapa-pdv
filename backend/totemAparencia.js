@@ -436,7 +436,7 @@ export function coresEfetivas(guardados, layout) {
    na folha), a posição efetiva DESTE aparelho, e o estado da logo. A logo em si NUNCA vai
    aqui — o bootstrap é relido a cada 5 min por aparelho, e 200 KB de base64 nessa
    frequência é desperdício puro. Vai a versão, e o tablet busca os bytes uma vez. */
-export function aparenciaPublica({ config, dispositivo } = {}) {
+export function aparenciaPublica({ config, dispositivo, temFundoEspera = false } = {}) {
   // O fundo primeiro: é ele que diz QUAL conjunto de overrides desce para o tablet.
   const layoutFundo = layoutEfetivo(config?.layoutFundo);
   return {
@@ -449,6 +449,10 @@ export function aparenciaPublica({ config, dispositivo } = {}) {
     // Estes dois podem ser `null`, e `null` aqui é informação: a tela não desenha a linha.
     tituloEspera: textoEfetivo(config?.tituloEspera, TITULO_MAX),
     subtituloEspera: textoEfetivo(config?.subtituloEspera, SUBTITULO_MAX),
+    // A foto de fundo, como a logo: só versão e presença. Os bytes têm rota própria e cache
+    // versionado; mandá-los a cada 5 min por aparelho seria desperdício puro.
+    fundoEsperaVersao: Number.isInteger(config?.fundoEsperaVersao) && config.fundoEsperaVersao >= 0 ? config.fundoEsperaVersao : 0,
+    temFundoEspera: temFundoEspera === true,
     posicaoCategorias: posicaoEfetiva({
       override: dispositivo?.posicaoCategoriasOverride,
       padrao: config?.posicaoCategoriasPadrao,

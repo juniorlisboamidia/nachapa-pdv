@@ -244,8 +244,8 @@ test('🔴 empresa sem banners: bloco vazio, e o quiosque cai no fallback', () =
 // ── tipo: capa × tela de espera ─────────────────────────────────────────────
 import { TIPOS, TIPO_PADRAO, MEDIDAS, MOTIVO_TIPO, normalizarTipo } from './totemBanner.js';
 
-test('três tipos, e o padrão é o que já existia', () => {
-  assert.deepEqual(TIPOS, ['ESPERA', 'CAPA', 'FUNDO']);
+test('dois tipos, e o padrão é o que já existia', () => {
+  assert.deepEqual(TIPOS, ['ESPERA', 'CAPA']);
   // ESPERA é o default no banco: os banners cadastrados antes do tipo existir continuam
   // exatamente onde estavam.
   assert.equal(TIPO_PADRAO, 'ESPERA');
@@ -260,10 +260,6 @@ test('cada tipo tem a sua medida recomendada', () => {
   assert.deepEqual(MEDIDAS.ESPERA, { largura: 1080, altura: 1920 });
   // 3:1 — a MESMA proporção da capa do Cardápio Web, para a loja reaproveitar a arte.
   assert.deepEqual(MEDIDAS.CAPA, { largura: 1200, altura: 400 });
-  // O FUNDO cobre a metade de cima da espera, mas a medida recomendada é a tela inteira:
-  // o recorte é `cover`, e pedir 1080 × 960 obrigaria a loja a pensar num enquadramento
-  // que a tela já resolve. A mesma arte da espera serve nos dois.
-  assert.deepEqual(MEDIDAS.FUNDO, MEDIDAS.ESPERA);
   // Todo tipo tem medida: um tipo sem medida deixaria o admin sem o que recomendar.
   for (const t of TIPOS) assert.ok(MEDIDAS[t], `${t} sem medida recomendada`);
   assert.equal(MEDIDAS.CAPA.largura / MEDIDAS.CAPA.altura, 3);

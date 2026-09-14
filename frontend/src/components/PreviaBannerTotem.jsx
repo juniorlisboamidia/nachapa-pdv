@@ -1,4 +1,5 @@
 import useCarrossel from './totem/useCarrossel'
+import PreviaVitrine from './PreviaVitrine'
 
 // Prévia do que o cliente vê, ao lado da lista de banners (Totem › Banners).
 //
@@ -37,7 +38,7 @@ const PADRAO = {
 }
 
 export default function PreviaBannerTotem({
-  tipo = 'CAPA', itens, cores, logoUrl, inicial = '?', posicaoCategorias = 'esquerda',
+  tipo = 'CAPA', itens, cores, logoUrl, inicial = '?', posicaoCategorias = 'esquerda', vitrine,
 }) {
   const { atual, total, indice, marcarFalha } = useCarrossel({ itens, tipo })
   const c = (k) => cores?.[k] || PADRAO[k]
@@ -62,7 +63,7 @@ export default function PreviaBannerTotem({
         <h2 className="ttm-pv-tit">Prévia</h2>
         <span className="ttm-pv-conta">
           {total === 0
-            ? (tipo === 'CAPA' ? 'Nada no ar — a faixa mostra o título' : 'Nada no ar — a tela institucional')
+            ? (tipo === 'CAPA' ? 'Nada no ar — a faixa mostra o título' : 'Nada no ar — a vitrine, que é o padrão')
             : total === 1
               ? '1 no ar'
               : `${indice + 1} de ${total} · ${atual?.duracaoSegundos ?? 6}s cada`}
@@ -116,19 +117,27 @@ export default function PreviaBannerTotem({
           </div>
         </div>
       ) : (
-        /* A espera é a tela INTEIRA — aqui a prévia é o aparelho todo, em 9:16. */
-        <div className="ttm-pv ttm-pv-tela" style={{ background: c('fundo') }}>
-          {arte ?? (
-            <div className="ttm-pv-institucional">
-              {logoUrl
-                ? <img src={logoUrl} alt="" />
-                : <span className="ttm-pv-inicial grande" style={{ background: c('acaoFundo'), color: c('acaoTexto') }}>{inicial}</span>}
-            </div>
-          )}
-          <span className="ttm-pv-toque" style={{ background: c('acaoFundo'), color: c('acaoTexto') }}>
-            Toque para começar
-          </span>
-        </div>
+        /* A espera é a tela INTEIRA — aqui a prévia é o aparelho todo, em 9:16.
+           Sem banner no ar o cliente vê a VITRINE (a tela padrão), e é ela que a prévia
+           mostra — a logo no meio do preto deixou de existir no aparelho. */
+        arte ? (
+          <div className="ttm-pv ttm-pv-tela" style={{ background: c('fundo') }}>
+            {arte}
+            <span className="ttm-pv-toque" style={{ background: c('acaoFundo'), color: c('acaoTexto') }}>
+              {vitrine?.chamada || 'Toque para começar'}
+            </span>
+          </div>
+        ) : (
+          <div className="ttm-pv ttm-pv-tela">
+            <PreviaVitrine
+              cores={cores}
+              fundoUrl={vitrine?.fundoUrl ?? null}
+              titulo={vitrine?.titulo}
+              subtitulo={vitrine?.subtitulo}
+              chamada={vitrine?.chamada}
+            />
+          </div>
+        )
       )}
     </div>
   )
