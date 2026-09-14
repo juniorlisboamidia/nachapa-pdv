@@ -905,10 +905,13 @@ model TotemEsperaFundo {
 
    Produto que sai do cardápio vira ÓRFÃO: o bootstrap não o encontra e ele não aparece na
    esteira; o admin mostra a linha marcada, com um botão de limpar. */
-// A FITA do produto no totem ("Mais pedido", "Novo", "Combo"…): apresentação deste canal,
-// uma por (empresa, item do CW). Guarda o CÓDIGO; o rótulo mora em totemFita.js. Tabela
-// própria porque TotemApresentacao só existe no modo vitrine — a fita não some com ele.
-model TotemFita {
+// A FITA do produto ("Mais pedido", "Recomendado", "Novidade", "Edição limitada", "Oferta").
+// NEUTRA DE CANAL: o totem desenha como faixa diagonal no card, a TV Indoor como etiqueta no
+// Menu Board, e o dado é UM só — marcar "Mais pedido" é decisão sobre o PRODUTO, não sobre o
+// canal, e pedir o mesmo cadastro duas vezes seria inventar trabalho para a loja.
+// Guarda o CÓDIGO; texto e cor moram em backend/produtoFita.js.
+// Chamava-se `TotemFita` e foi renomeada quando o segundo canal apareceu.
+model ProdutoFita {
   id           Int      @id @default(autoincrement())
   empresaId    Int
   cwItemId     Int
@@ -1140,24 +1143,73 @@ model TvPlaylist {
   @@index([empresaId])
 }
 
-// O conteúdo DENTRO da programação, na ordem. `ordem` é inteiro por POSIÇÃO: a lista chega
+// O item DENTRO da programação, na ordem. `ordem` é inteiro por POSIÇÃO: a lista chega
 // inteira e é reescrita em transação — trocar vizinhos deixa buracos e empates quando duas
 // abas mexem juntas.
+//
+// POLIMÓRFICO desde o Menu Board: o item é uma IMAGEM (arte que a loja subiu) ou um
+// MENU_BOARD (tela montada com o catálogo vivo). Duas colunas nuláveis e um `tipo`, em vez
+// de duas tabelas de item — a ORDEM é única e atravessa os dois, e com tabelas separadas
+// "promoção, hambúrgueres, promoção, combos" precisaria de uma terceira tabela só para
+// dizer a sequência.
+//
+// A regra "exatamente uma referência" é garantida em TRÊS lugares, de propósito: no domínio
+// (`tvMenuBoard.js`), na rota, e num CHECK do banco (a migration). Regra que só existe no
+// aplicativo é regra que a primeira consulta manual quebra.
+//
+// `tipo` tem DEFAULT 'IMAGEM': é o que faz cada item já gravado continuar valendo, sem
+// edição manual nenhuma, no instante em que a migration roda.
 model TvPlaylistItem {
-  id         Int @id @default(autoincrement())
-  playlistId Int
-  conteudoId Int
-  ordem      Int @default(0)
+  id          Int    @id @default(autoincrement())
+  playlistId  Int
+  tipo        String @default("IMAGEM") // IMAGEM | MENU_BOARD — régua em tvMenuBoard.js
+  conteudoId  Int?
+  menuBoardId Int?
+  ordem       Int    @default(0)
 
-  playlist TvPlaylist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
-  conteudo TvConteudo @relation(fields: [conteudoId], references: [id], onDelete: Cascade)
+  playlist  TvPlaylist   @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  conteudo  TvConteudo?  @relation(fields: [conteudoId], references: [id], onDelete: Cascade)
+  menuBoard TvMenuBoard? @relation(fields: [menuBoardId], references: [id], onDelete: Cascade)
 
-  // O mesmo conteúdo não entra duas vezes na mesma playlist: seria a mesma imagem duas
-  // vezes por volta — quase sempre engano, e o custo de proibir é zero (quem quiser mesmo
-  // duplica o conteúdo).
+  // O mesmo item não entra duas vezes na mesma playlist: seria a mesma tela duas vezes por
+  // volta — quase sempre engano, e o custo de proibir é zero. No Postgres, NULLs não colidem
+  // num índice único, então os dois convivem sem atrapalhar um ao outro.
   @@unique([playlistId, conteudoId])
+  @@unique([playlistId, menuBoardId])
   @@index([playlistId, ordem])
   @@index([conteudoId])
+  @@index([menuBoardId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MENU BOARD — o segundo tipo de item da programação: uma tela montada com o CATÁLOGO REAL
+// da loja, em vez de uma arte pronta.
+//
+// O QUE ELE GUARDA é referência e escolha: qual categoria, quais itens, em que ordem, qual é
+// o destaque. O QUE ELE NÃO GUARDA é nome, preço, foto, promoção e disponibilidade — tudo
+// isso vem do Cardápio Web a cada resolução, e uma cópia aqui seria uma segunda fonte de
+// verdade sobre dinheiro. Mudou o preço lá, mudou na parede no próximo refresh.
+//
+// Sem FK para o CW: o cardápio é de outro sistema e pode mudar embaixo de nós. As
+// referências vivem em `configuracao` e são resolvidas por texto, como no resto do PDV.
+// ─────────────────────────────────────────────────────────────────────────────
+model TvMenuBoard {
+  id              Int      @id @default(autoincrement())
+  empresaId       Int
+  nome            String                       // etiqueta interna; na tela aparece o título
+  ativo           Boolean  @default(true)
+  layout          String   @default("GRADE")   // GRADE | LISTA | DESTAQUE — régua em tvMenuBoard.js
+  // 20 s contra os 10 s de uma arte: um menu precisa ser LIDO, e quem passa na frente tem de
+  // achar o produto e o preço.
+  duracaoSegundos Int      @default(20)
+  // { cwCategoriaId?, titulo, itens: [{ cwItemId, destaque? }] } — validado no domínio.
+  configuracao    Json
+  criadoEm        DateTime @default(now())
+  atualizadoEm    DateTime @updatedAt
+
+  itens TvPlaylistItem[]
+
+  @@index([empresaId])
 }
 
 // Ponto Facial › Coletor — batidas que chegaram do coletor mas cujo enrollid

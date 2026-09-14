@@ -158,21 +158,38 @@ export function conteudoParaAdmin(c, agoraMs) {
   };
 }
 
-/* A playlist como o admin a lê, com os conteúdos já resolvidos e na ordem.
-   `linhas` são os `TvPlaylistItem` com o `conteudo` incluído. */
-export function playlistParaAdmin(p, agoraMs) {
+/* A playlist como o admin a lê, na ordem, com os DOIS tipos de item.
+   `linhas` são os `TvPlaylistItem` com `conteudo` e/ou `menuBoard` incluídos.
+
+   Cada item da saída declara o `tipo`, e o que vem junto depende dele: a imagem traz o
+   conteúdo inteiro (com status e agenda), o board traz o cabeçalho dele (nome, layout,
+   quantos itens) — a listagem do admin NÃO resolve catálogo, porque ela precisa abrir mesmo
+   com o HUB fora do ar. Quem resolve é a tela de edição do board e a programação da TV. */
+export function playlistParaAdmin(p, agoraMs, boardParaAdmin) {
   const itens = arranjo(p?.itens)
     .slice()
     .sort((a, b) => (a.ordem - b.ordem) || (a.id - b.id))
-    .filter((i) => i?.conteudo)
-    .map((i) => conteudoParaAdmin(i.conteudo, agoraMs));
+    .map((i) => {
+      // `tipo` ausente é IMAGEM: é o contrato da coluna (DEFAULT 'IMAGEM') e o que faz uma
+      // linha gravada antes do Menu Board continuar valendo.
+      const tipo = i?.tipo === 'MENU_BOARD' ? 'MENU_BOARD' : 'IMAGEM';
+      if (tipo === 'MENU_BOARD') {
+        if (!i?.menuBoard) return null;
+        const board = typeof boardParaAdmin === 'function' ? boardParaAdmin(i.menuBoard) : i.menuBoard;
+        return { tipo, itemId: i.id, board };
+      }
+      if (!i?.conteudo) return null;
+      return { tipo, itemId: i.id, conteudo: conteudoParaAdmin(i.conteudo, agoraMs) };
+    })
+    .filter(Boolean);
   return {
     id: p.id,
     nome: p.nome,
     itens,
     // Quantos estão NO AR agora: é a pergunta que o gestor faz olhando a lista, e um
-    // "8 conteúdos" que inclui 6 encerrados não responde nada.
-    noAr: itens.filter((i) => i.status === 'ATIVO').length,
+    // "8 conteúdos" que inclui 6 encerrados não responde nada. Board conta pelo liga-desliga
+    // — a elegibilidade dele depende do catálogo, que esta listagem não consulta.
+    noAr: itens.filter((i) => (i.tipo === 'IMAGEM' ? i.conteudo.status === 'ATIVO' : i.board?.ativo !== false)).length,
   };
 }
 
@@ -192,22 +209,37 @@ export function playlistParaAdmin(p, agoraMs) {
      segunda régua, e duas réguas divergem.
 
    Conteúdo sem arte não viaja: ele existiria só para falhar no carregamento. */
-export function programacaoPublica(itens, agoraMs) {
+export function programacaoPublica(itens, agoraMs, opcoes) {
+  // Os boards JÁ RESOLVIDOS contra o catálogo, por id. Quem resolve é a rota (precisa do
+  // HUB); aqui só se monta a sequência. Board sem entrada no mapa — ou resolvido como
+  // inelegível — simplesmente não entra: o player segue para o próximo item.
+  const boards = opcoes?.boards instanceof Map ? opcoes.boards : new Map();
   const lista = arranjo(itens)
-    .filter((i) => i?.conteudo)
     .slice()
     .sort((a, b) => (a.ordem - b.ordem) || (a.id - b.id))
-    .map((i) => i.conteudo)
-    .filter((c) => c.ativo === true && (c.imagemVersao ?? 0) > 0)
-    .map((c) => ({
-      id: c.id,
-      nome: c.nome,
-      ativo: true,
-      duracaoSegundos: normalizarDuracao(c.duracaoSegundos),
-      inicioEm: c.inicioEm ? new Date(c.inicioEm).toISOString() : null,
-      fimEm: c.fimEm ? new Date(c.fimEm).toISOString() : null,
-      imagemVersao: c.imagemVersao ?? 0,
-      imagemUrl: `/api/public/aparelho/tv/conteudo/${c.id}/imagem?v=${c.imagemVersao ?? 0}`,
-    }));
+    .map((i) => {
+      const tipo = i?.tipo === 'MENU_BOARD' ? 'MENU_BOARD' : 'IMAGEM';
+      if (tipo === 'MENU_BOARD') {
+        const id = i?.menuBoardId ?? i?.menuBoard?.id;
+        return id == null ? null : (boards.get(String(id)) ?? null);
+      }
+      const c = i?.conteudo;
+      // Conteúdo sem arte não viaja: existiria só para falhar no carregamento.
+      if (!c || c.ativo !== true || (c.imagemVersao ?? 0) <= 0) return null;
+      return {
+        // O TIPO é o que permite à playlist misturar arte e menu board. Aditivo: todo campo
+        // que a imagem já tinha continua onde estava.
+        tipo: 'imagem',
+        id: c.id,
+        nome: c.nome,
+        ativo: true,
+        duracaoSegundos: normalizarDuracao(c.duracaoSegundos),
+        inicioEm: c.inicioEm ? new Date(c.inicioEm).toISOString() : null,
+        fimEm: c.fimEm ? new Date(c.fimEm).toISOString() : null,
+        imagemVersao: c.imagemVersao ?? 0,
+        imagemUrl: `/api/public/aparelho/tv/conteudo/${c.id}/imagem?v=${c.imagemVersao ?? 0}`,
+      };
+    })
+    .filter(Boolean);
   return { agoraServidor: new Date(agoraMs).toISOString(), itens: lista };
 }

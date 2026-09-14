@@ -22,7 +22,9 @@ const semComentarios = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^
 /* Cada chamada `prisma.tv<Algo>.<op>({ ... })` do arquivo, com o corpo balanceado. */
 function consultasDaTv() {
   const fora = [];
-  const marca = /prisma\.(tvConteudo|tvConteudoImagem|tvPlaylist|tvPlaylistItem)\.(\w+)\(/g;
+  // `tvMenuBoard` entra aqui pelo mesmo motivo dos outros: a varredura não pode ficar cega
+  // para o model novo, ou a próxima consulta sem escopo passa sem ninguém ver.
+  const marca = /prisma\.(tvConteudo|tvConteudoImagem|tvPlaylist|tvPlaylistItem|tvMenuBoard)\.(\w+)\(/g;
   let m;
   while ((m = marca.exec(fonte)) !== null) {
     let i = marca.lastIndex - 1;
@@ -82,9 +84,9 @@ test('🔴 TODA consulta da TV é escopada por empresa', () => {
     // Os itens de uma playlist só são tocados depois do `findFirst` escopado da playlist,
     // no mesmo handler — e o teste abaixo prova que essa conferência existe e vem antes.
     // Duas formas: o `deleteMany` filtra por `playlistId: id`, e o `createMany` recebe as
-    // linhas de `itensTvParaGravar(id, …)`, que carimba o MESMO id já provado.
+    // linhas de `itensPlaylistParaGravar(id, …)`, que carimba o MESMO id já provado.
     const itemDePlaylistProvada = c.model === 'tvPlaylistItem'
-      && (/playlistId: id\b/.test(c.corpo) || /itensTvParaGravar\(id,/.test(c.corpo));
+      && (/playlistId: id\b/.test(c.corpo) || /itensPlaylistParaGravar\(id,/.test(c.corpo));
     if (!escopado && !posseJaProvada && !itemDePlaylistProvada) semEscopo.push(`${c.model}.${c.op} na linha ${c.linha}`);
   }
   assert.deepEqual(semEscopo, [], 'consulta da TV sem escopo de empresa');
@@ -130,11 +132,15 @@ test('🔴 os itens da playlist só são gravados depois de a POSSE dela ser pro
   const apagou = bloco.indexOf('tvPlaylistItem.deleteMany');
   assert.ok(conferiu > 0, 'a posse da playlist tem de ser conferida');
   assert.ok(apagou > conferiu, 'a conferência vem ANTES de apagar os itens');
-  // E os ids aceitos saem de uma consulta ESCOPADA, não do corpo.
-  assert.match(bloco, /prisma\.tvConteudo\.findMany\(\{ where: \{ empresaId \}, select: \{ id: true \} \}\)/,
-    'os ids permitidos saem do catálogo da empresa');
-  assert.match(bloco, /validarItensTv\(req\.body\?\.ids, new Set\(meus\.map/,
-    'e o corpo é validado CONTRA esse conjunto');
+  // E os ids aceitos saem de consultas ESCOPADAS, não do corpo — os DOIS conjuntos, desde
+  // que a playlist ficou polimórfica: é por aqui que o board da empresa B não entra na
+  // playlist da A.
+  assert.ok(bloco.includes('prisma.tvConteudo.findMany({ where: { empresaId }, select: { id: true } })'),
+    'as imagens permitidas saem do acervo da empresa');
+  assert.ok(bloco.includes('prisma.tvMenuBoard.findMany({ where: { empresaId }, select: { id: true } })'),
+    'e os boards permitidos tambem');
+  assert.ok(bloco.includes('validarItensPlaylist(corpo, disponiveis)'),
+    'e o corpo e validado CONTRA esses conjuntos');
   // Apagar e recriar na MESMA transação: a programação nunca fica pela metade.
   assert.match(bloco, /prisma\.\$transaction\(\[/, 'a troca de itens precisa ser transacional');
 });
@@ -255,4 +261,70 @@ test('🔴 o módulo puro da TV não importa nada do totem', () => {
   const imports = [...modulo.matchAll(/from '\.\/([\w.]+)\.js'/g)].map((m) => m[1]);
   // Só helpers TÉCNICOS, que não sabem o que é banner nem o que é conteúdo.
   assert.deepEqual(imports.sort(), ['midiaAgenda'], 'o domínio da TV só depende de helper técnico');
+});
+
+// ── Menu Board (contrato e fronteiras) ───────────────────────────────────────
+test('as rotas do Menu Board existem', () => {
+  for (const [rota, verbo] of [
+    ['/api/tv-indoor/menu-boards', 'get'], ['/api/tv-indoor/menu-boards', 'post'],
+    ['/api/tv-indoor/menu-boards/:id', 'put'], ['/api/tv-indoor/menu-boards/:id', 'delete'],
+    ['/api/tv-indoor/menu-boards/:id/previa', 'get'], ['/api/tv-indoor/catalogo', 'get'],
+  ]) {
+    assert.ok(fonte.includes(`app.${verbo}('${rota}'`), `falta ${verbo.toUpperCase()} ${rota}`);
+  }
+});
+
+test('🔴 o navegador NUNCA fala com o Cardápio Web — o caminho é PDV → HUB → CW', () => {
+  // A regra central: nenhuma credencial do CW no PDV, nenhuma chamada direta da TV ou do
+  // admin ao CW. Quem faz a ponte é `cardapioPedido.js` (JWT de serviço), e o serviço de
+  // catálogo é a única porta que o Menu Board usa.
+  const canal = fonte.slice(fonte.indexOf('// ── Menu Boards ──'), fonte.indexOf('// ── Telas ──'));
+  assert.match(canal, /catalogoDaLoja\(empresaId, \{/, 'o catálogo sai do serviço neutro');
+  assert.match(canal, /clienteIdDaEmpresa: clienteIdDaEmpresaTotem/, 'e o clienteId do único lugar que o lê');
+  assert.match(canal, /bootstrap: bootstrapTotemCW/, 'a ponte continua sendo a do HUB');
+  assert.equal(/cardapioweb|CW_API|apiKey|api_key|X-API-KEY/i.test(canal), false,
+    'nenhuma credencial nem host do CW pode aparecer no canal');
+});
+
+test('🔴 o Menu Board não lê NADA do totem', () => {
+  const canal = fonte.slice(fonte.indexOf('// ── Menu Boards ──'), fonte.indexOf('// ── Telas ──'))
+    + fonte.slice(fonte.indexOf('async function boardsDaProgramacao('), fonte.indexOf('// A PROGRAMAÇÃO desta tela.'));
+  for (const proibido of ['totemBanner', 'totemConfiguracao', 'totemApresentacao', 'totemDestaque', 'totemEsperaFundo', 'totemCategoria', 'totemFita']) {
+    assert.equal(canal.includes(`prisma.${proibido}`), false, `o Menu Board não pode ler ${proibido}`);
+  }
+  // `produtoFita` é PERMITIDO: a fita foi promovida a conceito neutro do catálogo (marcar
+  // "Mais pedido" é decisão sobre o PRODUTO, não sobre o canal), e os dois canais leem o
+  // mesmo dado. `projetarCatalogo` continua proibido — a projeção é da vitrine do totem.
+  assert.equal(canal.includes('projetarCatalogo'), false, 'o board consome o catálogo CRU, não a projeção da vitrine');
+  assert.match(canal, /prisma\.produtoFita\.findMany/, 'a fita é lida do model neutro');
+});
+
+test('🔴 a resolução do board é escopada pelo APARELHO, e só vai ao HUB se precisar', () => {
+  const i = fonte.indexOf('async function boardsDaProgramacao(');
+  const fn = semComentarios(fonte.slice(i, fonte.indexOf('\n// A PROGRAMAÇÃO desta tela.', i)));
+  assert.match(fn, /if \(!comBoard\.length\) return vazios/, 'playlist sem board não paga chamada ao HUB');
+  assert.match(fn, /whereDoAparelho\(ap, \{\}\)\.empresaId/, 'a empresa do catálogo vem do aparelho');
+  assert.match(fn, /where: whereDoAparelho\(ap, \{\}\)/, 'e as fitas também');
+  assert.equal(/req\.body|req\.query|req\.params/.test(fn), false, 'nada vindo do navegador');
+  // Catálogo fora do ar não pode derrubar a parede: sem catálogo, os boards ficam de fora e
+  // as artes continuam tocando.
+  assert.match(fn, /if \(!r\.ok\) return vazios/, 'catálogo fora → board fora, nunca erro');
+  assert.match(fn, /if \(resolvido\.elegivel\)/, 'board sem produto disponível não entra na programação');
+});
+
+test('🔴 a prévia do admin usa a MESMA função que a TV', () => {
+  // Admin e parede não podem mostrar coisas diferentes: a resolução é uma só.
+  const previa = semComentarios(handler('/api/tv-indoor/menu-boards/:id/previa', 'get'));
+  assert.match(previa, /resolverMenuBoard\(board, r\.catalogo, r\.fitas\)/);
+  const i = fonte.indexOf('async function boardsDaProgramacao(');
+  assert.match(fonte.slice(i, i + 2000), /resolverMenuBoard\(item\.menuBoard, r\.catalogo, fitas\)/);
+});
+
+test('🔴 a configuração do board nunca grava preço, nome ou foto', () => {
+  // O que entra no banco é o que `validarMenuBoard` devolveu — e o domínio só deixa passar
+  // referência, título e ordem. Este teste prende a rota a esse caminho.
+  const post = semComentarios(handler('/api/tv-indoor/menu-boards', 'post'));
+  assert.match(post, /validarMenuBoard\(req\.body/, 'o corpo passa pelo domínio');
+  assert.match(post, /data: \{ empresaId, \.\.\.v\.dados/, 'e só `v.dados` chega ao banco');
+  assert.equal(/configuracao: req\.body/.test(post), false, 'o corpo cru não pode ir para a coluna');
 });

@@ -1,5 +1,5 @@
-// A fita do produto no totem — testes puros (node --test, ESM).
-// Rodar: node --test backend/totemFita.test.js
+// A fita do produto (neutra de canal) — testes puros (node --test, ESM).
+// Rodar: node --test backend/produtoFita.test.js
 //
 // O que estes testes defendem:
 //   1. o catálogo de fitas é o MESMO do HUB: cinco códigos, textos e cores iguais;
@@ -10,7 +10,7 @@
 //   6. leitura tolerante: linha torta (inclusive código antigo) é ignorada, nunca lança.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SELOS, CODIGOS, fitaDoSelo, validarSelo, fitasPorItem, aplicarFitas, fitasParaAdmin } from './totemFita.js';
+import { SELOS, CODIGOS, fitaDoSelo, validarSelo, fitasPorItem, aplicarFitas, fitasParaAdmin } from './produtoFita.js';
 
 test('o catálogo é o espelho das fitas do HUB — cinco, com texto e cor', () => {
   assert.deepEqual(SELOS, [

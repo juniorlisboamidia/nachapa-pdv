@@ -39,7 +39,7 @@ import {
 } from './totemEnvio.js';
 // Totem › Apresentação: projeção pura do catálogo (sem Prisma, sem rede) — spec §4.1.
 import { MODOS, validarConfiguracao, projetarCatalogo, mesclarAdmin, sugerirCandidatos } from './totemApresentacao.js';
-import { SELOS, validarSelo, aplicarFitas, fitasParaAdmin } from './totemFita.js';
+import { SELOS, validarSelo, aplicarFitas, fitasParaAdmin, fitasPorItem } from './produtoFita.js';
 import {
   aplicarNomes as aplicarNomesDeCategoria,
   mesclarAdmin as mesclarAdminCategorias,
@@ -89,6 +89,16 @@ import {
 // A validação de imagem é helper TÉCNICO (MIME real por magic bytes, teto de bytes): os
 // dois canais usam a mesma, e ela não sabe o que é banner nem o que é conteúdo.
 import { lerImagem as lerImagemMidia, IMAGEM_MAX_BYTES as TV_IMG_MAX, proximaVersaoImagem as proximaVersaoTv } from './midiaImagem.js';
+// TV Indoor › Menu Board: o segundo tipo de item da programação, alimentado pelo CATÁLOGO.
+import {
+  LAYOUTS as MB_LAYOUTS, LAYOUT_PADRAO as MB_LAYOUT_PADRAO, DURACAO_PADRAO as MB_DUR_PADRAO,
+  DURACAO_MIN as MB_DUR_MIN, DURACAO_MAX as MB_DUR_MAX,
+  validarEntrada as validarMenuBoard, resolverMenuBoard, menuBoardPublico, menuBoardParaAdmin,
+  validarItensPlaylist, itensParaGravar as itensPlaylistParaGravar,
+} from './tvMenuBoard.js';
+// O catálogo da loja com ÚLTIMO-ESTADO-BOM. Serviço NEUTRO: o caminho
+// empresaId → clienteId → HUB → CW é o mesmo do totem, e nenhum navegador fala com o CW.
+import { catalogoDaLoja } from './catalogoDaLoja.js';
 
 // Campos do banner SEM a arte. Existe como constante para que nenhuma consulta esqueça o
 // `select` e arraste blobs — a arte mora em outra tabela justamente por isso, e este
@@ -8769,7 +8779,7 @@ async function comApresentacao(ap, body, resposta) {
       prisma.totemEsperaFundo.findFirst({ where: escopo, select: { empresaId: true } }).catch(() => null),
       // As fitas dos produtos. `.catch` próprio como as outras leituras acessórias: sem a
       // tabela (deploy antes da migration) o card sai sem fita, e o catálogo continua.
-      prisma.totemFita.findMany({ where: escopo, select: { cwItemId: true, selo: true } }).catch(() => []),
+      prisma.produtoFita.findMany({ where: escopo, select: { cwItemId: true, selo: true } }).catch(() => []),
     ]);
     const { catalogo: projetado, avisos } = projetarCatalogo(resposta.catalogo, configuracoes);
     // A fita entra DEPOIS da projeção, porque é do item base e vai para cada produto que a
@@ -9083,6 +9093,41 @@ function exigirTvIndoor(ap, res) {
   return false;
 }
 
+// Os MENU BOARDS de uma programação, resolvidos contra o catálogo atual da loja.
+//
+// Três cuidados que valem o comentário:
+//
+//  · SÓ VAI AO HUB SE PRECISAR. Playlist sem board nenhum não paga chamada nenhuma.
+//
+//  · CATÁLOGO FORA NÃO APAGA A PAREDE. `catalogoDaLoja` devolve o último catálogo bom
+//    quando a chamada falha; sem nem isso, os boards ficam de fora e a TV toca as artes que
+//    restarem — e o player ainda tem a programação anterior em mãos.
+//
+//  · A EMPRESA VEM DO APARELHO. `whereDoAparelho(ap, {})` para as fitas, e o mesmo
+//    `empresaId` para o catálogo: não existe caminho em que o navegador escolha a loja.
+//
+// Devolve um Map `String(boardId)` → board público. Board INELEGÍVEL (desligado, ou sem
+// nenhum produto disponível agora) simplesmente não entra: o player segue para o próximo.
+async function boardsDaProgramacao(ap, itens) {
+  const vazios = new Map();
+  const comBoard = (itens ?? []).filter((i) => i?.tipo === 'MENU_BOARD' && i?.menuBoard);
+  if (!comBoard.length) return vazios;
+  const empresaId = whereDoAparelho(ap, {}).empresaId;
+  const r = await catalogoDaLoja(empresaId, {
+    clienteIdDaEmpresa: clienteIdDaEmpresaTotem,
+    bootstrap: bootstrapTotemCW,
+  }).catch(() => ({ ok: false }));
+  if (!r.ok) return vazios;
+  const linhas = await prisma.produtoFita.findMany({ where: whereDoAparelho(ap, {}), select: { cwItemId: true, selo: true } }).catch(() => []);
+  const fitas = fitasPorItem(linhas);
+  const mapa = new Map();
+  for (const item of comBoard) {
+    const resolvido = resolverMenuBoard(item.menuBoard, r.catalogo, fitas);
+    if (resolvido.elegivel) mapa.set(String(item.menuBoard.id), menuBoardPublico(resolvido));
+  }
+  return mapa;
+}
+
 // A PROGRAMAÇÃO desta tela. Sem um byte de imagem: metadados, a URL versionada de cada
 // conteúdo e o `agoraServidor` que a TV usa para corrigir o próprio relógio.
 //
@@ -9113,18 +9158,25 @@ app.get('/api/public/aparelho/tv/programacao', async (req, res) => {
       select: {
         id: true, nome: true,
         itens: {
-          select: { id: true, ordem: true, conteudo: { select: TV_CAMPOS } },
+          select: {
+            id: true, ordem: true, tipo: true,
+            conteudo: { select: TV_CAMPOS },
+            menuBoard: { select: MB_CAMPOS },
+          },
           orderBy: [{ ordem: 'asc' }, { id: 'asc' }],
         },
       },
     });
     if (!playlist) return vazia();
     const loja = await lojaDoAparelho(ap, {}).catch(() => null);
+    // Os MENU BOARDS resolvidos contra o catálogo ATUAL. Só se vai ao HUB quando a
+    // programação realmente tem board — uma playlist só de artes não paga esse custo.
+    const boards = await boardsDaProgramacao(ap, playlist.itens);
     res.json({
       tela: { id: ap.id, nome: ap.nome },
       loja: loja ? lojaPublica(loja) : null,
       playlist: { id: playlist.id, nome: playlist.nome },
-      ...tvProgramacaoPublica(playlist.itens, agora),
+      ...tvProgramacaoPublica(playlist.itens, agora, { boards }),
     });
   } catch (err) {
     console.error('[public/aparelho tv programacao]', err?.code ?? err?.name ?? 'erro');
@@ -9530,7 +9582,7 @@ app.get('/api/totem/apresentacao', async (req, res) => {
     const [configuracoes, fitas] = await Promise.all([
       prisma.totemApresentacao.findMany({ where: { empresaId }, orderBy: { cwItemId: 'asc' } }),
       // `.catch` próprio: sem a tabela a tela do Cardápio continua abrindo, só sem fitas.
-      prisma.totemFita.findMany({ where: { empresaId }, select: { cwItemId: true, selo: true } }).catch(() => []),
+      prisma.produtoFita.findMany({ where: { empresaId }, select: { cwItemId: true, selo: true } }).catch(() => []),
     ]);
     res.json({
       ...mesclarAdmin(catalogo, configuracoes),
@@ -9589,10 +9641,10 @@ app.put('/api/totem/fita/:cwItemId', async (req, res) => {
     const veredito = validarSelo(req.body?.selo);
     if (!veredito.ok) return res.status(400).json({ erro: veredito.codigo });
     if (veredito.selo === null) {
-      const { count } = await prisma.totemFita.deleteMany({ where: { empresaId, cwItemId } });
+      const { count } = await prisma.produtoFita.deleteMany({ where: { empresaId, cwItemId } });
       return res.json({ ok: true, selo: null, removida: count > 0 });
     }
-    const linha = await prisma.totemFita.upsert({
+    const linha = await prisma.produtoFita.upsert({
       where: { empresaId_cwItemId: { empresaId, cwItemId } },
       create: { empresaId, cwItemId, selo: veredito.selo },
       update: { selo: veredito.selo },
@@ -10255,13 +10307,22 @@ app.get('/api/tv-indoor/conteudos/:id/imagem', async (req, res) => {
 // A programação com os conteúdos já resolvidos: a tela precisa do nome, da miniatura e do
 // status de cada um para mostrar a sequência, e uma segunda chamada por playlist deixaria
 // a tela piscando em lista.
+// Campos do menu board SEM a configuração: a listagem de playlists só precisa do cabeçalho.
+const MB_CABECALHO = { id: true, nome: true, ativo: true, layout: true, duracaoSegundos: true };
+const MB_CAMPOS = { ...MB_CABECALHO, configuracao: true };
+
 const TV_PLAYLIST_INCLUDE = {
   id: true, nome: true,
   itens: {
-    select: { id: true, ordem: true, conteudo: { select: TV_CAMPOS } },
+    // POLIMÓRFICO: cada item traz a referência que lhe cabe, e só ela. O `tipo` é o que
+    // permite à mesma programação alternar arte promocional e menu board.
+    select: { id: true, ordem: true, tipo: true, conteudo: { select: TV_CAMPOS }, menuBoard: { select: MB_CABECALHO } },
     orderBy: [{ ordem: 'asc' }, { id: 'asc' }],
   },
 };
+
+// A playlist para o admin, com o cabeçalho de cada board já no formato da tela.
+const tvPlaylistAdmin = (linha) => tvPlaylistParaAdmin(linha, Date.now(), menuBoardParaAdmin);
 
 app.get('/api/tv-indoor/playlists', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
@@ -10270,8 +10331,7 @@ app.get('/api/tv-indoor/playlists', async (req, res) => {
     const linhas = await prisma.tvPlaylist.findMany({
       where: { empresaId }, select: TV_PLAYLIST_INCLUDE, orderBy: [{ nome: 'asc' }, { id: 'asc' }],
     });
-    const agora = Date.now();
-    res.json({ playlists: linhas.map((p) => tvPlaylistParaAdmin(p, agora)), agoraServidor: new Date(agora).toISOString() });
+    res.json({ playlists: linhas.map(tvPlaylistAdmin), agoraServidor: new Date().toISOString() });
   } catch (err) { console.error('[tv-indoor/playlists]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
 });
 
@@ -10282,7 +10342,7 @@ app.post('/api/tv-indoor/playlists', async (req, res) => {
     const v = validarNomePlaylist(req.body?.nome);
     if (!v.ok) return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros: [{ campo: 'nome', motivo: v.motivo }] });
     const criada = await prisma.tvPlaylist.create({ data: { empresaId, nome: v.nome }, select: TV_PLAYLIST_INCLUDE });
-    res.status(201).json({ ok: true, playlist: tvPlaylistParaAdmin(criada, Date.now()) });
+    res.status(201).json({ ok: true, playlist: tvPlaylistAdmin(criada) });
   } catch (err) { console.error('[tv-indoor/playlists POST]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
 });
 
@@ -10297,7 +10357,7 @@ app.put('/api/tv-indoor/playlists/:id', async (req, res) => {
     const { count } = await prisma.tvPlaylist.updateMany({ where: { id, empresaId }, data: { nome: v.nome } });
     if (!count) return res.status(404).json({ erro: 'NAO_ENCONTRADO' });
     const linha = await prisma.tvPlaylist.findFirst({ where: { id, empresaId }, select: TV_PLAYLIST_INCLUDE });
-    res.json({ ok: true, playlist: tvPlaylistParaAdmin(linha, Date.now()) });
+    res.json({ ok: true, playlist: tvPlaylistAdmin(linha) });
   } catch (err) { console.error('[tv-indoor/playlists PUT]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
 });
 
@@ -10318,18 +10378,35 @@ app.put('/api/tv-indoor/playlists/:id/itens', async (req, res) => {
     const playlist = await prisma.tvPlaylist.findFirst({ where: { id, empresaId }, select: { id: true } });
     if (!playlist) return res.status(404).json({ erro: 'NAO_ENCONTRADO' });
 
-    const meus = await prisma.tvConteudo.findMany({ where: { empresaId }, select: { id: true } });
-    const v = validarItensTv(req.body?.ids, new Set(meus.map((c) => c.id)));
-    if (!v.ok) return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros: [{ campo: 'ids', motivo: v.motivo }] });
+    // Os dois conjuntos permitidos saem de consultas ESCOPADAS. É por aqui que o board da
+    // empresa B não entra na playlist da A — e o domínio RECUSA o que não estiver neles, em
+    // vez de filtrar: filtrar deixaria a tela dizendo "salvo" com menos itens do que o
+    // gestor escolheu, sem ele saber qual sumiu.
+    const [meusConteudos, meusBoards] = await Promise.all([
+      prisma.tvConteudo.findMany({ where: { empresaId }, select: { id: true } }),
+      prisma.tvMenuBoard.findMany({ where: { empresaId }, select: { id: true } }).catch(() => []),
+    ]);
+    const disponiveis = {
+      conteudos: new Set(meusConteudos.map((c) => c.id)),
+      boards: new Set(meusBoards.map((b) => b.id)),
+    };
+    // Contrato ADITIVO: `itens` é o corpo polimórfico novo; `ids` continua aceito e vira
+    // uma lista só de imagens — é o formato que a tela usava antes do Menu Board.
+    const corpo = Array.isArray(req.body?.itens)
+      ? req.body.itens
+      : (Array.isArray(req.body?.ids) ? req.body.ids.map((x) => ({ tipo: 'IMAGEM', conteudoId: Number(x) })) : null);
+    const v = validarItensPlaylist(corpo, disponiveis);
+    if (!v.ok) return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros: [{ campo: 'itens', motivo: v.motivo }] });
+    if (v.itens.length > TV_MAX_ITENS) return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros: [{ campo: 'itens', motivo: 'LIMITE_DE_ITENS' }] });
 
     // Apagar e recriar dentro da MESMA transação: a programação nunca fica pela metade, e
     // uma TV que buscar no meio da troca lê o estado antigo ou o novo, nunca um híbrido.
     await prisma.$transaction([
       prisma.tvPlaylistItem.deleteMany({ where: { playlistId: id } }),
-      ...(v.ids.length ? [prisma.tvPlaylistItem.createMany({ data: itensTvParaGravar(id, v.ids) })] : []),
+      ...(v.itens.length ? [prisma.tvPlaylistItem.createMany({ data: itensPlaylistParaGravar(id, v.itens) })] : []),
     ]);
     const linha = await prisma.tvPlaylist.findFirst({ where: { id, empresaId }, select: TV_PLAYLIST_INCLUDE });
-    res.json({ ok: true, playlist: tvPlaylistParaAdmin(linha, Date.now()) });
+    res.json({ ok: true, playlist: tvPlaylistAdmin(linha) });
   } catch (err) { console.error('[tv-indoor/playlists itens PUT]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
 });
 
@@ -10346,6 +10423,137 @@ app.delete('/api/tv-indoor/playlists/:id', async (req, res) => {
     if (!count) return res.status(404).json({ erro: 'NAO_ENCONTRADO' });
     res.json({ ok: true });
   } catch (err) { console.error('[tv-indoor/playlists DELETE]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// ── Menu Boards ─────────────────────────────────────────────────────────────
+// O segundo tipo de item da programação: uma tela montada com o CATÁLOGO REAL da loja.
+//
+// O que se guarda aqui é REFERÊNCIA e ESCOLHA (qual categoria, quais itens, em que ordem,
+// qual é o destaque). Nome, preço, foto, promoção e disponibilidade NÃO são gravados: eles
+// vêm do Cardápio Web a cada resolução, e uma cópia aqui seria uma segunda fonte de verdade
+// sobre dinheiro. Mudou o preço lá, muda na parede no próximo refresh.
+app.get('/api/tv-indoor/menu-boards', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const linhas = await prisma.tvMenuBoard.findMany({
+      where: { empresaId }, select: MB_CAMPOS, orderBy: [{ nome: 'asc' }, { id: 'asc' }],
+    });
+    res.json({
+      // A LISTAGEM não resolve catálogo nenhum, de propósito: ela precisa abrir mesmo com o
+      // HUB fora do ar. Quem consulta o cardápio é a tela de edição e a programação da TV.
+      menuBoards: linhas.map(menuBoardParaAdmin),
+      layouts: Object.values(MB_LAYOUTS),
+      limites: { duracaoMin: MB_DUR_MIN, duracaoMax: MB_DUR_MAX, duracaoPadrao: MB_DUR_PADRAO },
+    });
+  } catch (err) { console.error('[tv-indoor/menu-boards]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+app.post('/api/tv-indoor/menu-boards', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const v = validarMenuBoard(req.body, { exigirNome: true, layoutAtual: req.body?.layout ?? MB_LAYOUT_PADRAO });
+    if (!v.ok) return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros: v.erros });
+    const criado = await prisma.tvMenuBoard.create({
+      data: { empresaId, ...v.dados, configuracao: v.dados.configuracao ?? { titulo: '', itens: [] } },
+      select: MB_CAMPOS,
+    });
+    res.status(201).json({ ok: true, menuBoard: menuBoardParaAdmin(criado) });
+  } catch (err) { console.error('[tv-indoor/menu-boards POST]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+app.put('/api/tv-indoor/menu-boards/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ erro: 'ID_INVALIDO' });
+    const atual = await prisma.tvMenuBoard.findFirst({ where: { id, empresaId }, select: MB_CAMPOS });
+    if (!atual) return res.status(404).json({ erro: 'NAO_ENCONTRADO' });
+    // A configuração é validada contra o layout FINAL (o do corpo, ou o já salvo): trocar de
+    // DESTAQUE para GRADE mandando a configuração antiga guardaria uma escolha que o layout
+    // novo ignora em silêncio.
+    const v = validarMenuBoard(req.body, { layoutAtual: atual.layout });
+    if (!v.ok) return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros: v.erros });
+    const linha = await prisma.tvMenuBoard.update({ where: { id }, data: v.dados, select: MB_CAMPOS });
+    res.json({ ok: true, menuBoard: menuBoardParaAdmin(linha) });
+  } catch (err) { console.error('[tv-indoor/menu-boards PUT]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// Excluir. `deleteMany` com empresaId: id adulterado apaga ZERO linhas. Os itens de playlist
+// que apontavam para ele vão junto por CASCADE — a programação simplesmente encurta, e a TV
+// segue tocando o resto.
+app.delete('/api/tv-indoor/menu-boards/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ erro: 'ID_INVALIDO' });
+    const { count } = await prisma.tvMenuBoard.deleteMany({ where: { id, empresaId } });
+    if (!count) return res.status(404).json({ erro: 'NAO_ENCONTRADO' });
+    res.json({ ok: true });
+  } catch (err) { console.error('[tv-indoor/menu-boards DELETE]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// O CATÁLOGO para escolher os produtos, e a PRÉVIA de um board já configurado.
+//
+// O catálogo sai do serviço neutro (`catalogoDaLoja`), que é quem tem o último-estado-bom:
+// com o HUB fora do ar por um minuto, a tela ainda abre com os últimos preços conhecidos e
+// diz que está desatualizada, em vez de mostrar "erro" e sumir com a seleção do gestor.
+//
+// `empresaId` vem da SESSÃO. O catálogo é o da loja da sessão e de mais nenhuma: não existe
+// caminho em que o navegador escolha de quem é o cardápio.
+async function catalogoParaMenuBoard(empresaId) {
+  const r = await catalogoDaLoja(empresaId, {
+    clienteIdDaEmpresa: clienteIdDaEmpresaTotem,
+    bootstrap: bootstrapTotemCW,
+  });
+  const fitas = await prisma.produtoFita.findMany({ where: { empresaId }, select: { cwItemId: true, selo: true } }).catch(() => []);
+  return { ...r, fitas: fitasPorItem(fitas) };
+}
+
+app.get('/api/tv-indoor/catalogo', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const r = await catalogoParaMenuBoard(empresaId);
+    if (!r.ok) return res.status(r.codigo === 'CLIENTE_SEM_CW' ? 409 : 503).json({ erro: r.codigo });
+    // Só o que a escolha precisa: categoria, id, nome, foto, preço e disponibilidade. Os
+    // grupos de opções do item (a árvore técnica do CW) ficariam pesados e não servem aqui.
+    const categorias = (r.catalogo.categorias ?? []).map((c) => ({
+      id: c?.id, nome: c?.nome ?? null,
+      itens: (c?.itens ?? []).map((i) => ({
+        id: i?.id, nome: i?.nome ?? null, descricao: i?.descricao ?? null,
+        imagem: i?.imagem ?? null, preco: i?.preco ?? null,
+        ...(typeof i?.precoPromocional === 'number' ? { precoPromocional: i.precoPromocional } : {}),
+        status: i?.status ?? null,
+        selo: r.fitas.get(String(i?.id)) ?? null,
+      })),
+    }));
+    res.json({ categorias, desatualizado: r.desatualizado === true, catalogoEm: r.em ?? null, selos: SELOS });
+  } catch (err) { console.error('[tv-indoor/catalogo]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// A PRÉVIA: o board resolvido contra o catálogo atual, exatamente como a TV o receberá —
+// mesma função (`resolverMenuBoard`), mesmos campos. É o que garante que o admin e a parede
+// não mostrem coisas diferentes.
+//
+// A prévia leva o que a TV NÃO leva: `ausentes`, as referências que não existem mais no
+// catálogo. É assim que o gestor descobre que um produto saiu do cardápio — e a referência
+// NÃO é apagada por isso: some-la seria perder a escolha dele sem aviso.
+app.get('/api/tv-indoor/menu-boards/:id/previa', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ erro: 'ID_INVALIDO' });
+    const board = await prisma.tvMenuBoard.findFirst({ where: { id, empresaId }, select: MB_CAMPOS });
+    if (!board) return res.status(404).json({ erro: 'NAO_ENCONTRADO' });
+    const r = await catalogoParaMenuBoard(empresaId);
+    if (!r.ok) return res.status(r.codigo === 'CLIENTE_SEM_CW' ? 409 : 503).json({ erro: r.codigo });
+    res.json({ previa: resolverMenuBoard(board, r.catalogo, r.fitas), desatualizado: r.desatualizado === true });
+  } catch (err) { console.error('[tv-indoor/menu-boards previa]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
 });
 
 // ── Telas ───────────────────────────────────────────────────────────────────

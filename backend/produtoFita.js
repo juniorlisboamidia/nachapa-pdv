@@ -1,8 +1,15 @@
-// A FITA do produto no totem — módulo puro (sem Prisma, sem Express, sem rede).
+// A FITA do produto — módulo puro, NEUTRO de canal (sem Prisma, sem Express, sem rede).
 //
-// A fita é a faixa diagonal no canto do card ("Mais pedido", "Novidade"…). É APRESENTAÇÃO
-// deste canal, como o modo vitrine e o nome exibido da categoria: o Cardápio Web não tem
-// esse dado, e por isso ele mora no PDV, uma linha por (empresa, item do CW).
+// A fita é o selo do produto ("Mais pedido", "Novidade"…): a faixa diagonal no canto do card
+// no totem, e a etiqueta sobre a foto no Menu Board da TV. O Cardápio Web não tem esse dado,
+// e por isso ele mora no PDV, uma linha por (empresa, item do CW).
+//
+// ── POR QUE NEUTRO, E NÃO DO TOTEM ────────────────────────────────────────────────────
+// Nasceu como `totemFita.js` e mudou de nome quando a TV Indoor precisou da mesma marcação.
+// A razão é de produto, não de arquitetura: marcar "Mais pedido" é uma decisão sobre o
+// PRODUTO da loja, não sobre um canal. O gestor marca uma vez e aparece nos dois — pedir o
+// mesmo cadastro duas vezes seria inventar trabalho. Por isso a tabela também se chama
+// `ProdutoFita`: canais IRMÃOS podem dividir catálogo; o que eles não dividem é apresentação.
 //
 // O catálogo é o MESMO das fitas do HUB (frontend/src/pages/marketing/fitas.js, espelho de
 // backend/marketing/fitas.js lá): os mesmos cinco códigos, os mesmos textos e as mesmas
@@ -15,6 +22,9 @@
 //
 // A fita é do ITEM BASE. Num item em modo vitrine (um card por opção) ela vai para TODOS os
 // cards daquele item. Fita por opção não existe.
+//
+// `aplicarFitas` abaixo é do TOTEM (trabalha sobre o catálogo projetado, com `produtos`); a
+// TV usa `fitasPorItem` direto, contra o catálogo cru. As duas leem o MESMO dado.
 
 export const SELOS = Object.freeze([
   { codigo: 'MAIS_PEDIDO', rotulo: 'Mais pedido', cor: '#B45309' },

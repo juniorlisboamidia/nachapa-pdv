@@ -1,0 +1,336 @@
+// TV Indoor › Menu Board — testes puros do domínio (node --test, ESM).
+// Rodar: node --test backend/tvMenuBoard.test.js
+//
+// O que estes testes defendem:
+//   1. TRÊS layouts, com tetos próprios; layout inventado é recusado;
+//   2. a configuração guarda REFERÊNCIA e ESCOLHA — nunca nome, preço, foto ou status;
+//   3. o id do CW não tem tipo presumido: number e string valem, e a comparação é por texto;
+//   4. indisponível NÃO aparece; todos indisponíveis → board inelegível;
+//   5. produto sumido do catálogo vira `ausentes` (o admin avisa) e NÃO é apagado;
+//   6. promoção sai só dos dois preços do catálogo, e o percentual some quando não é oferta;
+//   7. item polimórfico: exatamente uma referência, nunca duas, nunca nenhuma;
+//   8. referência de outra empresa é RECUSADA, não filtrada em silêncio.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  LAYOUTS, LAYOUT_IDS, LAYOUT_PADRAO, DURACAO_PADRAO, DURACAO_MIN, DURACAO_MAX,
+  MOTIVO_NOME, MOTIVO_LAYOUT, MOTIVO_DURACAO, MOTIVO_ITENS, MOTIVO_LIMITE, MOTIVO_DESTAQUE,
+  MOTIVO_TIPO, MOTIVO_REFERENCIA, TIPOS_ITEM,
+  refValida, layoutValido, tetoDoLayout, validarConfiguracao, validarEntrada,
+  indexarCatalogo, produtoParaTv, disponivel, resolverMenuBoard, menuBoardPublico,
+  menuBoardParaAdmin, validarItensPlaylist, itensParaGravar,
+} from './tvMenuBoard.js';
+
+// Catálogo CRU, no shape que o HUB devolve (categorias[].itens[]).
+const CATALOGO = {
+  categorias: [
+    {
+      id: 10,
+      nome: '🍔 TRADICIONAIS',
+      itens: [
+        { id: 3527346, nome: 'X BACON', descricao: 'Pão, carne e bacon', imagem: 'https://cw/x.jpg', preco: 31.9, status: 'ACTIVE' },
+        { id: 3529326, nome: 'MAPLE', descricao: null, imagem: null, preco: 25, status: 'ACTIVE', precoPromocional: 19.9 },
+        { id: 3722673, nome: 'ESPECIAL', descricao: 'Da casa', imagem: 'https://cw/e.jpg', preco: 22, status: 'MISSING' },
+      ],
+    },
+    { id: 20, nome: 'COMBOS', itens: [{ id: 4384008, nome: 'SUPER BOX', preco: 152, status: 'ACTIVE' }] },
+  ],
+};
+
+// ── Layouts ──────────────────────────────────────────────────────────────────
+test('são TRÊS layouts fechados, com tetos pensados para 1920×1080', () => {
+  assert.deepEqual(LAYOUT_IDS, ['GRADE', 'LISTA', 'DESTAQUE']);
+  assert.equal(LAYOUTS.GRADE.maximo, 8, '4 × 2');
+  assert.equal(LAYOUTS.LISTA.maximo, 10);
+  assert.equal(LAYOUTS.DESTAQUE.maximo, 5, '1 grande + 2 × 2');
+  assert.equal(LAYOUTS.DESTAQUE.destaque, true);
+  assert.equal(LAYOUTS.GRADE.destaque, false, 'só o layout de destaque tem destaque');
+  assert.equal(LAYOUT_PADRAO, 'GRADE');
+});
+
+test('layout inventado é recusado', () => {
+  for (const ruim of ['CANVAS', 'grade', 'ZONAS', '', null, 3]) assert.equal(layoutValido(ruim), false, String(ruim));
+  assert.equal(validarEntrada({ layout: 'CANVAS' }).erros[0].motivo, MOTIVO_LAYOUT);
+  assert.equal(tetoDoLayout('CANVAS'), 8, 'teto desconhecido cai no padrão em vez de virar NaN');
+});
+
+// ── Referência do CW ─────────────────────────────────────────────────────────
+test('🔴 a referência do CW não tem tipo presumido: number e string valem', () => {
+  assert.equal(refValida(3527346), true);
+  assert.equal(refValida('3527346'), true);
+  assert.equal(refValida('abc-123'), true, 'um CW que um dia use id textual não quebra o board');
+  for (const ruim of [0, -1, 1.5, '', '   ', null, undefined, {}, [], true, 'x'.repeat(41)]) {
+    assert.equal(refValida(ruim), false, String(ruim));
+  }
+});
+
+// ── Configuração ─────────────────────────────────────────────────────────────
+test('validarConfiguracao guarda só referência, título e ordem', () => {
+  const v = validarConfiguracao({
+    cwCategoriaId: 10, titulo: '  Hambúrgueres  ',
+    itens: [{ cwItemId: 3527346, nome: 'X BACON', preco: 31.9 }, { cwItemId: '3529326' }],
+  }, 'GRADE');
+  assert.equal(v.ok, true);
+  assert.deepEqual(v.configuracao, {
+    cwCategoriaId: 10, titulo: 'Hambúrgueres',
+    itens: [{ cwItemId: 3527346 }, { cwItemId: '3529326' }],
+  });
+  const json = JSON.stringify(v.configuracao);
+  for (const proibido of ['nome', 'preco', 'imagem', 'status', 'X BACON', '31.9']) {
+    assert.equal(json.includes(proibido), false, `a configuração não pode guardar ${proibido}`);
+  }
+});
+
+test('a ORDEM escolhida é preservada', () => {
+  const v = validarConfiguracao({ itens: [{ cwItemId: 3 }, { cwItemId: 1 }, { cwItemId: 2 }] }, 'GRADE');
+  assert.deepEqual(v.configuracao.itens.map((i) => i.cwItemId), [3, 1, 2]);
+});
+
+test('teto por layout, item repetido e referência torta são recusados', () => {
+  const nove = Array.from({ length: 9 }, (_, i) => ({ cwItemId: i + 1 }));
+  assert.equal(validarConfiguracao({ itens: nove }, 'GRADE').motivo, MOTIVO_LIMITE);
+  assert.equal(validarConfiguracao({ itens: nove.slice(0, 8) }, 'GRADE').ok, true);
+  assert.equal(validarConfiguracao({ itens: nove.slice(0, 6) }, 'DESTAQUE').motivo, MOTIVO_LIMITE);
+  assert.equal(validarConfiguracao({ itens: [{ cwItemId: 1 }, { cwItemId: '1' }] }, 'GRADE').motivo, MOTIVO_ITENS,
+    'o mesmo produto duas vezes na mesma tela é engano — e 1 e "1" são o mesmo produto');
+  assert.equal(validarConfiguracao({ itens: [{ cwItemId: 0 }] }, 'GRADE').motivo, MOTIVO_ITENS);
+  assert.equal(validarConfiguracao({ itens: 'x' }, 'GRADE').motivo, MOTIVO_ITENS);
+  assert.equal(validarConfiguracao({}, 'GRADE').motivo, MOTIVO_ITENS);
+});
+
+test('destaque: só no layout que o tem, e só um', () => {
+  assert.equal(validarConfiguracao({ itens: [{ cwItemId: 1, destaque: true }] }, 'GRADE').motivo, MOTIVO_DESTAQUE,
+    'marcar destaque numa grade guardaria uma escolha sem efeito');
+  assert.equal(validarConfiguracao({ itens: [{ cwItemId: 1, destaque: true }] }, 'DESTAQUE').ok, true);
+  assert.equal(
+    validarConfiguracao({ itens: [{ cwItemId: 1, destaque: true }, { cwItemId: 2, destaque: true }] }, 'DESTAQUE').motivo,
+    MOTIVO_DESTAQUE,
+  );
+});
+
+test('validarEntrada: PUT parcial não apaga o resto; nome e duração têm régua', () => {
+  assert.deepEqual(Object.keys(validarEntrada({ nome: ' Almoço ' }).dados), ['nome']);
+  assert.equal(validarEntrada({ nome: '  ' }, { exigirNome: true }).erros[0].motivo, MOTIVO_NOME);
+  assert.equal(validarEntrada({ duracaoSegundos: 4 }).erros[0].motivo, MOTIVO_DURACAO);
+  assert.equal(validarEntrada({ duracaoSegundos: 121 }).erros[0].motivo, MOTIVO_DURACAO);
+  assert.equal(validarEntrada({ duracaoSegundos: DURACAO_MIN }).dados.duracaoSegundos, DURACAO_MIN);
+  assert.equal(validarEntrada({ duracaoSegundos: DURACAO_MAX }).dados.duracaoSegundos, DURACAO_MAX);
+  assert.equal(DURACAO_PADRAO, 20, 'um menu precisa ser LIDO — 10 s de arte é pouco');
+});
+
+test('🔴 a configuração é validada contra o layout FINAL, não o salvo', () => {
+  // Trocar de DESTAQUE para GRADE mandando a configuração antiga (com destaque) tem de ser
+  // recusado: aceitar guardaria uma escolha que o layout novo ignora em silêncio.
+  const v = validarEntrada(
+    { layout: 'GRADE', configuracao: { itens: [{ cwItemId: 1, destaque: true }] } },
+    { layoutAtual: 'DESTAQUE' },
+  );
+  assert.equal(v.ok, false);
+  assert.equal(v.erros[0].motivo, MOTIVO_DESTAQUE);
+});
+
+// ── Resolução contra o catálogo ──────────────────────────────────────────────
+test('indexarCatalogo: por texto, primeira ocorrência vence, torto não lança', () => {
+  const i = indexarCatalogo(CATALOGO);
+  assert.equal(i.get('3527346').nome, 'X BACON');
+  assert.equal(i.size, 4);
+  assert.equal(indexarCatalogo(null).size, 0);
+  assert.equal(indexarCatalogo({ categorias: [null, { itens: 'x' }] }).size, 0);
+});
+
+test('produtoParaTv: preço normal, sem campos de promoção', () => {
+  const p = produtoParaTv(CATALOGO.categorias[0].itens[0]);
+  assert.deepEqual(p, {
+    id: '3527346', nome: 'X BACON', descricao: 'Pão, carne e bacon',
+    imagemUrl: 'https://cw/x.jpg', preco: 31.9,
+  });
+  assert.equal('precoAnterior' in p, false);
+  assert.equal('descontoPercentual' in p, false);
+});
+
+test('🔴 promoção: o promocional é o preço ATUAL e o outro vira o anterior', () => {
+  const p = produtoParaTv(CATALOGO.categorias[0].itens[1]);
+  assert.equal(p.preco, 19.9, 'é o que o cliente paga');
+  assert.equal(p.precoAnterior, 25);
+  assert.equal(p.descontoPercentual, 20);
+});
+
+test('promoção que não é oferta não vira desconto', () => {
+  for (const par of [{ preco: 10, precoPromocional: 10 }, { preco: 10, precoPromocional: 12 }, { preco: 0, precoPromocional: 0 }]) {
+    const p = produtoParaTv({ id: 1, ...par });
+    assert.equal('descontoPercentual' in p, false, JSON.stringify(par));
+  }
+  // Promoção ausente NÃO é `precoPromocional: null` — a chave simplesmente não existe.
+  assert.equal('precoAnterior' in produtoParaTv({ id: 1, preco: 10, precoPromocional: null }), false);
+});
+
+test('o SELO vem resolvido em texto e cor (o mesmo do HUB)', () => {
+  const p = produtoParaTv({ id: 1, preco: 10 }, 'MAIS_PEDIDO');
+  assert.deepEqual(p.selo, { texto: 'Mais pedido', cor: '#B45309' });
+  assert.equal('selo' in produtoParaTv({ id: 1, preco: 10 }), false);
+  assert.equal('selo' in produtoParaTv({ id: 1, preco: 10 }, 'INVENTADO'), false);
+});
+
+test('disponivel: só ACTIVE aparece; status ausente conta como disponível', () => {
+  assert.equal(disponivel({ status: 'ACTIVE' }), true);
+  assert.equal(disponivel({ status: 'MISSING' }), false);
+  assert.equal(disponivel({ status: 'INACTIVE' }), false);
+  assert.equal(disponivel({}), true, 'catálogo de versão anterior não pode esvaziar a parede');
+});
+
+const board = (extra) => ({
+  id: 7, nome: 'Almoço', ativo: true, layout: 'GRADE', duracaoSegundos: 20,
+  configuracao: { titulo: 'Hambúrgueres', itens: [{ cwItemId: 3527346 }, { cwItemId: 3529326 }] },
+  ...extra,
+});
+
+test('resolverMenuBoard monta a tela na ordem escolhida', () => {
+  const r = resolverMenuBoard(board(), CATALOGO, new Map([['3527346', 'OFERTA']]));
+  assert.deepEqual(r.produtos.map((p) => p.nome), ['X BACON', 'MAPLE']);
+  assert.deepEqual(r.produtos[0].selo, { texto: 'Oferta', cor: '#15803D' });
+  assert.equal(r.produtos[1].descontoPercentual, 20);
+  assert.equal(r.titulo, 'Hambúrgueres');
+  assert.equal(r.elegivel, true);
+  assert.deepEqual(r.ausentes, []);
+});
+
+test('🔴 produto INDISPONÍVEL não aparece — e o board não preenche o buraco sozinho', () => {
+  const r = resolverMenuBoard(
+    board({ configuracao: { itens: [{ cwItemId: 3527346 }, { cwItemId: 3722673 }] } }),
+    CATALOGO, new Map(),
+  );
+  assert.deepEqual(r.produtos.map((p) => p.nome), ['X BACON'], 'o MISSING sai');
+  assert.equal(r.produtos.length, 1, 'nada é preenchido com produto que o gestor não escolheu');
+  assert.equal(r.elegivel, true);
+});
+
+test('🔴 TODOS indisponíveis → board INELEGÍVEL (o player segue para o próximo)', () => {
+  const r = resolverMenuBoard(board({ configuracao: { itens: [{ cwItemId: 3722673 }] } }), CATALOGO, new Map());
+  assert.deepEqual(r.produtos, []);
+  assert.equal(r.elegivel, false);
+});
+
+test('board DESLIGADO não é elegível, mesmo com produtos', () => {
+  assert.equal(resolverMenuBoard(board({ ativo: false }), CATALOGO, new Map()).elegivel, false);
+});
+
+test('🔴 produto que sumiu do catálogo vira AUSENTE e NÃO é apagado', () => {
+  const r = resolverMenuBoard(
+    board({ configuracao: { itens: [{ cwItemId: 3527346 }, { cwItemId: 999999 }] } }),
+    CATALOGO, new Map(),
+  );
+  assert.deepEqual(r.ausentes, ['999999'], 'o admin avisa "não encontrado no catálogo"');
+  assert.deepEqual(r.produtos.map((p) => p.id), ['3527346']);
+});
+
+test('catálogo vazio (HUB fora e sem cache) não lança: board inelegível', () => {
+  const r = resolverMenuBoard(board(), null, null);
+  assert.equal(r.elegivel, false);
+  assert.deepEqual(r.produtos, []);
+  assert.equal(r.ausentes.length, 2);
+});
+
+test('DESTAQUE: o escolhido manda; sem escolha, vale o primeiro disponível', () => {
+  const comEscolha = resolverMenuBoard(
+    board({ layout: 'DESTAQUE', configuracao: { itens: [{ cwItemId: 3527346 }, { cwItemId: 3529326, destaque: true }] } }),
+    CATALOGO, new Map(),
+  );
+  assert.equal(comEscolha.destaqueId, '3529326');
+  const sem = resolverMenuBoard(
+    board({ layout: 'DESTAQUE', configuracao: { itens: [{ cwItemId: 3527346 }, { cwItemId: 3529326 }] } }),
+    CATALOGO, new Map(),
+  );
+  assert.equal(sem.destaqueId, '3527346', 'layout de destaque sem destaque abriria um buraco na tela');
+  // O destaque escolhido ficou indisponível: o primeiro que sobrou assume.
+  const caiu = resolverMenuBoard(
+    board({ layout: 'DESTAQUE', configuracao: { itens: [{ cwItemId: 3722673, destaque: true }, { cwItemId: 3529326 }] } }),
+    CATALOGO, new Map(),
+  );
+  assert.equal(caiu.destaqueId, '3529326');
+});
+
+test('GRADE nunca ganha destaqueId', () => {
+  const r = resolverMenuBoard(board({ configuracao: { itens: [{ cwItemId: 3527346, destaque: true }] } }), CATALOGO, new Map());
+  assert.equal('destaqueId' in r, false);
+});
+
+// ── Saídas ───────────────────────────────────────────────────────────────────
+test('🔴 o board público declara o tipo e não leva nada de admin nem byte nenhum', () => {
+  const p = menuBoardPublico(resolverMenuBoard(board(), CATALOGO, new Map()));
+  assert.equal(p.tipo, 'menu_board');
+  assert.deepEqual(Object.keys(p).sort(), ['duracaoSegundos', 'id', 'layout', 'produtos', 'tipo', 'titulo']);
+  assert.equal('ausentes' in p, false, 'referência quebrada é assunto do admin');
+  assert.equal('nome' in p, false, 'o nome é etiqueta interna; na tela aparece o título');
+  assert.equal('elegivel' in p, false);
+  assert.equal(JSON.stringify(p).includes('base64'), false);
+  // A foto é URL do catálogo — nenhum byte copiado para o banco do PDV.
+  assert.equal(p.produtos[0].imagemUrl, 'https://cw/x.jpg');
+});
+
+test('menuBoardParaAdmin abre sem catálogo nenhum', () => {
+  const a = menuBoardParaAdmin(board());
+  assert.equal(a.qtdItens, 2);
+  assert.equal(a.maximo, 8);
+  assert.equal(a.titulo, 'Hambúrgueres');
+  assert.deepEqual(a.itens, [{ cwItemId: 3527346 }, { cwItemId: 3529326 }]);
+});
+
+// ── Item polimórfico da playlist ─────────────────────────────────────────────
+const MEUS = { conteudos: new Set([1, 2]), boards: new Set([7, 8]) };
+
+test('a playlist aceita imagem e board misturados, na ordem', () => {
+  const v = validarItensPlaylist([
+    { tipo: 'IMAGEM', conteudoId: 2 },
+    { tipo: 'MENU_BOARD', menuBoardId: 7 },
+    { tipo: 'IMAGEM', conteudoId: 1 },
+  ], MEUS);
+  assert.equal(v.ok, true);
+  assert.deepEqual(v.itens, [
+    { tipo: 'IMAGEM', conteudoId: 2 },
+    { tipo: 'MENU_BOARD', menuBoardId: 7 },
+    { tipo: 'IMAGEM', conteudoId: 1 },
+  ]);
+});
+
+test('playlist só de imagem e playlist só de board continuam valendo', () => {
+  assert.equal(validarItensPlaylist([{ tipo: 'IMAGEM', conteudoId: 1 }], MEUS).ok, true);
+  assert.equal(validarItensPlaylist([{ tipo: 'MENU_BOARD', menuBoardId: 7 }], MEUS).ok, true);
+  assert.deepEqual(validarItensPlaylist([], MEUS), { ok: true, itens: [] });
+});
+
+test('🔴 item sem tipo é IMAGEM — é o que faz a playlist antiga continuar valendo', () => {
+  const v = validarItensPlaylist([{ conteudoId: 1 }], MEUS);
+  assert.deepEqual(v.itens, [{ tipo: 'IMAGEM', conteudoId: 1 }]);
+});
+
+test('🔴 item polimórfico inválido é recusado: nunca os dois, nunca nenhum', () => {
+  assert.equal(validarItensPlaylist([{ tipo: 'IMAGEM', conteudoId: 1, menuBoardId: 7 }], MEUS).motivo, MOTIVO_REFERENCIA);
+  assert.equal(validarItensPlaylist([{ tipo: 'MENU_BOARD', conteudoId: 1, menuBoardId: 7 }], MEUS).motivo, MOTIVO_REFERENCIA);
+  assert.equal(validarItensPlaylist([{ tipo: 'IMAGEM' }], MEUS).motivo, MOTIVO_REFERENCIA);
+  assert.equal(validarItensPlaylist([{ tipo: 'MENU_BOARD' }], MEUS).motivo, MOTIVO_REFERENCIA);
+  assert.equal(validarItensPlaylist([{ tipo: 'IMAGEM', conteudoId: 0 }], MEUS).motivo, MOTIVO_REFERENCIA);
+  assert.equal(validarItensPlaylist([{ tipo: 'VIDEO', conteudoId: 1 }], MEUS).motivo, MOTIVO_TIPO);
+  assert.equal(validarItensPlaylist(null, MEUS).motivo, MOTIVO_ITENS);
+  assert.deepEqual(TIPOS_ITEM, ['IMAGEM', 'MENU_BOARD']);
+});
+
+test('🔴 board de OUTRA empresa é RECUSADO, nunca filtrado em silêncio', () => {
+  // É por aqui que a playlist da empresa A não recebe o board da B. Filtrar deixaria a tela
+  // dizendo "salvo" com menos itens do que o gestor escolheu.
+  assert.equal(validarItensPlaylist([{ tipo: 'MENU_BOARD', menuBoardId: 99 }], MEUS).motivo, MOTIVO_REFERENCIA);
+  assert.equal(validarItensPlaylist([{ tipo: 'IMAGEM', conteudoId: 99 }], MEUS).motivo, MOTIVO_REFERENCIA);
+});
+
+test('o mesmo item repetido na playlist é recusado; tipos diferentes com o mesmo id não', () => {
+  assert.equal(validarItensPlaylist([{ tipo: 'IMAGEM', conteudoId: 1 }, { tipo: 'IMAGEM', conteudoId: 1 }], MEUS).motivo, MOTIVO_ITENS);
+  // conteúdo 1 e board 7 são coisas diferentes; ids iguais em tabelas diferentes não colidem.
+  assert.equal(validarItensPlaylist([{ tipo: 'IMAGEM', conteudoId: 1 }, { tipo: 'MENU_BOARD', menuBoardId: 7 }], MEUS).ok, true);
+});
+
+test('itensParaGravar numera pela POSIÇÃO e deixa a outra referência NULA', () => {
+  assert.deepEqual(itensParaGravar(3, [{ tipo: 'MENU_BOARD', menuBoardId: 7 }, { tipo: 'IMAGEM', conteudoId: 1 }]), [
+    { playlistId: 3, tipo: 'MENU_BOARD', conteudoId: null, menuBoardId: 7, ordem: 0 },
+    { playlistId: 3, tipo: 'IMAGEM', conteudoId: 1, menuBoardId: null, ordem: 1 },
+  ]);
+  assert.deepEqual(itensParaGravar(3, null), []);
+});

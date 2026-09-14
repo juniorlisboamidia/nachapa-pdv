@@ -181,8 +181,23 @@ test('playlistParaAdmin ordena pelos itens e conta quantos estão NO AR', () => 
       { id: 40, ordem: 3, conteudo: null },
     ],
   }, AGORA);
-  assert.deepEqual(p.itens.map((i) => i.nome), ['A', 'B', 'C']);
+  assert.deepEqual(p.itens.map((i) => i.conteudo.nome), ['A', 'B', 'C']);
+  assert.ok(p.itens.every((i) => i.tipo === 'IMAGEM'), 'item sem `tipo` é IMAGEM — é o que preserva a playlist antiga');
   assert.equal(p.noAr, 2, 'o desligado conta na lista mas não no ar');
+});
+
+test('playlistParaAdmin mistura imagem e MENU BOARD, na ordem', () => {
+  const p = playlistParaAdmin({
+    id: 1, nome: 'Salão',
+    itens: [
+      { id: 10, ordem: 0, tipo: 'IMAGEM', conteudo: { ...CONTEUDO, id: 8, nome: 'Promo' } },
+      { id: 20, ordem: 1, tipo: 'MENU_BOARD', menuBoard: { id: 3, nome: 'Burgers', ativo: true, layout: 'GRADE' } },
+      { id: 30, ordem: 2, tipo: 'MENU_BOARD', menuBoard: null },
+    ],
+  }, AGORA);
+  assert.deepEqual(p.itens.map((i) => i.tipo), ['IMAGEM', 'MENU_BOARD'], 'board sem linha some, não quebra');
+  assert.equal(p.itens[1].board.nome, 'Burgers');
+  assert.equal(p.noAr, 2);
 });
 
 test('playlistParaAdmin aguenta playlist sem itens', () => {
@@ -193,8 +208,10 @@ test('playlistParaAdmin aguenta playlist sem itens', () => {
 test('🔴 a programação pública não leva NENHUM byte, e a URL é versionada', () => {
   const p = programacaoPublica([{ id: 1, ordem: 0, conteudo: CONTEUDO }], AGORA);
   const [item] = p.itens;
+  // `tipo` entrou com o Menu Board: é ele que permite à playlist misturar arte e menu.
+  assert.equal(item.tipo, 'imagem');
   assert.deepEqual(Object.keys(item).sort(), [
-    'ativo', 'duracaoSegundos', 'fimEm', 'id', 'imagemUrl', 'imagemVersao', 'inicioEm', 'nome',
+    'ativo', 'duracaoSegundos', 'fimEm', 'id', 'imagemUrl', 'imagemVersao', 'inicioEm', 'nome', 'tipo',
   ]);
   assert.equal(item.imagemUrl, '/api/public/aparelho/tv/conteudo/4/imagem?v=3');
   assert.equal(JSON.stringify(p).includes('base64'), false);
@@ -229,4 +246,38 @@ test('programação de playlist vazia (ou ausente) é lista vazia, nunca erro', 
   assert.deepEqual(programacaoPublica([], AGORA).itens, []);
   assert.deepEqual(programacaoPublica(null, AGORA).itens, []);
   assert.deepEqual(programacaoPublica([{ id: 1, ordem: 0, conteudo: null }], AGORA).itens, []);
+});
+
+// ── Programação polimórfica (Menu Board) ─────────────────────────────────────
+test('🔴 a programação mistura imagem e menu board, na ORDEM da playlist', () => {
+  const boards = new Map([['3', { tipo: 'menu_board', id: 3, duracaoSegundos: 20, layout: 'GRADE', titulo: 'Burgers', produtos: [{ id: '9' }] }]]);
+  const p = programacaoPublica([
+    { id: 10, ordem: 0, tipo: 'IMAGEM', conteudo: CONTEUDO },
+    { id: 20, ordem: 1, tipo: 'MENU_BOARD', menuBoardId: 3 },
+    { id: 30, ordem: 2, tipo: 'IMAGEM', conteudo: { ...CONTEUDO, id: 5 } },
+  ], AGORA, { boards });
+  assert.deepEqual(p.itens.map((i) => i.tipo), ['imagem', 'menu_board', 'imagem']);
+  assert.equal(p.itens[1].titulo, 'Burgers');
+});
+
+test('🔴 board INELEGÍVEL (sem produto disponível) simplesmente não entra', () => {
+  // Quem decide a elegibilidade é a rota, ao resolver o catálogo: o board sai do mapa e o
+  // player segue para o próximo item, sem saber que ele existiu.
+  const p = programacaoPublica([
+    { id: 10, ordem: 0, tipo: 'MENU_BOARD', menuBoardId: 3 },
+    { id: 20, ordem: 1, tipo: 'IMAGEM', conteudo: CONTEUDO },
+  ], AGORA, { boards: new Map() });
+  assert.deepEqual(p.itens.map((i) => i.tipo), ['imagem']);
+});
+
+test('playlist SÓ de imagem continua idêntica (o contrato antigo não quebrou)', () => {
+  const p = programacaoPublica([{ id: 1, ordem: 0, conteudo: CONTEUDO }], AGORA);
+  assert.equal(p.itens.length, 1);
+  assert.equal(p.itens[0].imagemUrl, '/api/public/aparelho/tv/conteudo/4/imagem?v=3');
+});
+
+test('playlist SÓ de board também funciona', () => {
+  const boards = new Map([['3', { tipo: 'menu_board', id: 3, duracaoSegundos: 20, layout: 'LISTA', titulo: null, produtos: [] }]]);
+  const p = programacaoPublica([{ id: 10, ordem: 0, tipo: 'MENU_BOARD', menuBoardId: 3 }], AGORA, { boards });
+  assert.deepEqual(p.itens.map((i) => i.tipo), ['menu_board']);
 });
