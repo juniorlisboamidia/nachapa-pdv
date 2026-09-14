@@ -324,6 +324,11 @@ test('os códigos de erro do totem são os do §7 (nada inventado)', () => {
     'NAO_ENCONTRADO',
     // Do pareamento (P2, §3.2), que divide o mesmo bloco público.
     'CODIGO_INVALIDO', 'MUITAS_TENTATIVAS',
+    // Da TV Indoor, canal IRMÃO que divide o bloco público do aparelho e a seção admin da
+    // Loja Digital. `APARELHO_NAO_E_TV` é o espelho exato de `APARELHO_NAO_E_TOTEM` — os
+    // dois existem para que um cookie de um canal não leia o outro. O contrato PRÓPRIO da
+    // TV (e a prova de que ELA também não inventa código) está em tvIndoorRotas.test.js.
+    'APARELHO_NAO_E_TV', 'PLAYLIST_INVALIDA', 'PLAYLIST_NAO_ENCONTRADA',
   ]);
   for (const c of usados) assert.ok(CONTRATO.has(c), `código fora do §7: ${c}`);
   // Os nomes ad-hoc da primeira volta não podem voltar.

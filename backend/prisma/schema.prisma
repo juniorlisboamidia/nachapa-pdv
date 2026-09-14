@@ -793,10 +793,20 @@ model Dispositivo {
   // logo ficam só no canal. `null` = segue o padrão da loja.
   posicaoCategoriasOverride String?
 
+  // TV INDOOR: a programação que ESTA tela reproduz. Nulo = sem playlist, e a TV mostra o
+  // fallback institucional (que é um estado legítimo, não um defeito).
+  // `SetNull` de propósito: apagar uma playlist não pode apagar a TV nem travar o delete —
+  // a tela cai no fallback e o gestor associa outra quando quiser.
+  // Só tem sentido em `tipo = 'TV_INDOOR'`; num TOTEM a coluna simplesmente fica nula (o
+  // canal do totem não a lê em lugar nenhum).
+  tvPlaylistId Int?
+  tvPlaylist   TvPlaylist? @relation(fields: [tvPlaylistId], references: [id], onDelete: SetNull)
+
   envios PedidoTotemEnvio[]
 
   @@index([empresaId])
   @@index([empresaId, tipo])
+  @@index([tvPlaylistId])
 }
 
 // Outbox/auditoria dos pedidos criados pelo totem de autoatendimento no Cardápio
@@ -1058,6 +1068,96 @@ model TotemBannerImagem {
   dados    Bytes
 
   banner TotemBanner @relation(fields: [bannerId], references: [id], onDelete: Cascade)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TV INDOOR — canal IRMÃO do totem, domínio PRÓPRIO.
+//
+// A TV divide com o totem `Dispositivo`, pareamento, heartbeat, validação de mídia, agenda
+// e cache: isso é INFRAESTRUTURA. O que ela não divide é contrato de produto — nenhuma
+// linha do canal TV lê `TotemBanner`, e o caminho contrário também não existe. Por isso os
+// models são próprios em vez de um `tipo: 'TV'` dentro de TotemBanner: um dia a TV vai
+// querer vídeo, zonas ou TV vertical, e nada disso pode aparecer no cadastro do totem.
+//
+// O prefixo é `Tv` (e não `TvIndoor`) porque não há outro canal de TV neste sistema — o
+// nome já é inequívoco e mantém as linhas curtas.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Uma peça de mídia da TV: a imagem, o nome, a duração na tela e a agenda.
+// 16:9 deitado (1920 × 1080) — TV vertical está fora do V1, então não há campo de formato.
+model TvConteudo {
+  id              Int       @id @default(autoincrement())
+  empresaId       Int
+  nome            String
+  ativo           Boolean   @default(true)
+  // Segundos na tela. Padrão 10 (a TV é lida de longe e de passagem; os 6 s do totem numa
+  // parede viram inquietação), faixa 3–120 — a régua mora em backend/tvIndoor.js.
+  duracaoSegundos Int       @default(10)
+  // Agenda em INSTANTE ABSOLUTO, como nos banners: o PDV não tem fuso por loja, e assumir
+  // o do VPS seria inventar um. O admin converte a hora local do navegador antes de mandar.
+  inicioEm        DateTime?
+  fimEm           DateTime?
+  // Sobe SÓ quando os bytes mudam. É ela que invalida o cache de um ano da TV, que guarda
+  // a imagem com `immutable`.
+  imagemVersao    Int       @default(0)
+  imagemTipo      String?
+  // Tamanho em bytes, para a tela mostrar sem precisar carregar o blob.
+  imagemBytes     Int?
+  criadoEm        DateTime  @default(now())
+  atualizadoEm    DateTime  @updatedAt
+
+  imagem TvConteudoImagem?
+  itens  TvPlaylistItem[]
+
+  @@index([empresaId])
+}
+
+// A IMAGEM, em tabela própria — mesma razão dos banners: a listagem do admin lê
+// `TvConteudo` a cada abertura, e um `findMany` sem `select` numa tabela com blob traria
+// vinte imagens de 500 KB para a memória de uma vez. Separada, esse erro é IMPOSSÍVEL em
+// vez de improvável. `Cascade` porque apagar o conteúdo apaga a mídia na mesma transação:
+// não existe arquivo órfão porque não existe arquivo.
+model TvConteudoImagem {
+  conteudoId Int   @id
+  dados      Bytes
+
+  conteudo TvConteudo @relation(fields: [conteudoId], references: [id], onDelete: Cascade)
+}
+
+// A PROGRAMAÇÃO. Existe desde o V1 — e não "todos os conteúdos ativos da empresa" — porque
+// o produto já nasce precisando de TV BALCÃO com uma sequência e TV SALÃO com outra. Uma
+// playlist pode servir várias telas.
+model TvPlaylist {
+  id           Int      @id @default(autoincrement())
+  empresaId    Int
+  nome         String
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  itens TvPlaylistItem[]
+  telas Dispositivo[]
+
+  @@index([empresaId])
+}
+
+// O conteúdo DENTRO da programação, na ordem. `ordem` é inteiro por POSIÇÃO: a lista chega
+// inteira e é reescrita em transação — trocar vizinhos deixa buracos e empates quando duas
+// abas mexem juntas.
+model TvPlaylistItem {
+  id         Int @id @default(autoincrement())
+  playlistId Int
+  conteudoId Int
+  ordem      Int @default(0)
+
+  playlist TvPlaylist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  conteudo TvConteudo @relation(fields: [conteudoId], references: [id], onDelete: Cascade)
+
+  // O mesmo conteúdo não entra duas vezes na mesma playlist: seria a mesma imagem duas
+  // vezes por volta — quase sempre engano, e o custo de proibir é zero (quem quiser mesmo
+  // duplica o conteúdo).
+  @@unique([playlistId, conteudoId])
+  @@index([playlistId, ordem])
+  @@index([conteudoId])
 }
 
 // Ponto Facial › Coletor — batidas que chegaram do coletor mas cujo enrollid

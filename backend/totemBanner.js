@@ -18,6 +18,20 @@
 // O desvio importa: tablet Android sem rede erra a hora com frequência, e a agenda da loja
 // não pode depender disso.
 
+// ── O QUE SAIU DAQUI, E POR QUÊ ───────────────────────────────────────────────────────
+// A validação de imagem (MIME real, teto de bytes, versão) e a régua de agenda (instante,
+// janela, status) eram deste arquivo e viraram helpers TÉCNICOS — `midiaImagem.js` e
+// `midiaAgenda.js` — quando o segundo canal (TV Indoor) precisou exatamente das mesmas
+// garantias. Eles não sabem o que é banner nem o que é conteúdo, então compartilhá-los não
+// cria dependência entre canais irmãos: o que é de PRODUTO (tipos, medidas, duração,
+// `bannersPublicos`) continua inteiro aqui.
+// As funções seguem exportadas com os mesmos nomes e o mesmo comportamento — quem importa
+// deste módulo não muda uma linha.
+import { lerImagem as lerImagemMidia, tipoReal, proximaVersaoImagem, IMAGEM_MAX_BYTES } from './midiaImagem.js';
+import { instante, janelaValida, dentroDaJanela, statusDaJanela, duracaoNaFaixa } from './midiaAgenda.js';
+
+export { tipoReal, proximaVersaoImagem, IMAGEM_MAX_BYTES, instante, janelaValida };
+
 /* Duração de cada arte no carrossel.
 
    O piso não é gosto: abaixo de 3 s a troca vira piscada, e quem passa na frente não lê
@@ -73,38 +87,10 @@ export const MOTIVO_JANELA = 'JANELA_INVALIDA';
 /* Inteiro dentro da faixa, com o padrão na dúvida. Grampeia em vez de recusar quando o
    valor é numérico: o campo é um seletor, e um número fora da faixa é engano — o totem
    precisa continuar com uma duração sensata em vez de nenhuma. */
-export function normalizarDuracao(valor) {
-  if (typeof valor !== 'number' && typeof valor !== 'string') return DURACAO_PADRAO;
-  if (typeof valor === 'string' && valor.trim() === '') return DURACAO_PADRAO;
-  const n = Number(valor);
-  if (!Number.isFinite(n)) return DURACAO_PADRAO;
-  const i = Math.round(n);
-  if (i < DURACAO_MIN) return DURACAO_MIN;
-  if (i > DURACAO_MAX) return DURACAO_MAX;
-  return i;
-}
+export const normalizarDuracao = (valor) => duracaoNaFaixa(valor, { min: DURACAO_MIN, max: DURACAO_MAX, padrao: DURACAO_PADRAO });
 
-/* Texto ISO (ou Date) → milissegundos, ou `null`.
-
-   Aceita só o que representa um instante ABSOLUTO. Não existe fuso por loja no PDV, e
-   inventar um a partir do relógio do VPS faria a agenda de uma loja depender de onde o
-   servidor está hospedado. O admin converte a hora local do navegador antes de mandar. */
-export function instante(valor) {
-  if (valor === null || valor === undefined || valor === '') return null;
-  const d = valor instanceof Date ? valor : new Date(valor);
-  const ms = d.getTime();
-  return Number.isFinite(ms) ? ms : null;
-}
-
-/* A janela é coerente? `fim <= início` é entrada inválida: uma janela que fecha antes de
-   abrir nunca exibiria o banner, e aceitar em silêncio deixaria o gestor esperando por
-   uma arte que não vai aparecer nunca. */
-export function janelaValida({ inicioEm, fimEm } = {}) {
-  const i = instante(inicioEm);
-  const f = instante(fimEm);
-  if (i === null || f === null) return true;
-  return f > i;
-}
+/* `instante` e `janelaValida` vêm de `midiaAgenda.js` e são reexportados no topo: o
+   contrato deste módulo não mudou, só o lugar onde a conta mora. */
 
 /* Este banner está no ar AGORA?
 
@@ -113,12 +99,7 @@ export function janelaValida({ inicioEm, fimEm } = {}) {
    às 18:00 não dividir esse segundo com o que começa às 18:00. */
 export function elegivel(banner, agoraMs) {
   if (!banner || banner.ativo !== true) return false;
-  if (!Number.isFinite(agoraMs)) return false;
-  const i = instante(banner.inicioEm);
-  const f = instante(banner.fimEm);
-  if (i !== null && agoraMs < i) return false;
-  if (f !== null && agoraMs >= f) return false;
-  return true;
+  return dentroDaJanela(banner, agoraMs);
 }
 
 /* Os banners que o carrossel deve girar, na ordem. Empate de `ordem` desempata por `id`,
@@ -130,15 +111,7 @@ export function elegiveis(lista, agoraMs) {
 
 /* O rótulo que o admin lê. Derivado, nunca guardado: um status em coluna envelhece sozinho
    e passa a mentir no minuto seguinte ao vencimento. */
-export function statusDoBanner(banner, agoraMs) {
-  if (!banner) return 'INATIVO';
-  if (banner.ativo !== true) return 'INATIVO';
-  const i = instante(banner.inicioEm);
-  const f = instante(banner.fimEm);
-  if (f !== null && Number.isFinite(agoraMs) && agoraMs >= f) return 'ENCERRADO';
-  if (i !== null && Number.isFinite(agoraMs) && agoraMs < i) return 'AGENDADO';
-  return 'ATIVO';
-}
+export const statusDoBanner = (banner, agoraMs) => statusDaJanela(banner, agoraMs);
 
 /* ── Entrada administrativa ─────────────────────────────────────────────────────────── */
 
@@ -189,56 +162,10 @@ export function conferirJanela(dados, atual) {
 
 /* ── Imagem ─────────────────────────────────────────────────────────────────────────── */
 
-/* Arte de tela cheia em 1080 × 1920. Maior que a logo (300 KB) porque aqui a imagem É o
-   conteúdo, e menor que o que o Nginx assume por padrão (1 MB) com folga para o resto do
-   corpo. O cliente reduz antes de subir; isto é o teto do servidor. */
-export const IMAGEM_MAX_BYTES = 700 * 1024;
-
-const TIPOS_IMAGEM = Object.freeze({ 'image/png': true, 'image/jpeg': true, 'image/webp': true });
-const DATA_URL = /^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/]+={0,2})$/;
-
-/* O tipo REAL, lido dos primeiros bytes.
-
-   O `Content-Type` do data URL é texto que o cliente escreve, e um `.exe` renomeado chega
-   com `image/png` no cabeçalho sem nenhum esforço. A assinatura não mente:
-     PNG   89 50 4E 47
-     JPEG  FF D8 FF
-     WEBP  "RIFF" .... "WEBP" */
-export function tipoReal(bytes) {
-  if (!bytes || bytes.length < 12) return null;
-  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return 'image/png';
-  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
-  if (bytes.toString('latin1', 0, 4) === 'RIFF' && bytes.toString('latin1', 8, 12) === 'WEBP') return 'image/webp';
-  return null;
-}
-
-/* Data URL → `{ tipo, bytes }`, ou `{ erro }`.
-
-   O tipo que sai é o REAL, não o declarado: se os dois discordam, o arquivo é recusado.
-   Deixar passar "declara png, é outra coisa" seria servir depois um `Content-Type` que
-   não corresponde ao conteúdo. */
-export function lerImagem(dataUrl) {
-  if (typeof dataUrl !== 'string' || !dataUrl) return { erro: 'IMAGEM_AUSENTE' };
-  const m = DATA_URL.exec(dataUrl.trim());
-  if (!m) return { erro: 'IMAGEM_FORMATO' };
-  if (!TIPOS_IMAGEM[m[1]]) return { erro: 'IMAGEM_TIPO' };
-  let bytes;
-  try { bytes = Buffer.from(m[2], 'base64'); } catch { return { erro: 'IMAGEM_FORMATO' }; }
-  if (!bytes.length) return { erro: 'IMAGEM_FORMATO' };
-  if (bytes.length > IMAGEM_MAX_BYTES) return { erro: 'IMAGEM_GRANDE' };
-  const real = tipoReal(bytes);
-  if (!real) return { erro: 'IMAGEM_FORMATO' };
-  if (real !== m[1]) return { erro: 'IMAGEM_TIPO' };
-  return { tipo: real, bytes };
-}
-
-/* A versão sobe SÓ quando os bytes mudam. Trocar nome, duração ou agenda não mexe nela —
-   o tablet guarda a arte por um ano com `immutable`, e rebaixar tudo porque alguém
-   corrigiu um título seria desperdício. */
-export function proximaVersaoImagem(atual) {
-  const base = Number.isInteger(atual) && atual >= 0 ? atual : 0;
-  return base + 1;
-}
+/* A arte do banner: PNG/JPEG/WEBP até 700 KB, com o MIME lido dos BYTES (não do cabeçalho
+   que o cliente escreve). A conta inteira mora em `midiaImagem.js` — aqui fica só o nome
+   que o resto do totem já importa, e o teto, que é decisão de canal. */
+export const lerImagem = (dataUrl) => lerImagemMidia(dataUrl, { maxBytes: IMAGEM_MAX_BYTES });
 
 /* ── Saídas ─────────────────────────────────────────────────────────────────────────── */
 

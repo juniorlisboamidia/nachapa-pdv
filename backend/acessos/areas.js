@@ -15,8 +15,10 @@ export const AREA_PREFIXOS = [
   ['/bonificacao', 'bonificacao'],
   ['/candidatos', 'talentos'], ['/vagas', 'talentos'], ['/recrutamento', 'talentos'], ['/talentos', 'talentos'], ['/banco-talentos', 'talentos'],
   ['/checklist', 'checklist'], ['/etiquetas', 'etiquetas'],
-  // Aparelhos (tablets do totem/TV): a área cobre o cadastro e as telas do Totem.
-  ['/aparelhos', 'aparelhos'], ['/totem', 'aparelhos'],
+  // Aparelhos (tablets do totem/TV): a área cobre o cadastro e as telas dos DOIS canais da
+  // Loja Digital. `/tv-indoor` precisa estar aqui — este mapa é FAIL-CLOSED, e um prefixo
+  // ausente faz todo endpoint do canal responder 403 para operador, em silêncio.
+  ['/aparelhos', 'aparelhos'], ['/totem', 'aparelhos'], ['/tv-indoor', 'aparelhos'],
 ];
 
 // Mais longo primeiro (mesma ideia de acessos/modulos.js do H360).

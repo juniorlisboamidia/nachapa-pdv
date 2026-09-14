@@ -97,6 +97,16 @@ export function aparelhoPublico(d) {
   return { id: d.id, nome: d.nome, tipo: d.tipo };
 }
 
+// A resolução reportada pelo aparelho, ou `null`. O heartbeat já grava `tela: { w, h }`
+// desde o totem; aqui ela só é traduzida para o admin. Um par incompleto vira `null`
+// inteiro: meia medida não informa nada e ainda parece dado bom.
+function telaDoHeartbeat(hb) {
+  const w = Number(hb?.tela?.w);
+  const h = Number(hb?.tela?.h);
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return null;
+  return { w, h };
+}
+
 // O que a TELA ADMIN vê. Também sem nenhum segredo: `pareado` e `pareamentoAtivo`
 // são booleanos derivados, não o hash nem o código.
 export function aparelhoAdmin(d, agora) {
@@ -113,6 +123,13 @@ export function aparelhoAdmin(d, agora) {
     pareamentoAtivo: !!(d.pareamentoCodigo && ms(d.pareamentoExpiraEm) > ms(agora)),
     pareamentoExpiraEm: d.pareamentoExpiraEm ?? null,
     criadoEm: d.criadoEm ?? null,
+    // A TELA que o aparelho reportou no último heartbeat. Vale para os dois canais, mas
+    // quem a usa hoje é a gestão das TVs: numa parede, saber que o painel diz 1920 × 1080
+    // é o que responde "a arte vai aparecer inteira?".
+    // `null` quando nunca houve sinal — nunca um 0 × 0, que leria como "tela sem tamanho".
+    tela: telaDoHeartbeat(d.heartbeatJson),
+    // A programação associada (só faz sentido em TV_INDOOR; num TOTEM é sempre null).
+    tvPlaylistId: d.tvPlaylistId ?? null,
   };
 }
 

@@ -162,6 +162,9 @@ test('aparelhoAdmin: campos da tela, sem token/credencialHash/pareamentoCodigo',
   assert.deepEqual(Object.keys(a).sort(), [
     'ativo', 'criadoEm', 'id', 'nome', 'online', 'pareadoEm', 'pareado',
     'pareamentoAtivo', 'pareamentoExpiraEm', 'tipo', 'ultimoSinalEm', 'versao',
+    // Da TV Indoor, e aditivos: a resolução que o aparelho reportou e a programação
+    // associada. Nenhum dos dois é segredo, e num TOTEM o segundo é sempre null.
+    'tela', 'tvPlaylistId',
   ].sort());
   for (const proibido of ['token', 'credencialHash', 'pareamentoCodigo', 'credencial']) {
     assert.ok(!(proibido in a), proibido);
@@ -173,6 +176,8 @@ test('aparelhoAdmin: campos da tela, sem token/credencialHash/pareamentoCodigo',
   assert.equal(a.online, true);
   assert.equal(a.versao, '1.2.3');
   assert.equal(a.pareamentoAtivo, true);
+  assert.deepEqual(a.tela, { w: 1080, h: 1920 }, 'a resolução sai do heartbeat');
+  assert.equal(a.tvPlaylistId, null, 'um totem nunca tem programação de TV');
   assert.equal(a.ultimoSinalEm, d.ultimoHeartbeatEm);
 });
 

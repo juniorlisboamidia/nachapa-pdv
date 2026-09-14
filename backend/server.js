@@ -75,12 +75,34 @@ import {
   lerImagem as lerImagemBanner, proximaVersaoImagem, bannerParaAdmin, bannersPublicos,
   TIPOS as BANNER_TIPOS, TIPO_PADRAO as BANNER_TIPO_PADRAO, MEDIDAS as BANNER_MEDIDAS,
 } from './totemBanner.js';
+// TV Indoor: canal IRMÃO do totem, domínio próprio. Nenhum símbolo daqui é do totem, e
+// nenhum símbolo do totem é usado no canal da TV — o que os dois dividem são os helpers
+// técnicos (`midiaImagem`, `midiaAgenda`) e a infraestrutura de Dispositivo/cookie/cache.
+import {
+  DURACAO_MIN as TV_DUR_MIN, DURACAO_MAX as TV_DUR_MAX, DURACAO_PADRAO as TV_DUR_PADRAO,
+  MEDIDA as TV_MEDIDA, MAX_ITENS_PLAYLIST as TV_MAX_ITENS,
+  validarConteudo as validarTvConteudo, conferirJanela as conferirJanelaTv,
+  validarNomePlaylist, validarItens as validarItensTv, itensParaGravar as itensTvParaGravar,
+  conteudoParaAdmin as tvConteudoParaAdmin, playlistParaAdmin as tvPlaylistParaAdmin,
+  programacaoPublica as tvProgramacaoPublica,
+} from './tvIndoor.js';
+// A validação de imagem é helper TÉCNICO (MIME real por magic bytes, teto de bytes): os
+// dois canais usam a mesma, e ela não sabe o que é banner nem o que é conteúdo.
+import { lerImagem as lerImagemMidia, IMAGEM_MAX_BYTES as TV_IMG_MAX, proximaVersaoImagem as proximaVersaoTv } from './midiaImagem.js';
 
 // Campos do banner SEM a arte. Existe como constante para que nenhuma consulta esqueça o
 // `select` e arraste blobs — a arte mora em outra tabela justamente por isso, e este
 // objeto é o lembrete de que a listagem nunca precisa dela.
 const BANNER_CAMPOS = {
   id: true, nome: true, tipo: true, ativo: true, ordem: true, duracaoSegundos: true,
+  inicioEm: true, fimEm: true, imagemVersao: true, imagemTipo: true, imagemBytes: true,
+};
+
+// Campos do conteúdo da TV SEM os bytes — o mesmo lembrete do BANNER_CAMPOS, pela mesma
+// razão: a imagem mora em outra tabela para que arrastar blobs numa listagem seja
+// impossível, e não só improvável.
+const TV_CAMPOS = {
+  id: true, nome: true, ativo: true, duracaoSegundos: true,
   inicioEm: true, fimEm: true, imagemVersao: true, imagemTipo: true, imagemBytes: true,
 };
 import { calcularCmvGlobal } from './cmv/calculo.js';
@@ -9051,6 +9073,93 @@ app.get('/api/public/aparelho/totem/pedido/:envioId', async (req, res) => {
     res.json(respostaPublica(envio));
   } catch (err) { console.error('[public/aparelho totem pedido GET]', err?.code ?? err?.name ?? 'erro'); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
 });
+// ── TV Indoor (PÚBLICO — a TV pareada) ──────────────────────────────────────
+// Só TV_INDOOR lê programação: um cookie de TOTEM (mesmo válido e da mesma loja) não
+// enxerga nada daqui. É o irmão exato de `exigirTotem`, e existe pelo mesmo motivo — o
+// tipo do aparelho é uma fronteira de produto, não um detalhe de UI.
+function exigirTvIndoor(ap, res) {
+  if (ap.tipo === 'TV_INDOOR') return true;
+  res.status(403).json({ erro: 'APARELHO_NAO_E_TV' });
+  return false;
+}
+
+// A PROGRAMAÇÃO desta tela. Sem um byte de imagem: metadados, a URL versionada de cada
+// conteúdo e o `agoraServidor` que a TV usa para corrigir o próprio relógio.
+//
+// A playlist sai do APARELHO (que o cookie resolveu), nunca do pedido — e a consulta dos
+// itens leva o escopo da empresa TAMBÉM, mesmo já tendo o playlistId: sem isso, uma
+// playlist de outra loja associada por engano (ou por adulteração de banco) serviria a
+// arte dela aqui. Com o escopo, ela simplesmente não é encontrada.
+//
+// Sem playlist, ou com a playlist vazia, a resposta é 200 com `itens: []`. A TV entende
+// isso como "mostre o fallback institucional", que é um estado legítimo — não um erro.
+app.get('/api/public/aparelho/tv/programacao', async (req, res) => {
+  try {
+    const ap = await exigirAparelho(req, res); if (!ap) return;
+    if (!exigirTvIndoor(ap, res)) return;
+    const agora = Date.now();
+    const vazia = (extra) => res.json({
+      tela: { id: ap.id, nome: ap.nome },
+      playlist: null,
+      ...tvProgramacaoPublica([], agora),
+      ...extra,
+    });
+    if (!ap.tvPlaylistId) return vazia();
+    // `whereDoAparelho(ap, {})` inline, como nas rotas de imagem: a variável `escopo` é
+    // reservada ao bootstrap do totem, e a guarda estática só a aceita nascendo de
+    // `whereDoAparelho(ap, body)`.
+    const playlist = await prisma.tvPlaylist.findFirst({
+      where: { id: ap.tvPlaylistId, ...whereDoAparelho(ap, {}) },
+      select: {
+        id: true, nome: true,
+        itens: {
+          select: { id: true, ordem: true, conteudo: { select: TV_CAMPOS } },
+          orderBy: [{ ordem: 'asc' }, { id: 'asc' }],
+        },
+      },
+    });
+    if (!playlist) return vazia();
+    const loja = await lojaDoAparelho(ap, {}).catch(() => null);
+    res.json({
+      tela: { id: ap.id, nome: ap.nome },
+      loja: loja ? lojaPublica(loja) : null,
+      playlist: { id: playlist.id, nome: playlist.nome },
+      ...tvProgramacaoPublica(playlist.itens, agora),
+    });
+  } catch (err) {
+    console.error('[public/aparelho tv programacao]', err?.code ?? err?.name ?? 'erro');
+    // Banco fora do ar, ou tabela ausente (deploy sem migration): a TV recebe programação
+    // vazia e mostra o fallback institucional, em vez de um erro numa parede da loja.
+    res.status(200).json({ playlist: null, agoraServidor: new Date().toISOString(), itens: [] });
+  }
+});
+
+// A IMAGEM de um conteúdo, em bytes. Mesma disciplina dos banners, e pelas mesmas razões:
+// fora da programação (que é relida a cada 60 s), cache PRIVADO e versionado, empresa
+// vinda do COOKIE, e a VERSÃO dentro do WHERE — `?v=` de outra geração é 404, nunca os
+// bytes atuais sob um número velho. A resposta é `immutable` por um ano: servir coisas
+// diferentes sob a mesma URL deixaria duas TVs com conteúdos distintos sem que nada no
+// sistema conseguisse distinguir os casos.
+app.get('/api/public/aparelho/tv/conteudo/:id/imagem', async (req, res) => {
+  try {
+    const ap = await exigirAparelho(req, res); if (!ap) return;
+    if (!exigirTvIndoor(ap, res)) return;
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).end();
+    const versao = Number(req.query?.v);
+    if (!Number.isSafeInteger(versao) || versao < 1) return res.status(404).end();
+    const conteudo = await prisma.tvConteudo.findFirst({
+      where: { id, imagemVersao: versao, ...whereDoAparelho(ap, {}) },
+      select: { imagemVersao: true, imagemTipo: true, imagem: { select: { dados: true } } },
+    });
+    if (!conteudo?.imagem?.dados || !conteudo.imagemTipo) return res.status(404).end();
+    responderImagem(res, { tipo: conteudo.imagemTipo, bytes: conteudo.imagem.dados }, `tv${id}-${ap.empresaId}-${conteudo.imagemVersao}`, req);
+  } catch (err) {
+    console.error('[public/aparelho tv conteudo imagem]', err?.code ?? err?.name ?? 'erro');
+    res.status(500).end();
+  }
+});
+
 // ===== FIM ROTAS PUBLICAS DO APARELHO =====
 
 // ===== Totem › Pedidos: outbox, reconciliação e job (spec §5.4/§5.5) =====
@@ -10006,6 +10115,290 @@ app.get('/api/totem/banners/:id/imagem', async (req, res) => {
     if (!banner?.imagem?.dados || !banner.imagemTipo) return res.status(404).end();
     responderImagem(res, { tipo: banner.imagemTipo, bytes: banner.imagem.dados }, `b${id}-${empresaId}-${banner.imagemVersao}`, req);
   } catch (err) { console.error('[totem/banners imagem]', err); res.status(500).end(); }
+});
+
+// ── TV Indoor › Conteúdos, Playlists e Telas (ADMIN) ───────────────────────
+// Canal IRMÃO do totem: mesma disciplina, domínio próprio. TODA consulta leva `empresaId`
+// no `where`, inclusive as que já recebem um `id` na URL — não é redundância, é o que faz
+// um id adulterado devolver "não encontrado" em vez da linha de outra loja. O `empresaId`
+// sai SEMPRE da sessão, nunca do corpo.
+//
+// A área de permissão é `aparelhos` (acessos/areas.js), a mesma do totem: quem cadastra o
+// aparelho é quem programa o que ele mostra.
+app.get('/api/tv-indoor/conteudos', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const linhas = await prisma.tvConteudo.findMany({
+      where: { empresaId }, select: TV_CAMPOS, orderBy: [{ criadoEm: 'desc' }, { id: 'desc' }],
+    });
+    const agora = Date.now();
+    res.json({
+      conteudos: linhas.map((c) => tvConteudoParaAdmin(c, agora)),
+      agoraServidor: new Date(agora).toISOString(),
+      limites: {
+        duracaoMin: TV_DUR_MIN, duracaoMax: TV_DUR_MAX, duracaoPadrao: TV_DUR_PADRAO,
+        imagemKb: Math.round(TV_IMG_MAX / 1024), medida: TV_MEDIDA, maxItensPlaylist: TV_MAX_ITENS,
+      },
+    });
+  } catch (err) { console.error('[tv-indoor/conteudos]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// Criar. Nome e imagem são obrigatórios: conteúdo sem imagem só existiria para falhar na
+// tela — e numa TV que fica ligada o dia inteiro isso é uma tarja preta na parede.
+app.post('/api/tv-indoor/conteudos', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const v = validarTvConteudo(req.body, { exigirNome: true });
+    const janela = conferirJanelaTv(v.dados, null);
+    const erros = [...v.erros, ...(janela ? [janela] : [])];
+    const img = lerImagemMidia(req.body?.imagem, { maxBytes: TV_IMG_MAX });
+    if (img.erro) erros.push({ campo: 'imagem', motivo: img.erro });
+    if (erros.length) return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros });
+
+    const criado = await prisma.tvConteudo.create({
+      data: {
+        empresaId,
+        ...v.dados,
+        imagemVersao: 1,
+        imagemTipo: img.tipo,
+        imagemBytes: img.bytes.length,
+        imagem: { create: { dados: img.bytes } },
+      },
+      select: TV_CAMPOS,
+    });
+    res.status(201).json({ ok: true, conteudo: tvConteudoParaAdmin(criado, Date.now()) });
+  } catch (err) { console.error('[tv-indoor/conteudos POST]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// Editar nome, ativo, duração e agenda. NÃO toca na imagem nem na versão dela: corrigir um
+// título não pode obrigar todas as TVs a rebaixar a arte que já têm em cache por um ano.
+app.put('/api/tv-indoor/conteudos/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ erro: 'ID_INVALIDO' });
+    const atual = await prisma.tvConteudo.findFirst({ where: { id, empresaId }, select: TV_CAMPOS });
+    if (!atual) return res.status(404).json({ erro: 'NAO_ENCONTRADO' });
+
+    const v = validarTvConteudo(req.body);
+    const janela = conferirJanelaTv(v.dados, atual);
+    const erros = [...v.erros, ...(janela ? [janela] : [])];
+    if (erros.length) return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros });
+
+    const linha = await prisma.tvConteudo.update({ where: { id }, data: v.dados, select: TV_CAMPOS });
+    res.json({ ok: true, conteudo: tvConteudoParaAdmin(linha, Date.now()) });
+  } catch (err) { console.error('[tv-indoor/conteudos PUT]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// Substituir a imagem. É a ÚNICA rota que incrementa `imagemVersao` — é ela que invalida o
+// cache de um ano das TVs.
+app.put('/api/tv-indoor/conteudos/:id/imagem', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ erro: 'ID_INVALIDO' });
+    const atual = await prisma.tvConteudo.findFirst({ where: { id, empresaId }, select: { id: true, imagemVersao: true } });
+    if (!atual) return res.status(404).json({ erro: 'NAO_ENCONTRADO' });
+    const img = lerImagemMidia(req.body?.imagem, { maxBytes: TV_IMG_MAX });
+    if (img.erro) return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros: [{ campo: 'imagem', motivo: img.erro }] });
+
+    const linha = await prisma.tvConteudo.update({
+      where: { id },
+      data: {
+        imagemVersao: proximaVersaoTv(atual.imagemVersao),
+        imagemTipo: img.tipo,
+        imagemBytes: img.bytes.length,
+        imagem: { upsert: { create: { dados: img.bytes }, update: { dados: img.bytes } } },
+      },
+      select: TV_CAMPOS,
+    });
+    res.json({ ok: true, conteudo: tvConteudoParaAdmin(linha, Date.now()) });
+  } catch (err) { console.error('[tv-indoor/conteudos imagem PUT]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// Excluir. `deleteMany` com empresaId: id adulterado apaga ZERO linhas em vez da de outra
+// loja. A imagem e os vínculos com playlists vão junto por CASCADE, na mesma transação do
+// banco — não há passo separado de mídia que possa falhar pela metade.
+app.delete('/api/tv-indoor/conteudos/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ erro: 'ID_INVALIDO' });
+    const { count } = await prisma.tvConteudo.deleteMany({ where: { id, empresaId } });
+    if (!count) return res.status(404).json({ erro: 'NAO_ENCONTRADO' });
+    res.json({ ok: true });
+  } catch (err) { console.error('[tv-indoor/conteudos DELETE]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// A imagem, para a miniatura e a prévia do admin.
+app.get('/api/tv-indoor/conteudos/:id/imagem', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).end();
+    const c = await prisma.tvConteudo.findFirst({
+      where: { id, empresaId },
+      select: { imagemVersao: true, imagemTipo: true, imagem: { select: { dados: true } } },
+    });
+    if (!c?.imagem?.dados || !c.imagemTipo) return res.status(404).end();
+    responderImagem(res, { tipo: c.imagemTipo, bytes: c.imagem.dados }, `tv${id}-${empresaId}-${c.imagemVersao}`, req);
+  } catch (err) { console.error('[tv-indoor/conteudos imagem]', err); res.status(500).end(); }
+});
+
+// ── Playlists ───────────────────────────────────────────────────────────────
+// A programação com os conteúdos já resolvidos: a tela precisa do nome, da miniatura e do
+// status de cada um para mostrar a sequência, e uma segunda chamada por playlist deixaria
+// a tela piscando em lista.
+const TV_PLAYLIST_INCLUDE = {
+  id: true, nome: true,
+  itens: {
+    select: { id: true, ordem: true, conteudo: { select: TV_CAMPOS } },
+    orderBy: [{ ordem: 'asc' }, { id: 'asc' }],
+  },
+};
+
+app.get('/api/tv-indoor/playlists', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const linhas = await prisma.tvPlaylist.findMany({
+      where: { empresaId }, select: TV_PLAYLIST_INCLUDE, orderBy: [{ nome: 'asc' }, { id: 'asc' }],
+    });
+    const agora = Date.now();
+    res.json({ playlists: linhas.map((p) => tvPlaylistParaAdmin(p, agora)), agoraServidor: new Date(agora).toISOString() });
+  } catch (err) { console.error('[tv-indoor/playlists]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+app.post('/api/tv-indoor/playlists', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const v = validarNomePlaylist(req.body?.nome);
+    if (!v.ok) return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros: [{ campo: 'nome', motivo: v.motivo }] });
+    const criada = await prisma.tvPlaylist.create({ data: { empresaId, nome: v.nome }, select: TV_PLAYLIST_INCLUDE });
+    res.status(201).json({ ok: true, playlist: tvPlaylistParaAdmin(criada, Date.now()) });
+  } catch (err) { console.error('[tv-indoor/playlists POST]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+app.put('/api/tv-indoor/playlists/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ erro: 'ID_INVALIDO' });
+    const v = validarNomePlaylist(req.body?.nome);
+    if (!v.ok) return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros: [{ campo: 'nome', motivo: v.motivo }] });
+    const { count } = await prisma.tvPlaylist.updateMany({ where: { id, empresaId }, data: { nome: v.nome } });
+    if (!count) return res.status(404).json({ erro: 'NAO_ENCONTRADO' });
+    const linha = await prisma.tvPlaylist.findFirst({ where: { id, empresaId }, select: TV_PLAYLIST_INCLUDE });
+    res.json({ ok: true, playlist: tvPlaylistParaAdmin(linha, Date.now()) });
+  } catch (err) { console.error('[tv-indoor/playlists PUT]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// Os ITENS da playlist, de uma vez. A lista chega inteira e a ordem é reescrita por
+// POSIÇÃO — nada de trocar dois vizinhos, que deixa buracos e empates quando duas abas
+// mexem juntas.
+//
+// O escopo aqui protege DUAS coisas: a playlist (que precisa ser desta loja) e cada
+// conteúdo (idem). Os ids permitidos saem de uma consulta escopada, e `validarItensTv`
+// RECUSA — não filtra — o que não estiver nela: filtrar deixaria a tela dizendo "salvo"
+// com menos conteúdos do que o gestor escolheu, sem ele saber qual sumiu.
+app.put('/api/tv-indoor/playlists/:id/itens', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ erro: 'ID_INVALIDO' });
+    const playlist = await prisma.tvPlaylist.findFirst({ where: { id, empresaId }, select: { id: true } });
+    if (!playlist) return res.status(404).json({ erro: 'NAO_ENCONTRADO' });
+
+    const meus = await prisma.tvConteudo.findMany({ where: { empresaId }, select: { id: true } });
+    const v = validarItensTv(req.body?.ids, new Set(meus.map((c) => c.id)));
+    if (!v.ok) return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros: [{ campo: 'ids', motivo: v.motivo }] });
+
+    // Apagar e recriar dentro da MESMA transação: a programação nunca fica pela metade, e
+    // uma TV que buscar no meio da troca lê o estado antigo ou o novo, nunca um híbrido.
+    await prisma.$transaction([
+      prisma.tvPlaylistItem.deleteMany({ where: { playlistId: id } }),
+      ...(v.ids.length ? [prisma.tvPlaylistItem.createMany({ data: itensTvParaGravar(id, v.ids) })] : []),
+    ]);
+    const linha = await prisma.tvPlaylist.findFirst({ where: { id, empresaId }, select: TV_PLAYLIST_INCLUDE });
+    res.json({ ok: true, playlist: tvPlaylistParaAdmin(linha, Date.now()) });
+  } catch (err) { console.error('[tv-indoor/playlists itens PUT]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// Excluir a playlist. As TVs que a usavam caem para `tvPlaylistId: null` pelo SET NULL da
+// FK — elas passam a mostrar o fallback institucional, que é estado legítimo, em vez de o
+// delete travar ou a TV sumir junto.
+app.delete('/api/tv-indoor/playlists/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ erro: 'ID_INVALIDO' });
+    const { count } = await prisma.tvPlaylist.deleteMany({ where: { id, empresaId } });
+    if (!count) return res.status(404).json({ erro: 'NAO_ENCONTRADO' });
+    res.json({ ok: true });
+  } catch (err) { console.error('[tv-indoor/playlists DELETE]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// ── Telas ───────────────────────────────────────────────────────────────────
+// As TVs desta loja, com a programação associada e o que o aparelho reportou. Criar,
+// parear, revogar, ativar e excluir continuam em `/api/aparelhos/*` — é a MESMA
+// infraestrutura do totem, e duplicá-la aqui seria criar um segundo lugar para o mesmo
+// pareamento divergir.
+//
+// O filtro `tipo: 'TV_INDOOR'` é do SERVIDOR, não uma peneira na tela: pedir a lista
+// inteira e esconder metade é como um totem reaparece num contador ou numa ação em lote.
+app.get('/api/tv-indoor/telas', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const ds = await prisma.dispositivo.findMany({
+      where: { empresaId, tipo: 'TV_INDOOR' }, orderBy: { criadoEm: 'asc' },
+    });
+    const playlists = await prisma.tvPlaylist.findMany({
+      where: { empresaId }, select: { id: true, nome: true }, orderBy: [{ nome: 'asc' }, { id: 'asc' }],
+    });
+    const agora = new Date();
+    res.json({ telas: ds.map((d) => aparelhoAdmin(d, agora)), playlists });
+  } catch (err) { console.error('[tv-indoor/telas]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// Associar (ou desassociar, com `null`) a programação de uma tela.
+//
+// A playlist é conferida com um `findFirst` ESCOPADO antes de gravar: a FK do banco garante
+// que ela existe, não que ela é desta loja. Sem esta conferência, um id de outra empresa
+// mandado pelo navegador faria uma TV daqui reproduzir a programação de lá — o vazamento
+// mais caro que este canal poderia ter.
+app.put('/api/tv-indoor/telas/:id/playlist', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ erro: 'ID_INVALIDO' });
+    const bruto = req.body?.playlistId;
+    let tvPlaylistId = null;
+    if (bruto !== null && bruto !== undefined && bruto !== '') {
+      const n = Number(bruto);
+      if (!Number.isSafeInteger(n) || n <= 0) return res.status(400).json({ erro: 'PLAYLIST_INVALIDA' });
+      const p = await prisma.tvPlaylist.findFirst({ where: { id: n, empresaId }, select: { id: true } });
+      if (!p) return res.status(404).json({ erro: 'PLAYLIST_NAO_ENCONTRADA' });
+      tvPlaylistId = p.id;
+    }
+    const { count } = await prisma.dispositivo.updateMany({
+      where: { id, empresaId, tipo: 'TV_INDOOR' }, data: { tvPlaylistId },
+    });
+    if (!count) return res.status(404).json({ erro: 'NAO_ENCONTRADO' });
+    const d = await prisma.dispositivo.findFirst({ where: { id, empresaId } });
+    res.json({ ok: true, tela: aparelhoAdmin(d, new Date()) });
+  } catch (err) { console.error('[tv-indoor/telas playlist PUT]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
 });
 
 // ── Job do totem (§5.4): 60 s, in-process, com lock ─────────────────────────
