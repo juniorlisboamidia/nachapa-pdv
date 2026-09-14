@@ -61,6 +61,11 @@ const SidebarCategorias = forwardRef(function SidebarCategorias({ categorias, ca
             key={c.id}
             type="button"
             className="tq-cat"
+            // O catálogo acha a pílula por aqui para posicionar o marcador. Não dá para
+            // usar `aria-current`: no quadro em que a categoria muda o React ainda não
+            // repintou, e a busca traria a pílula ANTERIOR — o marcador ficaria um passo
+            // atrás justamente no momento em que ele precisa acertar.
+            data-cat={c.id}
             ref={ativa ? ativoRef : null}
             aria-current={ativa ? 'true' : undefined}
             onClick={() => aoTrocar(c.id)}
@@ -74,10 +79,15 @@ const SidebarCategorias = forwardRef(function SidebarCategorias({ categorias, ca
       </div>
       {temMais ? <div className="tq-lado-fade" aria-hidden="true" /> : null}
 
-      {/* ONDE O CLIENTE ESTÁ NO CATÁLOGO. O tablet não desenha barra de rolagem: sem isto
-          dá para rolar por um minuto num cardápio de noventa cards sem nenhuma pista de
-          quanto falta. `aria-hidden` porque é reforço visual — quem usa leitor de tela já
-          tem o `aria-current` dizendo em que categoria está. */}
+      {/* ONDE O CLIENTE ESTÁ NO CATÁLOGO.
+          O marcador tem a altura de uma pílula e pousa sobre a categoria atual, deslizando
+          para a próxima conforme a seção avança. Ele já foi uma barra de rolagem, calculada
+          pela fração rolada do catálogo, e o problema não era de ajuste: barra de rolagem e
+          destaque de categoria medem coisas diferentes, e com categorias de tamanhos
+          diferentes elas não podem concordar — a tela mostrava dois indicadores apontando
+          para lugares distantes um do outro.
+          `aria-hidden` porque é reforço visual: quem usa leitor de tela já tem o
+          `aria-current` dizendo em que categoria está. */}
       <div className="tq-lado-trilho" aria-hidden="true"><span className="tq-lado-polegar" /></div>
     </nav>
   )

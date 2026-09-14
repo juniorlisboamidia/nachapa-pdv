@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { itemOrdenavel, precoDoCard } from '../totemCarrinho'
-import { categoriaPorRolagem, janelaDeRolagem } from '../totemFoco'
+import { categoriaPorRolagem, marcaNaColuna, progressoNaSecao } from '../totemFoco'
 import SidebarCategorias from './SidebarCategorias'
 import CardProduto from './CardProduto'
 
@@ -75,17 +75,40 @@ export default function TelaCatalogo({ categorias, categoriaId, aoTrocarCategori
         alturaTotal: cont.scrollHeight,
       }
 
+      // A categoria PRIMEIRO: o marcador é função dela, e não da rolagem.
+      const id = categoriaPorRolagem({ secoes, ...medida })
+
       // O INDICADOR vai por CSS, não por estado. Marcar estado a cada quadro de rolagem
       // redesenharia noventa cards para mover um risco de 2px — as variáveis são escritas
       // direto no nó da sidebar, que é a única coisa que muda.
+      //
+      // A pílula é achada pelo `data-cat` do id que ACABOU de ser calculado, e não por
+      // `aria-current`: neste quadro o React ainda não repintou a coluna, e o atributo
+      // aponta para a categoria anterior.
       const lado = ladoRef.current
-      if (lado) {
-        const janela = janelaDeRolagem(medida)
-        lado.style.setProperty('--tq-prog-i', String(janela.inicio))
-        lado.style.setProperty('--tq-prog-f', String(janela.fracao))
+      const trilho = lado?.querySelector('.tq-lado-trilho')
+      if (lado && trilho && id != null) {
+        const pilulas = [...lado.querySelectorAll('.tq-cat')]
+        const i = pilulas.findIndex((el) => el.dataset.cat === String(id))
+        if (i >= 0) {
+          // Tudo por `getBoundingClientRect`: a coluna de categorias também rola, e medir
+          // em coordenadas de viewport faz o marcador acompanhar as duas rolagens sem
+          // precisar saber que existem duas.
+          const base = trilho.getBoundingClientRect()
+          const r = pilulas[i].getBoundingClientRect()
+          const prox = pilulas[i + 1]?.getBoundingClientRect() ?? null
+          const marca = marcaNaColuna({
+            inicioPilula: r.top - base.top,
+            alturaPilula: r.height,
+            inicioProxima: prox ? prox.top - base.top : null,
+            alturaTrilha: base.height,
+            progresso: progressoNaSecao({ secoes, atual: id, ...medida }),
+          })
+          lado.style.setProperty('--tq-prog-i', String(marca.inicio))
+          lado.style.setProperty('--tq-prog-f', String(marca.fracao))
+        }
       }
 
-      const id = categoriaPorRolagem({ secoes, ...medida })
       if (id == null || String(id) === String(categoriaId)) return
       daRolagemRef.current = String(id)
       aoTrocarCategoria(id)
@@ -100,6 +123,11 @@ export default function TelaCatalogo({ categorias, categoriaId, aoTrocarCategori
     cont.addEventListener('scroll', aoRolar, { passive: true })
     cont.addEventListener('touchstart', libera, { passive: true })
     cont.addEventListener('wheel', libera, { passive: true })
+    // Uma medição na MONTAGEM. Sem ela o marcador só nasce no primeiro toque, e até lá as
+    // variáveis não existem — o CSS cai nos padrões (`0` e `1`) e a trilha aparece dourada
+    // de ponta a ponta, dizendo que o cliente está em todo lugar ao mesmo tempo.
+    // `aoRolar` agenda um quadro em vez de marcar estado aqui dentro.
+    aoRolar()
     return () => {
       cont.removeEventListener('scroll', aoRolar)
       cont.removeEventListener('touchstart', libera)

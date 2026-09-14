@@ -148,18 +148,70 @@ export function categoriaPorRolagem({
    marcando um ponto que não batia com a categoria acesa. Com o atraso corrigido, ele
    voltou. Fica o registro para ninguém refazer o diagnóstico errado. */
 
-/* A janela visível sobre o catálogo inteiro: onde ela começa e que fatia ela cobre.
+/* ── O MARCADOR NA COLUNA ─────────────────────────────────────────────────────────────
+   Onde o risco dourado fica, na trilha ao lado das categorias.
 
-   `minimo` existe porque num cardápio de noventa cards a janela é ~4% do total, e um
-   polegar de 4% da altura da coluna é um risco que ninguém enxerga a um metro. Ele passa
-   a ocupar o mínimo legível — o indicador vira posição, não medida exata. */
-export function janelaDeRolagem({ scrollAtual = 0, alturaVisivel = 0, alturaTotal = 0, minimo = 0.06 } = {}) {
-  const total = Number(alturaTotal) || 0
-  const visivel = Number(alturaVisivel) || 0
-  if (total <= 0 || visivel <= 0 || visivel >= total) return { inicio: 0, fracao: 1 }
-  const y = Math.min(Math.max(Number(scrollAtual) || 0, 0), total - visivel)
-  const fracao = Math.min(1, Math.max(minimo, visivel / total))
-  // O início é reescalado para a fração ampliada não estourar o fim da trilha.
-  const inicio = (y / (total - visivel)) * (1 - fracao)
+   ANTES ele era uma BARRA DE ROLAGEM: posição e tamanho saíam da fração rolada do
+   catálogo. O defeito não era de ajuste, era de conceito — barra de rolagem e destaque de
+   categoria medem coisas diferentes, e com categorias de tamanhos diferentes elas NÃO
+   PODEM concordar. Com o catálogo 60% rolado o cliente pode estar na 4ª de 10 categorias,
+   e a tela mostrava dois indicadores apontando para lugares distantes um do outro.
+
+   Agora o marcador sai da MESMA fonte que o destaque: ele tem a altura de uma pílula e
+   fica sobre a pílula da categoria atual. Entre uma e outra ele DESLIZA, na proporção do
+   quanto já se andou dentro da seção — é isso que o mantém informativo em vez de ser um
+   segundo desenho do que o destaque já diz. Os dois nunca mais divergem, porque um é
+   função do outro.
+
+   Tudo em FRAÇÕES da trilha: quem conhece pixel é o componente, que mede; aqui só se
+   calcula. */
+export function marcaNaColuna({
+  inicioPilula = 0, alturaPilula = 0, inicioProxima = null, alturaTrilha = 0, progresso = 0,
+} = {}) {
+  const trilha = Number(alturaTrilha) || 0
+  const alt = Number(alturaPilula) || 0
+  if (trilha <= 0 || alt <= 0) return { inicio: 0, fracao: 1 }
+
+  const fracao = Math.min(1, alt / trilha)
+  const i0 = (Number(inicioPilula) || 0) / trilha
+  // Sem próxima (última categoria), não há para onde deslizar: o marcador fica parado
+  // sobre ela em vez de escorregar para fora da trilha.
+  const i1 = Number.isFinite(Number(inicioProxima)) && inicioProxima !== null
+    ? Number(inicioProxima) / trilha
+    : i0
+  const t = Math.min(1, Math.max(0, Number(progresso) || 0))
+
+  const inicio = Math.min(Math.max(i0 + t * (i1 - i0), 0), Math.max(0, 1 - fracao))
   return { inicio, fracao }
 }
+
+/* Quanto do caminho DENTRO da seção atual já foi andado, de 0 a 1.
+
+   É o que dá movimento contínuo ao marcador: sem isto ele saltaria de pílula em pílula, e
+   a rolagem — que é fluida — pareceria travada em degraus.
+
+   A última seção termina no fim da rolagem possível (`alturaTotal - alturaVisivel`), e não
+   em `alturaTotal`: senão ela nunca chegaria a 1, porque o cliente não consegue rolar até
+   lá. Fora dos limites, grampeado — nunca `NaN`, que viraria um `transform` inválido e um
+   marcador invisível. */
+export function progressoNaSecao({
+  secoes, atual, scrollAtual = 0, alturaVisivel = 0, alturaTotal = 0,
+} = {}) {
+  const lista = (Array.isArray(secoes) ? secoes : [])
+    .filter((s) => s && s.id != null && Number.isFinite(Number(s.topo)))
+    .slice()
+    .sort((a, b) => Number(a.topo) - Number(b.topo))
+  if (!lista.length) return 0
+
+  const i = lista.findIndex((s) => String(s.id) === String(atual))
+  if (i < 0) return 0
+
+  const inicio = Number(lista[i].topo)
+  const fimRolagem = Math.max(0, (Number(alturaTotal) || 0) - (Number(alturaVisivel) || 0))
+  const fim = i + 1 < lista.length ? Number(lista[i + 1].topo) : fimRolagem
+  const vao = fim - inicio
+  if (!(vao > 0)) return 0
+
+  return Math.min(1, Math.max(0, ((Number(scrollAtual) || 0) - inicio) / vao))
+}
+

@@ -191,31 +191,78 @@ test('categoriaPorRolagem: entrada torta não derruba a sidebar', () => {
 })
 
 // ── indicador de posição no catálogo ─────────────────────────────────────────
-import { janelaDeRolagem } from './totemFoco.js';
+// ══ O marcador na coluna ═══════════════════════════════════════════════════
+// Ele era uma BARRA DE ROLAGEM: posição e tamanho saíam da fração rolada do catálogo. O
+// defeito não era de ajuste, era de conceito — barra de rolagem e destaque de categoria
+// medem coisas diferentes, e com categorias de tamanhos diferentes não podem concordar.
+// Agora o marcador é função do destaque, e estes testes travam isso.
+import { marcaNaColuna, progressoNaSecao } from './totemFoco.js';
 
-test('a janela: começo no topo, fim no fim', () => {
-  const topo = janelaDeRolagem({ scrollAtual: 0, alturaVisivel: 800, alturaTotal: 4000 });
-  assert.equal(topo.inicio, 0);
-  const fim = janelaDeRolagem({ scrollAtual: 3200, alturaVisivel: 800, alturaTotal: 4000 });
-  assert.equal(Math.round((fim.inicio + fim.fracao) * 1000) / 1000, 1, 'o polegar encosta no fim da trilha');
+const TRECHOS = [
+  { id: 'a', topo: 0 },      // 0 → 1000
+  { id: 'b', topo: 1000 },   // 1000 → 1600
+  { id: 'c', topo: 1600 },   // 1600 → fim
+];
+const VISTA = { alturaVisivel: 800, alturaTotal: 3000 };  // rolagem possível: 0 → 2200
+
+test('🔴 o marcador POUSA na pílula da categoria atual', () => {
+  // O caso que motivou a mudança: com o catálogo rolado até a quarta categoria, o risco
+  // ficava na altura da sexta porque seguia a fração de rolagem. Agora ele é a pílula.
+  const m = marcaNaColuna({ inicioPilula: 300, alturaPilula: 100, inicioProxima: 400, alturaTrilha: 1000, progresso: 0 });
+  assert.equal(m.inicio, 0.3, 'começa exatamente no topo da pílula atual');
+  assert.equal(m.fracao, 0.1, 'e tem a altura dela');
 });
 
-test('🔴 o polegar nunca some num cardápio longo', () => {
-  // 800 de janela em 20000 de catálogo dá 4% — um risco que ninguém vê a um metro.
-  const j = janelaDeRolagem({ scrollAtual: 0, alturaVisivel: 800, alturaTotal: 20000 });
-  assert.equal(j.fracao, 0.06, 'o mínimo legível manda');
-  const noFim = janelaDeRolagem({ scrollAtual: 19200, alturaVisivel: 800, alturaTotal: 20000 });
-  assert.ok(noFim.inicio + noFim.fracao <= 1.0001, 'e o mínimo não estoura o fim da trilha');
+test('entre uma pílula e outra ele DESLIZA, não salta', () => {
+  const meio = marcaNaColuna({ inicioPilula: 300, alturaPilula: 100, inicioProxima: 400, alturaTrilha: 1000, progresso: 0.5 });
+  assert.equal(meio.inicio, 0.35, 'na metade da seção, meio caminho até a próxima');
+  const fim = marcaNaColuna({ inicioPilula: 300, alturaPilula: 100, inicioProxima: 400, alturaTrilha: 1000, progresso: 1 });
+  assert.equal(fim.inicio, 0.4, 'no fim da seção, encostado na próxima');
 });
 
-test('conteúdo que cabe na tela: trilha cheia, sem indicador para dar', () => {
-  assert.deepEqual(janelaDeRolagem({ scrollAtual: 0, alturaVisivel: 900, alturaTotal: 900 }), { inicio: 0, fracao: 1 });
-  assert.deepEqual(janelaDeRolagem({}), { inicio: 0, fracao: 1 });
-  assert.deepEqual(janelaDeRolagem(), { inicio: 0, fracao: 1 });
+test('última categoria: sem para onde deslizar, o marcador fica parado nela', () => {
+  const m = marcaNaColuna({ inicioPilula: 800, alturaPilula: 100, inicioProxima: null, alturaTrilha: 1000, progresso: 1 });
+  assert.equal(m.inicio, 0.8, 'não escorrega para fora da trilha');
 });
 
-test('rolagem fora dos limites é grampeada', () => {
-  assert.equal(janelaDeRolagem({ scrollAtual: -500, alturaVisivel: 800, alturaTotal: 4000 }).inicio, 0);
-  const alem = janelaDeRolagem({ scrollAtual: 99999, alturaVisivel: 800, alturaTotal: 4000 });
-  assert.equal(Math.round((alem.inicio + alem.fracao) * 1000) / 1000, 1);
+test('🔴 o marcador nunca passa do fim da trilha', () => {
+  const m = marcaNaColuna({ inicioPilula: 960, alturaPilula: 100, inicioProxima: 2000, alturaTrilha: 1000, progresso: 1 });
+  assert.ok(m.inicio + m.fracao <= 1.0001, `estourou: ${m.inicio + m.fracao}`);
+});
+
+test('medida torta não vira NaN — seria um transform inválido e um risco invisível', () => {
+  assert.deepEqual(marcaNaColuna(), { inicio: 0, fracao: 1 });
+  assert.deepEqual(marcaNaColuna({}), { inicio: 0, fracao: 1 });
+  assert.deepEqual(marcaNaColuna({ alturaTrilha: 0, alturaPilula: 50 }), { inicio: 0, fracao: 1 });
+  const m = marcaNaColuna({ inicioPilula: 100, alturaPilula: 50, alturaTrilha: 500, progresso: 'muito' });
+  assert.equal(m.inicio, 0.2, 'progresso não-numérico vale zero');
+});
+
+// -- o progresso dentro da seção --------------------------------------------
+test('progresso vai de 0 a 1 dentro da seção', () => {
+  const p = (scrollAtual, atual) => progressoNaSecao({ secoes: TRECHOS, atual, scrollAtual, ...VISTA });
+  assert.equal(p(1000, 'b'), 0, 'no topo da seção');
+  assert.equal(p(1300, 'b'), 0.5, 'na metade');
+  assert.equal(p(1600, 'b'), 1, 'no fim');
+});
+
+test('🔴 a ÚLTIMA seção chega a 1 no fim da rolagem possível, não no fim do conteúdo', () => {
+  // Termina em 2200 (3000 − 800). Medir contra 3000 faria o marcador parar em 0,73 com o
+  // cliente já no rodapé do cardápio.
+  const p = (scrollAtual) => progressoNaSecao({ secoes: TRECHOS, atual: 'c', scrollAtual, ...VISTA });
+  assert.equal(p(1600), 0);
+  assert.equal(p(2200), 1, 'rolou tudo o que dava: chegou ao fim');
+});
+
+test('progresso é grampeado e nunca devolve NaN', () => {
+  assert.equal(progressoNaSecao({ secoes: TRECHOS, atual: 'b', scrollAtual: -999, ...VISTA }), 0);
+  assert.equal(progressoNaSecao({ secoes: TRECHOS, atual: 'b', scrollAtual: 99999, ...VISTA }), 1);
+  assert.equal(progressoNaSecao({ secoes: TRECHOS, atual: 'inexistente', scrollAtual: 500, ...VISTA }), 0);
+  assert.equal(progressoNaSecao({}), 0);
+  assert.equal(progressoNaSecao(), 0);
+});
+
+test('seções fora de ordem são ordenadas antes de medir', () => {
+  const baralhado = [TRECHOS[2], TRECHOS[0], TRECHOS[1]];
+  assert.equal(progressoNaSecao({ secoes: baralhado, atual: 'b', scrollAtual: 1300, ...VISTA }), 0.5);
 });

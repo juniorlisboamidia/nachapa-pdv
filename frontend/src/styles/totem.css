@@ -604,7 +604,13 @@
      (17,1:1 sobre o preto) e devolve a hierarquia. */
   color: rgba(var(--tq-tinta-base), 0.82);
   font-family: var(--tq-fonte-display);
+  /* 600 é o peso REAL disponível: a família do totem tem dois arquivos, um declarado para
+     500–700 e outro para 800–900. Pedir 700 não engrossaria nada (é o mesmo arquivo) e
+     pedir 800 saltaria para o Montserrat 900, que numa coluna de dez linhas vira bloco.
+     O meio-termo é o traço: 0,4px de contorno na própria cor engrossa a haste sem trocar
+     de família e sem o negrito SINTÉTICO, que é o que a folha evita desde o começo. */
   font-weight: 600; font-size: clamp(13px, 1.76vw, 19px); line-height: 1.2;
+  -webkit-text-stroke: 0.4px currentColor;
   letter-spacing: 0.02em; text-transform: uppercase;
   transition: background 0.14s ease, color 0.14s ease;
 }
