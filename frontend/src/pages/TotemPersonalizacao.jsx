@@ -346,10 +346,6 @@ export default function TotemPersonalizacao() {
           grande o bastante para ser lida. */}
       <div className="table-card" style={{ padding: 16, marginBottom: 16 }}>
         <h2 className="ttm-secao-t">Tela de espera</h2>
-        <div className="ttm-nota" style={{ marginTop: 0 }}>
-          É a tela <strong>padrão</strong> do totem: fica no vidro sempre que não há banner no ar.
-          Deixe em branco o que não quiser mostrar — a tela se compõe sem.
-        </div>
 
         <div className="ttm-vit-split">
           <div>
@@ -376,8 +372,7 @@ export default function TotemPersonalizacao() {
                 ) : null}
               </div>
               <div className="ttm-dica">
-                {dados?.fundo?.medida?.largura ?? 1080} × {dados?.fundo?.medida?.altura ?? 960} px — a metade de cima da tela.
-                PNG, JPG ou WEBP até {dados?.fundo?.limiteKb ?? 700} KB; reduzida antes de subir.
+                {dados?.fundo?.medida?.largura ?? 1080} × {dados?.fundo?.medida?.altura ?? 960} px, até {dados?.fundo?.limiteKb ?? 700} KB
               </div>
             </div>
 
@@ -398,9 +393,7 @@ export default function TotemPersonalizacao() {
                   onChange={(e) => setTitulo(e.target.value)}
                   aria-invalid={tituloLongo ? 'true' : undefined}
                 />
-                <div className={tituloLongo ? 'ttm-erro-campo' : 'ttm-dica'} role={tituloLongo ? 'alert' : undefined}>
-                  {tituloLongo ? `Passou de ${tituloMax} caracteres.` : 'Em branco, a tela não mostra título.'}
-                </div>
+                {tituloLongo ? <div className="ttm-erro-campo" role="alert">Passou de {tituloMax} caracteres.</div> : null}
               </div>
 
               <div className="form-group">
@@ -416,9 +409,7 @@ export default function TotemPersonalizacao() {
                   onChange={(e) => setSubtitulo(e.target.value)}
                   aria-invalid={subtituloLongo ? 'true' : undefined}
                 />
-                <div className={subtituloLongo ? 'ttm-erro-campo' : 'ttm-dica'} role={subtituloLongo ? 'alert' : undefined}>
-                  {subtituloLongo ? `Passou de ${subtituloMax} caracteres.` : 'Em branco, a tela não mostra subtítulo.'}
-                </div>
+                {subtituloLongo ? <div className="ttm-erro-campo" role="alert">Passou de {subtituloMax} caracteres.</div> : null}
               </div>
 
               <div className="form-group">
@@ -434,11 +425,7 @@ export default function TotemPersonalizacao() {
                   onChange={(e) => setChamada(e.target.value)}
                   aria-invalid={chamadaLonga ? 'true' : undefined}
                 />
-                <div className={chamadaLonga ? 'ttm-erro-campo' : 'ttm-dica'} role={chamadaLonga ? 'alert' : undefined}>
-                  {chamadaLonga
-                    ? `Passou de ${chamadaMax} caracteres — quebraria em duas linhas.`
-                    : `Em branco, “${dados?.chamadaPadrao ?? 'Toque para começar'}”. O totem escreve em caixa alta.`}
-                </div>
+                {chamadaLonga ? <div className="ttm-erro-campo" role="alert">Passou de {chamadaMax} caracteres.</div> : null}
               </div>
 
               <div className="form-group">
@@ -454,11 +441,7 @@ export default function TotemPersonalizacao() {
                   onChange={(e) => setFraseMeio(e.target.value)}
                   aria-invalid={fraseMeioLonga ? 'true' : undefined}
                 />
-                <div className={fraseMeioLonga ? 'ttm-erro-campo' : 'ttm-dica'} role={fraseMeioLonga ? 'alert' : undefined}>
-                  {fraseMeioLonga
-                    ? `Passou de ${fraseMeioMax} caracteres.`
-                    : `A faixa entre a foto e as esteiras. Em branco, “${dados?.fraseMeioPadrao ?? 'Nossos produtos'}”.`}
-                </div>
+                {fraseMeioLonga ? <div className="ttm-erro-campo" role="alert">Passou de {fraseMeioMax} caracteres.</div> : null}
               </div>
             </div>
           </div>
