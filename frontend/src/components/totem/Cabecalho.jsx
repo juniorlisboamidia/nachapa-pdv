@@ -69,25 +69,33 @@ export default function Cabecalho({ titulo, modo, marca, capa, aoVoltar, aoCance
             : <h1 className="tq-topo-tit tq-disp">{titulo ?? modo}</h1>}
         </div>
 
-        {/* SOBRE A CAPA o botão é um X, não uma palavra.
-            A capa é arte da loja e a faixa é dela; um balão escrito "Cancelar" no meio
-            disputava a leitura com a peça que a loja desenhou. O X é o vocabulário
-            universal de fechar, e o vermelho diz que a ação é destrutiva sem precisar
-            de texto.
+        {/* SOBRE A CAPA o botão é um X solto, sem chão nenhum.
+            A capa é arte da loja e a faixa é dela; um balão escrito "Cancelar" — ou um
+            disco por baixo do X — disputava a leitura com a peça que a loja desenhou.
 
-            Mas ele NÃO pode ser um X e mais nada: cancelar joga o pedido inteiro fora e
-            não tem desfazer. O primeiro toque abre o botão numa faixa com a pergunta
-            escrita — o X é o repouso, a palavra aparece na hora em que decide. É a mesma
-            regra de dois toques de sempre (spec §11), só que agora ela também é o que
-            devolve o texto à tela. */}
+            SEM CHÃO, o X precisa se garantir sobre qualquer arte: sobre foto clara um
+            vermelho puro some, e sobre foto escura ele encosta no fundo. Quem resolve é um
+            CONTORNO — o mesmo desenho traçado duas vezes, escuro e grosso por baixo,
+            vermelho e fino por cima. É contorno, não sombra: borda dura, sem borrão e sem
+            brilho, que é o que a folha evita em todo lugar. Sobre claro quem separa é o
+            contorno; sobre escuro, o vermelho.
+
+            🔴 UM TOQUE SÓ, por decisão do Junior (13/09/2026). Este botão não passa pela
+            confirmação de dois toques que o `.tq-topo-cancelar` de texto ainda usa: aqui
+            ele descarta o pedido e volta à tela inicial na hora. A consequência é real e
+            está registrada — um toque errado no canto superior direito joga fora um
+            carrinho montado, e não tem desfazer. */}
         {aoCancelar ? (
           <button
             type="button"
-            className={'tq-topo-cancelar sobre-capa' + (confirmando ? ' confirmando' : '')}
-            onClick={tocarCancelar}
-            aria-label={confirmando ? 'Confirmar: apagar o pedido' : 'Cancelar o pedido'}
+            className="tq-topo-cancelar sobre-capa"
+            onClick={aoCancelar}
+            aria-label="Cancelar o pedido e voltar ao início"
           >
-            {confirmando ? 'Apagar pedido?' : <Ico nome="xis" tam={34} traco={2.6} />}
+            <span className="tq-xis" aria-hidden="true">
+              <Ico nome="xis" tam={46} traco={6} className="tq-xis-borda" />
+              <Ico nome="xis" tam={46} traco={3} className="tq-xis-tinta" />
+            </span>
           </button>
         ) : null}
       </header>

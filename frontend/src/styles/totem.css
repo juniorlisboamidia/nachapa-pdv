@@ -1505,37 +1505,33 @@
   .tq-topo-capa-img { animation: tq-arte-entra 420ms ease-out both; }
 }
 .tq-topo-faixa .tq-topo-tit { position: relative; }
-/* Sobre a arte, o Cancelar precisa de chão próprio: a capa é do lojista, e não dá para
-   contar com contraste em cima dela.
-
-   Em repouso ele é um X vermelho num disco escuro. Três coisas o fazem ler como botão de
-   cancelar, e não como enfeite da arte: a forma fechada (disco), o contorno na mesma cor
-   do traço (contorno é o que diz "isto é um alvo") e o vermelho, que é a única cor de
-   perigo da tela.
-
-   AS CORES AQUI SÃO LITERAIS, e é de propósito: este botão flutua sobre a arte da LOJA, que
-   é a mesma nos dois fundos. Usar `--tq-perigo` faria o vermelho virar #b3261e no fundo
-   claro — escuro sobre um disco escuro — porque aquele token é calibrado para o chão do
-   quiosque, não para uma fotografia. */
+/* Sobre a arte, o Cancelar é um X SOLTO — sem disco, sem balão, sem chão.
+   O alvo continua tendo 64px; o que sumiu foi o desenho dele. Área de toque grande com
+   nada pintado em volta é o que deixa a capa inteira ser da loja sem tirar o alvo do
+   cliente. */
 .tq-topo-cancelar.sobre-capa {
-  position: absolute; top: 16px; right: 20px; z-index: 2;
+  position: absolute; top: 12px; right: 14px; z-index: 2;
   width: 64px; height: 64px; min-height: 64px; padding: 0;
   display: grid; place-items: center;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.62);
-  border: 2px solid #ff6a5c;
-  color: #ff6a5c;
-  backdrop-filter: blur(2px);
+  background: none; border: none; border-radius: 50%;
 }
-/* O primeiro toque abre o botão e escreve a pergunta. Precisa vencer `.confirmando` sozinho
-   (mesma especificidade, e este vem depois só por sorte) — daí as três classes. */
-.tq-topo-cancelar.sobre-capa.confirmando {
-  width: auto; padding: 0 22px; border-radius: 999px;
-  background: #ff6a5c; border-color: #ff6a5c; color: #1a0d0b;
-  font-family: var(--tq-fonte-display); font-weight: 900;
-}
-.tq-topo-cancelar.sobre-capa:active { background: rgba(0, 0, 0, 0.78); }
-.tq-topo-cancelar.sobre-capa.confirmando:active { background: #e85446; }
+/* Toque: só o X encolhe, e nada acende em volta. */
+.tq-topo-cancelar.sobre-capa:active .tq-xis { transform: scale(0.9); }
+
+/* O CONTORNO. Sem chão, o X tem de se garantir sobre qualquer arte: sobre foto clara um
+   vermelho puro some, e sobre foto escura ele encosta no fundo.
+
+   São dois desenhos do MESMO ícone empilhados na mesma célula da grade — escuro e grosso
+   atrás, vermelho e fino na frente. Contorno, e não sombra: borda dura, sem borrão e sem
+   brilho. Sobre claro quem separa é o contorno; sobre escuro, o vermelho.
+
+   O vermelho é LITERAL e não `--tq-perigo`: este botão flutua sobre a arte da LOJA, que é
+   a mesma nos dois fundos, e aquele token vira #b3261e no fundo claro porque é calibrado
+   para o chão do quiosque, não para uma fotografia. */
+.tq-xis { display: grid; place-items: center; transition: transform 0.12s ease; }
+.tq-xis > * { grid-area: 1 / 1; }
+.tq-xis-borda { color: rgba(0, 0, 0, 0.72); }
+.tq-xis-tinta { color: #ff5347; }
 @media (min-width: 900px) {
   /* Sem capa, a faixa cresce um pouco no alvo para não virar uma fresta de 96px numa tela
      de 1920. COM capa quem manda é a proporção, e este mínimo não morde. */
