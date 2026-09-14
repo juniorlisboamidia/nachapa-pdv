@@ -27,7 +27,11 @@ import useCarrossel from './useCarrossel'
 // O carrossel gira imagem numa tela onde, por definição, não existe sessão. Ociosidade,
 // MS_AMBIGUO e o relógio capturado são outro domínio e não se encostam. Este componente só
 // existe enquanto `tela === 'espera'`: sair desmonta e limpa tudo, voltar remonta.
-export default function TelaEspera({ loja, banners, aoTocar }) {
+export default function TelaEspera({ loja, banners, chamada, aoTocar }) {
+  /* O texto do botão vem de Personalização, já resolvido pelo servidor. O literal aqui é
+     a última rede: bootstrap de uma versão anterior não manda o campo, e um botão sem
+     texto na tela que fica horas no vidro seria o pior lugar possível para descobrir. */
+  const texto = (typeof chamada === 'string' && chamada.trim()) || 'Toque para começar'
   const logo = loja?.logo || loja?.logoDataUrl || null
   const inicial = String(loja?.nome ?? '').trim().charAt(0).toUpperCase() || '•'
 
@@ -44,7 +48,7 @@ export default function TelaEspera({ loja, banners, aoTocar }) {
       type="button"
       className={'tq-espera' + (atual ? ' com-banner' : '')}
       onClick={aoTocar}
-      aria-label="Toque para começar o seu pedido"
+      aria-label={texto}
     >
       {atual ? (
         <>
@@ -74,7 +78,7 @@ export default function TelaEspera({ loja, banners, aoTocar }) {
 
       <div className="tq-espera-chamada">
         <Ico nome="mais" tam={40} traco={2.4} className="tq-espera-ico" />
-        <span className="tq-disp tq-disp-forte">Toque para começar</span>
+        <span className="tq-disp tq-disp-forte">{texto}</span>
       </div>
 
       {/* Marcadores só com dois ou mais: com um banner eles seriam enfeite. */}

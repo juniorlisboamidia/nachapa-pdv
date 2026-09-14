@@ -56,6 +56,7 @@ import {
   MOTIVO_POSICAO, validarPatch, aplicarPatch, coresEfetivas, sanitizarTokens,
   normalizarPosicao, aparenciaPublica, diagnosticoDeContraste,
   LAYOUTS, MOTIVO_LAYOUT, normalizarLayout, layoutEfetivo, PADROES_POR_LAYOUT, tokensDoLayout,
+  CHAMADA_PADRAO, CHAMADA_MAX, MOTIVO_CHAMADA, validarChamada,
   LOGO_MAX_BYTES, validarLogoDataUrl, decodificarDataUrl, proximaVersaoLogo,
 } from './totemAparencia.js';
 // Totem › Banners: agenda, duração, imagem e as duas projeções (admin e pública).
@@ -9450,6 +9451,11 @@ app.get('/api/totem/aparencia', async (req, res) => {
       padroesPorFundo: PADROES_POR_LAYOUT,
       layoutFundo,
       layouts: LAYOUTS,
+      // O que está GUARDADO (pode ser null) ao lado do padrão: a tela precisa distinguir
+      // "a loja escolheu isto" de "está valendo o padrão" para saber o que pôr no campo.
+      chamadaEspera: cfg?.chamadaEspera ?? null,
+      chamadaPadrao: CHAMADA_PADRAO,
+      chamadaMax: CHAMADA_MAX,
       overrides,
       efetivas,
       contraste: diagnosticoDeContraste(efetivas),
@@ -9490,6 +9496,16 @@ app.put('/api/totem/aparencia', async (req, res) => {
       layout = normalizarLayout(corpo.layoutFundo);
       if (layout === null) erros.push({ chave: 'layoutFundo', motivo: MOTIVO_LAYOUT });
     }
+    // A chamada usa uma variável de PRESENÇA à parte: `valor` legítimo é `null` (voltar ao
+    // padrão), então `if (chamada)` no lugar de `if (temChamada)` engoliria o pedido de
+    // apagar e o campo nunca mais voltaria ao texto de fábrica.
+    let temChamada = false;
+    let chamada = null;
+    if (corpo.chamadaEspera !== undefined) {
+      const r = validarChamada(corpo.chamadaEspera);
+      if (!r.ok) erros.push({ chave: 'chamadaEspera', motivo: MOTIVO_CHAMADA });
+      else { temChamada = true; chamada = r.valor; }
+    }
     if (erros.length) return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros });
 
     const atual = await prisma.totemConfiguracao.findUnique({ where: { empresaId } });
@@ -9504,6 +9520,7 @@ app.put('/api/totem/aparencia', async (req, res) => {
     if (patch) dados.tokens = aplicarPatch(atual?.tokens, patch, alvo);
     if (posicao) dados.posicaoCategoriasPadrao = posicao;
     if (layout) dados.layoutFundo = layout;
+    if (temChamada) dados.chamadaEspera = chamada;
 
     const linha = await prisma.totemConfiguracao.upsert({
       where: { empresaId },
@@ -9516,6 +9533,7 @@ app.put('/api/totem/aparencia', async (req, res) => {
       ok: true,
       layoutFundo,
       padroes: PADROES_POR_LAYOUT[layoutFundo],
+      chamadaEspera: linha.chamadaEspera ?? null,
       overrides: tokensDoLayout(linha.tokens, layoutFundo),
       efetivas,
       contraste: diagnosticoDeContraste(efetivas),

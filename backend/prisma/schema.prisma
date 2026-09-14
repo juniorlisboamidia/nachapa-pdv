@@ -924,6 +924,11 @@ model TotemConfiguracao {
   // Padrão da LOJA. O aparelho pode divergir (Dispositivo.posicaoCategoriasOverride).
   posicaoCategoriasPadrao String @default("esquerda")
 
+  // O texto do botão da tela de espera. NULL = sem personalização, vale o padrão
+  // ("Toque para começar"). Teto e régua em totemAparencia.js — o padrão NÃO mora aqui,
+  // senão a string existiria em dois lugares.
+  chamadaEspera           String?
+
   // O FUNDO: 'PADRAO' (carvão) ou 'CLARO'. Não é uma sétima cor — é a RELAÇÃO entre as
   // seis, e por isso `tokens` guarda um conjunto de overrides POR fundo. Escolha da LOJA;
   // o aparelho não diverge (ainda). Régua e padrões em totemAparencia.js.

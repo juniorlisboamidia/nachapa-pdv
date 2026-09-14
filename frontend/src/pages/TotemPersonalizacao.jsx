@@ -62,6 +62,10 @@ export default function TotemPersonalizacao() {
   // na hora, e não fica pendurado no botão Salvar junto com as cores. Ver `trocarFundo`.
   const [fundo, setFundo] = useState('PADRAO')
   const [confirmandoFundo, setConfirmandoFundo] = useState(null)
+  // '' na tela significa "sem personalização" e vira `null` no banco. São a MESMA coisa
+  // para o gestor (o campo está vazio) e coisas diferentes para o JSON, então a conversão
+  // acontece num lugar só, na hora de montar o corpo.
+  const [chamada, setChamada] = useState('')
   const arquivoRef = useRef(null)
 
   // Não marca estado de forma síncrona: o efeito de montagem só AGENDA o trabalho.
@@ -73,6 +77,7 @@ export default function TotemPersonalizacao() {
       setRascunho(r.data?.efetivas ?? {})
       setPosicao(r.data?.posicaoCategoriasPadrao ?? 'esquerda')
       setFundo(r.data?.layoutFundo ?? 'PADRAO')
+      setChamada(r.data?.chamadaEspera ?? '')
       setErro(null)
     })
     .catch(() => setErro('Não foi possível ler a aparência agora.'))
@@ -104,7 +109,11 @@ export default function TotemPersonalizacao() {
     patch[k] = atual
   }
   const trocouPosicao = posicao !== dados?.posicaoCategoriasPadrao
-  const temMudanca = Object.keys(patch).length > 0 || trocouPosicao
+  const chamadaLimpa = chamada.trim()
+  const trocouChamada = chamadaLimpa !== (dados?.chamadaEspera ?? '')
+  const chamadaMax = dados?.chamadaMax ?? 32
+  const chamadaLonga = [...chamadaLimpa].length > chamadaMax
+  const temMudanca = Object.keys(patch).length > 0 || trocouPosicao || trocouChamada
 
   // Diagnóstico ao vivo, com as cores do RASCUNHO. Os pares vêm do servidor (é ele que
   // define quais importam); só a razão é recalculada aqui, para não ir ao servidor a
@@ -121,9 +130,12 @@ export default function TotemPersonalizacao() {
       const corpo = {}
       if (Object.keys(patch).length) corpo.tokens = patch
       if (trocouPosicao) corpo.posicaoCategoriasPadrao = posicao
+      // Vazio vira `null`: é o caminho explícito de "voltar ao texto de fábrica".
+      if (trocouChamada) corpo.chamadaEspera = chamadaLimpa || null
       const r = await api.put('/totem/aparencia', corpo)
       setDados((d) => ({ ...d, ...r.data }))
       setRascunho(r.data?.efetivas ?? rascunho)
+      setChamada(r.data?.chamadaEspera ?? '')
       setToast({ message: 'Aparência salva. Os totens aplicam na próxima vez que carregarem o cardápio.', type: 'success' })
     } catch (e) {
       const erros = e?.response?.data?.erros
@@ -314,6 +326,35 @@ export default function TotemPersonalizacao() {
         <Previa cores={rascunho} padroes={padroes} />
       </div>
 
+      {/* ── TELA DE ESPERA ── */}
+      <div className="table-card" style={{ padding: 16, marginBottom: 16 }}>
+        <h2 className="ttm-secao-t">Tela de espera</h2>
+        <div className="form-group" style={{ margin: 0, maxWidth: 460 }}>
+          <label className="form-label" htmlFor="apa-chamada">Texto do botão</label>
+          <input
+            id="apa-chamada"
+            className={'form-input' + (chamadaLonga ? ' invalido' : '')}
+            value={chamada}
+            disabled={salvando}
+            placeholder={dados?.chamadaPadrao ?? 'Toque para começar'}
+            onChange={(e) => setChamada(e.target.value)}
+            aria-invalid={chamadaLonga ? 'true' : undefined}
+            aria-describedby="apa-chamada-ajuda"
+          />
+          {/* A prévia mostra em CAIXA ALTA porque é assim que o totem escreve — a folha
+              aplica `text-transform`. Sem ela o gestor digita em minúsculas e leva um
+              susto no vidro. */}
+          <div className="ttm-chamada-previa" aria-hidden="true">
+            + {(chamadaLimpa || dados?.chamadaPadrao || 'Toque para começar').toUpperCase()}
+          </div>
+          <div id="apa-chamada-ajuda" className={chamadaLonga ? 'ttm-erro-campo' : 'ttm-dica'} role={chamadaLonga ? 'alert' : undefined}>
+            {chamadaLonga
+              ? `Passou de ${chamadaMax} caracteres. Mais que isso quebra em duas linhas e o botão cresce por cima da arte.`
+              : `Deixe em branco para usar “${dados?.chamadaPadrao ?? 'Toque para começar'}”. Até ${chamadaMax} caracteres — o totem escreve em caixa alta.`}
+          </div>
+        </div>
+      </div>
+
       {/* ── LAYOUT ── */}
       <div className="table-card" style={{ padding: 16, marginBottom: 16 }}>
         <h2 className="ttm-secao-t">Layout</h2>
@@ -360,7 +401,7 @@ export default function TotemPersonalizacao() {
         </div>
       </div>
 
-      <button type="button" className="btn btn-primary" onClick={salvar} disabled={!temMudanca || salvando}>
+      <button type="button" className="btn btn-primary" onClick={salvar} disabled={!temMudanca || salvando || chamadaLonga}>
         {salvando ? 'Salvando…' : 'Salvar'}
       </button>
 

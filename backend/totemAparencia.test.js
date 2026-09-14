@@ -251,6 +251,7 @@ test('uma paleta ilegível é DIAGNOSTICADA, não bloqueada — quem decide é a
 import {
   PADROES, PADROES_POR_LAYOUT, POSICOES, POSICAO_PADRAO,
   LAYOUTS, LAYOUT_PADRAO, normalizarLayout, layoutEfetivo, lerCofre, tokensDoLayout,
+  CHAMADA_PADRAO, CHAMADA_MAX, validarChamada, chamadaEfetiva,
   normalizarPosicao, posicaoEfetiva, validarPatch, aplicarPatch, coresEfetivas, aparenciaPublica,
 } from './totemAparencia.js';
 
@@ -377,6 +378,55 @@ test('🔴 os padrões dos dois fundos batem, valor por valor, com a folha do qu
   // E a tinta-base, que é o que faz os dezessete brancos-com-alfa virarem de lado.
   assert.equal(declarado(blocos.PADRAO, '--tq-tinta-base'), '255, 255, 255');
   assert.equal(declarado(blocos.CLARO, '--tq-tinta-base'), '26, 23, 20');
+});
+
+// ── A chamada da tela de espera ─────────────────────────────────────────────
+test('a chamada aceita texto e apara o que sobra nas pontas', () => {
+  assert.deepEqual(validarChamada('  Peça aqui  '), { ok: true, valor: 'Peça aqui' });
+  assert.equal(chamadaEfetiva('  Peça aqui  '), 'Peça aqui');
+});
+
+test('🔴 vazio não é erro: é "voltar ao padrão"', () => {
+  // Campo apagado no formulário tem de ter caminho de volta. Se vazio fosse recusado, a
+  // loja que personalizou uma vez nunca mais veria o texto de fábrica.
+  for (const v of ['', '   ', null]) {
+    assert.deepEqual(validarChamada(v), { ok: true, valor: null }, JSON.stringify(v));
+  }
+  assert.equal(chamadaEfetiva(null), CHAMADA_PADRAO);
+  assert.equal(chamadaEfetiva(''), CHAMADA_PADRAO);
+  assert.equal(chamadaEfetiva('   '), CHAMADA_PADRAO);
+});
+
+test('🔴 texto longo é RECUSADO na escrita e IGNORADO na leitura', () => {
+  // As duas réguas do módulo, no mesmo campo: o admin leva 400 e sabe o que corrigir; o
+  // quiosque, diante de um valor que já está no banco, cai no padrão e continua vendendo.
+  const longo = 'x'.repeat(CHAMADA_MAX + 1);
+  assert.equal(validarChamada(longo).ok, false);
+  assert.equal(chamadaEfetiva(longo), CHAMADA_PADRAO);
+  const limite = 'x'.repeat(CHAMADA_MAX);
+  assert.equal(validarChamada(limite).ok, true, 'o limite exato passa');
+  assert.equal(chamadaEfetiva(limite), limite);
+});
+
+test('o teto conta CARACTERES, não bytes — acento não pode custar duas letras', () => {
+  const comAcento = 'ç'.repeat(CHAMADA_MAX);
+  assert.equal(validarChamada(comAcento).ok, true, `${CHAMADA_MAX} letras acentuadas cabem`);
+});
+
+test('entrada que não é texto é recusada, e nunca vira texto', () => {
+  for (const v of [12, {}, [], true, undefined]) {
+    assert.equal(validarChamada(v).ok, false, String(v));
+    assert.equal(chamadaEfetiva(v), CHAMADA_PADRAO, String(v));
+  }
+});
+
+test('🔴 o bootstrap manda a chamada JÁ RESOLVIDA, nunca vazia', () => {
+  // Cor tem o padrão embarcado na folha; texto não tem folha nenhuma por baixo. Mandar
+  // null e deixar o quiosque adivinhar espalharia o padrão por dois lugares.
+  assert.equal(aparenciaPublica({}).chamadaEspera, CHAMADA_PADRAO);
+  assert.equal(aparenciaPublica({ config: {} }).chamadaEspera, CHAMADA_PADRAO);
+  assert.equal(aparenciaPublica({ config: { chamadaEspera: '  ' } }).chamadaEspera, CHAMADA_PADRAO);
+  assert.equal(aparenciaPublica({ config: { chamadaEspera: 'Peça aqui' } }).chamadaEspera, 'Peça aqui');
 });
 
 test('fundo inválido cai no padrão, nunca derruba a tela', () => {
@@ -535,7 +585,7 @@ test('🔴 a logo NUNCA vai no bootstrap', () => {
 
 test('bloco público tem só o que o quiosque desenha', () => {
   const pub = aparenciaPublica({ config: { tokens: { fundo: '#111111' }, posicaoCategoriasPadrao: 'direita' } });
-  assert.deepEqual(Object.keys(pub).sort(), ['layoutFundo', 'logoVersao', 'posicaoCategorias', 'temLogoPersonalizada', 'tokens']);
+  assert.deepEqual(Object.keys(pub).sort(), ['chamadaEspera', 'layoutFundo', 'logoVersao', 'posicaoCategorias', 'temLogoPersonalizada', 'tokens']);
   assert.equal(pub.posicaoCategorias, 'direita');
 });
 

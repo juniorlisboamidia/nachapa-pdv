@@ -256,6 +256,48 @@ export function layoutEfetivo(valor) {
   return normalizarLayout(valor) ?? LAYOUT_PADRAO;
 }
 
+/* ── A CHAMADA DA TELA DE ESPERA ──────────────────────────────────────────────────────
+   O texto do botão que fica horas no vidro chamando quem passa.
+
+   O TETO é 32 e não é número redondo à toa: o botão tem `width: min(760px, 100%)` e o
+   texto vai em caixa alta, na fonte de display, a `clamp(24px, 4.2vw, 50px)`. A 50px, 32
+   caracteres em Montserrat 900 é o que ainda cabe numa linha no alvo em pé — passando
+   disso o texto quebra em duas e o botão cresce por cima da arte. Recusar é melhor do que
+   aceitar e deixar a loja descobrir no vidro.
+
+   VAZIO NÃO É ERRO, é "voltar ao padrão": campo apagado no formulário guarda `null` e a
+   tela volta a dizer "Toque para começar". É o mesmo desenho do `null` no patch de cores —
+   ausência é uma escolha, e ela tem de ter um caminho.
+
+   A CAIXA ALTA é da folha (`text-transform: uppercase`), não daqui: o que a loja escreve é
+   guardado como ela escreveu. Se um dia a tela deixar de gritar, o texto continua certo. */
+export const CHAMADA_PADRAO = 'Toque para começar';
+export const CHAMADA_MAX = 32;
+export const MOTIVO_CHAMADA = 'CHAMADA_INVALIDA';
+
+/* ENTRADA — rigor. Devolve `{ ok, valor }`, com `valor` já aparado; `null` significa
+   "sem personalização, use o padrão".
+
+   Espaço em volta some: ninguém escolhe começar um botão com espaço, e um texto que só tem
+   espaços é um campo vazio disfarçado. */
+export function validarChamada(bruto) {
+  if (bruto === null) return { ok: true, valor: null };
+  if (typeof bruto !== 'string') return { ok: false, valor: null };
+  const t = bruto.trim();
+  if (!t) return { ok: true, valor: null };
+  if ([...t].length > CHAMADA_MAX) return { ok: false, valor: null };
+  return { ok: true, valor: t };
+}
+
+/* LEITURA — tolerância. O que o quiosque vai realmente escrever no botão. Nunca vazio:
+   dado torto no banco não pode deixar o totem com um botão sem texto. */
+export function chamadaEfetiva(bruto) {
+  if (typeof bruto !== 'string') return CHAMADA_PADRAO;
+  const t = bruto.trim();
+  if (!t || [...t].length > CHAMADA_MAX) return CHAMADA_PADRAO;
+  return t;
+}
+
 export const POSICOES = Object.freeze(['esquerda', 'direita']);
 export const POSICAO_PADRAO = 'esquerda';
 export const MOTIVO_POSICAO = 'POSICAO_INVALIDA';
@@ -366,6 +408,10 @@ export function aparenciaPublica({ config, dispositivo } = {}) {
   return {
     layoutFundo,
     tokens: tokensDoLayout(config?.tokens, layoutFundo),
+    // JÁ RESOLVIDA, ao contrário das cores. Cor tem o padrão embarcado na folha, que é o
+    // chão quando nada chega; texto não tem folha nenhuma por baixo — mandar `null` e
+    // deixar o quiosque adivinhar espalharia o padrão por dois lugares.
+    chamadaEspera: chamadaEfetiva(config?.chamadaEspera),
     posicaoCategorias: posicaoEfetiva({
       override: dispositivo?.posicaoCategoriasOverride,
       padrao: config?.posicaoCategoriasPadrao,
