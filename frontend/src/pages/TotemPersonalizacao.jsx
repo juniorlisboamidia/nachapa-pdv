@@ -450,14 +450,18 @@ export default function TotemPersonalizacao() {
               produtos da esteira são blocos neutros: eles se escolhem em Destaques da vitrine. */}
           <div className="ttm-vit-lado">
             <div className="ttm-pv-cab"><h3 className="ttm-pv-tit">Prévia</h3></div>
-            <PreviaVitrine
-              cores={rascunho}
-              fundoUrl={dados?.fundo?.tem ? dados.fundo.url : null}
-              titulo={tituloLimpo}
-              subtitulo={subtituloLimpo}
-              chamada={chamadaLimpa || dados?.chamadaPadrao}
-              fraseMeio={fraseMeioLimpa || dados?.fraseMeioPadrao}
-            />
+            {/* Recorte: só o que ESTA tela controla (metade de cima, faixa, uma espiada na
+                esteira), na altura dos campos ao lado. A vitrine inteira fica em Banners. */}
+            <div className="ttm-vit-recorte">
+              <PreviaVitrine
+                cores={rascunho}
+                fundoUrl={dados?.fundo?.tem ? dados.fundo.url : null}
+                titulo={tituloLimpo}
+                subtitulo={subtituloLimpo}
+                chamada={chamadaLimpa || dados?.chamadaPadrao}
+                fraseMeio={fraseMeioLimpa || dados?.fraseMeioPadrao}
+              />
+            </div>
           </div>
         </div>
       </div>
