@@ -1228,13 +1228,92 @@
   text-align: center; cursor: pointer;
 }
 .tq-espera:active { background: var(--tq-preto-2); }
-/* A marca toma o espaço que sobra e se centra nele: é ela que segura o campo visual. */
-.tq-espera-marca { flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; }
-.tq-espera-inicial {
-  width: clamp(140px, 22vw, 260px); aspect-ratio: 1; border-radius: 28px;
-  display: grid; place-items: center;
-  background: var(--tq-amarelo); color: var(--tq-tinta);
-  font-size: clamp(72px, 12vw, 140px); line-height: 1;
+/* ══ A VITRINE — a tela de espera PADRÃO ═══════════════════════════════════
+   Duas metades: em cima foto, título, subtítulo e o botão; embaixo as esteiras.
+
+   Com banner elegível a tela vira outra coisa (arte em tela cheia), e por isso a casca
+   troca de regras em vez de acumular: `.vitrine` desliga o respiro e o centramento que a
+   composição de banner precisa, porque aqui quem divide a tela são as duas metades. */
+.tq-espera.vitrine {
+  justify-content: stretch; gap: 0; padding: 0; text-align: left;
+}
+
+.tq-vit-alto {
+  position: relative; flex: 1 1 52%; min-height: 0; overflow: hidden;
+  display: flex; flex-direction: column; justify-content: flex-end;
+  padding: clamp(32px, 5vh, 88px) clamp(32px, 6vw, 72px) clamp(28px, 4vh, 64px);
+}
+/* A foto cobre a metade inteira. `cover` corta as pontas em vez de distorcer — arte
+   esticada é pior do que arte cortada, e a loja manda 1080 × 1920. */
+.tq-vit-fundo { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+/* O véu é DEGRADÊ e mais forte embaixo, onde estão o título e o botão. Uniforme, ele
+   apagaria a foto inteira para proteger o texto de uma faixa só. */
+.tq-vit-veu {
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg,
+    rgba(0, 0, 0, 0.10) 0%,
+    rgba(0, 0, 0, 0.55) 52%,
+    rgba(0, 0, 0, 0.86) 100%);
+}
+.tq-vit-txt { position: relative; z-index: 1; display: flex; flex-direction: column; gap: clamp(12px, 2vh, 28px); }
+.tq-vit-tit {
+  font-size: clamp(40px, 8.6vw, 122px); line-height: 0.96; letter-spacing: -0.02em;
+  color: var(--tq-branco); text-wrap: balance; max-width: 16ch;
+}
+.tq-vit-sub {
+  font-size: clamp(17px, 3.1vw, 38px); line-height: 1.25;
+  color: var(--tq-texto-claro); max-width: 30ch;
+}
+/* Dentro da vitrine o botão não é mais a tela inteira: ele é um alvo entre outros
+   elementos, então volta a ter largura de conteúdo e a se alinhar com o texto. */
+.tq-espera.vitrine .tq-espera-chamada {
+  width: auto; align-self: flex-start; margin-top: clamp(6px, 1.4vh, 18px);
+}
+
+/* ── As esteiras ──
+   Cada fileira é a lista DUPLICADA no JSX, e o deslocamento vai até -50%: a segunda cópia
+   chega na posição exata em que a primeira começou, e o laço fecha sem salto. */
+.tq-vit-baixo {
+  flex: 1 1 48%; min-height: 0; overflow: hidden;
+  display: flex; flex-direction: column; justify-content: center;
+  gap: clamp(14px, 2.2vh, 34px);
+  padding-block: clamp(14px, 2vh, 32px);
+  background: var(--tq-fundo);
+}
+.tq-vit-trilho { overflow: hidden; }
+.tq-vit-fila {
+  display: flex; gap: clamp(14px, 2.2vw, 30px); width: max-content;
+  /* `translate3d` e `will-change` põem a fileira em camada própria: esta tela fica LIGADA
+     por horas, e sem isso o navegador repinta a metade de baixo a cada quadro. */
+  will-change: transform;
+  animation: tq-fila-anda var(--tq-fila-dur, 30s) linear infinite;
+}
+.tq-vit-fila.volta { animation-direction: reverse; }
+@keyframes tq-fila-anda {
+  from { transform: translate3d(0, 0, 0); }
+  to { transform: translate3d(-50%, 0, 0); }
+}
+/* Movimento reduzido: a esteira PARA, e não some. Os produtos continuam na tela — o que
+   sai é o deslocamento, que é o que incomoda quem pediu para reduzir. */
+@media (prefers-reduced-motion: reduce) {
+  .tq-vit-fila { animation: none; }
+}
+.tq-vit-card {
+  flex: 0 0 auto; width: clamp(150px, 27vw, 300px);
+  display: flex; flex-direction: column; gap: 6px;
+}
+.tq-vit-card img {
+  width: 100%; aspect-ratio: 4 / 3; object-fit: cover;
+  border-radius: var(--tq-raio-2); background: var(--tq-superficie);
+}
+.tq-vit-nome {
+  font-family: var(--tq-fonte-display); font-weight: 600;
+  font-size: clamp(14px, 2.2vw, 26px); line-height: 1.15; color: var(--tq-texto);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tq-vit-preco {
+  font-family: var(--tq-fonte-display); font-weight: 900;
+  font-size: clamp(15px, 2.5vw, 30px); color: var(--tq-preco);
 }
 /* A chamada é a única coisa amarela da tela: aqui o dourado indica ação, como em todo o
    resto do quiosque. */

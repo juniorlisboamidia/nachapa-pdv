@@ -703,7 +703,14 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
   if (tela === TELA_REPOUSO) {
     return (
       <Casca tokens={aparencia?.tokens} posicaoCategorias={posicaoCategorias} fundo={fundo}>
-        <TelaEspera loja={loja} banners={boot?.banners} chamada={aparencia?.chamadaEspera} aoTocar={comecarSessao} />
+        <TelaEspera
+          banners={boot?.banners}
+          chamada={aparencia?.chamadaEspera}
+          titulo={aparencia?.tituloEspera}
+          subtitulo={aparencia?.subtituloEspera}
+          destaques={boot?.destaques}
+          aoTocar={comecarSessao}
+        />
       </Casca>
     )
   }
