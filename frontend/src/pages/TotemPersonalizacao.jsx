@@ -335,15 +335,20 @@ export default function TotemPersonalizacao() {
       </div>
 
       {/* ── TELA DE ESPERA (a vitrine) ──
-          Logo depois da Marca, e não lá embaixo: é a segunda coisa que identifica a loja no
-          vidro, e é a tela que fica horas acesa. Tudo EXPOSTO, sem modal e sem lista — é UMA
-          foto, UM título, UM subtítulo e UM botão, o padrão da loja. Um modal com lista
-          faria parecer que haveria vários fundos, e não há. */}
+          Logo depois da Marca: é a segunda coisa que identifica a loja no vidro, e a tela que
+          fica horas acesa. Tudo EXPOSTO, sem modal — é UMA foto, UM título, UM subtítulo, UMA
+          frase do meio e UM botão, o padrão da loja.
+
+          A composição segue o resto do PDV: a foto numa linha como a logo em Marca, e os
+          textos numa GRADE de duas colunas (a mesma `ttm-aparencia-grade` das cores), na
+          ordem em que aparecem no vidro — título, subtítulo, botão, frase do meio. Nenhum
+          campo com largura própria: quem dimensiona é a grade, e a prévia fica ao lado,
+          grande o bastante para ser lida. */}
       <div className="table-card" style={{ padding: 16, marginBottom: 16 }}>
         <h2 className="ttm-secao-t">Tela de espera</h2>
-        <div className="ttm-nota" style={{ marginTop: 0, marginBottom: 16 }}>
-          É a tela <strong>padrão</strong> do totem: fica no vidro sempre que não há banner no ar. Deixe em
-          branco o que não quiser mostrar — a tela se compõe sem.
+        <div className="ttm-nota" style={{ marginTop: 0 }}>
+          É a tela <strong>padrão</strong> do totem: fica no vidro sempre que não há banner no ar.
+          Deixe em branco o que não quiser mostrar — a tela se compõe sem.
         </div>
 
         <div className="ttm-vit-split">
@@ -351,13 +356,7 @@ export default function TotemPersonalizacao() {
             <div className="form-group">
               <label className="form-label" htmlFor="apa-fundo">Foto de fundo</label>
               <div className="ttm-fundo-linha">
-                {/* A foto que está no ar, em miniatura: é o sinal de que há uma foto aqui. */}
                 {dados?.fundo?.tem ? <img className="ttm-fundo-atual" src={dados.fundo.url} alt="Foto de fundo atual" /> : null}
-                {/* O <input type="file"> NATIVO sai de vista. O texto dele ("Nenhum arquivo
-                    escolhido") é sobre a seleção da vez, não sobre o que está gravado — e
-                    numa tela que já tem foto ele dizia o contrário do que a miniatura ao lado
-                    mostra. O input continua no DOM, acessível pelo label; quem aparece é um
-                    botão que fala da foto, não do arquivo. */}
                 <input
                   ref={fundoRef}
                   id="apa-fundo"
@@ -371,97 +370,98 @@ export default function TotemPersonalizacao() {
                   {dados?.fundo?.tem ? 'Trocar a foto' : 'Escolher foto'}
                 </label>
                 {dados?.fundo?.tem ? (
-                  /* `btn-danger` é o botão destrutivo padrão do PDV: texto vermelho, sem chapa,
-                     mesma altura do botão ao lado. Nada de classe própria aqui. */
                   <button type="button" className="btn btn-danger" onClick={removerFundo} disabled={salvando}>
                     Remover
                   </button>
                 ) : null}
               </div>
               <div className="ttm-dica">
-                {/* A medida é a do ESPAÇO onde a foto aparece — a metade de cima —, e vem do
-                    servidor para não haver número escrito à mão aqui que a folha do quiosque
-                    possa desmentir. */}
-                Recomendado <strong>{dados?.fundo?.medida?.largura ?? 1080} × {dados?.fundo?.medida?.altura ?? 960} px</strong> —
-                a foto ocupa a metade de cima da tela. PNG, JPG ou WEBP, até {dados?.fundo?.limiteKb ?? 700} KB;
-                a imagem é reduzida antes de subir.
+                {dados?.fundo?.medida?.largura ?? 1080} × {dados?.fundo?.medida?.altura ?? 960} px — a metade de cima da tela.
+                PNG, JPG ou WEBP até {dados?.fundo?.limiteKb ?? 700} KB; reduzida antes de subir.
               </div>
             </div>
 
-            <div className="form-group" style={{ maxWidth: 460 }}>
-              <label className="form-label" htmlFor="apa-titulo">Título</label>
-              <input
-                id="apa-titulo"
-                className={'form-input' + (tituloLongo ? ' invalido' : '')}
-                value={titulo}
-                disabled={salvando}
-                placeholder="Ex.: Bateu a fome?"
-                onChange={(e) => setTitulo(e.target.value)}
-                aria-invalid={tituloLongo ? 'true' : undefined}
-              />
-              <div className={tituloLongo ? 'ttm-erro-campo' : 'ttm-dica'} role={tituloLongo ? 'alert' : undefined}>
-                {tituloLongo ? `Passou de ${tituloMax} caracteres.` : `Até ${tituloMax} caracteres. Em branco, a tela não mostra título.`}
+            <div className="ttm-aparencia-grade">
+              <div className="form-group">
+                <label className="form-label" htmlFor="apa-titulo">
+                  Título <span className="ttm-contador">{[...tituloLimpo].length}/{tituloMax}</span>
+                </label>
+                <input
+                  id="apa-titulo"
+                  className={'form-input' + (tituloLongo ? ' invalido' : '')}
+                  value={titulo}
+                  disabled={salvando}
+                  placeholder="Ex.: Bateu a fome?"
+                  onChange={(e) => setTitulo(e.target.value)}
+                  aria-invalid={tituloLongo ? 'true' : undefined}
+                />
+                <div className={tituloLongo ? 'ttm-erro-campo' : 'ttm-dica'} role={tituloLongo ? 'alert' : undefined}>
+                  {tituloLongo ? `Passou de ${tituloMax} caracteres.` : 'Em branco, a tela não mostra título.'}
+                </div>
               </div>
-            </div>
 
-            <div className="form-group" style={{ maxWidth: 560 }}>
-              <label className="form-label" htmlFor="apa-subtitulo">Subtítulo</label>
-              <input
-                id="apa-subtitulo"
-                className={'form-input' + (subtituloLongo ? ' invalido' : '')}
-                value={subtitulo}
-                disabled={salvando}
-                placeholder="Ex.: Monte seu pedido em poucos toques e retire no balcão"
-                onChange={(e) => setSubtitulo(e.target.value)}
-                aria-invalid={subtituloLongo ? 'true' : undefined}
-              />
-              <div className={subtituloLongo ? 'ttm-erro-campo' : 'ttm-dica'} role={subtituloLongo ? 'alert' : undefined}>
-                {subtituloLongo ? `Passou de ${subtituloMax} caracteres.` : `Até ${subtituloMax} caracteres.`}
+              <div className="form-group ttm-grade-inteira">
+                <label className="form-label" htmlFor="apa-subtitulo">
+                  Subtítulo <span className="ttm-contador">{[...subtituloLimpo].length}/{subtituloMax}</span>
+                </label>
+                <input
+                  id="apa-subtitulo"
+                  className={'form-input' + (subtituloLongo ? ' invalido' : '')}
+                  value={subtitulo}
+                  disabled={salvando}
+                  placeholder="Ex.: Monte seu pedido em poucos toques e retire no balcão"
+                  onChange={(e) => setSubtitulo(e.target.value)}
+                  aria-invalid={subtituloLongo ? 'true' : undefined}
+                />
+                <div className={subtituloLongo ? 'ttm-erro-campo' : 'ttm-dica'} role={subtituloLongo ? 'alert' : undefined}>
+                  {subtituloLongo ? `Passou de ${subtituloMax} caracteres.` : 'Em branco, a tela não mostra subtítulo.'}
+                </div>
               </div>
-            </div>
 
-            <div className="form-group" style={{ maxWidth: 460 }}>
-              <label className="form-label" htmlFor="apa-frase-meio">Frase do meio</label>
-              <input
-                id="apa-frase-meio"
-                className={'form-input' + (fraseMeioLonga ? ' invalido' : '')}
-                value={fraseMeio}
-                disabled={salvando}
-                placeholder={dados?.fraseMeioPadrao ?? 'Nossos produtos'}
-                onChange={(e) => setFraseMeio(e.target.value)}
-                aria-invalid={fraseMeioLonga ? 'true' : undefined}
-              />
-              <div className={fraseMeioLonga ? 'ttm-erro-campo' : 'ttm-dica'} role={fraseMeioLonga ? 'alert' : undefined}>
-                {fraseMeioLonga
-                  ? `Passou de ${fraseMeioMax} caracteres.`
-                  : `A faixa entre a foto e as esteiras. Deixe em branco para usar “${dados?.fraseMeioPadrao ?? 'Nossos produtos'}”. Até ${fraseMeioMax} caracteres — o totem escreve em caixa alta.`}
+              <div className="form-group">
+                <label className="form-label" htmlFor="apa-chamada">
+                  Texto do botão <span className="ttm-contador">{[...chamadaLimpa].length}/{chamadaMax}</span>
+                </label>
+                <input
+                  id="apa-chamada"
+                  className={'form-input' + (chamadaLonga ? ' invalido' : '')}
+                  value={chamada}
+                  disabled={salvando}
+                  placeholder={dados?.chamadaPadrao ?? 'Toque para começar'}
+                  onChange={(e) => setChamada(e.target.value)}
+                  aria-invalid={chamadaLonga ? 'true' : undefined}
+                />
+                <div className={chamadaLonga ? 'ttm-erro-campo' : 'ttm-dica'} role={chamadaLonga ? 'alert' : undefined}>
+                  {chamadaLonga
+                    ? `Passou de ${chamadaMax} caracteres — quebraria em duas linhas.`
+                    : `Em branco, “${dados?.chamadaPadrao ?? 'Toque para começar'}”. O totem escreve em caixa alta.`}
+                </div>
               </div>
-            </div>
 
-            <div className="form-group" style={{ margin: 0, maxWidth: 460 }}>
-              <label className="form-label" htmlFor="apa-chamada">Texto do botão</label>
-              <input
-                id="apa-chamada"
-                className={'form-input' + (chamadaLonga ? ' invalido' : '')}
-                value={chamada}
-                disabled={salvando}
-                placeholder={dados?.chamadaPadrao ?? 'Toque para começar'}
-                onChange={(e) => setChamada(e.target.value)}
-                aria-invalid={chamadaLonga ? 'true' : undefined}
-                aria-describedby="apa-chamada-ajuda"
-              />
-              <div id="apa-chamada-ajuda" className={chamadaLonga ? 'ttm-erro-campo' : 'ttm-dica'} role={chamadaLonga ? 'alert' : undefined}>
-                {chamadaLonga
-                  ? `Passou de ${chamadaMax} caracteres. Mais que isso quebra em duas linhas e o botão cresce por cima da foto.`
-                  : `Deixe em branco para usar “${dados?.chamadaPadrao ?? 'Toque para começar'}”. Até ${chamadaMax} caracteres — o totem escreve em caixa alta.`}
+              <div className="form-group">
+                <label className="form-label" htmlFor="apa-frase-meio">
+                  Frase do meio <span className="ttm-contador">{[...fraseMeioLimpa].length}/{fraseMeioMax}</span>
+                </label>
+                <input
+                  id="apa-frase-meio"
+                  className={'form-input' + (fraseMeioLonga ? ' invalido' : '')}
+                  value={fraseMeio}
+                  disabled={salvando}
+                  placeholder={dados?.fraseMeioPadrao ?? 'Nossos produtos'}
+                  onChange={(e) => setFraseMeio(e.target.value)}
+                  aria-invalid={fraseMeioLonga ? 'true' : undefined}
+                />
+                <div className={fraseMeioLonga ? 'ttm-erro-campo' : 'ttm-dica'} role={fraseMeioLonga ? 'alert' : undefined}>
+                  {fraseMeioLonga
+                    ? `Passou de ${fraseMeioMax} caracteres.`
+                    : `A faixa entre a foto e as esteiras. Em branco, “${dados?.fraseMeioPadrao ?? 'Nossos produtos'}”.`}
+                </div>
               </div>
             </div>
           </div>
 
-          {/* A prévia usa o RASCUNHO (cores e textos ainda não salvos) e a foto já gravada:
-              a foto sobe na hora, os textos esperam o Salvar — e a prévia mostra os dois
-              como vão ficar juntos. Os produtos da esteira são blocos neutros: eles se
-              escolhem em Destaques da vitrine, não aqui. */}
+          {/* A prévia usa o RASCUNHO (cores e textos ainda não salvos) e a foto já gravada. Os
+              produtos da esteira são blocos neutros: eles se escolhem em Destaques da vitrine. */}
           <div className="ttm-vit-lado">
             <div className="ttm-pv-cab"><h3 className="ttm-pv-tit">Prévia</h3></div>
             <PreviaVitrine

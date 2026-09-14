@@ -3353,7 +3353,15 @@ body.theme-dark .apr-contagem, body.theme-dark .apr-qr-legenda, body.theme-dark 
    Wireframe com as proporções do aparelho: metade de cima com foto, título, subtítulo e
    botão; metade de baixo com a esteira em bloco neutro. Usada em Personalização (ao lado
    dos campos) e em Banners › Tela de espera (como o "nada no ar"). */
-.ttm-vit-split { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 24px; align-items: start; }
+/* Campos à esquerda numa grade de duas colunas (a mesma das cores), prévia à direita com
+   largura para ser LIDA — 280px fazia dela uma miniatura longe demais dos campos. */
+.ttm-vit-split { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 32px; align-items: start; margin-top: 16px; }
+/* Campo que atravessa a grade inteira (o subtítulo, que é uma frase longa). */
+.ttm-grade-inteira { grid-column: 1 / -1; }
+/* Contador ao lado do rótulo: "12/40", tabular, discreto — a dica embaixo fica só para o
+   que não é número. */
+.ttm-contador { float: right; font-weight: 400; font-variant-numeric: tabular-nums; color: var(--app-text-3); }
+.ttm-aparencia-grade .form-group { margin-bottom: 4px; }
 @media (max-width: 980px) { .ttm-vit-split { grid-template-columns: minmax(0, 1fr); } }
 .ttm-vit-lado { position: sticky; top: 16px; }
 /* O seletor de arquivo e o "tirar" na mesma linha: tirar a foto é ação secundária, e um
