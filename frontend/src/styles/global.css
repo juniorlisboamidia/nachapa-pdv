@@ -3395,13 +3395,14 @@ body.theme-dark .apr-contagem, body.theme-dark .apr-qr-legenda, body.theme-dark 
 }
 .ttm-vit-alto { flex: 0 0 50%; }
 .ttm-vit-baixo { flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: space-evenly; gap: 0; padding: 1.5cqw 0; }
-/* A faixa do meio: escura nos dois fundos, some nas pontas, frase em caixa alta. */
-.ttm-vit-faixa {
-  flex: 0 0 auto; display: grid; place-items: center; height: 4cqw; background: #000;
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
+/* A faixa do meio: chão opaco por baixo e uma sombra radial por cima, como no aparelho. */
+.ttm-vit-faixa { position: relative; flex: 0 0 auto; display: grid; place-items: center; height: 6.4cqw; overflow: hidden; }
+.ttm-vit-faixa::before {
+  content: ''; position: absolute; inset: 0;
+  background: radial-gradient(ellipse 58% 120% at 50% 50%, rgba(0,0,0,.98) 0%, rgba(0,0,0,.88) 38%, rgba(0,0,0,.42) 70%, rgba(0,0,0,0) 100%);
 }
-.ttm-vit-faixa span { color: #fff; font-family: Montserrat, 'Segoe UI', sans-serif; font-weight: 800; font-size: 1.9cqw; letter-spacing: .16em; white-space: nowrap; }
+.ttm-vit-faixa span { position: relative; color: #fff; font-family: Montserrat, 'Segoe UI', sans-serif; font-weight: 900; font-size: 3.3cqw; letter-spacing: .14em; white-space: nowrap; }
+.ttm-vit-alto { clip-path: inset(0); }
 .ttm-vit-fila { display: flex; gap: 3cqw; padding-left: 4cqw; }
 .ttm-vit-fila:nth-child(2) { padding-left: 14cqw; }
 .ttm-vit-card { flex: 0 0 auto; width: 27cqw; display: flex; flex-direction: column; gap: 1.6cqw; }
