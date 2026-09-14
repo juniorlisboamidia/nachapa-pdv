@@ -77,7 +77,9 @@ const MARCA_INICIO = '// ===== INICIO ROTAS PUBLICAS DO APARELHO =====';
 const MARCA_FIM = '// ===== FIM ROTAS PUBLICAS DO APARELHO =====';
 
 function blocoPublico() {
-  const fonte = readFileSync(new URL('./server.js', import.meta.url), 'utf8');
+  // Normalizado: em CRLF as regex de comentário deste arquivo param de casar e a
+  // varredura se desarma em silêncio. Ver a nota em totem.tenant.test.js.
+  const fonte = readFileSync(new URL('./server.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
   const i = fonte.indexOf(MARCA_INICIO);
   const f = fonte.indexOf(MARCA_FIM);
   assert.ok(i > 0, 'marcador de INICIO das rotas públicas do aparelho não encontrado em server.js');

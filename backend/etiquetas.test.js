@@ -107,7 +107,8 @@ console.log('\n== CONSTRAINT_LOTE continua batendo com o schema ==');
 // faz o Postgres mandar outro nome, o retry vira código morto de novo e a colisão
 // volta a chegar na cozinha como 500 opaco no meio do turno. Os testes acima não
 // pegariam isso (usam o mesmo literal). Este pega: lê o schema e confere.
-const schema = readFileSync(new URL('./prisma/schema.prisma', import.meta.url), 'utf8');
+// Normalizado: ver a nota em totem.tenant.test.js.
+const schema = readFileSync(new URL('./prisma/schema.prisma', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const modelDoLote = [...schema.matchAll(/model\s+(\w+)\s*\{([\s\S]*?)\n\}/g)]
   .find(([, , corpo]) => /^\s*lote\s+\S+\s+@unique/m.test(corpo));
 t('schema tem um model com `lote ... @unique`', !!modelDoLote, true);

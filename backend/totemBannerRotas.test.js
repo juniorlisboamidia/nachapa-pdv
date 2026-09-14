@@ -16,7 +16,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
-const fonte = fs.readFileSync(new URL('./server.js', import.meta.url), 'utf8');
+// Normalizado: em CRLF as regex de comentário param de casar e a varredura se desarma
+// em silêncio. Ver a nota em totem.tenant.test.js.
+const fonte = fs.readFileSync(new URL('./server.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 
 /* Cada chamada `prisma.totemBanner.<op>({ ... })` do arquivo, com o corpo balanceado. */
 function consultasDeBanner() {

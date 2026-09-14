@@ -18,7 +18,15 @@ import { readFileSync } from 'node:fs';
 const MARCA_INICIO = '// ===== INICIO ROTAS PUBLICAS DO APARELHO =====';
 const MARCA_FIM = '// ===== FIM ROTAS PUBLICAS DO APARELHO =====';
 
-const fonte = () => readFileSync(new URL('./server.js', import.meta.url), 'utf8');
+/* LEITURA NORMALIZADA — não é detalhe de plataforma.
+
+   Numa checkout Windows o arquivo chega em CRLF, e aí `/\/\/.*$/` deixa de casar: em
+   regex de JavaScript o `.` NÃO casa `\r` (é terminador de linha), então o `.*` para antes
+   dele e o `$` fica depois. O match falha inteiro, nenhum comentário é removido, e esta
+   varredura passa a ler comentário como código — que é como uma guarda se desarma sem
+   ninguém perceber. Normalizar aqui conserta todas as regex do arquivo de uma vez. */
+const lerFonte = (u) => readFileSync(u, 'utf8').replace(/\r\n/g, '\n');
+const fonte = () => lerFonte(new URL('./server.js', import.meta.url));
 const semComentarios = (s) => s.split('\n').map((l) => l.replace(/\/\/.*$/, '')).join('\n');
 
 function blocoPublico() {
@@ -209,7 +217,7 @@ test('nenhuma rota do totem chama o Cardápio Web direto: só a ponte do HUB', (
   }
   // E a ponte do totem usa a URL do env sem default (a const do server.js tem default e
   // não serve para o totem).
-  const ponte = semComentarios(readFileSync(new URL('./cardapioPedido.js', import.meta.url), 'utf8'));
+  const ponte = semComentarios(lerFonte(new URL('./cardapioPedido.js', import.meta.url)));
   assert.ok(/process\.env\.HUB_API_URL/.test(ponte));
   assert.equal(ponte.match(/HUB_API_URL\s*\|\|/), null, 'a ponte do totem não pode ter URL padrão');
   assert.ok(/svc: 'pdv-operacao'/.test(ponte));

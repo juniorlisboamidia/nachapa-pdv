@@ -237,7 +237,8 @@ test('corpo não-JSON: 2xx vira corpo vazio, 5xx vira HUB_INDISPONIVEL', async (
 });
 
 test('a ponte não loga nada: token de serviço nunca vai para o log', () => {
-  const fonte = readFileSync(new URL('./cardapioPedido.js', import.meta.url), 'utf8');
+  // Normalizado: ver a nota em totem.tenant.test.js.
+  const fonte = readFileSync(new URL('./cardapioPedido.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
   const codigo = fonte.split('\n').map((l) => l.replace(/\/\/.*$/, '')).join('\n');
   assert.equal(codigo.match(/console\./), null, 'a ponte não deve logar (o resultado carrega o que interessa)');
   assert.equal(codigo.match(/Authorization[^\n]*console/), null);
