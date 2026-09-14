@@ -870,6 +870,27 @@ model TotemCategoria {
   @@index([empresaId])
 }
 
+/* Os produtos que a esteira da tela de espera mostra.
+
+   Mesma forma de `TotemApresentacao`: uma linha por item do Cardápio Web, com o id DELE
+   (`cwItemId`) e nada mais. Nome, preço e foto NUNCA são copiados para cá — eles vêm do
+   catálogo vivo a cada bootstrap. Copiar transformaria esta tabela numa segunda fonte de
+   verdade sobre preço, que é exatamente o erro que o resto do totem evita.
+
+   Item que sai do cardápio vira ÓRFÃO: o bootstrap simplesmente não o encontra e ele não
+   aparece na esteira; o admin mostra a linha marcada, com um botão de limpar. É o mesmo
+   tratamento que a apresentação já dá. */
+model TotemDestaque {
+  id           Int      @id @default(autoincrement())
+  empresaId    Int
+  cwItemId     Int
+  ordem        Int      @default(0)
+  criadoEm     DateTime @default(now())
+
+  @@unique([empresaId, cwItemId])
+  @@index([empresaId, ordem])
+}
+
 model TotemApresentacao {
   id                 Int      @id @default(autoincrement())
   empresaId          Int
@@ -928,6 +949,11 @@ model TotemConfiguracao {
   // ("Toque para começar"). Teto e régua em totemAparencia.js — o padrão NÃO mora aqui,
   // senão a string existiria em dois lugares.
   chamadaEspera           String?
+
+  // Título e subtítulo da tela de espera PADRÃO (a vitrine). NULL = a tela não desenha a
+  // linha, e isso é uma escolha de desenho legítima — não têm padrão de fábrica.
+  tituloEspera            String?
+  subtituloEspera         String?
 
   // O FUNDO: 'PADRAO' (carvão) ou 'CLARO'. Não é uma sétima cor — é a RELAÇÃO entre as
   // seis, e por isso `tokens` guarda um conjunto de overrides POR fundo. Escolha da LOJA;

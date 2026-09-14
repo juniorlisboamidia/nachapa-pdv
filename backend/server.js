@@ -57,6 +57,7 @@ import {
   normalizarPosicao, aparenciaPublica, diagnosticoDeContraste,
   LAYOUTS, MOTIVO_LAYOUT, normalizarLayout, layoutEfetivo, PADROES_POR_LAYOUT, tokensDoLayout,
   CHAMADA_PADRAO, CHAMADA_MAX, MOTIVO_CHAMADA, validarChamada,
+  TITULO_MAX, SUBTITULO_MAX, MOTIVO_TITULO, MOTIVO_SUBTITULO, validarTexto,
   LOGO_MAX_BYTES, validarLogoDataUrl, decodificarDataUrl, proximaVersaoLogo,
 } from './totemAparencia.js';
 // Totem › Banners: agenda, duração, imagem e as duas projeções (admin e pública).
@@ -9456,6 +9457,12 @@ app.get('/api/totem/aparencia', async (req, res) => {
       chamadaEspera: cfg?.chamadaEspera ?? null,
       chamadaPadrao: CHAMADA_PADRAO,
       chamadaMax: CHAMADA_MAX,
+      // Título e subtítulo vão CRUS (podem ser null): aqui `null` é "a tela não desenha
+      // esta linha", e resolver para um padrão inventaria texto que a loja não escreveu.
+      tituloEspera: cfg?.tituloEspera ?? null,
+      subtituloEspera: cfg?.subtituloEspera ?? null,
+      tituloMax: TITULO_MAX,
+      subtituloMax: SUBTITULO_MAX,
       overrides,
       efetivas,
       contraste: diagnosticoDeContraste(efetivas),
@@ -9506,6 +9513,18 @@ app.put('/api/totem/aparencia', async (req, res) => {
       if (!r.ok) erros.push({ chave: 'chamadaEspera', motivo: MOTIVO_CHAMADA });
       else { temChamada = true; chamada = r.valor; }
     }
+    // Os dois textos da vitrine seguem a mesma mecânica de presença: `null` é valor
+    // legítimo ("apagar"), então quem decide se grava é a presença da chave no corpo.
+    const textos = {};
+    for (const [chave, teto, motivo] of [
+      ['tituloEspera', TITULO_MAX, MOTIVO_TITULO],
+      ['subtituloEspera', SUBTITULO_MAX, MOTIVO_SUBTITULO],
+    ]) {
+      if (corpo[chave] === undefined) continue;
+      const r = validarTexto(corpo[chave], teto);
+      if (!r.ok) erros.push({ chave, motivo });
+      else textos[chave] = r.valor;
+    }
     if (erros.length) return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros });
 
     const atual = await prisma.totemConfiguracao.findUnique({ where: { empresaId } });
@@ -9521,6 +9540,7 @@ app.put('/api/totem/aparencia', async (req, res) => {
     if (posicao) dados.posicaoCategoriasPadrao = posicao;
     if (layout) dados.layoutFundo = layout;
     if (temChamada) dados.chamadaEspera = chamada;
+    Object.assign(dados, textos);
 
     const linha = await prisma.totemConfiguracao.upsert({
       where: { empresaId },
@@ -9534,6 +9554,8 @@ app.put('/api/totem/aparencia', async (req, res) => {
       layoutFundo,
       padroes: PADROES_POR_LAYOUT[layoutFundo],
       chamadaEspera: linha.chamadaEspera ?? null,
+      tituloEspera: linha.tituloEspera ?? null,
+      subtituloEspera: linha.subtituloEspera ?? null,
       overrides: tokensDoLayout(linha.tokens, layoutFundo),
       efetivas,
       contraste: diagnosticoDeContraste(efetivas),

@@ -43,6 +43,7 @@ const STATUS = {
 const TIPOS = [
   { id: 'CAPA', rota: 'capa', rotulo: 'Capa', ondeAparece: 'A faixa no topo do catálogo, enquanto o cliente escolhe.' },
   { id: 'ESPERA', rota: 'espera', rotulo: 'Tela de espera', ondeAparece: 'A tela inteira, com o totem parado no vidro.' },
+  { id: 'FUNDO', rota: 'fundo', rotulo: 'Fundo da vitrine', ondeAparece: 'Atrás do título, na metade de cima da tela de espera padrão.' },
 ]
 
 /* O tipo vem da URL, e a URL vem da SIDEBAR. Endereço torto cai na capa em vez de mostrar
@@ -223,7 +224,7 @@ export default function TotemBanners() {
           navegação que já existe ao lado. */}
       <div className="page-header">
         <div>
-          <h1>{aba === 'CAPA' ? 'Capa do catálogo' : 'Banners da tela de espera'}</h1>
+          <h1>{TIPOS.find((t) => t.id === aba)?.rotulo ?? 'Banners'}</h1>
           <div className="page-header-sub">
             {TIPOS.find((t) => t.id === aba)?.ondeAparece}
           </div>
@@ -238,7 +239,7 @@ export default function TotemBanners() {
           sobrou é a única que muda uma decisão de quem está nesta tela: a medida. */}
       <div className="ttm-bn-barra">
         <button type="button" className="btn btn-primary" disabled={ocupado} onClick={() => setEditando(vazio(limites, aba))}>
-          {aba === 'CAPA' ? 'Nova capa' : 'Novo banner'}
+          {{ CAPA: 'Nova capa', ESPERA: 'Novo banner', FUNDO: 'Novo fundo' }[aba] ?? 'Novo'}
         </button>
         {/* NO AR, não "cadastradas": conta o status, que já pesa o liga-desliga e a agenda
             juntos. Uma capa agendada para amanhã está cadastrada e não está aparecendo. */}
@@ -257,9 +258,11 @@ export default function TotemBanners() {
         <div>
         {visiveis.length === 0 ? (
           <div className="empty-state">
-            {aba === 'CAPA'
-              ? 'Nenhuma capa cadastrada. O cabeçalho do catálogo está mostrando o título.'
-              : 'Nenhum banner cadastrado. O totem está mostrando a tela institucional.'}
+            {{
+              CAPA: 'Nenhuma capa cadastrada. O cabeçalho do catálogo está mostrando o título.',
+              ESPERA: 'Nenhum banner cadastrado. O totem está mostrando a vitrine — que é o padrão, não um caso degradado.',
+              FUNDO: 'Nenhum fundo cadastrado. A metade de cima da vitrine usa o chão do template.',
+            }[aba]}
           </div>
         ) : (
           /* Lista de CARTÕES, não tabela. A arte é o assunto da linha, e numa tabela ela
@@ -448,7 +451,7 @@ function Editor({ valor, limites, ocupado, aoFechar, aoSalvar, aoAvisar }) {
     <div className="modal-overlay">
       <div className="modal ttm-banner-modal">
         <div className="modal-header">
-          <h2>{(form.id ? 'Editar ' : 'Nova ') + (form.tipo === 'CAPA' ? 'capa' : 'arte da tela de espera')}</h2>
+          <h2>{(form.id ? 'Editar ' : 'Nova ') + ({ CAPA: 'capa', ESPERA: 'arte da tela de espera', FUNDO: 'arte de fundo da vitrine' }[form.tipo] ?? 'arte')}</h2>
         </div>
         <div className="ttm-banner-corpo">
           <div className={'ttm-banner-previa' + (form.tipo === 'CAPA' ? ' capa' : '')}>
@@ -494,9 +497,13 @@ function Editor({ valor, limites, ocupado, aoFechar, aoSalvar, aoAvisar }) {
               {faltando.imagem ? <div className="ttm-erro-campo" role="alert">{faltando.imagem}</div> : null}
               <div className="ttm-dica">
                 Recomendado: <strong>{medida.largura} × {medida.altura} px</strong>{' '}
-                {form.tipo === 'CAPA'
-                  ? '— a mesma proporção da capa do Cardápio Web, então dá para usar a mesma arte nos dois.'
-                  : '(retrato, a tela inteira do totem).'}
+                {{
+                  CAPA: '— a mesma proporção da capa do Cardápio Web, então dá para usar a mesma arte nos dois.',
+                  ESPERA: '(retrato, a tela inteira do totem).',
+                  // A tela inteira mesmo, e não a metade: o recorte é `cover`, e pedir meia
+                  // tela obrigaria a loja a pensar num enquadramento que a tela já resolve.
+                  FUNDO: '(retrato — a vitrine usa a metade de cima, recortando o resto).',
+                }[form.tipo]}
                 {' '}PNG, JPG ou WEBP, até {limites?.imagemKb ?? 700} KB. A imagem é reduzida antes de subir.
               </div>
             </div>

@@ -275,6 +275,40 @@ export const CHAMADA_PADRAO = 'Toque para começar';
 export const CHAMADA_MAX = 32;
 export const MOTIVO_CHAMADA = 'CHAMADA_INVALIDA';
 
+/* O TÍTULO e o SUBTÍTULO da tela de espera padrão — a vitrine.
+
+   Mesma régua da chamada, com tetos diferentes porque os papéis são diferentes: o título é
+   display, grande, e vive de ser curto; o subtítulo é corpo e pode explicar. Ambos vazios
+   por padrão, e a tela sabe se compor sem eles.
+
+   Não têm PADRÃO de fábrica, ao contrário da chamada. Um botão sem texto é um botão
+   quebrado, então lá o padrão é obrigatório; um título ausente é uma escolha de desenho
+   legítima — a loja que só quer a foto e o botão não deve ser obrigada a inventar frase. */
+export const TITULO_MAX = 40;
+export const SUBTITULO_MAX = 90;
+export const MOTIVO_TITULO = 'TITULO_INVALIDO';
+export const MOTIVO_SUBTITULO = 'SUBTITULO_INVALIDO';
+
+/* Uma régua só para os dois: aparar, aceitar vazio como `null`, recusar o que passa do
+   teto. Contar CARACTERES e não bytes — acento não pode custar duas letras. */
+export function validarTexto(bruto, teto) {
+  if (bruto === null) return { ok: true, valor: null };
+  if (typeof bruto !== 'string') return { ok: false, valor: null };
+  const t = bruto.trim();
+  if (!t) return { ok: true, valor: null };
+  if ([...t].length > teto) return { ok: false, valor: null };
+  return { ok: true, valor: t };
+}
+
+/* LEITURA — tolerância. Texto torto guardado no banco vira ausência, não vira tela
+   quebrada: a vitrine simplesmente não desenha aquela linha. */
+export function textoEfetivo(bruto, teto) {
+  if (typeof bruto !== 'string') return null;
+  const t = bruto.trim();
+  if (!t || [...t].length > teto) return null;
+  return t;
+}
+
 /* ENTRADA — rigor. Devolve `{ ok, valor }`, com `valor` já aparado; `null` significa
    "sem personalização, use o padrão".
 
@@ -412,6 +446,9 @@ export function aparenciaPublica({ config, dispositivo } = {}) {
     // chão quando nada chega; texto não tem folha nenhuma por baixo — mandar `null` e
     // deixar o quiosque adivinhar espalharia o padrão por dois lugares.
     chamadaEspera: chamadaEfetiva(config?.chamadaEspera),
+    // Estes dois podem ser `null`, e `null` aqui é informação: a tela não desenha a linha.
+    tituloEspera: textoEfetivo(config?.tituloEspera, TITULO_MAX),
+    subtituloEspera: textoEfetivo(config?.subtituloEspera, SUBTITULO_MAX),
     posicaoCategorias: posicaoEfetiva({
       override: dispositivo?.posicaoCategoriasOverride,
       padrao: config?.posicaoCategoriasPadrao,

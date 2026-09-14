@@ -66,6 +66,10 @@ export default function TotemPersonalizacao() {
   // para o gestor (o campo está vazio) e coisas diferentes para o JSON, então a conversão
   // acontece num lugar só, na hora de montar o corpo.
   const [chamada, setChamada] = useState('')
+  // Título e subtítulo da vitrine. '' na tela é "sem texto" e vira `null` no banco — aqui
+  // ausência NÃO tem padrão de fábrica: a tela simplesmente não desenha a linha.
+  const [titulo, setTitulo] = useState('')
+  const [subtitulo, setSubtitulo] = useState('')
   const arquivoRef = useRef(null)
 
   // Não marca estado de forma síncrona: o efeito de montagem só AGENDA o trabalho.
@@ -78,6 +82,8 @@ export default function TotemPersonalizacao() {
       setPosicao(r.data?.posicaoCategoriasPadrao ?? 'esquerda')
       setFundo(r.data?.layoutFundo ?? 'PADRAO')
       setChamada(r.data?.chamadaEspera ?? '')
+      setTitulo(r.data?.tituloEspera ?? '')
+      setSubtitulo(r.data?.subtituloEspera ?? '')
       setErro(null)
     })
     .catch(() => setErro('Não foi possível ler a aparência agora.'))
@@ -113,7 +119,17 @@ export default function TotemPersonalizacao() {
   const trocouChamada = chamadaLimpa !== (dados?.chamadaEspera ?? '')
   const chamadaMax = dados?.chamadaMax ?? 32
   const chamadaLonga = [...chamadaLimpa].length > chamadaMax
+  const tituloLimpo = titulo.trim()
+  const subtituloLimpo = subtitulo.trim()
+  const tituloMax = dados?.tituloMax ?? 40
+  const subtituloMax = dados?.subtituloMax ?? 90
+  const tituloLongo = [...tituloLimpo].length > tituloMax
+  const subtituloLongo = [...subtituloLimpo].length > subtituloMax
+  const trocouTitulo = tituloLimpo !== (dados?.tituloEspera ?? '')
+  const trocouSubtitulo = subtituloLimpo !== (dados?.subtituloEspera ?? '')
+  const algoLongo = chamadaLonga || tituloLongo || subtituloLongo
   const temMudanca = Object.keys(patch).length > 0 || trocouPosicao || trocouChamada
+    || trocouTitulo || trocouSubtitulo
 
   // Diagnóstico ao vivo, com as cores do RASCUNHO. Os pares vêm do servidor (é ele que
   // define quais importam); só a razão é recalculada aqui, para não ir ao servidor a
@@ -132,10 +148,14 @@ export default function TotemPersonalizacao() {
       if (trocouPosicao) corpo.posicaoCategoriasPadrao = posicao
       // Vazio vira `null`: é o caminho explícito de "voltar ao texto de fábrica".
       if (trocouChamada) corpo.chamadaEspera = chamadaLimpa || null
+      if (trocouTitulo) corpo.tituloEspera = tituloLimpo || null
+      if (trocouSubtitulo) corpo.subtituloEspera = subtituloLimpo || null
       const r = await api.put('/totem/aparencia', corpo)
       setDados((d) => ({ ...d, ...r.data }))
       setRascunho(r.data?.efetivas ?? rascunho)
       setChamada(r.data?.chamadaEspera ?? '')
+      setTitulo(r.data?.tituloEspera ?? '')
+      setSubtitulo(r.data?.subtituloEspera ?? '')
       setToast({ message: 'Aparência salva. Os totens aplicam na próxima vez que carregarem o cardápio.', type: 'success' })
     } catch (e) {
       const erros = e?.response?.data?.erros
@@ -329,6 +349,43 @@ export default function TotemPersonalizacao() {
       {/* ── TELA DE ESPERA ── */}
       <div className="table-card" style={{ padding: 16, marginBottom: 16 }}>
         <h2 className="ttm-secao-t">Tela de espera</h2>
+        <div className="ttm-nota" style={{ marginTop: 0, marginBottom: 16 }}>
+          Estes textos aparecem na <strong>vitrine</strong> — a tela de espera padrão, que fica no vidro
+          sempre que não há banner no ar. Deixe em branco o que não quiser mostrar: a tela se compõe sem.
+        </div>
+
+        <div className="form-group" style={{ maxWidth: 460 }}>
+          <label className="form-label" htmlFor="apa-titulo">Título</label>
+          <input
+            id="apa-titulo"
+            className={'form-input' + (tituloLongo ? ' invalido' : '')}
+            value={titulo}
+            disabled={salvando}
+            placeholder="Ex.: Bateu a fome?"
+            onChange={(e) => setTitulo(e.target.value)}
+            aria-invalid={tituloLongo ? 'true' : undefined}
+          />
+          <div className={tituloLongo ? 'ttm-erro-campo' : 'ttm-dica'} role={tituloLongo ? 'alert' : undefined}>
+            {tituloLongo ? `Passou de ${tituloMax} caracteres.` : `Até ${tituloMax} caracteres. Em branco, a tela não mostra título.`}
+          </div>
+        </div>
+
+        <div className="form-group" style={{ maxWidth: 560 }}>
+          <label className="form-label" htmlFor="apa-subtitulo">Subtítulo</label>
+          <input
+            id="apa-subtitulo"
+            className={'form-input' + (subtituloLongo ? ' invalido' : '')}
+            value={subtitulo}
+            disabled={salvando}
+            placeholder="Ex.: Monte seu pedido em poucos toques e retire no balcão"
+            onChange={(e) => setSubtitulo(e.target.value)}
+            aria-invalid={subtituloLongo ? 'true' : undefined}
+          />
+          <div className={subtituloLongo ? 'ttm-erro-campo' : 'ttm-dica'} role={subtituloLongo ? 'alert' : undefined}>
+            {subtituloLongo ? `Passou de ${subtituloMax} caracteres.` : `Até ${subtituloMax} caracteres.`}
+          </div>
+        </div>
+
         <div className="form-group" style={{ margin: 0, maxWidth: 460 }}>
           <label className="form-label" htmlFor="apa-chamada">Texto do botão</label>
           <input
@@ -401,7 +458,7 @@ export default function TotemPersonalizacao() {
         </div>
       </div>
 
-      <button type="button" className="btn btn-primary" onClick={salvar} disabled={!temMudanca || salvando || chamadaLonga}>
+      <button type="button" className="btn btn-primary" onClick={salvar} disabled={!temMudanca || salvando || algoLongo}>
         {salvando ? 'Salvando…' : 'Salvar'}
       </button>
 

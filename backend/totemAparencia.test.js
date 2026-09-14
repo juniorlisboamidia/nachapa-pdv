@@ -252,6 +252,7 @@ import {
   PADROES, PADROES_POR_LAYOUT, POSICOES, POSICAO_PADRAO,
   LAYOUTS, LAYOUT_PADRAO, normalizarLayout, layoutEfetivo, lerCofre, tokensDoLayout,
   CHAMADA_PADRAO, CHAMADA_MAX, validarChamada, chamadaEfetiva,
+  TITULO_MAX, SUBTITULO_MAX, validarTexto, textoEfetivo,
   normalizarPosicao, posicaoEfetiva, validarPatch, aplicarPatch, coresEfetivas, aparenciaPublica,
 } from './totemAparencia.js';
 
@@ -429,6 +430,42 @@ test('🔴 o bootstrap manda a chamada JÁ RESOLVIDA, nunca vazia', () => {
   assert.equal(aparenciaPublica({ config: { chamadaEspera: 'Peça aqui' } }).chamadaEspera, 'Peça aqui');
 });
 
+// ── Título e subtítulo da vitrine ───────────────────────────────────────────
+test('a régua dos dois textos: apara, aceita vazio, recusa o que passa do teto', () => {
+  assert.deepEqual(validarTexto('  Bom apetite  ', TITULO_MAX), { ok: true, valor: 'Bom apetite' });
+  assert.deepEqual(validarTexto('', TITULO_MAX), { ok: true, valor: null });
+  assert.deepEqual(validarTexto('   ', TITULO_MAX), { ok: true, valor: null });
+  assert.deepEqual(validarTexto(null, TITULO_MAX), { ok: true, valor: null });
+  assert.equal(validarTexto('x'.repeat(TITULO_MAX), TITULO_MAX).ok, true, 'o limite exato passa');
+  assert.equal(validarTexto('x'.repeat(TITULO_MAX + 1), TITULO_MAX).ok, false);
+  for (const v of [12, {}, [], true, undefined]) assert.equal(validarTexto(v, TITULO_MAX).ok, false, String(v));
+});
+
+test('o teto conta CARACTERES — acento não custa duas letras', () => {
+  assert.equal(validarTexto('ç'.repeat(SUBTITULO_MAX), SUBTITULO_MAX).ok, true);
+});
+
+test('🔴 ausência é ESCOLHA, não defeito: não há título de fábrica', () => {
+  // Ao contrário do texto do botão, que sem padrão viraria um botão sem texto. Um título
+  // ausente é uma composição legítima — a loja que só quer a foto e o botão não deve ser
+  // obrigada a inventar frase.
+  assert.equal(textoEfetivo(null, TITULO_MAX), null);
+  assert.equal(textoEfetivo('', TITULO_MAX), null);
+  assert.equal(textoEfetivo('   ', TITULO_MAX), null);
+  const pub = aparenciaPublica({});
+  assert.equal(pub.tituloEspera, null);
+  assert.equal(pub.subtituloEspera, null);
+  // …e a CHAMADA continua tendo padrão, que é a diferença entre os dois casos.
+  assert.equal(pub.chamadaEspera, CHAMADA_PADRAO);
+});
+
+test('texto longo guardado no banco vira ausência, não vira tela quebrada', () => {
+  const longo = 'x'.repeat(TITULO_MAX + 1);
+  assert.equal(textoEfetivo(longo, TITULO_MAX), null);
+  assert.equal(aparenciaPublica({ config: { tituloEspera: longo } }).tituloEspera, null);
+  assert.equal(aparenciaPublica({ config: { tituloEspera: '  Bom apetite ' } }).tituloEspera, 'Bom apetite');
+});
+
 test('fundo inválido cai no padrão, nunca derruba a tela', () => {
   assert.equal(normalizarLayout('CLARO'), 'CLARO');
   assert.equal(normalizarLayout('claro'), null, 'não normaliza caixa: vem de um seletor');
@@ -585,7 +622,7 @@ test('🔴 a logo NUNCA vai no bootstrap', () => {
 
 test('bloco público tem só o que o quiosque desenha', () => {
   const pub = aparenciaPublica({ config: { tokens: { fundo: '#111111' }, posicaoCategoriasPadrao: 'direita' } });
-  assert.deepEqual(Object.keys(pub).sort(), ['chamadaEspera', 'layoutFundo', 'logoVersao', 'posicaoCategorias', 'temLogoPersonalizada', 'tokens']);
+  assert.deepEqual(Object.keys(pub).sort(), ['chamadaEspera', 'layoutFundo', 'logoVersao', 'posicaoCategorias', 'subtituloEspera', 'temLogoPersonalizada', 'tituloEspera', 'tokens']);
   assert.equal(pub.posicaoCategorias, 'direita');
 });
 

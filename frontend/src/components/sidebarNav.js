@@ -152,6 +152,7 @@ export const grupos = [
             itens: [
               { to: '/totem/banners/capa', label: 'Capa' },
               { to: '/totem/banners/espera', label: 'Tela de espera' },
+              { to: '/totem/banners/fundo', label: 'Fundo da vitrine' },
             ],
           },
           { to: '/totem/pagamentos', label: 'Formas de pagamento', icon: 'financeiro' },
