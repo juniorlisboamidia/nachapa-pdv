@@ -50,6 +50,14 @@ const ICONES = {
     </>
   ),
   lapis: <path d="M4 20h4L20 8l-4-4L4 16v4z" />,
+  // Duas diagonais cheias, canto a canto. Sem círculo em volta: quem faz o alvo e o
+  // contorno é o botão, e um círculo desenhado aqui dentro brigaria com ele.
+  xis: (
+    <>
+      <path d="M6 6l12 12" />
+      <path d="M18 6L6 18" />
+    </>
+  ),
   voltar: <path d="M15 19l-7-7 7-7" />,
   relogio: (
     <>

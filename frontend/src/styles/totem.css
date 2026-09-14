@@ -1506,12 +1506,36 @@
 }
 .tq-topo-faixa .tq-topo-tit { position: relative; }
 /* Sobre a arte, o Cancelar precisa de chão próprio: a capa é do lojista, e não dá para
-   contar com contraste em cima dela. */
+   contar com contraste em cima dela.
+
+   Em repouso ele é um X vermelho num disco escuro. Três coisas o fazem ler como botão de
+   cancelar, e não como enfeite da arte: a forma fechada (disco), o contorno na mesma cor
+   do traço (contorno é o que diz "isto é um alvo") e o vermelho, que é a única cor de
+   perigo da tela.
+
+   AS CORES AQUI SÃO LITERAIS, e é de propósito: este botão flutua sobre a arte da LOJA, que
+   é a mesma nos dois fundos. Usar `--tq-perigo` faria o vermelho virar #b3261e no fundo
+   claro — escuro sobre um disco escuro — porque aquele token é calibrado para o chão do
+   quiosque, não para uma fotografia. */
 .tq-topo-cancelar.sobre-capa {
   position: absolute; top: 16px; right: 20px; z-index: 2;
-  background: rgba(0, 0, 0, 0.55); border-radius: 12px; padding: 10px 18px;
+  width: 64px; height: 64px; min-height: 64px; padding: 0;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.62);
+  border: 2px solid #ff6a5c;
+  color: #ff6a5c;
   backdrop-filter: blur(2px);
 }
+/* O primeiro toque abre o botão e escreve a pergunta. Precisa vencer `.confirmando` sozinho
+   (mesma especificidade, e este vem depois só por sorte) — daí as três classes. */
+.tq-topo-cancelar.sobre-capa.confirmando {
+  width: auto; padding: 0 22px; border-radius: 999px;
+  background: #ff6a5c; border-color: #ff6a5c; color: #1a0d0b;
+  font-family: var(--tq-fonte-display); font-weight: 900;
+}
+.tq-topo-cancelar.sobre-capa:active { background: rgba(0, 0, 0, 0.78); }
+.tq-topo-cancelar.sobre-capa.confirmando:active { background: #e85446; }
 @media (min-width: 900px) {
   /* Sem capa, a faixa cresce um pouco no alvo para não virar uma fresta de 96px numa tela
      de 1920. COM capa quem manda é a proporção, e este mínimo não morde. */

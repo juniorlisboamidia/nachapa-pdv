@@ -69,13 +69,25 @@ export default function Cabecalho({ titulo, modo, marca, capa, aoVoltar, aoCance
             : <h1 className="tq-topo-tit tq-disp">{titulo ?? modo}</h1>}
         </div>
 
+        {/* SOBRE A CAPA o botão é um X, não uma palavra.
+            A capa é arte da loja e a faixa é dela; um balão escrito "Cancelar" no meio
+            disputava a leitura com a peça que a loja desenhou. O X é o vocabulário
+            universal de fechar, e o vermelho diz que a ação é destrutiva sem precisar
+            de texto.
+
+            Mas ele NÃO pode ser um X e mais nada: cancelar joga o pedido inteiro fora e
+            não tem desfazer. O primeiro toque abre o botão numa faixa com a pergunta
+            escrita — o X é o repouso, a palavra aparece na hora em que decide. É a mesma
+            regra de dois toques de sempre (spec §11), só que agora ela também é o que
+            devolve o texto à tela. */}
         {aoCancelar ? (
           <button
             type="button"
             className={'tq-topo-cancelar sobre-capa' + (confirmando ? ' confirmando' : '')}
             onClick={tocarCancelar}
+            aria-label={confirmando ? 'Confirmar: apagar o pedido' : 'Cancelar o pedido'}
           >
-            {confirmando ? 'Apagar pedido?' : 'Cancelar'}
+            {confirmando ? 'Apagar pedido?' : <Ico nome="xis" tam={34} traco={2.6} />}
           </button>
         ) : null}
       </header>
