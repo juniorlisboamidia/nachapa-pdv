@@ -16,10 +16,20 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .tv-raiz {
+  /* Os mesmos seis tokens do menu board: uma paleta só pinta as quatro telas do
+     canal. Os fallbacks aqui são o chão para quando o adaptador ainda não
+     escreveu (cold start) — e o `#000` de antes virou o token, porque a parede
+     inteira passou a ser personalizável. */
+  --tvmb-fundo: #0b0a09;
+  --tvmb-texto: #ffffff;
+  --tvmb-texto-2: #b8b8b8;
+  --tvmb-destaque: #d79e00;
+  --tvmb-texto-destaque: #000000;
+
   position: fixed;
   inset: 0;
   overflow: hidden;
-  background: #000;
+  background: var(--tvmb-fundo);
   /* `dvh` depois de `vh`: TV com WebView antiga não conhece o primeiro e usa o
      segundo. Sem os dois, a barra de sistema de alguns aparelhos come uma faixa
      da arte. */
@@ -36,7 +46,7 @@
   -webkit-user-select: none;
   -webkit-tap-highlight-color: transparent;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  color: #fff;
+  color: var(--tvmb-texto);
 }
 
 /* A ARTE. `cover` porque o formato recomendado é 16:9 numa TV 16:9 — nesse caso
@@ -63,11 +73,26 @@
    há mensagem de sistema nenhuma — quem está na frente é o cliente da loja.
    Um degradê muito leve em volta da marca, para o centro não parecer um
    retângulo colado no preto. */
+/* O institucional é o REPOUSO do canal, e agora ele usa a marca da loja: o fundo
+   configurado, o texto configurado, e o disco da inicial no destaque. Continua
+   sem degradê inventado — o chão é o chão, e o que aparece é a marca. */
 .tv-institucional {
-  background: radial-gradient(ellipse 70% 70% at 50% 45%, #17161a 0%, #000 100%);
+  background: var(--tvmb-fundo);
   gap: clamp(20px, 3vh, 48px);
   grid-auto-flow: row;
   align-content: center;
+}
+
+/* A logo da EMPRESA (o fallback neutro) costuma vir de material impresso, com
+   fundo branco embutido. Sobre um fundo escuro, o retângulo branco aparece como
+   um erro — então ela ganha uma placa clara discreta, e a decisão é da ORIGEM,
+   não do arquivo. A logo PRÓPRIA da TV é feita para a televisão e pode ter
+   transparência: vai direto sobre o fundo, sem placa. */
+.tv-logo-placa {
+  background: #fff;
+  border-radius: 18px;
+  padding: clamp(14px, 2.2vh, 28px);
+  display: block;
 }
 
 .tv-logo {
@@ -85,8 +110,8 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: #d79e00;
-  color: #000;
+  background: var(--tvmb-destaque);
+  color: var(--tvmb-texto-destaque);
   font-weight: 800;
   font-size: clamp(56px, 9vh, 132px);
   line-height: 1;
@@ -98,9 +123,9 @@
   letter-spacing: 0.02em;
   text-align: center;
   max-width: 80vw;
-  /* A cor é branco rebaixado: numa parede, branco puro num texto grande brilha
-     demais à noite. */
-  color: rgba(255, 255, 255, 0.86);
+  /* O texto de APOIO, e não o principal: numa parede, o texto grande na cor cheia
+     brilha demais à noite — e é o token de apoio que existe para isso. */
+  color: var(--tvmb-texto-2);
 }
 
 /* O MENU BOARD dentro do player: ocupa a tela inteira. O desenho em si mora em

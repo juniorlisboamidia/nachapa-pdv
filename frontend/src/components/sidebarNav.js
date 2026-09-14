@@ -185,6 +185,9 @@ export const grupos = [
           // ordem da sidebar é a ordem em que a loja monta as coisas, e o board é o passo
           // que se aprende por último (é preciso ter cardápio no CW para ele fazer sentido).
           { to: '/tv-indoor/menu-boards', label: 'Menu Boards', icon: 'ficha' },
+          // Aparência por último: é o ajuste fino, e só faz sentido depois de existir algo
+          // na tela para ver pintado.
+          { to: '/tv-indoor/aparencia', label: 'Aparência', icon: 'star' },
         ],
       },
     ],

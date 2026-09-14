@@ -17,11 +17,14 @@
 // resolveu foi o backend, contra o catálogo vivo.
 //
 // ── IDENTIDADE ────────────────────────────────────────────────────────────────────────
-// Cores PRÓPRIAS do canal (tokens `--tvmb-*` em styles/tvMenuBoard.css), com os mesmos
-// literais da marca que o totem usa — copiados por valor. Ler `TotemConfiguracao` daria a
-// personalização de graça e criaria o acoplamento entre canais irmãos que esta arquitetura
-// recusa. A personalização de cor da TV é dívida registrada, não esquecimento.
+// A paleta do canal, escrita por CSSOM sobre os tokens `--tvmb-*` da folha. Ela vem da
+// APARÊNCIA do TV Indoor (TV Indoor › Aparência), que é própria: nada de `TotemConfiguracao`
+// e nada de `--tq-*`. Os canais dividem a técnica, não a identidade.
+//
+// `tokens` é opcional: sem ele, a folha manda — e é por isso que a TV desenha igual no cold
+// start, com a rede caindo ou com a aparência corrompida.
 import { useEffect, useRef, useState } from 'react'
+import { aplicar as aplicarTemaTv } from '../tvIndoorTema'
 import '../../styles/tvMenuBoard.css'
 
 const moeda = (v) => (typeof v === 'number' ? v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : null)
@@ -178,8 +181,13 @@ export function MenuBoardTela({ board }) {
    O observer escreve DIRETO no nó (`style.setProperty`), sem passar por estado do React: a
    TV redimensiona uma vez na vida, e um `setState` a cada quadro de resize remontaria o
    board inteiro à toa. */
-export default function MenuBoard({ board }) {
+export default function MenuBoard({ board, tokens }) {
   const caixaRef = useRef(null)
+
+  // A paleta entra por `style.setProperty`, uma propriedade conhecida de cada vez — nunca
+  // uma `<style>` montada com string. O adaptador (`tvIndoorTema`) é o único que sabe
+  // traduzir chave de domínio em nome de custom property, e ele recusa o que não conhece.
+  useEffect(() => { aplicarTemaTv(caixaRef.current, tokens) }, [tokens])
 
   useEffect(() => {
     const el = caixaRef.current

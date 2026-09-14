@@ -239,3 +239,43 @@ test('🔴 a COMPOSIÇÃO do board muda a assinatura (produto que saiu, layout, 
 test('imagem e board com o MESMO id não se confundem na assinatura', () => {
   assert.notEqual(assinatura([conteudo({ id: 3 })]), assinatura([board({ id: 3, produtos: [] })]))
 })
+
+// ── Aparência: guardas estáticas do player ───────────────────────────────────
+test('🔴 a APARÊNCIA não entra na assinatura — trocar cor não reinicia a playlist', async () => {
+  // A assinatura é dos ITENS. A aparência viaja ao lado deles na programação, e por isso
+  // uma troca de paleta redesenha o board no lugar, sem a TV voltar ao começo da volta.
+  const itens = [conteudo({ id: 1 }), board({ id: 9 })]
+  assert.equal(assinatura(itens), assinatura(itens))
+  const fs = await import('node:fs')
+  const fonteMod = fs.readFileSync(new URL('./tvProgramacao.js', import.meta.url), 'utf8')
+  assert.equal(/aparencia|tokens/.test(fonteMod), false, 'o módulo da programação não conhece aparência')
+})
+
+test('🔴 refresh sem bloco de aparência NÃO apaga o tema que está na tela', async () => {
+  const fs = await import('node:fs')
+  const player = fs.readFileSync(new URL('../pages/TvIndoorPlayer.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  const codigo = player.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').map((l) => l.split('//')[0]).join('\n')
+  // Só uma resposta VÁLIDA substitui a aparência: um servidor de versão anterior, ou uma
+  // resposta degradada, não pode apagar a identidade da loja da parede.
+  assert.match(codigo, /if \(r\.data\?\.aparencia\?\.tokens\) setAparencia\(r\.data\.aparencia\)/)
+  // E a aparência vive em estado PRÓPRIO, fora de `programacao` — senão o `.catch` que
+  // preserva a programação não a alcançaria.
+  assert.match(codigo, /const \[aparencia, setAparencia\] = useState\(null\)/)
+})
+
+test('🔴 a ARTE do gestor não recebe overlay de tema', async () => {
+  // Uma imagem 1920 × 1080 é exibida como foi criada. Nenhum véu, nenhum filtro, nenhuma
+  // cor por cima — a aparência pinta a casca, e `object-fit: cover` faz a arte cobrir tudo.
+  const fs = await import('node:fs')
+  const player = fs.readFileSync(new URL('../pages/TvIndoorPlayer.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  const i = player.indexOf('className={\'tv-arte\'')
+  assert.ok(i > 0, 'a arte precisa existir no player')
+  // Entre a abertura da raiz da arte e o fim do componente não pode haver véu nem tinta.
+  const trecho = player.slice(player.lastIndexOf('<div className="tv-raiz" ref={raizRef}>', i), player.indexOf('</div>', i))
+  for (const proibido of ['tv-veu', 'veu', 'overlay', 'filter:', 'mixBlend', 'background:']) {
+    assert.equal(trecho.includes(proibido), false, `${proibido} não pode existir sobre a arte`)
+  }
+  const css = fs.readFileSync(new URL('../styles/tv.css', import.meta.url), 'utf8')
+  const regra = css.slice(css.indexOf('.tv-arte {'), css.indexOf('}', css.indexOf('.tv-arte {')))
+  assert.equal(/filter|opacity|background/.test(regra), false, 'a folha também não pode tingir a arte')
+})

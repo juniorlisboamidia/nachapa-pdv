@@ -31,12 +31,32 @@
 .tvmb-caixa {
   --tvmb-escala: 1;              /* o ResizeObserver do componente sobrescreve com a medida real */
 
-  /* Marca: preto de parede e o dourado da ação. Literais, não herdados. */
+  /* ── OS SEIS TOKENS DO CANAL ──────────────────────────────────────────
+     Estes valores são o CHÃO: o que a TV desenha quando nada chega (cold
+     start, rede caindo, aparência corrompida). Quando a loja personaliza, o
+     adaptador (`components/tvIndoorTema.js`) escreve por cima, por CSSOM.
+
+     Os mesmos seis estão em `backend/tvIndoorAparencia.js` (o que o admin
+     mostra como "padrão") e em `tvIndoorTema.js` (o que a prévia usa antes de
+     a API responder). Os três TÊM de concordar, e há teste para isso —
+     divergir faria a tela de configuração mentir sobre o que a loja vê.
+
+     Em hexadecimal de seis dígitos, sem alpha: é o único formato que o
+     adaptador deixa passar, e ter o fallback noutro formato esconderia uma
+     divergência real atrás de uma diferença de escrita.
+
+     `superficie` nasce igual ao fundo de propósito: hoje o card do menu board
+     não tem caixa — quem separa um do outro é o espaço. Configurar esta cor
+     passa a desenhar a caixa, que é exatamente o que "superfície" significa. */
   --tvmb-fundo: #0b0a09;
-  --tvmb-superficie: #17151300;  /* o card não tem caixa: quem separa é o espaço */
+  --tvmb-superficie: #0b0a09;
   --tvmb-texto: #ffffff;
-  --tvmb-texto-2: rgba(255, 255, 255, 0.72);
+  --tvmb-texto-2: #b8b8b8;
   --tvmb-destaque: #d79e00;
+  --tvmb-texto-destaque: #000000;
+  /* DERIVADA, não um sétimo campo: o texto rebaixado. O adaptador a recalcula a
+     partir do token `texto`, e é isso que a faz aparecer num fundo claro — uma
+     divisória branca fixa sumiria justamente na paleta clara. */
   --tvmb-linha: rgba(255, 255, 255, 0.14);
 
   position: relative;
@@ -102,7 +122,7 @@
   padding: 4px 12px;
   border-radius: 999px;
   background: var(--tvmb-destaque);
-  color: #000;
+  color: var(--tvmb-texto-destaque);
   font-size: 22px;
   font-weight: 900;
   line-height: 1;
@@ -156,7 +176,9 @@
   align-content: start;
 }
 .tvmb-card { display: flex; flex-direction: column; background: var(--tvmb-superficie); }
-.tvmb-card-midia { position: relative; width: 100%; height: 230px; overflow: hidden; border-radius: 16px; background: #141210; }
+/* O chão atrás da foto acompanha a SUPERFÍCIE: com a paleta clara, um buraco
+   preto embaixo de cada card seria a única coisa escura da tela. */
+.tvmb-card-midia { position: relative; width: 100%; height: 230px; overflow: hidden; border-radius: 16px; background: var(--tvmb-superficie); }
 .tvmb-card-txt { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: space-between; gap: 12px; padding: 18px 4px 0; }
 .tvmb-card-nome {
   margin: 0;
@@ -211,7 +233,7 @@
    Um produto grande à esquerda, até quatro à direita em 2 × 2. */
 .tvmb-destaque { flex: 1 1 auto; display: grid; grid-template-columns: 860px 1fr; gap: 40px; min-height: 0; }
 .tvmb-hero { display: flex; flex-direction: column; min-height: 0; }
-.tvmb-hero-midia { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; border-radius: 20px; background: #141210; }
+.tvmb-hero-midia { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; border-radius: 20px; background: var(--tvmb-superficie); }
 .tvmb-hero-midia .tvmb-selo { font-size: 26px; padding: 10px 20px; }
 .tvmb-hero-txt { flex: 0 0 auto; padding-top: 22px; display: flex; flex-direction: column; gap: 10px; }
 .tvmb-hero-nome { margin: 0; font-size: 56px; font-weight: 900; line-height: 1.02; }
