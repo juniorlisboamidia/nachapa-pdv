@@ -102,3 +102,10 @@
      demais à noite. */
   color: rgba(255, 255, 255, 0.86);
 }
+
+/* O MENU BOARD dentro do player: ocupa a tela inteira. O desenho em si mora em
+   `tvMenuBoard.css`, compartilhado com a prévia do admin — é isso que garante
+   que a parede e a tela de aprovação mostrem a mesma coisa. */
+.tv-board { width: 100%; height: 100%; display: block; }
+.tv-board .tvmb-caixa { width: 100%; height: 100%; aspect-ratio: auto; }
+.tv-board.entrando { animation: tv-entrar 0.45s ease-out; }

@@ -1,0 +1,233 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   MENU BOARD — a folha do board desenhado. Carregada pelo PLAYER e pela PRÉVIA
+   do admin, porque as duas desenham o mesmo componente.
+
+   Prefixo `.tvmb-`: `.tv-` é do player (tv.css), `.tvi-` é do admin da TV,
+   `.tq-` é do quiosque do totem e `.ttm-` é do escritório. Cinco famílias já
+   conviveram no mesmo arquivo uma vez, e um seletor um pouco mais genérico
+   pintou a tela errada sem aviso.
+
+   ── A ESCALA, QUE É A DECISÃO CENTRAL ────────────────────────────────────
+   O board é desenhado em 1920 × 1080 px ABSOLUTOS e reduzido por `transform:
+   scale()`. Não é preguiça de fazer layout fluido: é o que faz "este nome cabe
+   em duas linhas?" ter UMA resposta. Com layout fluido, o admin numa caixa de
+   600 px quebraria o texto diferente da TV, e o gestor descobriria a diferença
+   olhando a parede.
+
+   A escala NÃO sai do CSS: `scale()` quer um número puro, e CSS não divide um
+   comprimento por outro (`calc(100% / 1920px)` não existe). `cqw` resolveria e
+   está fora — WebView de TV de loja é velha, e um layout que depende de recurso
+   recente falha justamente no aparelho que importa. Quem mede é um
+   `ResizeObserver` no componente, que escreve `--tvmb-escala` aqui. O padrão 1
+   abaixo é o que vale enquanto a primeira medição não chega: numa TV 1920 ele
+   já é o valor certo, então nada pisca.
+
+   ── IDENTIDADE ───────────────────────────────────────────────────────────
+   Tokens PRÓPRIOS do canal, com os literais da marca copiados por VALOR (os
+   mesmos do totem). Ler a configuração do totem daria personalização de graça
+   e acoplaria canais irmãos — a personalização da TV é dívida registrada.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.tvmb-caixa {
+  --tvmb-escala: 1;              /* o ResizeObserver do componente sobrescreve com a medida real */
+
+  /* Marca: preto de parede e o dourado da ação. Literais, não herdados. */
+  --tvmb-fundo: #0b0a09;
+  --tvmb-superficie: #17151300;  /* o card não tem caixa: quem separa é o espaço */
+  --tvmb-texto: #ffffff;
+  --tvmb-texto-2: rgba(255, 255, 255, 0.72);
+  --tvmb-destaque: #d79e00;
+  --tvmb-linha: rgba(255, 255, 255, 0.14);
+
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  background: var(--tvmb-fundo);
+  font-family: Montserrat, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: var(--tvmb-texto);
+}
+
+/* O palco tem o tamanho REAL e é encolhido a partir do canto superior esquerdo. */
+.tvmb-palco {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1920px;
+  height: 1080px;
+  transform: scale(var(--tvmb-escala));
+  transform-origin: top left;
+}
+
+.tvmb-tela {
+  width: 1920px;
+  height: 1080px;
+  display: flex;
+  flex-direction: column;
+  padding: 56px 72px 64px;
+  box-sizing: border-box;
+}
+
+/* O TÍTULO da faixa: é ele que diz do que é esta tela ("Hambúrgueres"). Em caixa
+   alta e dourado — a única coisa dourada além do preço, e os dois dizem a mesma
+   coisa: "olhe aqui". */
+.tvmb-titulo {
+  margin: 0 0 40px;
+  font-size: 68px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--tvmb-destaque);
+  flex: 0 0 auto;
+}
+
+.tvmb-corpo { flex: 1 1 auto; min-height: 0; display: flex; }
+
+/* ── Preço ────────────────────────────────────────────────────────────────
+   Nome e preço com peso equivalente: o que os distingue é a COR (o preço é
+   dourado) e não o tamanho. O preço anterior é riscado mas LEGÍVEL — 72% de
+   branco e risco de 3px; apagado, a promoção não é percebida de longe, que é o
+   contrário do que ela existe para fazer. */
+.tvmb-preco { display: flex; flex-direction: column; gap: 4px; }
+.tvmb-preco-antes { display: flex; align-items: center; gap: 12px; }
+.tvmb-preco-de {
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--tvmb-texto-2);
+  text-decoration: line-through;
+  text-decoration-thickness: 3px;
+}
+.tvmb-desconto {
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--tvmb-destaque);
+  color: #000;
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+}
+.tvmb-preco-valor {
+  font-size: 44px;
+  font-weight: 900;
+  line-height: 1;
+  color: var(--tvmb-destaque);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Selo ─────────────────────────────────────────────────────────────────
+   Etiqueta reta no canto da foto — a apresentação é PRÓPRIA da TV (o totem usa
+   faixa diagonal), mas a cor vem resolvida do servidor, da mesma paleta. */
+.tvmb-selo {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 8px 16px;
+  border-bottom-right-radius: 12px;
+  color: #fff;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+/* Na lista não há foto: o selo vira uma pílula ao lado do nome. */
+.tvmb-linha-nome .tvmb-selo { position: static; border-radius: 999px; margin-left: 16px; font-size: 20px; padding: 6px 14px; vertical-align: middle; }
+
+/* ── Foto ─────────────────────────────────────────────────────────────────
+   `cover` como no resto do canal. Sem foto (ou com a foto quebrada), um bloco
+   neutro do mesmo tamanho: o produto continua na tela, e a grade não entorta. */
+.tvmb-foto { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tvmb-foto-vazia { display: block; background: linear-gradient(135deg, #1d1a17, #110f0e); }
+
+/* ── GRADE (4 × 2) ────────────────────────────────────────────────────────
+   `auto-rows` fixo e `justify-content: center`: com menos de 8 produtos os
+   cards NÃO esticam para preencher — um card de 900 px ao lado de um de 440 lê
+   como defeito. A grade centraliza o que há. */
+.tvmb-grade {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: repeat(4, 408px);
+  grid-auto-rows: 428px;
+  gap: 32px 32px;
+  justify-content: center;
+  align-content: start;
+}
+.tvmb-card { display: flex; flex-direction: column; background: var(--tvmb-superficie); }
+.tvmb-card-midia { position: relative; width: 100%; height: 230px; overflow: hidden; border-radius: 16px; background: #141210; }
+.tvmb-card-txt { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: space-between; gap: 12px; padding: 18px 4px 0; }
+.tvmb-card-nome {
+  margin: 0;
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.1;
+  /* Duas linhas e para: um nome de cinco palavras não pode empurrar o preço para
+     fora do card e deixar um buraco na fileira. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ── LISTA ────────────────────────────────────────────────────────────────
+   O menu tradicional: nome à esquerda, pontilhado, preço à direita. O
+   pontilhado é `repeating-linear-gradient` e não uma fileira de pontos: ele se
+   estica sozinho e nunca sobra meio ponto na borda. */
+.tvmb-lista { flex: 1 1 auto; list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.tvmb-linha {
+  display: flex;
+  align-items: baseline;
+  gap: 20px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--tvmb-linha);
+}
+.tvmb-linha:last-child { border-bottom: none; }
+.tvmb-linha-txt { flex: 0 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.tvmb-linha-nome { font-size: 40px; font-weight: 700; line-height: 1.05; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tvmb-linha-desc {
+  font-size: 24px;
+  color: var(--tvmb-texto-2);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 1100px;
+}
+.tvmb-pontilhado {
+  flex: 1 1 auto;
+  height: 4px;
+  min-width: 40px;
+  transform: translateY(-8px);
+  background-image: radial-gradient(circle, var(--tvmb-linha) 2px, transparent 2px);
+  background-size: 14px 4px;
+  background-repeat: repeat-x;
+}
+.tvmb-preco-linha { flex: 0 0 auto; align-items: flex-end; text-align: right; }
+.tvmb-preco-linha .tvmb-preco-valor { font-size: 46px; }
+
+/* ── DESTAQUE + GRADE ─────────────────────────────────────────────────────
+   Um produto grande à esquerda, até quatro à direita em 2 × 2. */
+.tvmb-destaque { flex: 1 1 auto; display: grid; grid-template-columns: 860px 1fr; gap: 40px; min-height: 0; }
+.tvmb-hero { display: flex; flex-direction: column; min-height: 0; }
+.tvmb-hero-midia { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; border-radius: 20px; background: #141210; }
+.tvmb-hero-midia .tvmb-selo { font-size: 26px; padding: 10px 20px; }
+.tvmb-hero-txt { flex: 0 0 auto; padding-top: 22px; display: flex; flex-direction: column; gap: 10px; }
+.tvmb-hero-nome { margin: 0; font-size: 56px; font-weight: 900; line-height: 1.02; }
+.tvmb-hero-desc {
+  margin: 0;
+  font-size: 26px;
+  color: var(--tvmb-texto-2);
+  line-height: 1.25;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tvmb-preco-hero .tvmb-preco-valor { font-size: 64px; }
+.tvmb-preco-hero .tvmb-preco-de { font-size: 30px; }
+.tvmb-secundarios { display: grid; grid-template-columns: repeat(2, 1fr); grid-auto-rows: 1fr; gap: 28px; min-height: 0; }
+.tvmb-secundarios .tvmb-card-midia { height: 180px; }
+.tvmb-secundarios .tvmb-card-nome { font-size: 30px; }
+.tvmb-secundarios .tvmb-preco-valor { font-size: 38px; }

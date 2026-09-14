@@ -131,6 +131,9 @@ test('Loja Digital é suíte de canais: Totem (sete itens) e TV Indoor', () => {
     ['Telas', '/tv-indoor/telas'],
     ['Conteúdos', '/tv-indoor/conteudos'],
     ['Playlists', '/tv-indoor/playlists'],
+    // Menu Boards vem por último: é o passo que se aprende depois, e o único que exige
+    // cardápio no Cardápio Web para fazer sentido.
+    ['Menu Boards', '/tv-indoor/menu-boards'],
   ]);
   // Telas PRIMEIRO, e isto não é gosto: a `primeiraFolha` da Visão Geral e o redirect de
   // `/tv-indoor` apontam para a primeira folha. Sem uma TV cadastrada, conteúdo e playlist
@@ -148,7 +151,7 @@ test('operador com aparelhos vê só Loja Digital, com as duas suítes', () => {
     'Pedidos', 'Configurações', 'Gestão de totens', 'Cardápio', 'Personalização', 'Banners', 'Formas de pagamento',
   ]);
   // A mesma área abre os DOIS canais: as folhas da TV herdam `aparelhos` do subgrupo.
-  assert.deepEqual(labels(grupo(grupo(v, 'Loja Digital').itens, 'TV Indoor').itens), ['Telas', 'Conteúdos', 'Playlists']);
+  assert.deepEqual(labels(grupo(grupo(v, 'Loja Digital').itens, 'TV Indoor').itens), ['Telas', 'Conteúdos', 'Playlists', 'Menu Boards']);
 });
 
 test('operador com etiquetas vê Ferramentas com Etiquetas e NÃO vê Loja Digital', () => {

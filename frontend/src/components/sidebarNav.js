@@ -181,6 +181,10 @@ export const grupos = [
           { to: '/tv-indoor/telas', label: 'Telas', icon: 'cpu' },
           { to: '/tv-indoor/conteudos', label: 'Conteúdos', icon: 'marketing' },
           { to: '/tv-indoor/playlists', label: 'Playlists', icon: 'relatorios' },
+          // Menu Boards fica DEPOIS das playlists e não entre Conteúdos e Playlists: a
+          // ordem da sidebar é a ordem em que a loja monta as coisas, e o board é o passo
+          // que se aprende por último (é preciso ter cardápio no CW para ele fazer sentido).
+          { to: '/tv-indoor/menu-boards', label: 'Menu Boards', icon: 'ficha' },
         ],
       },
     ],

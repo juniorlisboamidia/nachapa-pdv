@@ -11,7 +11,9 @@
 //     institucional da loja. Um "não foi possível carregar" numa parede fica lá o dia todo;
 //   · NÃO PISCA. A programação é relida a cada 60 s, e um refresh que devolve o mesmo não
 //     reinicia o rodízio (`assinatura`). Sem isso, a primeira imagem voltaria a cada minuto;
-//   · imagem que falha é PULADA; todas falharem cai no institucional.
+//   · imagem que falha é PULADA; todas falharem cai no institucional;
+//   · a programação alterna ARTE e MENU BOARD no mesmo motor — um `setTimeout` por item,
+//     com a duração daquele item. Não há um segundo player: o que muda é o que se desenha.
 //
 // ── O QUE ELA NÃO É ───────────────────────────────────────────────────────────────────
 // Não há toque, não há sessão, não há pedido. O V1 é promocional/institucional — a TV não
@@ -24,7 +26,8 @@
 // tarja preta numa tela ligada o dia inteiro. Tarja preta lê como defeito.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { aparelhoApi } from '../services/api'
-import { assinatura, desvioDoRelogio, duracaoMs, paraExibir, proximaParaPrecarregar, proximoIndice } from '../components/tvProgramacao'
+import { assinatura, chaveDoItem, desvioDoRelogio, duracaoMs, ehMenuBoard, paraExibir, proximaParaPrecarregar, proximoIndice } from '../components/tvProgramacao'
+import MenuBoard from '../components/tv/MenuBoard'
 import '../styles/tv.css'
 
 // A programação se refaz a cada minuto: é o que faz uma troca no PDV aparecer na parede
@@ -123,10 +126,14 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
   //  · E não há laço: marcar uma falha muda a lista filtrada, mas NÃO muda a crua — então
   //    o efeito não dispara de novo e o item não volta imediatamente para falhar outra vez.
   const chave = assinatura(itens)
+  /* eslint-disable react-hooks/set-state-in-effect -- o reset É o efeito que esta
+     sincronização existe para produzir: a programação mudou, então o rodízio recomeça e as
+     falhas antigas são perdoadas. Não há caminho sem estado aqui. */
   useEffect(() => {
     setIndice(0)
     setFalhados((s) => (s.size ? new Set() : s))
-  }, [chave]) // eslint-disable-line react-hooks/set-state-in-effect
+  }, [chave])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const atual = lista[Math.min(indice, Math.max(0, total - 1))] ?? null
 
@@ -141,14 +148,23 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
 
   // Pré-carrega SÓ a próxima: o que importa é que a troca não mostre um quadro vazio, e TV
   // de loja não tem memória para a lista inteira.
-  const proxima = proximaParaPrecarregar(lista, indice)
+  // Pré-carrega o PRÓXIMO item: uma arte, ou as fotos dos produtos do próximo menu board —
+  // sem isso, a troca mostraria oito retângulos vazios enchendo um a um na frente do cliente.
+  const proximas = proximaParaPrecarregar(lista, indice)
+  const chaveProximas = proximas.join('|')
   useEffect(() => {
-    if (!proxima) return
-    const img = new Image()
-    img.src = proxima
-  }, [proxima])
+    for (const url of chaveProximas ? chaveProximas.split('|') : []) {
+      const img = new Image()
+      img.src = url
+    }
+  }, [chaveProximas])
 
-  const marcarFalha = (id) => setFalhados((s) => (s.has(id) ? s : new Set(s).add(id)))
+  // A chave é por TIPO (`i:3` / `b:3`): o id 3 de uma arte e o id 3 de um board são coisas
+  // diferentes, e uma imagem quebrada não pode tirar um menu board do ar.
+  const marcarFalha = (item) => setFalhados((s) => {
+    const k = chaveDoItem(item)
+    return s.has(k) ? s : new Set(s).add(k)
+  })
 
   // Movimento decorativo respeita a preferência do sistema; a TROCA em si não é
   // decoração — é o conteúdo — e continua acontecendo.
@@ -156,17 +172,33 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
 
   if (!atual) return <Institucional loja={loja} aparelho={aparelho} />
 
+  // MENU BOARD: a mesma casca, o mesmo temporizador, outro desenho. O board chega RESOLVIDO
+  // do servidor (preço, promoção e selo prontos) — a TV não conhece regra do Cardápio Web.
+  //
+  // A `key` é só o id, e NÃO inclui os produtos: quando o preço muda no CW, o board tem de
+  // se redesenhar NO LUGAR, sem remontar. Remontar reiniciaria a animação de entrada e
+  // piscaria a tela a cada refresh de preço — exatamente o que não se quer numa parede.
+  if (ehMenuBoard(atual)) {
+    return (
+      <div className="tv-raiz">
+        <div key={`b${atual.id}`} className={'tv-board' + (reduzido ? '' : ' entrando')}>
+          <MenuBoard board={atual} />
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="tv-raiz">
       {/* `key` por conteúdo: trocar o `src` do MESMO elemento deixaria a imagem anterior
           visível até a nova decodificar — um flash de arte velha a cada troca. Com key,
           cada peça é um elemento próprio. */}
       <img
-        key={`${atual.id}:${atual.imagemVersao}`}
+        key={`i${atual.id}:${atual.imagemVersao}`}
         className={'tv-arte' + (reduzido ? '' : ' entrando')}
         src={atual.imagemUrl}
         alt=""
-        onError={() => marcarFalha(atual.id)}
+        onError={() => marcarFalha(atual)}
       />
     </div>
   )

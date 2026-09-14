@@ -41,6 +41,9 @@ export default function TvIndoorPlaylists() {
   const [toast, setToast] = useState(null)
   const [playlists, setPlaylists] = useState([])
   const [conteudos, setConteudos] = useState([])
+  const [boards, setBoards] = useState([])
+  // Qual acervo está aberto à direita: as artes ou os menu boards.
+  const [acervo, setAcervo] = useState('CONTEUDOS')
   const [ocupado, setOcupado] = useState(false)
   const [selecionada, setSelecionada] = useState(null) // id
   const [nova, setNova] = useState('')
@@ -50,10 +53,15 @@ export default function TvIndoorPlaylists() {
   const buscar = useCallback(() => Promise.all([
     api.get('/tv-indoor/playlists'),
     api.get('/tv-indoor/conteudos'),
+    // Os menu boards entram no MESMO acervo: a programação alterna arte e cardápio, e a
+    // ordem é única. Uma lista separada obrigaria o gestor a montar a sequência em dois
+    // lugares e a adivinhar como eles se intercalam.
+    api.get('/tv-indoor/menu-boards').catch(() => ({ data: { menuBoards: [] } })),
   ])
-    .then(([p, c]) => {
+    .then(([p, c, b]) => {
       setPlaylists(Array.isArray(p.data?.playlists) ? p.data.playlists : [])
       setConteudos(Array.isArray(c.data?.conteudos) ? c.data.conteudos : [])
+      setBoards(Array.isArray(b.data?.menuBoards) ? b.data.menuBoards : [])
       setErro(null)
     })
     .catch(() => setErro('Não foi possível ler as playlists agora.'))
@@ -108,30 +116,44 @@ export default function TvIndoorPlaylists() {
 
   /* A lista INTEIRA sobe de uma vez, e o servidor reescreve a ordem por posição — é o
      mesmo caminho para adicionar, remover e reordenar. Um endpoint só, uma transação só,
-     e nenhuma chance de a programação ficar pela metade. */
-  async function gravarItens(ids) {
+     e nenhuma chance de a programação ficar pela metade.
+
+     Os itens são POLIMÓRFICOS: `{ tipo, conteudoId }` ou `{ tipo, menuBoardId }`. A ordem
+     é uma só e atravessa os dois — "promoção, hambúrgueres, promoção, combos". */
+  async function gravarItens(itens) {
     if (!atual) return
     setOcupado(true)
     try {
-      const r = await api.put(`/tv-indoor/playlists/${atual.id}/itens`, { ids })
+      const r = await api.put(`/tv-indoor/playlists/${atual.id}/itens`, { itens })
       const atualizada = r.data?.playlist
       if (atualizada) setPlaylists((ps) => ps.map((p) => (p.id === atualizada.id ? atualizada : p)))
     } catch (e) { setToast({ message: erroDe(e, 'Não foi possível salvar a programação.'), type: 'error' }) } finally { setOcupado(false) }
   }
 
-  const idsAtuais = () => (atual?.itens ?? []).map((i) => i.id)
-  const adicionar = (id) => gravarItens([...idsAtuais(), id])
-  const remover = (id) => gravarItens(idsAtuais().filter((x) => x !== id))
+  // A programação como o servidor a espera de volta. O `itemId` (a linha da tabela) fica de
+  // fora: quem manda é a POSIÇÃO na lista, e o servidor recria as linhas.
+  const itensAtuais = () => (atual?.itens ?? []).map((i) => (i.tipo === 'MENU_BOARD'
+    ? { tipo: 'MENU_BOARD', menuBoardId: i.board.id }
+    : { tipo: 'IMAGEM', conteudoId: i.conteudo.id }))
+  const idDoItem = (i) => (i.tipo === 'MENU_BOARD' ? `b${i.board.id}` : `i${i.conteudo.id}`)
+
+  const adicionar = (tipo, id) => gravarItens([
+    ...itensAtuais(),
+    tipo === 'MENU_BOARD' ? { tipo, menuBoardId: id } : { tipo, conteudoId: id },
+  ])
+  const remover = (indice) => gravarItens(itensAtuais().filter((_, i) => i !== indice))
   const mover = (indice, passo) => {
-    const ids = idsAtuais()
+    const itens = itensAtuais()
     const destino = indice + passo
-    if (destino < 0 || destino >= ids.length) return
-    ;[ids[indice], ids[destino]] = [ids[destino], ids[indice]]
-    gravarItens(ids)
+    if (destino < 0 || destino >= itens.length) return
+    ;[itens[indice], itens[destino]] = [itens[destino], itens[indice]]
+    gravarItens(itens)
   }
 
-  const dentro = new Set((atual?.itens ?? []).map((i) => i.id))
-  const fora = conteudos.filter((c) => !dentro.has(c.id))
+  const dentro = new Set((atual?.itens ?? []).map(idDoItem))
+  const foraConteudos = conteudos.filter((c) => !dentro.has(`i${c.id}`))
+  const foraBoards = boards.filter((b) => !dentro.has(`b${b.id}`))
+  const fora = acervo === 'MENU_BOARDS' ? foraBoards : foraConteudos
 
   if (carregando) return <div className="loading-state">Carregando…</div>
   if (erro) {
@@ -223,26 +245,40 @@ export default function TvIndoorPlaylists() {
               </div>
             ) : (
               <ul className="tvi-lista">
-                {atual.itens.map((c, i) => (
-                  <li key={c.id} className={'tvi-item' + (c.status === 'ATIVO' ? '' : ' off')}>
-                    <span className="tvi-ordem">{i + 1}</span>
-                    <span className="tvi-mini estatica"><img src={c.imagemUrl} alt="" draggable={false} /></span>
-                    <span className="tvi-item-info">
-                      <span className="tvi-item-nome">{c.nome}</span>
-                      <span className="tvi-item-meta">
-                        <span className={'badge ' + STATUS[c.status].cor}>{STATUS[c.status].texto}</span>
-                        <span>{c.duracaoSegundos}s</span>
+                {atual.itens.map((item, i) => {
+                  // Os dois tipos na MESMA lista, com a mesma numeração: é a sequência que a
+                  // TV vai reproduzir, e ela não se divide por tipo.
+                  const board = item.tipo === 'MENU_BOARD'
+                  const c = board ? item.board : item.conteudo
+                  const ligado = board ? c.ativo !== false : c.status === 'ATIVO'
+                  return (
+                    <li key={idDoItem(item)} className={'tvi-item' + (ligado ? '' : ' off')}>
+                      <span className="tvi-ordem">{i + 1}</span>
+                      {board
+                        ? <span className="tvi-mini estatica tvi-mini-board" aria-hidden="true">MENU</span>
+                        : <span className="tvi-mini estatica"><img src={c.imagemUrl} alt="" draggable={false} /></span>}
+                      <span className="tvi-item-info">
+                        <span className="tvi-item-nome">{c.nome}</span>
+                        <span className="tvi-item-meta">
+                          {board
+                            ? <>
+                              <span className="badge badge-slate">Menu board</span>
+                              <span className={'badge ' + (c.ativo === false ? 'badge-gray' : 'badge-green')}>{c.ativo === false ? 'Desligado' : 'Ligado'}</span>
+                            </>
+                            : <span className={'badge ' + STATUS[c.status].cor}>{STATUS[c.status].texto}</span>}
+                          <span>{c.duracaoSegundos}s</span>
+                        </span>
                       </span>
-                    </span>
-                    <span className="tvi-item-acoes">
-                      {/* Subir/descer em vez de arrastar: funciona no teclado e no toque
-                          sem nenhum tratamento especial, que é onde o arrasto não existe. */}
-                      <button type="button" className="btn btn-secondary btn-sm" disabled={ocupado || i === 0} aria-label={`Subir ${c.nome}`} onClick={() => mover(i, -1)}>↑</button>
-                      <button type="button" className="btn btn-secondary btn-sm" disabled={ocupado || i === atual.itens.length - 1} aria-label={`Descer ${c.nome}`} onClick={() => mover(i, 1)}>↓</button>
-                      <button type="button" className="btn btn-secondary btn-sm" disabled={ocupado} onClick={() => remover(c.id)}>Tirar</button>
-                    </span>
-                  </li>
-                ))}
+                      <span className="tvi-item-acoes">
+                        {/* Subir/descer em vez de arrastar: funciona no teclado e no toque
+                            sem nenhum tratamento especial, que é onde o arrasto não existe. */}
+                        <button type="button" className="btn btn-secondary btn-sm" disabled={ocupado || i === 0} aria-label={`Subir ${c.nome}`} onClick={() => mover(i, -1)}>↑</button>
+                        <button type="button" className="btn btn-secondary btn-sm" disabled={ocupado || i === atual.itens.length - 1} aria-label={`Descer ${c.nome}`} onClick={() => mover(i, 1)}>↓</button>
+                        <button type="button" className="btn btn-secondary btn-sm" disabled={ocupado} onClick={() => remover(i)}>Tirar</button>
+                      </span>
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </div>
@@ -252,8 +288,44 @@ export default function TvIndoorPlaylists() {
             <div className="ttm-cab-secao">
               <h2 className="ttm-secao-t">Adicionar</h2>
               <span className="ttm-meta-txt">{fora.length} {fora.length === 1 ? 'disponível' : 'disponíveis'}</span>
+              {/* DOIS acervos, um seletor: artes e menu boards são naturezas diferentes, mas
+                  entram na MESMA programação. Duas listas empilhadas fariam a segunda sumir
+                  embaixo da primeira num cardápio grande. */}
+              <div className="ttm-cab-acao tvi-abas">
+                <button type="button" className={'tvi-aba' + (acervo === 'CONTEUDOS' ? ' on' : '')} onClick={() => setAcervo('CONTEUDOS')}>
+                  Conteúdos<span className="tvi-aba-n">{foraConteudos.length}</span>
+                </button>
+                <button type="button" className={'tvi-aba' + (acervo === 'MENU_BOARDS' ? ' on' : '')} onClick={() => setAcervo('MENU_BOARDS')}>
+                  Menu boards<span className="tvi-aba-n">{foraBoards.length}</span>
+                </button>
+              </div>
             </div>
-            {conteudos.length === 0 ? (
+            {acervo === 'MENU_BOARDS' ? (
+              boards.length === 0 ? (
+                <div className="empty-state">Nenhum menu board ainda. Crie um em <strong>Menu Boards</strong>.</div>
+              ) : fora.length === 0 ? (
+                <div className="empty-state">Todos os menu boards já estão nesta playlist.</div>
+              ) : (
+                <ul className="tvi-lista">
+                  {fora.map((b) => (
+                    <li key={b.id} className={'tvi-item' + (b.ativo ? '' : ' off')}>
+                      <span className="tvi-mini estatica tvi-mini-board" aria-hidden="true">MENU</span>
+                      <span className="tvi-item-info">
+                        <span className="tvi-item-nome">{b.nome}</span>
+                        <span className="tvi-item-meta">
+                          <span className={'badge ' + (b.ativo ? 'badge-green' : 'badge-gray')}>{b.ativo ? 'Ligado' : 'Desligado'}</span>
+                          <span>{b.qtdItens} {b.qtdItens === 1 ? 'produto' : 'produtos'}</span>
+                          <span>{b.duracaoSegundos}s</span>
+                        </span>
+                      </span>
+                      <span className="tvi-item-acoes">
+                        <button type="button" className="btn btn-primary btn-sm" disabled={ocupado} onClick={() => adicionar('MENU_BOARD', b.id)}>Adicionar</button>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )
+            ) : conteudos.length === 0 ? (
               <div className="empty-state">Nenhum conteúdo no acervo. Suba as imagens em <strong>Conteúdos</strong>.</div>
             ) : fora.length === 0 ? (
               <div className="empty-state">Todos os conteúdos do acervo já estão nesta playlist.</div>
@@ -270,7 +342,7 @@ export default function TvIndoorPlaylists() {
                       </span>
                     </span>
                     <span className="tvi-item-acoes">
-                      <button type="button" className="btn btn-primary btn-sm" disabled={ocupado} onClick={() => adicionar(c.id)}>Adicionar</button>
+                      <button type="button" className="btn btn-primary btn-sm" disabled={ocupado} onClick={() => adicionar('IMAGEM', c.id)}>Adicionar</button>
                     </span>
                   </li>
                 ))}

@@ -18,10 +18,25 @@ export const FAIXA = Object.freeze({ minS: 3, maxS: 120, padraoS: 10 })
 
 export const duracaoMs = (conteudo) => duracaoEmMs(conteudo?.duracaoSegundos, FAIXA)
 
-/* Este conteúdo está no ar AGORA? */
-export function noAr(conteudo, agoraMs) {
-  if (!conteudo || conteudo.ativo !== true) return false
-  return dentroDaJanela(conteudo, agoraMs)
+/* Os dois tipos de item da programação. Um item sem `tipo` é IMAGEM: é o contrato do
+   servidor (a coluna nasce com DEFAULT 'IMAGEM') e o que faz uma TV com build anterior
+   continuar entendendo a programação. */
+export const ehMenuBoard = (item) => item?.tipo === 'menu_board'
+
+/* Este item está no ar AGORA?
+
+   A pergunta é diferente para cada tipo, e é por isso que ela mora aqui:
+
+   · IMAGEM     precisa estar ativa, dentro da janela e ter arte. A agenda é da imagem —
+                ela pode entrar às 18:00 sem ninguém tocar no aparelho.
+   · MENU BOARD já chega RESOLVIDO do servidor, que é quem conhece o catálogo. Se ele veio,
+                é porque tem produto disponível. A checagem aqui é a última rede: um board
+                que chegasse sem produto nenhum viraria uma tela vazia na parede. */
+export function noAr(item, agoraMs) {
+  if (!item) return false
+  if (ehMenuBoard(item)) return Array.isArray(item.produtos) && item.produtos.length > 0
+  if (item.ativo !== true) return false
+  return dentroDaJanela(item, agoraMs)
 }
 
 /* O que a TV deve girar agora, na ordem que veio da playlist — já sem o que falhou ao
@@ -33,8 +48,20 @@ export function noAr(conteudo, agoraMs) {
 export function paraExibir({ itens, agoraMs, falhados } = {}) {
   const lista = Array.isArray(itens) ? itens : []
   const fora = falhados instanceof Set ? falhados : new Set()
-  return lista.filter((c) => c && !fora.has(c.id) && c.imagemUrl && noAr(c, agoraMs))
+  return lista.filter((item) => {
+    if (!item) return false
+    // `falhados` é por TIPO: o id 3 de uma imagem e o id 3 de um board são coisas
+    // diferentes, e uma arte quebrada não pode tirar um menu board do ar.
+    if (fora.has(chaveDoItem(item))) return false
+    // Arte sem URL existiria só para falhar no carregamento; board sem produto seria tela
+    // vazia. Os dois caem na mesma pergunta, cada um com a régua dele.
+    if (!ehMenuBoard(item) && !item.imagemUrl) return false
+    return noAr(item, agoraMs)
+  })
 }
+
+/* A chave de um item na programação. `tipo:id` porque as duas listas têm ids próprios. */
+export const chaveDoItem = (item) => `${ehMenuBoard(item) ? 'b' : 'i'}:${item?.id}`
 
 /* A assinatura da lista exibida: mudou de verdade, ou o refresh só devolveu o mesmo?
 
@@ -46,7 +73,15 @@ export function paraExibir({ itens, agoraMs, falhados } = {}) {
    é — o nome é do admin, a TV nem o mostra —, e por isso ele fica de fora. */
 export function assinatura(lista) {
   return (Array.isArray(lista) ? lista : [])
-    .map((c) => `${c.id}:${c.imagemVersao ?? 0}:${c.duracaoSegundos ?? 0}`)
+    .map((item) => {
+      if (!ehMenuBoard(item)) return `i${item?.id}:${item?.imagemVersao ?? 0}:${item?.duracaoSegundos ?? 0}`
+      // O PREÇO NÃO ENTRA na assinatura, e isso é o coração do menu board: preço mudou no
+      // Cardápio Web, a tela se redesenha com o valor novo no próximo refresh SEM reiniciar
+      // o rodízio. O que entra é a COMPOSIÇÃO — layout, título e quais produtos estão na
+      // tela —, porque essa mudança é estrutural e merece recomeçar.
+      const ids = (item.produtos ?? []).map((p) => p?.id).join(',')
+      return `b${item.id}:${item.duracaoSegundos ?? 0}:${item.layout ?? ''}:${item.titulo ?? ''}:${ids}`
+    })
     .join('|')
 }
 
@@ -55,6 +90,12 @@ export function assinatura(lista) {
    Uma só, e não a lista inteira: TV de loja é hardware modesto, e o que importa é que a
    troca não mostre um quadro vazio. Com um conteúdo só não há o que pré-carregar. */
 export function proximaParaPrecarregar(lista, indice) {
-  if (!Array.isArray(lista) || lista.length < 2) return null
-  return lista[proximoIndice(indice, lista.length)]?.imagemUrl ?? null
+  if (!Array.isArray(lista) || lista.length < 2) return []
+  const proxima = lista[proximoIndice(indice, lista.length)]
+  if (!proxima) return []
+  // MENU BOARD pré-carrega as fotos dos PRODUTOS: sem isso, a troca mostraria oito
+  // retângulos vazios enchendo um a um na frente do cliente. É a lista inteira do board, e
+  // não a tela toda — são poucas imagens, e só as do próximo item.
+  if (ehMenuBoard(proxima)) return (proxima.produtos ?? []).map((p) => p?.imagemUrl).filter(Boolean)
+  return proxima.imagemUrl ? [proxima.imagemUrl] : []
 }

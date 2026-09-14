@@ -3815,3 +3815,63 @@ body.theme-dark .hb-table tr.ttm-linha-revisao:hover td { background: #3a2612; }
 .tvi-item-acoes .btn { min-height: 32px; }
 
 .tvi-sel-playlist { width: 180px; min-width: 180px; }
+
+/* ── Menu Boards (admin) ──────────────────────────────────────────────────
+   O editor em TRÊS colunas: o que o board é · o cardápio · a prévia. As três
+   respondem perguntas diferentes e o gestor vai e volta entre elas o tempo
+   todo — empilhadas, ele escolheria um produto sem ver o efeito. */
+.tvi-mb-modal { max-width: min(1500px, 96vw); width: 100%; }
+.tvi-mb-corpo {
+  display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr) minmax(0, 420px);
+  gap: 20px; padding: 16px; align-items: start;
+  /* O modal não cresce sem fim: o miolo rola, o rodapé com os botões fica. */
+  max-height: calc(100vh - 220px); overflow: auto;
+}
+@media (max-width: 1200px) { .tvi-mb-corpo { grid-template-columns: minmax(0, 1fr); } }
+.tvi-mb-col { min-width: 0; display: flex; flex-direction: column; }
+/* O cardápio pode ter noventa itens: ele rola sozinho, sem empurrar a prévia. */
+.tvi-mb-catalogo { max-height: 460px; overflow: auto; padding-right: 4px; }
+.tvi-mb-cat {
+  margin: 12px 0 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--app-text-3);
+}
+.tvi-mb-catalogo section:first-child .tvi-mb-cat { margin-top: 0; }
+
+/* A escolha do layout é pela FORMA, não pelo nome: três miniaturas desenhadas em
+   CSS puro (nada de imagem para manter em sincronia com o layout de verdade). */
+.tvi-mb-layouts { display: flex; gap: 10px; flex-wrap: wrap; }
+.tvi-mb-layout {
+  flex: 1 1 96px; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  padding: 10px 8px; border: 1.5px solid var(--app-border); border-radius: 10px;
+  background: var(--app-surface); cursor: pointer; color: var(--app-text);
+}
+.tvi-mb-layout:hover { border-color: var(--app-text-3); }
+.tvi-mb-layout.on { border-color: var(--brand-gold); background: color-mix(in srgb, var(--brand-gold) 10%, transparent); }
+.tvi-mb-layout-nome { font-size: 12.5px; font-weight: 600; }
+.tvi-mb-layout-max { font-size: 11px; color: var(--app-text-3); }
+.tvi-mb-mini { width: 72px; height: 40px; border-radius: 4px; background: #16140f; display: block; padding: 4px; box-sizing: border-box; }
+/* Cada miniatura é a composição real em miniatura: 4×2, linhas, e 1 grande + 2×2. */
+.tvi-mb-mini.grade {
+  background-image: linear-gradient(#5b5346 0 0), linear-gradient(#5b5346 0 0), linear-gradient(#5b5346 0 0), linear-gradient(#5b5346 0 0),
+    linear-gradient(#5b5346 0 0), linear-gradient(#5b5346 0 0), linear-gradient(#5b5346 0 0), linear-gradient(#5b5346 0 0);
+  background-size: 14px 14px; background-repeat: no-repeat;
+  background-position: 5px 4px, 22px 4px, 39px 4px, 56px 4px, 5px 21px, 22px 21px, 39px 21px, 56px 21px;
+}
+.tvi-mb-mini.lista {
+  background-image: linear-gradient(#5b5346 0 0), linear-gradient(#5b5346 0 0), linear-gradient(#5b5346 0 0), linear-gradient(#5b5346 0 0);
+  background-size: 62px 5px; background-repeat: no-repeat;
+  background-position: 5px 5px, 5px 14px, 5px 23px, 5px 32px;
+}
+.tvi-mb-mini.destaque {
+  background-image: linear-gradient(#5b5346 0 0), linear-gradient(#5b5346 0 0), linear-gradient(#5b5346 0 0), linear-gradient(#5b5346 0 0), linear-gradient(#5b5346 0 0);
+  background-repeat: no-repeat;
+  background-size: 30px 32px, 14px 14px, 14px 14px, 14px 14px, 14px 14px;
+  background-position: 5px 4px, 39px 4px, 56px 4px, 39px 21px, 56px 21px;
+}
+
+/* O item da programação que é um MENU BOARD não tem miniatura de arte: um selo no
+   lugar dela diz o que aquela linha é, sem inventar uma imagem que não existe. */
+.tvi-mini-board {
+  display: grid; place-items: center; background: #16140f; color: var(--brand-gold);
+  font-size: 10px; font-weight: 800; letter-spacing: 0.08em;
+}

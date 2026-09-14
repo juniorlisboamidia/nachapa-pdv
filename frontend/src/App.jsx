@@ -57,6 +57,7 @@ import DispositivoPareamento from './pages/DispositivoPareamento'
 import TvIndoorTelas from './pages/TvIndoorTelas'
 import TvIndoorConteudos from './pages/TvIndoorConteudos'
 import TvIndoorPlaylists from './pages/TvIndoorPlaylists'
+import TvIndoorMenuBoards from './pages/TvIndoorMenuBoards'
 
 function TelaCarregando() {
   return (
@@ -177,6 +178,7 @@ export default function App() {
             <Route path="tv-indoor/telas" element={<TvIndoorTelas />} />
             <Route path="tv-indoor/conteudos" element={<TvIndoorConteudos />} />
             <Route path="tv-indoor/playlists" element={<TvIndoorPlaylists />} />
+            <Route path="tv-indoor/menu-boards" element={<TvIndoorMenuBoards />} />
             {/* Compatibilidade: os endereços antigos continuam abrindo o lugar novo. Link
                 anotado, favorito do navegador e aba esquecida aberta não podem virar 404. */}
             <Route path="aparelhos" element={<Navigate to="/totem/aparelhos" replace />} />

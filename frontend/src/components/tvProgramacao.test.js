@@ -12,12 +12,15 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  FAIXA, desvioDoRelogio, noAr, paraExibir, duracaoMs, assinatura, proximaParaPrecarregar, proximoIndice,
+  FAIXA, desvioDoRelogio, noAr, paraExibir, duracaoMs, assinatura, proximaParaPrecarregar,
+  proximoIndice, ehMenuBoard, chaveDoItem,
 } from './tvProgramacao.js'
 
 const T = (iso) => new Date(iso).getTime()
 const AGORA = T('2026-09-14T12:00:00.000Z')
-const conteudo = (extra) => ({ id: 1, ativo: true, imagemUrl: '/img/1?v=1', imagemVersao: 1, duracaoSegundos: 10, ...extra })
+const conteudo = (extra) => ({ tipo: 'imagem', id: 1, ativo: true, imagemUrl: '/img/1?v=1', imagemVersao: 1, duracaoSegundos: 10, ...extra })
+// Um MENU BOARD como o servidor o entrega: já resolvido, com preço e selo prontos.
+const board = (extra) => ({ tipo: 'menu_board', id: 9, duracaoSegundos: 20, layout: 'GRADE', titulo: 'Burgers', produtos: [{ id: '1', nome: 'X', preco: 10 }], ...extra })
 
 // ── Relógio ──────────────────────────────────────────────────────────────────
 test('desvioDoRelogio: a TV atrasada é corrigida pelo servidor', () => {
@@ -76,9 +79,18 @@ test('paraExibir tira o agendado para o futuro e o encerrado', () => {
 
 test('🔴 imagem que FALHOU é pulada; todas falharem devolve vazio (→ fallback)', () => {
   const itens = [conteudo({ id: 1 }), conteudo({ id: 2 })]
-  assert.deepEqual(paraExibir({ itens, agoraMs: AGORA, falhados: new Set([1]) }).map((c) => c.id), [2])
-  assert.deepEqual(paraExibir({ itens, agoraMs: AGORA, falhados: new Set([1, 2]) }), [],
+  assert.deepEqual(paraExibir({ itens, agoraMs: AGORA, falhados: new Set(['i:1']) }).map((c) => c.id), [2])
+  assert.deepEqual(paraExibir({ itens, agoraMs: AGORA, falhados: new Set(['i:1', 'i:2']) }), [],
     'com tudo falhando a TV cai no institucional, nunca num retângulo preto')
+})
+
+test('🔴 a chave de falha é por TIPO: uma arte quebrada não tira um board do ar', () => {
+  // `i:3` e `b:3` são coisas diferentes — os dois têm id próprio, em tabelas próprias.
+  assert.equal(chaveDoItem(conteudo({ id: 3 })), 'i:3')
+  assert.equal(chaveDoItem(board({ id: 3 })), 'b:3')
+  const itens = [conteudo({ id: 3 }), board({ id: 3 })]
+  const fora = paraExibir({ itens, agoraMs: AGORA, falhados: new Set(['i:3']) })
+  assert.deepEqual(fora.map((i) => i.tipo), ['menu_board'])
 })
 
 test('paraExibir ignora conteúdo sem URL e aguenta entrada torta', () => {
@@ -132,10 +144,19 @@ test('assinatura de lista vazia ou torta é string, nunca erro', () => {
 // ── Pré-carregamento e rotação ───────────────────────────────────────────────
 test('pré-carrega a PRÓXIMA, e nada com um conteúdo só', () => {
   const lista = [conteudo({ id: 1, imagemUrl: '/a' }), conteudo({ id: 2, imagemUrl: '/b' })]
-  assert.equal(proximaParaPrecarregar(lista, 0), '/b')
-  assert.equal(proximaParaPrecarregar(lista, 1), '/a', 'circular')
-  assert.equal(proximaParaPrecarregar([lista[0]], 0), null, 'com um só não há o que pré-carregar')
-  assert.equal(proximaParaPrecarregar(null, 0), null)
+  assert.deepEqual(proximaParaPrecarregar(lista, 0), ['/b'])
+  assert.deepEqual(proximaParaPrecarregar(lista, 1), ['/a'], 'circular')
+  assert.deepEqual(proximaParaPrecarregar([lista[0]], 0), [], 'com um só não há o que pré-carregar')
+  assert.deepEqual(proximaParaPrecarregar(null, 0), [])
+})
+
+test('🔴 o board pré-carrega as FOTOS DOS PRODUTOS dele', () => {
+  // Sem isto, a troca mostraria oito retângulos vazios enchendo um a um na frente do cliente.
+  const lista = [
+    conteudo({ id: 1, imagemUrl: '/a' }),
+    board({ id: 9, produtos: [{ id: '1', imagemUrl: '/p1' }, { id: '2', imagemUrl: null }, { id: '3', imagemUrl: '/p3' }] }),
+  ]
+  assert.deepEqual(proximaParaPrecarregar(lista, 0), ['/p1', '/p3'], 'produto sem foto não vira URL vazia')
 })
 
 test('proximoIndice é circular e nunca devolve NaN', () => {
@@ -162,4 +183,59 @@ test('🔴 o player assina a programação CRUA, não a lista filtrada', async (
     'a mudança de programação precisa dar nova chance a quem falhou')
   // E o institucional continua sendo a saída para "nada no ar".
   assert.match(semComentarios, /if \(!atual\) return <Institucional/, 'sem conteúdo elegível, a TV mostra a marca')
+})
+
+// ── Menu Board na programação ────────────────────────────────────────────────
+test('ehMenuBoard: item sem `tipo` é IMAGEM (contrato do servidor)', () => {
+  assert.equal(ehMenuBoard(board()), true)
+  assert.equal(ehMenuBoard(conteudo()), false)
+  assert.equal(ehMenuBoard({ id: 1 }), false, 'o DEFAULT da coluna e IMAGEM')
+  assert.equal(ehMenuBoard(null), false)
+})
+
+test('🔴 o board não passa pela régua de agenda da imagem — ele já vem resolvido', () => {
+  // Quem sabe se ha produto disponivel e o SERVIDOR, que tem o catalogo. A checagem aqui e a
+  // ultima rede: board sem produto nenhum seria uma tela vazia na parede.
+  assert.equal(noAr(board(), AGORA), true)
+  assert.equal(noAr(board({ produtos: [] }), AGORA), false)
+  assert.equal(noAr(board({ produtos: null }), AGORA), false)
+  // Board nao tem `ativo` nem janela no contrato publico, e isso nao o derruba.
+  assert.equal(noAr({ tipo: 'menu_board', id: 1, produtos: [{ id: 'a' }] }, AGORA), true)
+})
+
+test('🔴 a playlist MISTA sai na ordem, sem reordenar', () => {
+  const lista = paraExibir({
+    itens: [conteudo({ id: 1 }), board({ id: 9 }), conteudo({ id: 2 }), board({ id: 8 })],
+    agoraMs: AGORA,
+  })
+  assert.deepEqual(lista.map((i) => i.tipo + ':' + i.id), ['imagem:1', 'menu_board:9', 'imagem:2', 'menu_board:8'])
+})
+
+test('a duração do board é a DELE (20 s), como a de qualquer item', () => {
+  assert.equal(duracaoMs(board({ duracaoSegundos: 20 })), 20_000)
+  assert.equal(duracaoMs(board({ duracaoSegundos: 300 })), 120_000, 'o teto do canal vale para os dois tipos')
+})
+
+test('🔴 o PREÇO não entra na assinatura: preço novo NÃO reinicia o rodízio', () => {
+  // E o coracao do menu board: o gestor muda o preco no Cardapio Web e a parede mostra o
+  // valor novo no proximo refresh, sem a tela voltar para o comeco da programacao.
+  const antes = [board({ produtos: [{ id: '1', preco: 10 }, { id: '2', preco: 20 }] })]
+  const depois = [board({ produtos: [{ id: '1', preco: 12 }, { id: '2', preco: 20 }] })]
+  assert.equal(assinatura(antes), assinatura(depois))
+  // Promocao nova tambem e so preco.
+  const promo = [board({ produtos: [{ id: '1', preco: 9, precoAnterior: 10, descontoPercentual: 10 }, { id: '2', preco: 20 }] })]
+  assert.equal(assinatura(antes), assinatura(promo))
+})
+
+test('🔴 a COMPOSIÇÃO do board muda a assinatura (produto que saiu, layout, título)', () => {
+  const base = [board({ produtos: [{ id: '1' }, { id: '2' }] })]
+  assert.notEqual(assinatura(base), assinatura([board({ produtos: [{ id: '1' }] })]), 'produto indisponivel saiu')
+  assert.notEqual(assinatura(base), assinatura([board({ produtos: [{ id: '2' }, { id: '1' }] })]), 'a ordem mudou')
+  assert.notEqual(assinatura(base), assinatura([board({ produtos: [{ id: '1' }, { id: '2' }], layout: 'LISTA' })]))
+  assert.notEqual(assinatura(base), assinatura([board({ produtos: [{ id: '1' }, { id: '2' }], titulo: 'Outro' })]))
+  assert.notEqual(assinatura(base), assinatura([board({ produtos: [{ id: '1' }, { id: '2' }], duracaoSegundos: 40 })]))
+})
+
+test('imagem e board com o MESMO id não se confundem na assinatura', () => {
+  assert.notEqual(assinatura([conteudo({ id: 3 })]), assinatura([board({ id: 3, produtos: [] })]))
 })
