@@ -1181,6 +1181,50 @@ model TvPlaylistItem {
   @@index([menuBoardId])
 }
 
+// A APARÊNCIA do canal: seis cores e uma logo, PRÓPRIAS da TV Indoor.
+//
+// Nada aqui vem de `TotemConfiguracao`, e nada dela vem daqui. Os canais são irmãos e
+// dividem infraestrutura (Dispositivo, cookie, cache, validação de mídia), não identidade:
+// uma loja pode querer no vidro do quiosque uma arte que não serve para a parede, e pintar
+// os dois com a mesma paleta seria decidir isso por ela.
+//
+// Empresa sem linha aqui desenha com os defaults embarcados em `backend/tvIndoorAparencia.js`
+// — a configuração é OPCIONAL, e sua ausência é o estado normal de quem nunca personalizou.
+model TvIndoorConfiguracao {
+  id        Int   @id @default(autoincrement())
+  empresaId Int   @unique
+  // Overrides ESPARSOS, em chaves de DOMÍNIO (fundo, superficie, texto, textoApoio,
+  // destaque, textoDestaque) — NUNCA `--tvmb-*`: o banco não conhece nome de custom
+  // property, senão renomear um token da folha invalidaria a configuração de todas as
+  // lojas. Régua em tvIndoorAparencia.js.
+  tokens    Json?
+
+  // Sobe ao TROCAR e ao REMOVER a logo — é ela que invalida o cache de um ano da TV.
+  // Mexer em cor NÃO encosta aqui: uma troca de paleta não pode fazer todas as telas
+  // rebaixarem uma logo que não mudou.
+  logoVersao Int     @default(0)
+  logoTipo   String?
+  logoBytes  Int?
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  logo TvIndoorLogo?
+
+  @@index([empresaId])
+}
+
+// Os BYTES da logo, em tabela própria. A configuração é lida em TODA programação (a cada
+// 60 s, por tela) e em toda abertura do admin; com o blob na mesma linha, um `findUnique`
+// sem `select` arrastaria a imagem nessas duas rotas quentes. Separada, esse erro é
+// IMPOSSÍVEL em vez de improvável.
+model TvIndoorLogo {
+  configuracaoId Int   @id
+  dados          Bytes
+
+  configuracao TvIndoorConfiguracao @relation(fields: [configuracaoId], references: [id], onDelete: Cascade)
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // MENU BOARD — o segundo tipo de item da programação: uma tela montada com o CATÁLOGO REAL
 // da loja, em vez de uma arte pronta.

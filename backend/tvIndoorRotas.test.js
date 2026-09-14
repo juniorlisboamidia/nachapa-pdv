@@ -328,3 +328,88 @@ test('🔴 a configuração do board nunca grava preço, nome ou foto', () => {
   assert.match(post, /data: \{ empresaId, \.\.\.v\.dados/, 'e só `v.dados` chega ao banco');
   assert.equal(/configuracao: req\.body/.test(post), false, 'o corpo cru não pode ir para a coluna');
 });
+
+// ── Aparência (contrato e fronteiras) ────────────────────────────────────────
+test('as rotas da aparência existem', () => {
+  for (const [rota, verbo] of [
+    ['/api/tv-indoor/aparencia', 'get'], ['/api/tv-indoor/aparencia', 'put'],
+    ['/api/tv-indoor/aparencia/logo', 'put'], ['/api/tv-indoor/aparencia/logo', 'delete'],
+    ['/api/tv-indoor/aparencia/logo', 'get'],
+    ['/api/public/aparelho/tv/aparencia/logo', 'get'],
+  ]) {
+    assert.ok(fonte.includes(`app.${verbo}('${rota}'`), `falta ${verbo.toUpperCase()} ${rota}`);
+  }
+});
+
+test('🔴 a aparência é escopada por empresa nos dois lados', () => {
+  const canal = fonte.slice(fonte.indexOf('// ── Aparência (ADMIN) ──'), fonte.indexOf('// ── Telas ──'));
+  // Toda consulta administrativa leva `empresaId` da SESSÃO.
+  const consultas = [...canal.matchAll(/prisma\.tvIndoor(Configuracao|Logo)\.(\w+)\(\{([^)]*)/g)];
+  assert.ok(consultas.length >= 5, `esperava várias consultas, achei ${consultas.length}`);
+  for (const c of consultas) {
+    const ok = c[3].includes('empresaId') || c[3].includes('configuracaoId');
+    assert.ok(ok, `consulta sem escopo: ${c[0].slice(0, 90)}`);
+  }
+  // E a pública, pelo APARELHO.
+  const publica = semComentarios(handler('/api/public/aparelho/tv/aparencia/logo', 'get'));
+  assert.match(publica, /exigirTvIndoor\(ap, res\)/);
+  assert.match(publica, /where: \{ \.\.\.whereDoAparelho\(ap, \{\}\), logoVersao: versao \}/,
+    'a versão entra no WHERE, junto do escopo do aparelho');
+  assert.equal(/req\.body|req\.params\.empresaId|req\.query\.empresaId/.test(publica), false);
+});
+
+test('🔴 trocar COR não mexe na versão da logo', () => {
+  // Uma troca de paleta não pode fazer todas as TVs rebaixarem uma logo que não mudou.
+  const put = semComentarios(handler('/api/tv-indoor/aparencia', 'put'));
+  assert.equal(/logoVersao/.test(put), false, 'o PUT de cores não pode tocar em logoVersao');
+  assert.match(put, /update: \{ tokens: v\.tokens \}/, 'só os tokens entram no update');
+  // E as duas rotas da logo sobem a versão.
+  for (const verbo of ['put', 'delete']) {
+    assert.match(semComentarios(handler('/api/tv-indoor/aparencia/logo', verbo)), /proximaVersaoLogoTv\(/,
+      `${verbo.toUpperCase()} da logo precisa subir a versão`);
+  }
+});
+
+test('🔴 a versão e os bytes da logo sobem na MESMA transação', () => {
+  // Versão nova apontando para bytes velhos é um cache imutável servindo a logo errada por
+  // um ano — e o contrário deixa a TV com 404 até alguém salvar de novo.
+  const put = semComentarios(handler('/api/tv-indoor/aparencia/logo', 'put'));
+  assert.match(put, /prisma\.\$transaction\(async \(tx\) =>/);
+  assert.match(put, /tx\.tvIndoorConfiguracao\.upsert/);
+  assert.match(put, /tx\.tvIndoorLogo\.upsert/);
+});
+
+test('🔴 o corpo cru nunca vira token: o patch passa pelo domínio', () => {
+  const put = semComentarios(handler('/api/tv-indoor/aparencia', 'put'));
+  assert.match(put, /tvAparenciaPatch\(atual\?\.tokens, req\.body\?\.tokens\)/);
+  assert.equal(/tokens: req\.body/.test(put), false, 'o corpo cru não pode ir para a coluna');
+});
+
+test('🔴 a aparência acompanha TODA resposta da programação, inclusive a vazia', () => {
+  // É ela que pinta o fallback institucional — que é justamente o que a TV mostra quando
+  // não há programação nenhuma.
+  const bloco = semComentarios(handler('/api/public/aparelho/tv/programacao', 'get'));
+  assert.match(bloco, /const aparencia = await aparenciaDaTv\(ap\)/);
+  const vazias = bloco.match(/aparencia,/g) ?? [];
+  assert.ok(vazias.length >= 2, 'a resposta vazia e a cheia precisam levar a aparência');
+});
+
+test('🔴 falha ao ler a aparência cai nos DEFAULTS, nunca num erro na parede', () => {
+  const i = fonte.indexOf('async function aparenciaDaTv(');
+  const fn = semComentarios(fonte.slice(i, fonte.indexOf('\n// Os MENU BOARDS', i)));
+  assert.match(fn, /\.catch\(\(\) => null\)/, 'cada leitura tem catch próprio');
+  assert.match(fn, /catch \{\s*return tvAparenciaPublica\(null\)/, 'e o handler inteiro também');
+  assert.match(fn, /whereDoAparelho\(ap, \{\}\)/, 'a empresa vem do aparelho');
+});
+
+test('🔴 a aparência da TV não lê NADA do totem', () => {
+  const canal = fonte.slice(fonte.indexOf('// ── Aparência (ADMIN) ──'), fonte.indexOf('// ── Telas ──'))
+    + fonte.slice(fonte.indexOf('async function aparenciaDaTv('), fonte.indexOf('// Os MENU BOARDS'));
+  for (const proibido of ['totemConfiguracao', 'totemAparencia', 'totemBanner', 'totemEsperaFundo']) {
+    assert.equal(canal.includes(`prisma.${proibido}`), false, `a aparência da TV não pode ler ${proibido}`);
+  }
+  assert.equal(/coresEfetivas|PADROES_POR_LAYOUT|aparenciaPublica\(/.test(canal.replace(/tvAparenciaPublica/g, '')), false,
+    'nem usar as projeções de aparência do totem');
+  // A logo NEUTRA da empresa é permitida — ela é da EMPRESA, não de canal nenhum.
+  assert.match(canal, /prisma\.empresa\.findUnique/);
+});

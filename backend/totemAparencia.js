@@ -31,40 +31,29 @@
 //                       sobrevivente de uma versão anterior não pode derrubar o totem —
 //                       ele cai no padrão da folha e a loja continua vendendo.
 
+// ── O QUE SAIU DAQUI, E POR QUÊ ───────────────────────────────────────────────────────
+// A régua de cor (hexadecimal, validação, sanitização) e a matemática de contraste (sRGB,
+// WCAG) eram deste arquivo e viraram `cores.js` quando a TV Indoor precisou exatamente das
+// mesmas contas. O helper não sabe quais são as chaves da paleta nem quais pares merecem
+// diagnóstico — tudo isso ENTRA POR PARÂMETRO, e é por isso que dois canais irmãos podem
+// dividi-lo sem um conhecer o outro.
+//
+// O que é de PRODUTO do totem (as seis chaves, os pares, os dois fundos, os textos da tela
+// de espera) continua inteiro aqui. As funções seguem exportadas com os mesmos nomes e o
+// mesmo comportamento — quem importa deste módulo não muda uma linha.
+import {
+  AA_NORMAL, AA_GRANDE, MOTIVO_CHAVE, MOTIVO_COR, MOTIVO_FORMATO,
+  normalizarCor, contraste, validarPaleta, sanitizarPaleta, diagnosticar,
+} from './cores.js';
+
+export { AA_NORMAL, AA_GRANDE, MOTIVO_CHAVE, MOTIVO_COR, MOTIVO_FORMATO, normalizarCor, contraste };
+
 /* As chaves do domínio. A ordem é a de leitura na tela de configuração, não tem outro
    significado. */
 export const CHAVES = Object.freeze(['fundo', 'cartao', 'texto', 'textoApoio', 'acaoFundo', 'acaoTexto']);
 
-/* Limiares da WCAG 2.1. `aaGrande` vale para texto grande — no totem, quase tudo é texto
-   grande, mas quem decide o que é aviso e o que é bloqueio é a tela (A6), não este
-   módulo. Aqui só se mede. */
-export const AA_NORMAL = 4.5;
-export const AA_GRANDE = 3;
-
-/* Motivos de recusa. Constantes porque a tela vai traduzi-los, e comparar string solta é
-   como um erro deixa de aparecer depois de um typo. */
-export const MOTIVO_CHAVE = 'CHAVE_DESCONHECIDA';
-export const MOTIVO_COR = 'COR_INVALIDA';
-export const MOTIVO_FORMATO = 'FORMATO_INVALIDO';
-
-/* Só `#rgb` e `#rrggbb`. Sem alpha: `#rgba`/`#rrggbbaa` ficam de fora porque uma cor de
-   marca semitransparente sobre outra superfície produz um contraste que este módulo não
-   consegue medir — e medir errado é pior do que não oferecer. */
-const HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
-
-/* Texto → `#rrggbb` minúsculo, ou `null`.
-
-   Aceita espaço em volta (é campo de formulário, e colar de um guia de marca traz espaço).
-   Não aceita mais nada: número, objeto, `null`, `transparent`, `rgb(...)`, `var(...)`.
-   Tudo isso falha no tipo ou na regex. */
-export function normalizarCor(valor) {
-  if (typeof valor !== 'string') return null;
-  const t = valor.trim();
-  if (!HEX.test(t)) return null;
-  const hex = t.slice(1).toLowerCase();
-  if (hex.length === 3) return `#${hex[0]}${hex[0]}${hex[1]}${hex[1]}${hex[2]}${hex[2]}`;
-  return `#${hex}`;
-}
+/* `normalizarCor` e `contraste` vêm de `cores.js` e são reexportados acima: o contrato
+   deste módulo não mudou, só o lugar onde a conta mora. */
 
 /* ENTRADA DO ADMIN — rigor.
 
@@ -78,73 +67,16 @@ export function normalizarCor(valor) {
    forma de apagar. Se um dia "voltar ao padrão" precisar existir, ele merece um caminho
    explícito em vez de pegar carona no `null`, que é o mesmo que um campo vazio manda por
    acidente. */
-export function validarEntrada(bruto) {
-  if (!ehObjeto(bruto)) return { ok: false, tokens: {}, erros: [{ chave: null, motivo: MOTIVO_FORMATO }] };
-  const tokens = {};
-  const erros = [];
-  for (const chave of Object.keys(bruto)) {
-    if (!CHAVES.includes(chave)) { erros.push({ chave, motivo: MOTIVO_CHAVE }); continue; }
-    const cor = normalizarCor(bruto[chave]);
-    if (cor === null) { erros.push({ chave, motivo: MOTIVO_COR }); continue; }
-    tokens[chave] = cor;
-  }
-  return { ok: erros.length === 0, tokens, erros };
-}
+export const validarEntrada = (bruto) => validarPaleta(bruto, CHAVES);
 
 /* LEITURA — tolerância.
 
    Nunca lança e nunca devolve `undefined`: entrada torta vira `{}`, e o totem usa o padrão
    da folha. `ignoradas` existe para o admin poder mostrar "isto aqui está no banco e não
    é usado" sem que nada disso chegue perto do quiosque. */
-export function sanitizarTokens(bruto) {
-  if (!ehObjeto(bruto)) return { tokens: {}, ignoradas: [] };
-  const tokens = {};
-  const ignoradas = [];
-  for (const chave of Object.keys(bruto)) {
-    if (!CHAVES.includes(chave)) { ignoradas.push({ chave, motivo: MOTIVO_CHAVE }); continue; }
-    const cor = normalizarCor(bruto[chave]);
-    if (cor === null) { ignoradas.push({ chave, motivo: MOTIVO_COR }); continue; }
-    tokens[chave] = cor;
-  }
-  return { tokens, ignoradas };
-}
+export const sanitizarTokens = (bruto) => sanitizarPaleta(bruto, CHAVES);
 
-/* ── Contraste (WCAG 2.1, sRGB) ──────────────────────────────────────────────────────── */
-
-/* Luminância relativa de um canal: a curva de gama do sRGB, não o valor cru. Usar o byte
-   direto é o erro clássico — dá números plausíveis e errados, e o erro só aparece em
-   cores médias, justamente onde a decisão é difícil. */
-function canal(c) {
-  const s = c / 255;
-  return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
-}
-
-function luminancia(hex) {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return 0.2126 * canal(r) + 0.7152 * canal(g) + 0.0722 * canal(b);
-}
-
-/* Razão de contraste entre duas cores, na ordem que for — a fórmula é simétrica.
-   Cor inválida devolve `null`, nunca um número inventado: um contraste falso é pior que
-   contraste nenhum, porque ele passa no teste da tela.
-
-   Arredondado a duas casas para exibição. Preto × branco dá exatamente 21. */
-export function contraste(a, b) {
-  const ca = normalizarCor(a);
-  const cb = normalizarCor(b);
-  if (ca === null || cb === null) return null;
-  return round2(razao(ca, cb));
-}
-
-function razao(ca, cb) {
-  const la = luminancia(ca);
-  const lb = luminancia(cb);
-  const claro = Math.max(la, lb);
-  const escuro = Math.min(la, lb);
-  return (claro + 0.05) / (escuro + 0.05);
-}
+/* A matemática do contraste (luminância sRGB, razão, limiares) mora em `cores.js`. */
 
 /* Os pares que decidem se a tela é legível. São estes cinco porque são os que existem no
    desenho: texto e texto de apoio sobre as duas superfícies, e o texto do botão sobre o
@@ -165,21 +97,9 @@ export const PARES = Object.freeze([
 
    As aprovações saem da razão CRUA, não da arredondada: 4,4996 exibido como "4,5" não pode
    passar num limiar de 4,5. */
-export function diagnosticoDeContraste(tokens) {
-  const { tokens: cores } = sanitizarTokens(tokens);
-  return PARES.map((p) => {
-    const a = cores[p.frente];
-    const b = cores[p.tras];
-    if (!a || !b) {
-      return { ...p, ratio: null, aaNormal: false, aaGrande: false, medido: false };
-    }
-    const cru = razao(a, b);
-    return { ...p, ratio: round2(cru), aaNormal: cru >= AA_NORMAL, aaGrande: cru >= AA_GRANDE, medido: true };
-  });
-}
+export const diagnosticoDeContraste = (tokens) => diagnosticar(tokens, PARES, CHAVES);
 
 const ehObjeto = (v) => typeof v === 'object' && v !== null && !Array.isArray(v);
-const round2 = (n) => Math.round(n * 100) / 100;
 
 /* ══ Operações de CONTRATO ═══════════════════════════════════════════════════════════
    O que vem acima é o domínio puro das cores. O que vem daqui para baixo é o contrato do

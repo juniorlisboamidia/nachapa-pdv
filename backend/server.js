@@ -99,6 +99,13 @@ import {
 // O catálogo da loja com ÚLTIMO-ESTADO-BOM. Serviço NEUTRO: o caminho
 // empresaId → clienteId → HUB → CW é o mesmo do totem, e nenhum navegador fala com o CW.
 import { catalogoDaLoja } from './catalogoDaLoja.js';
+// TV Indoor › Aparência: as seis cores e a logo PRÓPRIAS do canal. Nada de
+// `TotemConfiguracao` — os canais dividem infraestrutura, não identidade.
+import {
+  CHAVES as TV_AP_CHAVES, PADROES as TV_AP_PADROES,
+  aplicarPatch as tvAparenciaPatch, aparenciaParaAdmin as tvAparenciaAdmin,
+  aparenciaPublica as tvAparenciaPublica, proximaVersaoLogo as proximaVersaoLogoTv,
+} from './tvIndoorAparencia.js';
 
 // Campos do banner SEM a arte. Existe como constante para que nenhuma consulta esqueça o
 // `select` e arraste blobs — a arte mora em outra tabela justamente por isso, e este
@@ -9093,6 +9100,34 @@ function exigirTvIndoor(ap, res) {
   return false;
 }
 
+// A APARÊNCIA que esta TV deve desenhar. Cores efetivas (padrão + overrides) e a logo como
+// URL versionada — nenhum byte, nenhum id interno, nenhum metadado de admin.
+//
+// A logo da EMPRESA entra como fallback NEUTRO da marca. É `Empresa.logoDataUrl`, que
+// pertence à empresa e não a canal nenhum — a logo do TOTEM nunca é consultada aqui.
+//
+// Falhar não pode custar a parede: qualquer erro cai nos defaults do canal, e a TV desenha
+// como sempre desenhou.
+async function aparenciaDaTv(ap) {
+  try {
+    // `whereDoAparelho(ap, {})` INLINE, e não numa variável `escopo`: aquele nome é
+    // reservado ao bootstrap do totem, e a guarda estática do bloco público só o aceita
+    // nascendo de `whereDoAparelho(ap, body)`. O `{}` literal é a prova de que o corpo da
+    // requisição não entra na conta.
+    const [cfg, empresa] = await Promise.all([
+      prisma.tvIndoorConfiguracao.findFirst({
+        where: whereDoAparelho(ap, {}), select: { tokens: true, logoVersao: true, logoTipo: true },
+      }).catch(() => null),
+      prisma.empresa.findUnique({
+        where: { id: whereDoAparelho(ap, {}).empresaId }, select: { logoDataUrl: true },
+      }).catch(() => null),
+    ]);
+    return tvAparenciaPublica(cfg, { temLogoDaEmpresa: !!empresa?.logoDataUrl });
+  } catch {
+    return tvAparenciaPublica(null);
+  }
+}
+
 // Os MENU BOARDS de uma programação, resolvidos contra o catálogo atual da loja.
 //
 // Três cuidados que valem o comentário:
@@ -9143,9 +9178,15 @@ app.get('/api/public/aparelho/tv/programacao', async (req, res) => {
     const ap = await exigirAparelho(req, res); if (!ap) return;
     if (!exigirTvIndoor(ap, res)) return;
     const agora = Date.now();
+    // A APARÊNCIA acompanha TODA resposta, inclusive a vazia: é ela que pinta o fallback
+    // institucional, que é justamente o que a TV mostra quando não há programação.
+    // `.catch` próprio — sem a tabela (deploy antes da migration) a TV usa os defaults do
+    // canal, nunca um erro na parede.
+    const aparencia = await aparenciaDaTv(ap);
     const vazia = (extra) => res.json({
       tela: { id: ap.id, nome: ap.nome },
       playlist: null,
+      aparencia,
       ...tvProgramacaoPublica([], agora),
       ...extra,
     });
@@ -9176,6 +9217,7 @@ app.get('/api/public/aparelho/tv/programacao', async (req, res) => {
       tela: { id: ap.id, nome: ap.nome },
       loja: loja ? lojaPublica(loja) : null,
       playlist: { id: playlist.id, nome: playlist.nome },
+      aparencia,
       ...tvProgramacaoPublica(playlist.itens, agora, { boards }),
     });
   } catch (err) {
@@ -9183,6 +9225,27 @@ app.get('/api/public/aparelho/tv/programacao', async (req, res) => {
     // Banco fora do ar, ou tabela ausente (deploy sem migration): a TV recebe programação
     // vazia e mostra o fallback institucional, em vez de um erro numa parede da loja.
     res.status(200).json({ playlist: null, agoraServidor: new Date().toISOString(), itens: [] });
+  }
+});
+
+// A LOGO do canal, em bytes. Mesma disciplina de tudo o mais: fora da programação, cache
+// PRIVADO e versionado, empresa vinda do COOKIE, e a VERSÃO dentro do WHERE — `?v=` de
+// outra geração é 404, nunca os bytes atuais sob um número velho.
+app.get('/api/public/aparelho/tv/aparencia/logo', async (req, res) => {
+  try {
+    const ap = await exigirAparelho(req, res); if (!ap) return;
+    if (!exigirTvIndoor(ap, res)) return;
+    const versao = Number(req.query?.v);
+    if (!Number.isSafeInteger(versao) || versao < 1) return res.status(404).end();
+    const cfg = await prisma.tvIndoorConfiguracao.findFirst({
+      where: { ...whereDoAparelho(ap, {}), logoVersao: versao },
+      select: { logoVersao: true, logoTipo: true, logo: { select: { dados: true } } },
+    });
+    if (!cfg?.logo?.dados || !cfg.logoTipo) return res.status(404).end();
+    responderImagem(res, { tipo: cfg.logoTipo, bytes: cfg.logo.dados }, `tvap-${ap.empresaId}-${cfg.logoVersao}`, req);
+  } catch (err) {
+    console.error('[public/aparelho tv aparencia logo]', err?.code ?? err?.name ?? 'erro');
+    res.status(500).end();
   }
 });
 
@@ -10554,6 +10617,120 @@ app.get('/api/tv-indoor/menu-boards/:id/previa', async (req, res) => {
     if (!r.ok) return res.status(r.codigo === 'CLIENTE_SEM_CW' ? 409 : 503).json({ erro: r.codigo });
     res.json({ previa: resolverMenuBoard(board, r.catalogo, r.fitas), desatualizado: r.desatualizado === true });
   } catch (err) { console.error('[tv-indoor/menu-boards previa]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// ── Aparência (ADMIN) ───────────────────────────────────────────────────────
+// A identidade visual PRÓPRIA do canal. Seis cores e uma logo, que alcançam o fallback
+// institucional e os três layouts de Menu Board — e NÃO a arte que o gestor enviou: uma
+// imagem 1920 × 1080 é exibida como foi criada.
+//
+// A configuração é OPCIONAL: empresa sem linha desenha com os defaults embarcados, e é por
+// isso que o GET responde 200 com os padrões em vez de 404.
+const TV_AP_CAMPOS = { id: true, tokens: true, logoVersao: true, logoTipo: true, logoBytes: true };
+
+// A logo da EMPRESA é o fallback neutro da marca (nunca a do totem). Só a PRESENÇA
+// interessa aqui — os bytes dela não passam por esta rota.
+async function temLogoDaEmpresa(empresaId) {
+  const e = await prisma.empresa.findUnique({ where: { id: empresaId }, select: { logoDataUrl: true } }).catch(() => null);
+  return !!e?.logoDataUrl;
+}
+
+app.get('/api/tv-indoor/aparencia', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const [cfg, daEmpresa] = await Promise.all([
+      prisma.tvIndoorConfiguracao.findUnique({ where: { empresaId }, select: TV_AP_CAMPOS }),
+      temLogoDaEmpresa(empresaId),
+    ]);
+    res.json(tvAparenciaAdmin(cfg, { temLogoDaEmpresa: daEmpresa }));
+  } catch (err) { console.error('[tv-indoor/aparencia]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// PATCH esparso das cores. `null` numa chave REMOVE o override e volta ao padrão; chave
+// desconhecida e cor inválida são 400, e nesse caso NADA é gravado — o PUT é tudo ou nada.
+app.put('/api/tv-indoor/aparencia', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const atual = await prisma.tvIndoorConfiguracao.findUnique({ where: { empresaId }, select: TV_AP_CAMPOS });
+    const v = tvAparenciaPatch(atual?.tokens, req.body?.tokens);
+    if (!v.ok) return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros: v.erros });
+    const linha = await prisma.tvIndoorConfiguracao.upsert({
+      where: { empresaId },
+      create: { empresaId, tokens: v.tokens },
+      // A logo NÃO entra no update: trocar cor não pode mexer na versão dela.
+      update: { tokens: v.tokens },
+      select: TV_AP_CAMPOS,
+    });
+    res.json(tvAparenciaAdmin(linha, { temLogoDaEmpresa: await temLogoDaEmpresa(empresaId) }));
+  } catch (err) { console.error('[tv-indoor/aparencia PUT]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// Trocar a logo: é a ÚNICA rota (com o DELETE) que incrementa `logoVersao`. O MIME é lido
+// dos BYTES, nunca do cabeçalho que o cliente escreve.
+app.put('/api/tv-indoor/aparencia/logo', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const img = lerImagemMidia(req.body?.dataUrl, { maxBytes: TV_IMG_MAX });
+    if (img.erro) return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros: [{ campo: 'dataUrl', motivo: img.erro }] });
+    const atual = await prisma.tvIndoorConfiguracao.findUnique({ where: { empresaId }, select: { id: true, logoVersao: true } });
+    const versao = proximaVersaoLogoTv(atual?.logoVersao);
+    // Transação: a versão e os bytes sobem juntos, ou nenhum dos dois. Uma versão nova
+    // apontando para bytes velhos é um cache imutável servindo a logo errada por um ano.
+    const linha = await prisma.$transaction(async (tx) => {
+      const cfg = await tx.tvIndoorConfiguracao.upsert({
+        where: { empresaId },
+        create: { empresaId, logoVersao: 1, logoTipo: img.tipo, logoBytes: img.bytes.length },
+        update: { logoVersao: versao, logoTipo: img.tipo, logoBytes: img.bytes.length },
+        select: TV_AP_CAMPOS,
+      });
+      await tx.tvIndoorLogo.upsert({
+        where: { configuracaoId: cfg.id },
+        create: { configuracaoId: cfg.id, dados: img.bytes },
+        update: { dados: img.bytes },
+      });
+      return cfg;
+    });
+    res.json(tvAparenciaAdmin(linha, { temLogoDaEmpresa: await temLogoDaEmpresa(empresaId) }));
+  } catch (err) { console.error('[tv-indoor/aparencia logo PUT]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// Remover TAMBÉM sobe a versão: sem isso a TV continuaria servindo do cache uma logo que a
+// loja acabou de tirar do ar.
+app.delete('/api/tv-indoor/aparencia/logo', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const atual = await prisma.tvIndoorConfiguracao.findUnique({ where: { empresaId }, select: TV_AP_CAMPOS });
+    if (!atual || !atual.logoTipo) {
+      return res.json(tvAparenciaAdmin(atual, { temLogoDaEmpresa: await temLogoDaEmpresa(empresaId) }));
+    }
+    const linha = await prisma.$transaction(async (tx) => {
+      await tx.tvIndoorLogo.deleteMany({ where: { configuracaoId: atual.id } });
+      return tx.tvIndoorConfiguracao.update({
+        where: { empresaId },
+        data: { logoVersao: proximaVersaoLogoTv(atual.logoVersao), logoTipo: null, logoBytes: null },
+        select: TV_AP_CAMPOS,
+      });
+    });
+    res.json(tvAparenciaAdmin(linha, { temLogoDaEmpresa: await temLogoDaEmpresa(empresaId) }));
+  } catch (err) { console.error('[tv-indoor/aparencia logo DELETE]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// A logo, para a prévia do admin.
+app.get('/api/tv-indoor/aparencia/logo', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const cfg = await prisma.tvIndoorConfiguracao.findUnique({
+      where: { empresaId },
+      select: { logoVersao: true, logoTipo: true, logo: { select: { dados: true } } },
+    });
+    if (!cfg?.logo?.dados || !cfg.logoTipo) return res.status(404).end();
+    responderImagem(res, { tipo: cfg.logoTipo, bytes: cfg.logo.dados }, `tvap-${empresaId}-${cfg.logoVersao}`, req);
+  } catch (err) { console.error('[tv-indoor/aparencia logo]', err); res.status(500).end(); }
 });
 
 // ── Telas ───────────────────────────────────────────────────────────────────
