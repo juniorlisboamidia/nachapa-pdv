@@ -3428,7 +3428,13 @@ body.theme-dark .apr-contagem, body.theme-dark .apr-qr-legenda, body.theme-dark 
 .ttm-dst-txt strong { font-size: 13.5px; color: var(--app-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ttm-dst-meta { font-size: 11.5px; color: var(--app-text-3); }
 .ttm-dst-aviso { font-size: 11.5px; color: #b45309; font-weight: 600; }
-.ttm-dst-acoes { flex: 0 0 auto; display: flex; gap: 4px; }
+.ttm-dst-acoes { flex: 0 0 auto; display: flex; gap: 4px; align-items: center; }
+/* As duas esteiras, uma abaixo da outra, com um respiro entre elas que não é o de uma
+   lista só continuando. */
+.ttm-dst-secao + .ttm-dst-secao { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--app-border); }
+.ttm-dst-secao .ttm-dst-lista { margin-top: 10px; }
+/* Onde o produto já está, ao lado do Tirar. */
+.ttm-dst-onde { font-size: 11.5px; font-weight: 600; color: #ea580c; padding: 0 6px; }
 .ttm-dst-acoes .btn { min-width: 32px; padding: 4px 8px; }
 
 

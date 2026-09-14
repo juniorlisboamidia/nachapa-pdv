@@ -63,8 +63,8 @@ import {
 // Totem › Destaques: os produtos da esteira da vitrine. O banco guarda ID; nome, preço e
 // foto vêm do catálogo vivo, e é este módulo que junta os dois.
 import {
-  MAX_DESTAQUES, destaquesPublicos, destaquesParaAdmin, catalogoParaEscolha,
-  validarChaves, linhasParaGravar,
+  MAX_POR_ESTEIRA, ESTEIRAS as DESTAQUE_ESTEIRAS, destaquesPublicos, destaquesParaAdmin,
+  catalogoParaEscolha, validarEsteiras, linhasParaGravar,
 } from './totemDestaque.js';
 // Totem › Banners: agenda, duração, imagem e as duas projeções (admin e pública).
 import {
@@ -8738,7 +8738,7 @@ async function comApresentacao(ap, body, resposta) {
       // estourar o Promise.all e fazer a VITRINE inteira sumir. Sem destaques, a esteira
       // não aparece e o resto da tela continua de pé.
       prisma.totemDestaque.findMany({
-        where: escopo, select: { chave: true, ordem: true }, orderBy: [{ ordem: 'asc' }, { chave: 'asc' }],
+        where: escopo, select: { chave: true, esteira: true, ordem: true }, orderBy: [{ ordem: 'asc' }, { chave: 'asc' }],
       }).catch(() => []),
       // Só a PRESENÇA da foto de fundo: `select` na chave, nunca em `dados`. É a razão de
       // os bytes morarem em tabela própria — este bootstrap roda a cada 5 min por aparelho.
@@ -8761,9 +8761,9 @@ async function comApresentacao(ap, body, resposta) {
       // elegibilidade temporal é o CLIENTE, com o relógio corrigido pelo desvio — é assim
       // que um banner das 18:00 entra às 18:00 em vez de esperar o próximo bootstrap.
       banners: bannersPublicos(banners, Date.now()),
-      // A esteira da vitrine, resolvida contra o catálogo PROJETADO (`catalogo`, já com os
-      // complementos expandidos em produtos) — e não contra o cru do CW. É a mesma lista que
-      // o cliente vê no catálogo; o banco só guardou chaves, e nome, preço e foto saem daqui.
+      // As duas esteiras da vitrine (`{ superior, inferior }`), resolvidas contra o catálogo
+      // PROJETADO (`catalogo`, já com os complementos expandidos em produtos) — e não contra
+      // o cru do CW. É a mesma lista que o cliente vê; o banco só guardou chaves.
       destaques: destaquesPublicos(catalogo, destaques),
     };
   } catch (err) {
@@ -8781,7 +8781,7 @@ async function comApresentacao(ap, body, resposta) {
       // Sem banner, a espera institucional é o fallback — que é exatamente o que se quer
       // quando algo deu errado.
       banners: bannersPublicos([], Date.now()),
-      destaques: [],
+      destaques: { superior: [], inferior: [] },
     };
   }
 }
@@ -9361,12 +9361,13 @@ app.get('/api/totem/destaques', async (req, res) => {
   try {
     const projetado = await catalogoProjetadoDoAdmin(empresaId, res); if (!projetado) return;
     const linhas = await prisma.totemDestaque.findMany({
-      where: { empresaId }, select: { chave: true, ordem: true }, orderBy: [{ ordem: 'asc' }, { chave: 'asc' }],
+      where: { empresaId }, select: { chave: true, esteira: true, ordem: true }, orderBy: [{ ordem: 'asc' }, { chave: 'asc' }],
     });
     res.json({
       escolhidos: destaquesParaAdmin(projetado, linhas),
       catalogo: catalogoParaEscolha(projetado),
-      max: MAX_DESTAQUES,
+      esteiras: DESTAQUE_ESTEIRAS,
+      maxPorEsteira: MAX_POR_ESTEIRA,
     });
   } catch (err) { console.error('[totem/destaques]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
 });
@@ -9387,19 +9388,20 @@ app.put('/api/totem/destaques', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
   const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
   try {
-    const r = validarChaves(req.body?.chaves);
+    // O corpo é `{ superior: [...], inferior: [...] }` — as duas listas finais, na ordem.
+    const r = validarEsteiras(req.body);
     if (!r.ok) return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros: r.erros });
     await prisma.$transaction([
       prisma.totemDestaque.deleteMany({ where: { empresaId } }),
-      prisma.totemDestaque.createMany({ data: linhasParaGravar(empresaId, r.chaves) }),
+      prisma.totemDestaque.createMany({ data: linhasParaGravar(empresaId, r.esteiras) }),
     ]);
     // Relê contra o catálogo projetado para a tela já mostrar órfão, sem-foto e em-falta do
     // que acabou de ser gravado, sem precisar de uma segunda chamada.
     const projetado = await catalogoProjetadoDoAdmin(empresaId, res); if (!projetado) return;
     const linhas = await prisma.totemDestaque.findMany({
-      where: { empresaId }, select: { chave: true, ordem: true }, orderBy: [{ ordem: 'asc' }, { chave: 'asc' }],
+      where: { empresaId }, select: { chave: true, esteira: true, ordem: true }, orderBy: [{ ordem: 'asc' }, { chave: 'asc' }],
     });
-    res.json({ ok: true, escolhidos: destaquesParaAdmin(projetado, linhas), max: MAX_DESTAQUES });
+    res.json({ ok: true, escolhidos: destaquesParaAdmin(projetado, linhas), maxPorEsteira: MAX_POR_ESTEIRA });
   } catch (err) { console.error('[totem/destaques PUT]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
 });
 

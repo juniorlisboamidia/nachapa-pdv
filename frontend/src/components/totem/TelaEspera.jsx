@@ -52,11 +52,19 @@ export default function TelaEspera({ banners, chamada, titulo, subtitulo, fundo,
 
   const reduzido = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
 
-  const produtos = Array.isArray(destaques) ? destaques : []
-  // Duas fileiras a partir de QUATRO produtos. Com menos, a segunda ficaria com uma ou duas
-  // fotos andando sozinhas num vão largo — uma fileira cheia lê melhor que duas vazias.
-  const meio = Math.ceil(produtos.length / 2)
-  const filas = produtos.length >= 4 ? [produtos.slice(0, meio), produtos.slice(meio)] : [produtos]
+  // DUAS esteiras com lista própria, escolhidas pela loja: a superior anda para a direita,
+  // a inferior para a esquerda. Não se dividem nem se misturam — quem decide o que passa em
+  // cada uma é Personalização › Destaques. Um bootstrap de versão anterior mandava uma
+  // lista só: ela cai na superior, e a inferior fica vazia.
+  // `lista` já é o nome da lista do carrossel de banners, logo acima — daí `itensDe`.
+  const itensDe = (v) => (Array.isArray(v) ? v : [])
+  const esteiras = Array.isArray(destaques)
+    ? { superior: destaques, inferior: [] }
+    : { superior: itensDe(destaques?.superior), inferior: itensDe(destaques?.inferior) }
+  const filas = [
+    { nome: 'superior', itens: esteiras.superior, volta: false },
+    { nome: 'inferior', itens: esteiras.inferior, volta: true },
+  ].filter((f) => f.itens.length > 0)
 
   return (
     <button
@@ -120,19 +128,19 @@ export default function TelaEspera({ banners, chamada, titulo, subtitulo, fundo,
               `aria-hidden` porque é apetite, não conteúdo: quem usa leitor de tela já tem o
               rótulo do botão dizendo o que a tela faz, e ouvir doze nomes de lanche antes
               disso seria ruído. */}
-          {produtos.length ? (
+          {filas.length ? (
             <div className="tq-vit-baixo" aria-hidden="true">
-              {filas.map((fila, i) => (
-                <div className="tq-vit-trilho" key={i}>
+              {filas.map((fila) => (
+                <div className="tq-vit-trilho" key={fila.nome}>
                   <div
-                    className={'tq-vit-fila' + (i % 2 ? ' volta' : '')}
+                    className={'tq-vit-fila' + (fila.volta ? ' volta' : '')}
                     // A duração cresce com a quantidade para a VELOCIDADE ser a mesma em
-                    // toda loja: seis produtos e doze passam no mesmo ritmo, o que um tempo
-                    // fixo não daria — com doze, o dobro da distância no mesmo tempo é o
+                    // toda loja: cinco produtos e dez passam no mesmo ritmo, o que um tempo
+                    // fixo não daria — com dez, o dobro da distância no mesmo tempo é o
                     // dobro da velocidade.
-                    style={{ '--tq-fila-dur': `${Math.max(18, fila.length * 6)}s` }}
+                    style={{ '--tq-fila-dur': `${Math.max(18, fila.itens.length * 6)}s` }}
                   >
-                    {[...fila, ...fila].map((p, j) => (
+                    {[...fila.itens, ...fila.itens].map((p, j) => (
                       <span className="tq-vit-card" key={`${p.id}-${j}`}>
                         <img src={p.imagem} alt="" />
                         <span className="tq-vit-nome">{p.nome}</span>

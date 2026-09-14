@@ -899,11 +899,16 @@ model TotemDestaque {
   id           Int      @id @default(autoincrement())
   empresaId    Int
   chave        String
+  // 'SUPERIOR' (anda para a direita) ou 'INFERIOR' (para a esquerda). Duas listas que não
+  // se misturam, dez em cada. Régua em totemDestaque.js; valor torto cai na SUPERIOR.
+  esteira      String   @default("SUPERIOR")
   ordem        Int      @default(0)
   criadoEm     DateTime @default(now())
 
+  // Único por (empresa, chave), e não por (empresa, esteira, chave): um produto fica numa
+  // esteira só. O PUT já garante isso; o índice é a segunda trava.
   @@unique([empresaId, chave])
-  @@index([empresaId, ordem])
+  @@index([empresaId, esteira, ordem])
 }
 
 model TotemApresentacao {
