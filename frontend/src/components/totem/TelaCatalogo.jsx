@@ -204,6 +204,7 @@ export default function TelaCatalogo({ categorias, categoriaId, aoTrocarCategori
                       descricao={produto.descricao}
                       imagem={produto.imagem}
                       preco={preco}
+                      selos={produto.selos}
                       bloqueado={!!emFalta || preco.indisponivel}
                       rotuloFalta={!emFalta && produto.motivo === 'GRUPO_EM_FALTA' ? 'Indisponível no momento' : 'Em falta'}
                       aoAbrir={() => aoAbrirProduto(produto)}
@@ -219,6 +220,7 @@ export default function TelaCatalogo({ categorias, categoriaId, aoTrocarCategori
                       descricao={item.descricao}
                       imagem={item.imagem}
                       preco={{ valor: item.preco, valorPromocional: item.precoPromocional ?? undefined, aPartirDe: false }}
+                      selos={item.selos}
                       bloqueado={!razao.ok}
                       rotuloFalta={razao.motivo === 'GRUPO_EM_FALTA' ? 'Indisponível no momento' : 'Em falta'}
                       aoAbrir={() => aoAbrirItem(item)}

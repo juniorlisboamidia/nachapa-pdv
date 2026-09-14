@@ -756,9 +756,12 @@
    continua em display — é ele que precisa ancorar o card.
    Nome nunca parte no meio da palavra: em duas colunas estreitas era assim que
    "X CALA BURGUER" virava uma coluna de letras. */
+/* NOME e PREÇO no mesmo corpo (3,1vw): são os dois pontos do card, e antes o preço, a
+   3,7vw em dourado, engolia o nome. O que os distingue agora é a cor e o peso — nome
+   branco em 600, preço dourado em 900 —, não o tamanho. */
 .tq-card-nome {
   font-family: var(--tq-fonte-display); font-weight: 600;
-  font-size: clamp(20px, 2.87vw, 31px); line-height: 1.15; letter-spacing: 0.005em;
+  font-size: clamp(22px, 3.1vw, 34px); line-height: 1.12; letter-spacing: 0.005em;
   word-break: normal; overflow-wrap: normal; hyphens: none;
   /* Duas linhas no máximo: um nome de quatro palavras não vira um card mais alto que
      os vizinhos. O nome completo está no detalhe, a um toque. */
@@ -772,7 +775,35 @@
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
   word-break: normal; overflow-wrap: normal;
 }
-.tq-card-rod { margin-top: auto; padding-top: 10px; }
+.tq-card-rod { margin-top: auto; padding-top: 12px; }
+.tq-card .tq-preco-valor { font-size: clamp(22px, 3.1vw, 34px); }
+/* A OFERTA no card: "de R$ 24,90" riscado e o selo "-20%" na mesma linha, o preço atual
+   embaixo. O antigo é secundário mas LEGÍVEL — 78% de branco, risco de 2px —, porque é
+   ele que dá o tamanho da oferta; apagado, a promoção não era percebida. */
+.tq-preco-oferta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 2px; }
+.tq-card .tq-preco-de {
+  font-size: clamp(15px, 1.95vw, 21px); font-weight: 600; color: rgba(var(--tq-tinta-base), 0.78);
+  text-decoration: line-through; text-decoration-thickness: 2px;
+}
+
+/* -- Mídia do card e as FITAS ------------------------------------------------
+   As fitas ficam sobre a FOTO, no canto superior esquerdo, e não no texto: ali elas
+   não empurram nome nem preço, e a foto continua inteira por baixo. A pílula é a do
+   Design System do HUB (raio total, sem sombra, fundo na cor da marca com o texto na
+   cor do botão) — a mesma que o selo "-20%" usa, para oferta e fita falarem uma
+   língua só. */
+.tq-card-midia { position: relative; display: block; }
+.tq-card-fitas {
+  position: absolute; top: 12px; left: 12px; max-width: calc(100% - 24px);
+  display: flex; flex-wrap: wrap; gap: 6px; pointer-events: none;
+}
+.tq-fita {
+  display: inline-flex; align-items: center; padding: 6px 12px; border-radius: 999px;
+  background: var(--tq-amarelo); color: var(--tq-tinta);
+  font-family: var(--tq-fonte-display); font-weight: 900; line-height: 1;
+  font-size: clamp(12px, 1.48vw, 16px); letter-spacing: 0.06em; text-transform: uppercase;
+  white-space: nowrap;
+}
 
 /* -- Foto ------------------------------------------------------------------ */
 .tq-foto { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--tq-superficie-3); }
