@@ -342,24 +342,28 @@ export default function TotemPersonalizacao() {
             <div className="form-group">
               <label className="form-label" htmlFor="apa-fundo">Foto de fundo</label>
               <div className="ttm-fundo-linha">
-                {/* A foto que está no ar, em miniatura: é o sinal de que há uma foto aqui —
-                    sem ela, o seletor vazio dizia "nenhum arquivo escolhido" para uma tela
-                    que tem foto. E o "tirar" fica na mesma linha, ao lado do que ele tira. */}
+                {/* A foto que está no ar, em miniatura: é o sinal de que há uma foto aqui. */}
                 {dados?.fundo?.tem ? <img className="ttm-fundo-atual" src={dados.fundo.url} alt="Foto de fundo atual" /> : null}
+                {/* O <input type="file"> NATIVO sai de vista. O texto dele ("Nenhum arquivo
+                    escolhido") é sobre a seleção da vez, não sobre o que está gravado — e
+                    numa tela que já tem foto ele dizia o contrário do que a miniatura ao lado
+                    mostra. O input continua no DOM, acessível pelo label; quem aparece é um
+                    botão que fala da foto, não do arquivo. */}
                 <input
                   ref={fundoRef}
                   id="apa-fundo"
                   type="file"
                   accept="image/png,image/jpeg,image/webp"
-                  className="form-input"
+                  className="ttm-vis-oculto"
                   disabled={salvando}
                   onChange={(e) => enviarFundo(e.target.files?.[0])}
                 />
-                {/* Tirar é ação secundária: link ao lado do seletor, no mesmo estilo do
-                    "usar padrão" das cores — não um botão inteiro embaixo. */}
+                <label htmlFor="apa-fundo" className={'btn btn-secondary' + (salvando ? ' desabilitado' : '')}>
+                  {dados?.fundo?.tem ? 'Trocar a foto' : 'Escolher foto'}
+                </label>
                 {dados?.fundo?.tem ? (
-                  <button type="button" className="btn btn-link ttm-usar-padrao" onClick={removerFundo} disabled={salvando}>
-                    Tirar a foto
+                  <button type="button" className="btn btn-link ttm-remover" onClick={removerFundo} disabled={salvando}>
+                    Remover
                   </button>
                 ) : null}
               </div>

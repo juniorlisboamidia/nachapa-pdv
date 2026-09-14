@@ -3359,7 +3359,14 @@ body.theme-dark .apr-contagem, body.theme-dark .apr-qr-legenda, body.theme-dark 
 /* O seletor de arquivo e o "tirar" na mesma linha: tirar a foto é ação secundária, e um
    botão inteiro embaixo dava a ela o mesmo peso de escolher. */
 .ttm-fundo-linha { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.ttm-fundo-linha .form-input { flex: 0 1 380px; }
+/* Visualmente oculto, mas presente: o label abre o seletor, o teclado e o leitor de tela
+   continuam alcançando o input. `display: none` tiraria os dois. */
+.ttm-vis-oculto { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.ttm-fundo-linha label.btn { cursor: pointer; margin: 0; }
+.ttm-fundo-linha label.btn.desabilitado { opacity: .55; pointer-events: none; }
+/* Remover é destrutivo e secundário ao mesmo tempo: texto, sem chapa, em vermelho. */
+.ttm-remover { padding: 4px 0; font-size: 13px; color: #b91c1c; }
+.ttm-remover:hover:not(:disabled) { color: #991b1b; text-decoration: underline; }
 /* A foto que está no ar, em miniatura, ao lado do seletor: é o que diz "há uma foto aqui"
    sem precisar de frase. 9:8, a mesma proporção da metade de cima. */
 .ttm-fundo-atual { flex: 0 0 auto; width: 72px; height: 64px; border-radius: 8px; object-fit: cover; border: 1px solid var(--app-border); background: #111; }
