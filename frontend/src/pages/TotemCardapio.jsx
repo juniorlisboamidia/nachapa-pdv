@@ -82,6 +82,8 @@ export default function TotemCardapio() {
   const [salvando, setSalvando] = useState(null)   // cwItemId em voo
   const [confirmNormal, setConfirmNormal] = useState(null) // { cwItemId, nome }
   const [confirmOrfa, setConfirmOrfa] = useState(null)     // órfã
+  const [fitas, setFitas] = useState({})                   // { [cwItemId]: código do selo }
+  const [fitaEmVoo, setFitaEmVoo] = useState(null)         // cwItemId da fita sendo gravada
 
   const notify = (message, type = 'success') => setToast({ message, type })
 
@@ -91,6 +93,7 @@ export default function TotemCardapio() {
       .then((r) => {
         setDados(r.data)
         setErroCarga(null)
+        setFitas(r.data?.fitas && typeof r.data.fitas === 'object' ? r.data.fitas : {})
         // O formulário nasce espelhando o que está salvo: quem abre a tela vê o estado
         // real, e "Salvar" sem mexer em nada não muda nada.
         const inicial = {}
@@ -147,6 +150,28 @@ export default function TotemCardapio() {
     salvar(item.cwItemId, { modo: 'EXPANDIDO', cwGrupoPrincipalId: Number(f.grupoId) }, `“${item.nome}” agora aparece como vitrine no totem.`)
   }
 
+  // A fita grava NA HORA, sem "Salvar": é uma escolha só, num select, e o operador vê o
+  // resultado no próprio select. Vazio tira a fita. Sem recarregar a lista inteira — o
+  // servidor devolve o selo gravado e a linha se atualiza sozinha.
+  async function mudarFita(item, selo) {
+    const chave = String(item.cwItemId)
+    setFitaEmVoo(chave)
+    try {
+      const r = await api.put(`/totem/fita/${item.cwItemId}`, { selo: selo || null })
+      setFitas((f) => {
+        const prox = { ...f }
+        if (r.data?.selo) prox[chave] = r.data.selo
+        else delete prox[chave]
+        return prox
+      })
+      notify(r.data?.selo ? `“${item.nome}” agora leva a fita no totem.` : `Fita de “${item.nome}” removida.`)
+    } catch (e) {
+      notify(erroDe(e, { ID_INVALIDO: 'Item inválido.', SELO_INVALIDO: 'Fita inválida.' }, 'Não foi possível salvar a fita.'), 'error')
+    } finally {
+      setFitaEmVoo(null)
+    }
+  }
+
   const mudarForm = (cwItemId, campo, valor) => setForm((f) => ({
     ...f,
     [String(cwItemId)]: { ...(f[String(cwItemId)] ?? { modo: 'NORMAL', grupoId: '' }), [campo]: valor },
@@ -162,6 +187,7 @@ export default function TotemCardapio() {
   const itens = Array.isArray(dados?.itens) ? dados.itens : []
   const orfas = Array.isArray(dados?.orfas) ? dados.orfas : []
   const sugestoes = Array.isArray(dados?.sugestoes) ? dados.sugestoes : []
+  const selos = Array.isArray(dados?.selos) ? dados.selos : []
   const expandidos = itens.filter((i) => i.config?.modo === 'EXPANDIDO').length
   // Mesma régua da linha vermelha: só conta o veredito NEGATIVO explícito do servidor.
   const invalidos = itens.filter((i) => i.config && i.validacao?.ok === false).length
@@ -233,6 +259,7 @@ export default function TotemCardapio() {
                     <th style={{ textAlign: 'right' }}>Preço base</th>
                     <th>Hoje</th>
                     <th>Como mostrar no totem</th>
+                    <th>Fita</th>
                     <th style={{ textAlign: 'right' }}>Ações</th>
                   </tr>
                 </thead>
@@ -342,6 +369,20 @@ export default function TotemCardapio() {
                             )}
                           </div>
                           )}
+                        </td>
+                        <td>
+                          {/* A fita é do ITEM: em vitrine ela vai para cada card que sai dele.
+                              Grava ao escolher; o vazio tira. */}
+                          <select
+                            className="form-input ttm-fita-select"
+                            aria-label={`Fita de ${item.nome}`}
+                            value={fitas[chave] ?? ''}
+                            disabled={fitaEmVoo === chave || selos.length === 0}
+                            onChange={(e) => mudarFita(item, e.target.value)}
+                          >
+                            <option value="">Sem fita</option>
+                            {selos.map((s) => <option key={s.codigo} value={s.codigo}>{s.rotulo}</option>)}
+                          </select>
                         </td>
                         <td style={{ textAlign: 'right' }}>
                           {/* Item neutro não tem o que salvar: sem select, sem botão. */}

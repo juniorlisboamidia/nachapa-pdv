@@ -3355,6 +3355,9 @@ body.theme-dark .apr-contagem, body.theme-dark .apr-qr-legenda, body.theme-dark 
    dos campos) e em Banners › Tela de espera (como o "nada no ar"). */
 /* Campos à esquerda numa grade de duas colunas (a mesma das cores), prévia à direita com
    largura para ser LIDA — 280px fazia dela uma miniatura longe demais dos campos. */
+/* O select da fita no Cardápio do totem: largura própria, para a coluna não engolir a
+   tabela — "Mais pedido" cabe folgado em 150px. */
+.ttm-fita-select { width: 150px; min-width: 150px; }
 .ttm-vit-split { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 32px; align-items: start; margin-top: 16px; }
 /* Recorte 9:10 da vitrine 9:16 — a metade de cima, a faixa e o começo da esteira — para a
    prévia ter a altura dos campos, não o dobro. O pé esvai no chão do template. */

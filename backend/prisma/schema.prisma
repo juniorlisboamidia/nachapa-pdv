@@ -895,6 +895,21 @@ model TotemEsperaFundo {
 
    Produto que sai do cardápio vira ÓRFÃO: o bootstrap não o encontra e ele não aparece na
    esteira; o admin mostra a linha marcada, com um botão de limpar. */
+// A FITA do produto no totem ("Mais pedido", "Novo", "Combo"…): apresentação deste canal,
+// uma por (empresa, item do CW). Guarda o CÓDIGO; o rótulo mora em totemFita.js. Tabela
+// própria porque TotemApresentacao só existe no modo vitrine — a fita não some com ele.
+model TotemFita {
+  id           Int      @id @default(autoincrement())
+  empresaId    Int
+  cwItemId     Int
+  selo         String
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@unique([empresaId, cwItemId])
+  @@index([empresaId])
+}
+
 model TotemDestaque {
   id           Int      @id @default(autoincrement())
   empresaId    Int

@@ -39,6 +39,7 @@ import {
 } from './totemEnvio.js';
 // Totem › Apresentação: projeção pura do catálogo (sem Prisma, sem rede) — spec §4.1.
 import { MODOS, validarConfiguracao, projetarCatalogo, mesclarAdmin, sugerirCandidatos } from './totemApresentacao.js';
+import { SELOS, validarSelo, aplicarFitas, fitasParaAdmin } from './totemFita.js';
 import {
   aplicarNomes as aplicarNomesDeCategoria,
   mesclarAdmin as mesclarAdminCategorias,
@@ -8719,7 +8720,7 @@ function exigirTotem(ap, res) {
 async function comApresentacao(ap, body, resposta) {
   try {
     const escopo = whereDoAparelho(ap, body);
-    const [configuracoes, categorias, doCanal, banners, destaques, fundo] = await Promise.all([
+    const [configuracoes, categorias, doCanal, banners, destaques, fundo, fitas] = await Promise.all([
       prisma.totemApresentacao.findMany({ where: escopo }),
       prisma.totemCategoria.findMany({ where: escopo }),
       // `findFirst` com o MESMO escopo das outras duas: o construtor de where é um só, e
@@ -8744,8 +8745,14 @@ async function comApresentacao(ap, body, resposta) {
       // Só a PRESENÇA da foto de fundo: `select` na chave, nunca em `dados`. É a razão de
       // os bytes morarem em tabela própria — este bootstrap roda a cada 5 min por aparelho.
       prisma.totemEsperaFundo.findFirst({ where: escopo, select: { empresaId: true } }).catch(() => null),
+      // As fitas dos produtos. `.catch` próprio como as outras leituras acessórias: sem a
+      // tabela (deploy antes da migration) o card sai sem fita, e o catálogo continua.
+      prisma.totemFita.findMany({ where: escopo, select: { cwItemId: true, selo: true } }).catch(() => []),
     ]);
-    const { catalogo, avisos } = projetarCatalogo(resposta.catalogo, configuracoes);
+    const { catalogo: projetado, avisos } = projetarCatalogo(resposta.catalogo, configuracoes);
+    // A fita entra DEPOIS da projeção, porque é do item base e vai para cada produto que a
+    // vitrine tirou dele — antes da projeção não haveria `produtos` para receber.
+    const catalogo = aplicarFitas(projetado, fitas);
     // Nome de exibição por categoria: ADITIVO (`nomeExibido` ao lado de `nome`) e
     // depois da projeção, porque a vitrine mexe em itens e este passo só na string
     // que o cliente lê.
@@ -9411,11 +9418,19 @@ app.get('/api/totem/apresentacao', async (req, res) => {
   const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
   try {
     const catalogo = await catalogoVivoDoAdmin(empresaId, res); if (!catalogo) return;
-    const configuracoes = await prisma.totemApresentacao.findMany({ where: { empresaId }, orderBy: { cwItemId: 'asc' } });
+    const [configuracoes, fitas] = await Promise.all([
+      prisma.totemApresentacao.findMany({ where: { empresaId }, orderBy: { cwItemId: 'asc' } }),
+      // `.catch` próprio: sem a tabela a tela do Cardápio continua abrindo, só sem fitas.
+      prisma.totemFita.findMany({ where: { empresaId }, select: { cwItemId: true, selo: true } }).catch(() => []),
+    ]);
     res.json({
       ...mesclarAdmin(catalogo, configuracoes),
       sugestoes: sugerirCandidatos(catalogo),
       avisosApresentacao: projetarCatalogo(catalogo, configuracoes).avisos,
+      // A fita por item e a lista fechada de selos — a tela monta o select com a lista
+      // que o servidor aceita, e nunca com uma cópia própria.
+      fitas: fitasParaAdmin(fitas),
+      selos: SELOS,
     });
   } catch (err) { console.error('[totem/apresentacao]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
 });
@@ -9451,6 +9466,30 @@ app.put('/api/totem/apresentacao/:cwItemId', async (req, res) => {
     });
     res.json({ ok: true, config: { id: cfg.id, cwItemId: cfg.cwItemId, modo: cfg.modo, cwGrupoPrincipalId: cfg.cwGrupoPrincipalId } });
   } catch (err) { console.error('[totem/apresentacao PUT]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// A FITA de um item: `{ selo: 'MAIS_PEDIDO' }` grava, `{ selo: null }` tira. Não consulta o
+// catálogo de propósito — é apresentação, e tirar a fita de um item que saiu do CW tem de
+// funcionar mesmo com o Cardápio Web fora do ar. Um selo por item; a lista é fechada.
+app.put('/api/totem/fita/:cwItemId', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const cwItemId = Number(req.params.cwItemId);
+    if (!Number.isSafeInteger(cwItemId) || cwItemId <= 0) return res.status(400).json({ erro: 'ID_INVALIDO' });
+    const veredito = validarSelo(req.body?.selo);
+    if (!veredito.ok) return res.status(400).json({ erro: veredito.codigo });
+    if (veredito.selo === null) {
+      const { count } = await prisma.totemFita.deleteMany({ where: { empresaId, cwItemId } });
+      return res.json({ ok: true, selo: null, removida: count > 0 });
+    }
+    const linha = await prisma.totemFita.upsert({
+      where: { empresaId_cwItemId: { empresaId, cwItemId } },
+      create: { empresaId, cwItemId, selo: veredito.selo },
+      update: { selo: veredito.selo },
+    });
+    res.json({ ok: true, selo: linha.selo });
+  } catch (err) { console.error('[totem/fita PUT]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
 });
 
 // Lista da tela: uma linha por categoria do catálogo VIVO, com o nome do CW, o
