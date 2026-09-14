@@ -362,7 +362,9 @@ export default function TotemPersonalizacao() {
                   {dados?.fundo?.tem ? 'Trocar a foto' : 'Escolher foto'}
                 </label>
                 {dados?.fundo?.tem ? (
-                  <button type="button" className="btn btn-link ttm-remover" onClick={removerFundo} disabled={salvando}>
+                  {/* `btn-danger` é o botão destrutivo padrão do PDV: texto vermelho, sem chapa,
+                      mesma altura do botão ao lado. Nada de classe própria aqui. */}
+                  <button type="button" className="btn btn-danger" onClick={removerFundo} disabled={salvando}>
                     Remover
                   </button>
                 ) : null}

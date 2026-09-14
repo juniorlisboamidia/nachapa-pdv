@@ -3364,9 +3364,7 @@ body.theme-dark .apr-contagem, body.theme-dark .apr-qr-legenda, body.theme-dark 
 .ttm-vis-oculto { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .ttm-fundo-linha label.btn { cursor: pointer; margin: 0; }
 .ttm-fundo-linha label.btn.desabilitado { opacity: .55; pointer-events: none; }
-/* Remover é destrutivo e secundário ao mesmo tempo: texto, sem chapa, em vermelho. */
-.ttm-remover { padding: 4px 0; font-size: 13px; color: #b91c1c; }
-.ttm-remover:hover:not(:disabled) { color: #991b1b; text-decoration: underline; }
+
 /* A foto que está no ar, em miniatura, ao lado do seletor: é o que diz "há uma foto aqui"
    sem precisar de frase. 9:8, a mesma proporção da metade de cima. */
 .ttm-fundo-atual { flex: 0 0 auto; width: 72px; height: 64px; border-radius: 8px; object-fit: cover; border: 1px solid var(--app-border); background: #111; }
