@@ -52,6 +52,7 @@ import TotemCardapio from './pages/TotemCardapio'
 import TotemConfiguracoes from './pages/TotemConfiguracoes'
 import TotemPersonalizacao from './pages/TotemPersonalizacao'
 import TotemBanners from './pages/TotemBanners'
+import TotemDestaques from './pages/TotemDestaques'
 import DispositivoPareamento from './pages/DispositivoPareamento'
 
 function TelaCarregando() {
@@ -161,6 +162,7 @@ export default function App() {
             <Route path="totem/aparelhos" element={<Aparelhos />} />
             <Route path="totem/cardapio" element={<TotemCardapio />} />
             <Route path="totem/personalizacao" element={<TotemPersonalizacao />} />
+            <Route path="totem/destaques" element={<TotemDestaques />} />
             <Route path="totem/banners" element={<Navigate to="/totem/banners/capa" replace />} />
             <Route path="totem/banners/:tipo" element={<TotemBanners />} />
             <Route path="totem/pagamentos" element={<EmConstrucao titulo="Formas de pagamento" descricao="Em breve." />} />

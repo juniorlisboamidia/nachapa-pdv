@@ -148,6 +148,9 @@ export const grupos = [
           // então ele é subgrupo, e abre os dois no mesmo drill de sempre.
           { to: '/totem/personalizacao', label: 'Personalização', icon: 'star' },
           {
+            to: '/totem/destaques', label: 'Destaques da vitrine', icon: 'trophy',
+          },
+          {
             label: 'Banners', icon: 'marketing',
             itens: [
               { to: '/totem/banners/capa', label: 'Capa' },

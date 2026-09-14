@@ -27,7 +27,7 @@ test('subitens de Ferramentas e Loja Digital com identidade própria', () => {
   // As folhas do Totem também se distinguem entre si: numa lista de seis, ícone
   // repetido faz duas telas diferentes parecerem a mesma de relance.
   const totem = grupo(grupo(grupos, 'Loja Digital').itens, 'Totem').itens;
-  assert.deepEqual(totem.map((n) => n.icon), ['relatorios', 'config', 'cpu', 'ficha', 'star', 'marketing', 'financeiro']);
+  assert.deepEqual(totem.map((n) => n.icon), ['relatorios', 'config', 'cpu', 'ficha', 'star', 'trophy', 'marketing', 'financeiro']);
   // Banners é SUBGRUPO: ele abre outro nível na sidebar em vez de abas dentro da página.
   const banners = totem.find((n) => n.label === 'Banners');
   assert.equal(banners.to, undefined, 'subgrupo não é link');
@@ -89,7 +89,7 @@ test('Ferramentas volta a ter só Checklist e Etiquetas', () => {
   assert.deepEqual(labels(grupo(grupos, 'Ferramentas').itens), ['Checklist', 'Etiquetas']);
 });
 
-test('Loja Digital é suíte de canais: Totem (sete itens) e TV Indoor', () => {
+test('Loja Digital é suíte de canais: Totem (oito itens) e TV Indoor', () => {
   const ld = grupo(grupos, 'Loja Digital').itens;
   assert.deepEqual(ld.map((n) => n.label), ['Totem', 'TV Indoor']);
   const totem = grupo(ld, 'Totem');
@@ -99,12 +99,12 @@ test('Loja Digital é suíte de canais: Totem (sete itens) e TV Indoor', () => {
   assert.equal(totem.to, undefined, 'o subgrupo não é link: quem tem rota são as folhas');
   assert.deepEqual(totem.itens.map((n) => n.label), [
     'Pedidos', 'Configurações', 'Gestão de totens', 'Cardápio',
-    'Personalização', 'Banners', 'Formas de pagamento',
+    'Personalização', 'Destaques da vitrine', 'Banners', 'Formas de pagamento',
   ]);
   // Seis folhas com rota própria; Banners é o único que abre outro nível.
   assert.deepEqual(totem.itens.filter((n) => n.to).map((n) => n.to), [
     '/totem/pedidos', '/totem/configuracoes', '/totem/aparelhos',
-    '/totem/cardapio', '/totem/personalizacao', '/totem/pagamentos',
+    '/totem/cardapio', '/totem/personalizacao', '/totem/destaques', '/totem/pagamentos',
   ]);
   // Pedidos PRIMEIRO, e isto não é ordem alfabética nem gosto: a `primeiraFolha` da
   // Visão Geral e o redirect de `/totem` apontam para a primeira folha. Trocar a
@@ -122,7 +122,7 @@ test('operador com aparelhos vê só Loja Digital, com as duas suítes', () => {
   assert.deepEqual(labels(v), ['Loja Digital']);
   assert.deepEqual(labels(grupo(v, 'Loja Digital').itens), ['Totem', 'TV Indoor']);
   assert.deepEqual(labels(grupo(grupo(v, 'Loja Digital').itens, 'Totem').itens), [
-    'Pedidos', 'Configurações', 'Gestão de totens', 'Cardápio', 'Personalização', 'Banners', 'Formas de pagamento',
+    'Pedidos', 'Configurações', 'Gestão de totens', 'Cardápio', 'Personalização', 'Destaques da vitrine', 'Banners', 'Formas de pagamento',
   ]);
 });
 
