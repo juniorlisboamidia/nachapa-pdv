@@ -108,7 +108,6 @@ export default function TelaRevisar({
                         ))}
                       </ul>
                     ) : null}
-                    {local?.observacao ? <div className="tq-linha-obs">“{local.observacao}”</div> : null}
                     {mudou ? <div className="tq-linha-mudou">preço atualizado</div> : null}
                   </div>
                   <div className="tq-linha-valor tq-disp tq-disp-forte tq-num">{moeda(l.totalPrice)}</div>

@@ -1047,7 +1047,6 @@
 .tq-linha-qtd { margin-right: 6px; }
 .tq-linha-ops { margin-top: 8px; font-size: clamp(15px, 1.94vw, 21px); color: var(--tq-texto-2); line-height: 1.5; }
 .tq-linha-ops li::before { content: '• '; color: rgba(var(--tq-tinta-base), 0.45); }
-.tq-linha-obs { margin-top: 8px; font-size: clamp(14px, 1.76vw, 19px); font-style: italic; color: var(--tq-texto-2); }
 .tq-linha-mudou { margin-top: 8px; font-weight: 800; font-size: clamp(13px, 1.67vw, 18px); letter-spacing: 0.06em; text-transform: uppercase; }
 .tq-linha-lado { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 14px; }
 .tq-linha-valor { font-size: clamp(21px, 3.06vw, 33px); white-space: nowrap; }

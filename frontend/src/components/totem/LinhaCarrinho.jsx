@@ -43,7 +43,6 @@ export default function LinhaCarrinho({ linha, aoEditar, aoRemover, aoMudarQtd }
             ))}
           </ul>
         ) : null}
-        {linha.observacao ? <div className="tq-linha-obs">“{linha.observacao}”</div> : null}
       </div>
       <div className="tq-linha-lado">
         <div className="tq-linha-valor tq-disp tq-disp-forte tq-num">{moeda(subtotalLocal(linha))}</div>

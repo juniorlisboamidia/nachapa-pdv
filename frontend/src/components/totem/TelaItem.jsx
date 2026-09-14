@@ -111,17 +111,17 @@ export default function TelaItem({
             />
           ))}
 
-          {/* AQUI HAVIA UM CAMPO DE OBSERVAÇÃO, e ele saiu porque não havia como
-              preencher: o totem é um monitor em pé, sem teclado físico, e o teclado
+          {/* AQUI HAVIA UM CAMPO DE OBSERVAÇÃO, e ele saiu de TODAS as etapas do totem:
+              não existe mais nem entrada nem exibição, aqui, no carrinho ou na revisão.
+              O motivo é físico — o totem é um monitor em pé, sem teclado, e o teclado
               virtual do Android não é garantido num aparelho em modo quiosque. Um campo
-              que o cliente vê e não consegue usar é pior do que campo nenhum.
+              que o cliente vê e não consegue preencher é pior do que campo nenhum: ele
+              para o fluxo para descobrir que não dá.
 
-              O CARRINHO CONTINUA CARREGANDO `observacao`, e é de propósito: o módulo puro
-              (`totemCarrinho.js`), o envio ao HUB e o contrato do Cardápio Web ficaram
-              intocados — o que muda é que o valor agora é sempre vazio. `LinhaCarrinho`
-              também segue sabendo desenhá-la, então o dia em que existir um caminho de
-              entrada (voz, teclado na tela, escolha por botões) nada precisa ser
-              redescoberto. */}
+              O DOMÍNIO ainda carrega o campo: `totemCarrinho.js`, o envio ao HUB e o
+              contrato do Cardápio Web seguem com `observacao`, agora sempre vazia. Tirar
+              a interface é apresentação; tirar o campo do carrinho e do payload é mexer em
+              contrato, e isso precisa de autorização própria. */}
         </div>
       </div>
 

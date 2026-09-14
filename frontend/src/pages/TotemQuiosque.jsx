@@ -426,6 +426,9 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
     // Item em falta, ou com um grupo OBRIGATÓRIO em falta, não abre: não há como montá-lo,
     // e deixar o cliente tentar só adiaria a recusa para a tela de revisão.
     if (!itemOrdenavel(item).ok) return
+    // `observacao` nasce vazia e MORRE vazia: a interface que a preenchia saiu de todas as
+    // etapas (não há teclado no totem). O campo continua aqui porque `totemCarrinho.js` e o
+    // payload do pedido o esperam, e mexer neles é contrato — não presentação.
     setAberto({ item, apresentado: null, qtd: 1, observacao: '', selecoes: {}, uid: null, precoCard: null })
     setTela('item')
   }
