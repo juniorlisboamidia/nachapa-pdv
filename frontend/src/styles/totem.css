@@ -786,17 +786,36 @@
   text-decoration: line-through; text-decoration-thickness: 2px;
 }
 
-/* -- Mídia do card e as FITAS ------------------------------------------------
-   As fitas ficam sobre a FOTO, no canto superior esquerdo, e não no texto: ali elas
-   não empurram nome nem preço, e a foto continua inteira por baixo. A pílula é a do
-   Design System do HUB (raio total, sem sombra, fundo na cor da marca com o texto na
-   cor do botão) — a mesma que o selo "-20%" usa, para oferta e fita falarem uma
-   língua só. */
+/* -- Mídia do card e a FITA DO CANTO ------------------------------------------
+   A mesma fita do Banner do HUB (`.hm-fita` em backend/marketing/experienceFrame.js):
+   uma caixa quadrada no canto, com overflow escondido, e dentro dela uma faixa larga
+   girada 45° — a cor vem da fita, o texto é branco em negrito, com a sombra curta que
+   descola a faixa da foto. Lá ela fica no canto ESQUERDO; aqui, no DIREITO, por decisão
+   de desenho do totem (o preço e o nome já puxam o olho para a esquerda do card).
+   As medidas do HUB são 156/240/-59/42 px numa arte de ~420px; aqui a caixa é derivada
+   da largura da tela para a fita manter a proporção num card de 365px no alvo e num de
+   ~330px no tablet pequeno. A faixa fica no lado de fora do card, escondida pelo
+   `overflow: hidden` da caixa. */
 .tq-card-midia { position: relative; display: block; }
-.tq-card-fitas {
-  position: absolute; top: 12px; left: 12px; max-width: calc(100% - 24px);
-  display: flex; flex-wrap: wrap; gap: 6px; pointer-events: none;
+.tq-fita-canto {
+  --tq-fita-caixa: clamp(112px, 14.4vw, 156px);
+  position: absolute; top: 0; right: 0; z-index: 2; pointer-events: none; overflow: hidden;
+  width: var(--tq-fita-caixa); height: var(--tq-fita-caixa);
 }
+.tq-fita-faixa {
+  position: absolute; display: block; text-align: center; white-space: nowrap;
+  /* faixa = 1,54 × caixa; deslocamentos = −0,378 × e 0,27 × caixa (as razões do HUB). */
+  width: calc(var(--tq-fita-caixa) * 1.54);
+  right: calc(var(--tq-fita-caixa) * -0.378);
+  top: calc(var(--tq-fita-caixa) * 0.27);
+  padding: calc(var(--tq-fita-caixa) * 0.058) 0;
+  transform: rotate(45deg);
+  color: #fff; font-family: var(--tq-fonte-corpo); font-weight: 700;
+  font-size: clamp(12px, 1.48vw, 16px); line-height: 1.25; letter-spacing: 0.3px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.28);
+}
+/* Selo de DESCONTO ("-20%") ao lado do preço antigo: pílula do Design System do HUB
+   (raio total, sem sombra, fundo na cor da marca com o texto na cor do botão). */
 .tq-fita {
   display: inline-flex; align-items: center; padding: 6px 12px; border-radius: 999px;
   background: var(--tq-amarelo); color: var(--tq-tinta);

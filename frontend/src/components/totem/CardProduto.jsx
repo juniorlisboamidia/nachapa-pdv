@@ -10,19 +10,19 @@ import Preco from './Preco'
 // A foto é o elemento maior do card de propósito — comida vende por foto, e o
 // card antigo dava 132px a ela num monitor de 1920.
 //
-// `selos` são as FITAS sobre a foto ("Mais pedido", "Novo", "Combo"…): pílulas no padrão
-// dos selos do Design System do HUB. O catálogo ainda não traz esse dado — o prop existe
-// para a casca estar pronta; sem lista, nada é desenhado. Card bloqueado não mostra
-// fita: "Mais pedido" em cima de "Em falta" é ruído.
-export default function CardProduto({ nome, descricao, imagem, preco, selos, bloqueado, rotuloFalta, aoAbrir }) {
-  const fitas = !bloqueado && Array.isArray(selos) ? selos.filter((s) => typeof s === 'string' && s.trim()) : []
+// `fita` é a FAIXA DIAGONAL no canto direito da foto ("Mais pedido", "Novidade"…), a mesma
+// fita do Banner do HUB — lá no canto esquerdo, aqui no direito. Chega RESOLVIDA do
+// bootstrap (`{ texto, cor }`): o quiosque não conhece códigos nem escolhe cor. Card
+// bloqueado não mostra fita: "Mais pedido" em cima de "Em falta" é ruído.
+export default function CardProduto({ nome, descricao, imagem, preco, fita, bloqueado, rotuloFalta, aoAbrir }) {
+  const temFita = !bloqueado && fita && typeof fita.texto === 'string' && fita.texto.trim() && typeof fita.cor === 'string'
   return (
     <button type="button" className="tq-card" disabled={bloqueado} onClick={aoAbrir}>
       <span className="tq-card-midia">
         <Foto src={imagem} alt="" tamIcone={56} />
-        {fitas.length ? (
-          <span className="tq-card-fitas">
-            {fitas.map((s) => <span key={s} className="tq-fita">{s}</span>)}
+        {temFita ? (
+          <span className="tq-fita-canto" aria-hidden="true">
+            <span className="tq-fita-faixa" style={{ background: fita.cor }}>{fita.texto}</span>
           </span>
         ) : null}
       </span>

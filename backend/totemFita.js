@@ -1,23 +1,27 @@
 // A FITA do produto no totem — módulo puro (sem Prisma, sem Express, sem rede).
 //
-// A fita é o selo que o card mostra sobre a foto ("Mais pedido", "Novo", "Combo"…). É
-// APRESENTAÇÃO deste canal, como o modo vitrine e o nome exibido da categoria: o Cardápio
-// Web não tem esse dado, e por isso ele mora no PDV, uma linha por (empresa, item do CW).
+// A fita é a faixa diagonal no canto do card ("Mais pedido", "Novidade"…). É APRESENTAÇÃO
+// deste canal, como o modo vitrine e o nome exibido da categoria: o Cardápio Web não tem
+// esse dado, e por isso ele mora no PDV, uma linha por (empresa, item do CW).
 //
-// Lista FECHADA de selos, e não texto livre: o vidro do totem não é lugar para
-// "PROMOÇÃO IMPERDÍVEL!!!" de trinta letras. O banco guarda o CÓDIGO; o rótulo que o
-// cliente lê vem daqui, e muda aqui.
+// O catálogo é o MESMO das fitas do HUB (frontend/src/pages/marketing/fitas.js, espelho de
+// backend/marketing/fitas.js lá): os mesmos cinco códigos, os mesmos textos e as mesmas
+// cores — a fita que a loja conhece do Banner é a que aparece no totem. Copiado por valor,
+// de propósito: o Totem não importa nada do HUB (domínio independente). Mudou lá, muda aqui.
+//
+// Lista FECHADA, e não texto livre: o vidro do totem não é lugar para "PROMOÇÃO
+// IMPERDÍVEL!!!" de trinta letras. O banco guarda o CÓDIGO; texto e cor que o cliente vê
+// vêm daqui.
 //
 // A fita é do ITEM BASE. Num item em modo vitrine (um card por opção) ela vai para TODOS os
-// cards daquele item — "Combo" sobre cada combo, por exemplo. Fita por opção não existe.
+// cards daquele item. Fita por opção não existe.
 
 export const SELOS = Object.freeze([
-  { codigo: 'MAIS_PEDIDO', rotulo: 'Mais pedido' },
-  { codigo: 'OFERTA', rotulo: 'Oferta' },
-  { codigo: 'NOVO', rotulo: 'Novo' },
-  { codigo: 'COMBO', rotulo: 'Combo' },
-  { codigo: 'DESTAQUE', rotulo: 'Destaque' },
-  { codigo: 'EXCLUSIVO', rotulo: 'Exclusivo' },
+  { codigo: 'MAIS_PEDIDO', rotulo: 'Mais pedido', cor: '#B45309' },
+  { codigo: 'RECOMENDADO', rotulo: 'Recomendado', cor: '#1D4ED8' },
+  { codigo: 'NOVIDADE', rotulo: 'Novidade', cor: '#ff5f00' },
+  { codigo: 'EDICAO_LIMITADA', rotulo: 'Edição limitada', cor: '#BE185D' },
+  { codigo: 'OFERTA', rotulo: 'Oferta', cor: '#15803D' },
 ]);
 
 export const CODIGOS = Object.freeze(SELOS.map((s) => s.codigo));
@@ -25,9 +29,10 @@ export const CODIGOS = Object.freeze(SELOS.map((s) => s.codigo));
 const arranjo = (v) => (Array.isArray(v) ? v : []);
 const objeto = (v) => (v && typeof v === 'object' ? v : {});
 
-export function rotuloDoSelo(codigo) {
+// O que o CARD recebe: `{ texto, cor }` resolvidos — o quiosque não conhece códigos.
+export function fitaDoSelo(codigo) {
   const s = SELOS.find((x) => x.codigo === codigo);
-  return s ? s.rotulo : null;
+  return s ? { texto: s.rotulo, cor: s.cor } : null;
 }
 
 // Rigor na ESCRITA: só um código da lista, ou "nada" (null / '' / undefined = tirar a
@@ -53,9 +58,9 @@ export function fitasPorItem(linhas) {
   return mapa;
 }
 
-// Catálogo PROJETADO (com `produtos` por categoria) → o mesmo catálogo com `selos: [rótulo]`
-// nos produtos cujo `origem.itemId` tem fita. ADITIVO e imutável: a entrada não é tocada,
-// e produto sem fita sai sem a chave — o card já sabe desenhar sem lista.
+// Catálogo PROJETADO (com `produtos` por categoria) → o mesmo catálogo com
+// `fita: { texto, cor }` nos produtos cujo `origem.itemId` tem fita. ADITIVO e imutável: a
+// entrada não é tocada, e produto sem fita sai sem a chave — o card já sabe desenhar sem.
 export function aplicarFitas(catalogo, linhas) {
   const raiz = objeto(catalogo);
   const fitas = fitasPorItem(linhas);
@@ -66,7 +71,7 @@ export function aplicarFitas(catalogo, linhas) {
       const produto = objeto(p);
       const itemId = objeto(produto.origem).itemId;
       const selo = itemId === null || itemId === undefined ? null : fitas.get(String(itemId));
-      return selo ? { ...produto, selos: [rotuloDoSelo(selo)] } : produto;
+      return selo ? { ...produto, fita: fitaDoSelo(selo) } : produto;
     });
     return { ...categoria, produtos };
   });
