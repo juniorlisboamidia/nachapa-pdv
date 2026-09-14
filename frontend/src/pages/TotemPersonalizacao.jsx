@@ -381,7 +381,10 @@ export default function TotemPersonalizacao() {
               </div>
             </div>
 
-            <div className="ttm-aparencia-grade">
+            {/* Duas colunas FIXAS, não auto-fit: num monitor largo o auto-fit abria quatro e
+                deixava o Título sozinho na linha. Título | Subtítulo em cima, Botão | Frase
+                do meio embaixo — a ordem de leitura do vidro, sem célula vazia. */}
+            <div className="ttm-vit-campos">
               <div className="form-group">
                 <label className="form-label" htmlFor="apa-titulo">
                   Título <span className="ttm-contador">{[...tituloLimpo].length}/{tituloMax}</span>
@@ -400,7 +403,7 @@ export default function TotemPersonalizacao() {
                 </div>
               </div>
 
-              <div className="form-group ttm-grade-inteira">
+              <div className="form-group">
                 <label className="form-label" htmlFor="apa-subtitulo">
                   Subtítulo <span className="ttm-contador">{[...subtituloLimpo].length}/{subtituloMax}</span>
                 </label>
