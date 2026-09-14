@@ -52,9 +52,10 @@ import {
 // Totem › Aparência: cores em chaves de DOMÍNIO, posição das categorias e o estado da
 // logo. A régua é toda pura e mora num lugar só.
 import {
-  CHAVES as CHAVES_APARENCIA, PADROES as PADROES_APARENCIA, POSICOES as POSICOES_CATEGORIAS,
+  CHAVES as CHAVES_APARENCIA, POSICOES as POSICOES_CATEGORIAS,
   MOTIVO_POSICAO, validarPatch, aplicarPatch, coresEfetivas, sanitizarTokens,
   normalizarPosicao, aparenciaPublica, diagnosticoDeContraste,
+  LAYOUTS, MOTIVO_LAYOUT, normalizarLayout, layoutEfetivo, PADROES_POR_LAYOUT, tokensDoLayout,
   LOGO_MAX_BYTES, validarLogoDataUrl, decodificarDataUrl, proximaVersaoLogo,
 } from './totemAparencia.js';
 // Totem › Banners: agenda, duração, imagem e as duas projeções (admin e pública).
@@ -9431,15 +9432,24 @@ app.get('/api/totem/aparencia', async (req, res) => {
   const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
   try {
     const cfg = await prisma.totemConfiguracao.findUnique({ where: { empresaId } });
-    const { tokens: overrides } = sanitizarTokens(cfg?.tokens);
-    const efetivas = coresEfetivas(cfg?.tokens);
+    // O FUNDO primeiro: é ele que diz qual conjunto de overrides e quais padrões valem.
+    // Ler os overrides sem ele devolveria a paleta escura enquanto a tela está clara.
+    const layoutFundo = layoutEfetivo(cfg?.layoutFundo);
+    const overrides = tokensDoLayout(cfg?.tokens, layoutFundo);
+    const efetivas = coresEfetivas(cfg?.tokens, layoutFundo);
     const versao = Number.isInteger(cfg?.logoVersao) ? cfg.logoVersao : 0;
     res.json({
       // Os três estados que a tela precisa distinguir: o que é padrão, o que a loja
       // escolheu, e o que o cliente vê. Sem os três ela teria de copiar hexadecimal para
       // dentro do React, e aí o padrão passaria a existir em dois lugares.
       chaves: CHAVES_APARENCIA,
-      padroes: PADROES_APARENCIA,
+      // `padroes` é o do fundo ATUAL — é contra ele que a tela mostra "voltar ao padrão".
+      // `padroesPorFundo` vai junto para a prévia de cada fundo no seletor não precisar
+      // de uma segunda chamada.
+      padroes: PADROES_POR_LAYOUT[layoutFundo],
+      padroesPorFundo: PADROES_POR_LAYOUT,
+      layoutFundo,
+      layouts: LAYOUTS,
       overrides,
       efetivas,
       contraste: diagnosticoDeContraste(efetivas),
@@ -9475,24 +9485,38 @@ app.put('/api/totem/aparencia', async (req, res) => {
       posicao = normalizarPosicao(corpo.posicaoCategoriasPadrao);
       if (posicao === null) erros.push({ chave: 'posicaoCategoriasPadrao', motivo: MOTIVO_POSICAO });
     }
+    let layout;
+    if (corpo.layoutFundo !== undefined) {
+      layout = normalizarLayout(corpo.layoutFundo);
+      if (layout === null) erros.push({ chave: 'layoutFundo', motivo: MOTIVO_LAYOUT });
+    }
     if (erros.length) return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros });
 
     const atual = await prisma.totemConfiguracao.findUnique({ where: { empresaId } });
+    // Em QUAL fundo o patch de cores cai: o que veio no corpo, se veio, senão o guardado.
+    // A regra é "o fundo que vale DEPOIS deste PUT" — trocar de fundo e pintar na mesma
+    // requisição pinta no fundo novo, que é a única leitura que não surpreende.
+    const alvo = layout ?? layoutEfetivo(atual?.layoutFundo);
     const dados = {};
     // `aplicarPatch` parte do que está GUARDADO: o PUT não precisa reenviar as seis cores
-    // para mexer numa, e o que ele não menciona continua exatamente como estava.
-    if (patch) dados.tokens = aplicarPatch(atual?.tokens, patch);
+    // para mexer numa, e o que ele não menciona continua exatamente como estava. Devolve o
+    // cofre inteiro, com só o conjunto do fundo alvo tocado.
+    if (patch) dados.tokens = aplicarPatch(atual?.tokens, patch, alvo);
     if (posicao) dados.posicaoCategoriasPadrao = posicao;
+    if (layout) dados.layoutFundo = layout;
 
     const linha = await prisma.totemConfiguracao.upsert({
       where: { empresaId },
       create: { empresaId, ...dados },
       update: dados,
     });
-    const efetivas = coresEfetivas(linha.tokens);
+    const layoutFundo = layoutEfetivo(linha.layoutFundo);
+    const efetivas = coresEfetivas(linha.tokens, layoutFundo);
     res.json({
       ok: true,
-      overrides: sanitizarTokens(linha.tokens).tokens,
+      layoutFundo,
+      padroes: PADROES_POR_LAYOUT[layoutFundo],
+      overrides: tokensDoLayout(linha.tokens, layoutFundo),
       efetivas,
       contraste: diagnosticoDeContraste(efetivas),
       posicaoCategoriasPadrao: linha.posicaoCategoriasPadrao,

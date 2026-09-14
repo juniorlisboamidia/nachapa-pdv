@@ -5,6 +5,7 @@
 // módulo, o admin recebe RECUSA quando erra, e o totem NUNCA quebra por dado velho.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   CHAVES, PARES, AA_NORMAL, AA_GRANDE, MOTIVO_CHAVE, MOTIVO_COR, MOTIVO_FORMATO,
   normalizarCor, validarEntrada, sanitizarTokens, contraste, diagnosticoDeContraste,
@@ -248,7 +249,8 @@ test('uma paleta ilegível é DIAGNOSTICADA, não bloqueada — quem decide é a
 
 // ══ Operações de contrato (A3) ══════════════════════════════════════════════
 import {
-  PADROES, POSICOES, POSICAO_PADRAO,
+  PADROES, PADROES_POR_LAYOUT, POSICOES, POSICAO_PADRAO,
+  LAYOUTS, LAYOUT_PADRAO, normalizarLayout, layoutEfetivo, lerCofre, tokensDoLayout,
   normalizarPosicao, posicaoEfetiva, validarPatch, aplicarPatch, coresEfetivas, aparenciaPublica,
 } from './totemAparencia.js';
 
@@ -258,10 +260,167 @@ test('os padrões são as seis chaves, e batem com o que a folha desenha', () =>
   // Estes seis também estão em frontend/src/styles/totem.css. Mudar um sem o outro faz a
   // tela de configuração mentir sobre o que o cliente está vendo.
   assert.deepEqual(PADROES, {
-    fundo: '#000000', cartao: '#131211', texto: '#ffffff',
+    fundo: '#0f0e0d', cartao: '#1e1b18', texto: '#ffffff',
     textoApoio: '#d79e00', acaoFundo: '#d79e00', acaoTexto: '#000000',
   });
   for (const v of Object.values(PADROES)) assert.equal(normalizarCor(v), v, 'padrão tem de ser hex canônico');
+});
+
+// ── Os dois fundos ────────────────────────────────────────────
+test('cada fundo tem as SEIS chaves, em hex canônico', () => {
+  assert.deepEqual([...LAYOUTS], ['PADRAO', 'CLARO']);
+  assert.equal(LAYOUT_PADRAO, 'PADRAO');
+  assert.equal(PADROES_POR_LAYOUT.PADRAO, PADROES, 'PADROES é atalho do fundo padrão');
+  for (const l of LAYOUTS) {
+    assert.deepEqual(Object.keys(PADROES_POR_LAYOUT[l]).sort(), [...CHAVES].sort(), l);
+    assert.ok(Object.isFrozen(PADROES_POR_LAYOUT[l]), l);
+    for (const v of Object.values(PADROES_POR_LAYOUT[l])) assert.equal(normalizarCor(v), v, l + ': hex canônico');
+  }
+});
+
+test('🔴 a escada aponta para cima, e o chão não é preto puro', () => {
+  /* Duas afirmações, e nenhuma delas é "contraste".
+
+     A razão da WCAG NÃO serve para medir separação entre dois quase-pretos: o termo +0,05
+     da fórmula domina, e #000 contra #131211 (o par antigo) dá 1,122 enquanto #0f0e0d
+     contra #1e1b18 (o par novo) dá 1,125. Pelo número, nada mudou. A régua é para texto
+     sobre fundo, e usá-la aqui produziria um teste que passa dizendo o que não sabe.
+
+     O que a escada garante, e é o que se mede aqui:
+       · o cartão é MAIS CLARO que o chão nos dois fundos — em tema escuro elevação é
+         claridade, e no claro a mesma direção continua valendo;
+       · o chão não é preto puro. Era ele o buraco: com #000 embaixo, quem separava o
+         cartão do chão era a FOTOGRAFIA, e um produto sem foto virava um vazio na grade.
+
+     O terceiro pedaço do desenho — o fio de 1px no cartão — mora na folha, porque não é
+     cor de domínio: a loja não o configura. */
+  const claridade = (hex) => parseInt(hex.slice(1, 3), 16) + parseInt(hex.slice(3, 5), 16) + parseInt(hex.slice(5, 7), 16);
+  for (const l of LAYOUTS) {
+    const { fundo, cartao } = PADROES_POR_LAYOUT[l];
+    assert.ok(claridade(cartao) > claridade(fundo), l + ': o cartão tem de subir sobre o chão');
+    assert.notEqual(fundo, '#000000', l + ': chão preto puro é o buraco que esta frente veio fechar');
+  }
+});
+
+test('🔴 os cinco pares passam em AA nos DOIS fundos', () => {
+  // Um fundo que sai da fábrica reprovando contraste é um fundo que não devia existir.
+  for (const l of LAYOUTS) {
+    for (const par of diagnosticoDeContraste(PADROES_POR_LAYOUT[l])) {
+      assert.ok(par.medido, l + '/' + par.id + ': sem medida');
+      assert.ok(par.aaNormal, l + '/' + par.id + ': ' + par.ratio + ':1 não passa em AA');
+    }
+  }
+});
+
+/* ── A GUARDA: a folha e o servidor têm de concordar ─────────────────────────
+   Os seis valores de cada fundo existem em DOIS lugares: aqui, como "o padrão" que o
+   admin mostra, e em `frontend/src/styles/totem.css`, como o que o quiosque desenha
+   quando nada chega (bootstrap velho, rede caindo, aparência corrompida).
+
+   O comentário do módulo sempre prometeu que havia teste para isso. Não havia — o que
+   havia era um `deepEqual` contra valores digitados à mão, que concorda com ele mesmo.
+   Mudar a folha sem mudar o módulo faz a tela de configuração MENTIR sobre o que o
+   cliente está vendo, e nada acusaria. Este teste lê o CSS e compara.
+
+   Ler um arquivo do frontend a partir de um teste do backend não cria dependência de
+   runtime: nada aqui é importado pelo servidor. É uma guarda estática, do mesmo tipo das
+   que leem `server.js` para conferir escopo por empresa. */
+test('🔴 os padrões dos dois fundos batem, valor por valor, com a folha do quiosque', () => {
+  // Normalizado: ver a nota em totem.tenant.test.js.
+  const css = readFileSync(new URL('../frontend/src/styles/totem.css', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+
+  // Chave de domínio → a custom property que a folha usa. É o MESMO mapa de
+  // `frontend/src/components/totemTema.js`, repetido aqui de propósito: se um dia ele
+  // mudar de um lado só, este teste é que vai contar.
+  const PROP = {
+    fundo: '--tq-fundo',
+    cartao: '--tq-superficie',
+    texto: '--ds-texto',
+    textoApoio: '--ds-texto-apoio',
+    acaoFundo: '--ds-botao-fundo',
+    acaoTexto: '--ds-botao-texto',
+  };
+
+  // O bloco que vale para cada fundo: a raiz para o padrão, `[data-fundo='claro']` para o
+  // claro. Recortar o bloco antes de procurar evita casar com a declaração do outro.
+  const bloco = (abre) => {
+    const i = css.indexOf(abre);
+    assert.notEqual(i, -1, `bloco ausente na folha: ${abre}`);
+    const fim = css.indexOf('\n}', i);
+    assert.notEqual(fim, -1, `bloco sem fecho: ${abre}`);
+    return css.slice(i, fim);
+  };
+
+  const declarado = (trecho, prop) => {
+    // A ÚLTIMA declaração é a que vale — a folha declara `--tq-lado-bg` duas vezes.
+    const achados = [...trecho.matchAll(new RegExp(`${prop}:\\s*([^;]+);`, 'g'))];
+    return achados.length ? achados[achados.length - 1][1].trim() : null;
+  };
+
+  const blocos = {
+    PADRAO: bloco('.tq-raiz {'),
+    CLARO: bloco(".tq-raiz[data-fundo='claro'] {"),
+  };
+
+  for (const layout of LAYOUTS) {
+    for (const [chave, prop] of Object.entries(PROP)) {
+      const naFolha = declarado(blocos[layout], prop);
+      // O fundo claro só redefine o que MUDA; o que ele não declara vem da raiz.
+      const valor = naFolha ?? declarado(blocos.PADRAO, prop);
+      assert.equal(
+        valor, PADROES_POR_LAYOUT[layout][chave],
+        `${layout}.${chave}: a folha diz ${valor} e o módulo diz ${PADROES_POR_LAYOUT[layout][chave]}`,
+      );
+    }
+  }
+
+  // E a tinta-base, que é o que faz os dezessete brancos-com-alfa virarem de lado.
+  assert.equal(declarado(blocos.PADRAO, '--tq-tinta-base'), '255, 255, 255');
+  assert.equal(declarado(blocos.CLARO, '--tq-tinta-base'), '26, 23, 20');
+});
+
+test('fundo inválido cai no padrão, nunca derruba a tela', () => {
+  assert.equal(normalizarLayout('CLARO'), 'CLARO');
+  assert.equal(normalizarLayout('claro'), null, 'não normaliza caixa: vem de um seletor');
+  for (const v of [null, undefined, '', 'ESCURO', 3, {}, []]) {
+    assert.equal(normalizarLayout(v), null, String(v));
+    assert.equal(layoutEfetivo(v), 'PADRAO', String(v));
+  }
+});
+
+// ── O cofre: um conjunto de overrides por fundo ────────────────────────
+test('🔴 formato ANTIGO (objeto plano) é lido como o conjunto do fundo padrão', () => {
+  // É o que dispensa migração de dado: quem já configurou continua valendo, no fundo em
+  // que aquelas cores sempre foram escolhidas.
+  const antigo = { fundo: '#111111', texto: '#eeeeee' };
+  assert.deepEqual(lerCofre(antigo), { PADRAO: antigo, CLARO: {} });
+  assert.deepEqual(tokensDoLayout(antigo, 'PADRAO'), antigo);
+  assert.deepEqual(tokensDoLayout(antigo, 'CLARO'), {}, 'o claro nasce limpo');
+});
+
+test('o cofre novo mantém os dois conjuntos separados', () => {
+  const cofre = { PADRAO: { fundo: '#111111' }, CLARO: { fundo: '#f0f0f0' } };
+  assert.deepEqual(tokensDoLayout(cofre, 'PADRAO'), { fundo: '#111111' });
+  assert.deepEqual(tokensDoLayout(cofre, 'CLARO'), { fundo: '#f0f0f0' });
+  assert.equal(coresEfetivas(cofre, 'PADRAO').fundo, '#111111');
+  assert.equal(coresEfetivas(cofre, 'CLARO').fundo, '#f0f0f0');
+  assert.equal(coresEfetivas(cofre, 'CLARO').texto, PADROES_POR_LAYOUT.CLARO.texto,
+    'o que não tem override vem do padrão DAQUELE fundo');
+});
+
+test('cofre torto: cada conjunto é saneado por si, e o resto sobrevive', () => {
+  const podre = { PADRAO: { fundo: '#111111', borda: '#fff' }, CLARO: 'não é objeto', LIXO: { fundo: '#000' } };
+  assert.deepEqual(lerCofre(podre), { PADRAO: { fundo: '#111111' }, CLARO: {} });
+  for (const v of [null, undefined, 42, 'texto', []]) {
+    assert.deepEqual(lerCofre(v), { PADRAO: {}, CLARO: {} }, String(v));
+  }
+});
+
+test('🔴 gravar num fundo não encosta no outro', () => {
+  const cofre = { PADRAO: { fundo: '#111111' }, CLARO: { fundo: '#f0f0f0' } };
+  const novo = aplicarPatch(cofre, validarPatch({ texto: '#00ff00' }), 'CLARO');
+  assert.deepEqual(novo.PADRAO, { fundo: '#111111' }, 'o fundo padrão fica intocado');
+  assert.deepEqual(novo.CLARO, { fundo: '#f0f0f0', texto: '#00ff00' });
 });
 
 test('🔴 instalação sem configuração = a aparência de hoje, idêntica', () => {
@@ -310,13 +469,13 @@ test('🔴 null REMOVE o override — e continua não sendo cor válida', () => 
 test('🔴 chave omitida não é tocada — PUT parcial não apaga o resto', () => {
   const guardados = { fundo: '#111111', texto: '#eeeeee', acaoFundo: '#f9d900' };
   const novo = aplicarPatch(guardados, validarPatch({ texto: '#ffffff' }));
-  assert.deepEqual(novo, { fundo: '#111111', texto: '#ffffff', acaoFundo: '#f9d900' });
+  assert.deepEqual(novo.PADRAO, { fundo: '#111111', texto: '#ffffff', acaoFundo: '#f9d900' });
 });
 
 test('🔴 remover tira a chave do objeto, não guarda null', () => {
   const novo = aplicarPatch({ fundo: '#111111', texto: '#eeeeee' }, validarPatch({ fundo: null }));
-  assert.deepEqual(novo, { texto: '#eeeeee' });
-  assert.equal('fundo' in novo, false, 'override removido some do objeto');
+  assert.deepEqual(novo.PADRAO, { texto: '#eeeeee' });
+  assert.equal('fundo' in novo.PADRAO, false, 'override removido some do objeto');
   assert.equal(coresEfetivas(novo).fundo, PADROES.fundo, 'e a cor volta ao padrão');
 });
 
@@ -376,7 +535,7 @@ test('🔴 a logo NUNCA vai no bootstrap', () => {
 
 test('bloco público tem só o que o quiosque desenha', () => {
   const pub = aparenciaPublica({ config: { tokens: { fundo: '#111111' }, posicaoCategoriasPadrao: 'direita' } });
-  assert.deepEqual(Object.keys(pub).sort(), ['logoVersao', 'posicaoCategorias', 'temLogoPersonalizada', 'tokens']);
+  assert.deepEqual(Object.keys(pub).sort(), ['layoutFundo', 'logoVersao', 'posicaoCategorias', 'temLogoPersonalizada', 'tokens']);
   assert.equal(pub.posicaoCategorias, 'direita');
 });
 

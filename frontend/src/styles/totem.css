@@ -79,13 +79,22 @@
   --ds-borda: #ffffff;           /* border.default     17,1:1 sobre o cartão */
 
   /* ── Papéis do quiosque, apontando para a marca ── */
-  --tq-preto: var(--ds-fundo);
+  /* O CHÃO do quiosque. Aponta para um valor próprio e não para `--ds-fundo`
+     (que continua guardando o #000 da marca, logo acima) pelo mesmo motivo que
+     `--tq-superficie` não aponta para `--ds-cartao`: é um desvio consciente,
+     registrado.
+     Preto puro era o buraco. Com #000 embaixo e o cartão 1,2% mais claro em
+     cima, a tela não tinha superfície nenhuma — tinha fotografia flutuando no
+     vazio. #0f0e0d dá o primeiro degrau da escada sem deixar de ser noite. */
+  --tq-fundo: #0f0e0d;
+  /* Apelido histórico: dezenove regras chamam a superfície de "preto". Elas
+     continuam certas — o que mudou é que o preto tem um degrau agora. */
+  --tq-preto: var(--tq-fundo);
   --tq-preto-2: #1a1817;      /* derivado: ver nota das superfícies */
   --tq-branco: var(--ds-texto);
   --tq-amarelo: var(--ds-botao-fundo);
   --tq-tinta: var(--ds-botao-texto);
-  --tq-fundo: var(--ds-fundo);
-  --tq-superficie: #131211;   /* derivado: ver nota das superfícies */
+  --tq-superficie: #1e1b18;   /* o cartão: segundo degrau da escada */
   --tq-texto: var(--ds-texto);
   --tq-texto-2: var(--ds-texto-apoio);
 
@@ -98,11 +107,11 @@
      para um contorno de interface ser percebido; 50% para o contorno que precisa
      delimitar de verdade (opção, botão secundário). Abaixo disso o card some no
      fundo, que é o defeito clássico de tela escura. */
-  --tq-borda: rgba(255, 255, 255, 0.34);
-  --tq-borda-forte: rgba(255, 255, 255, 0.50);
+  --tq-borda: rgba(var(--tq-tinta-base), 0.34);
+  --tq-borda-forte: rgba(var(--tq-tinta-base), 0.50);
   /* Terceiro nível de texto: branco rebaixado, nunca um cinza novo. */
-  --tq-texto-3: rgba(255, 255, 255, 0.70);
-  --tq-texto-claro: rgba(255, 255, 255, 0.74);
+  --tq-texto-3: rgba(var(--tq-tinta-base), 0.70);
+  --tq-texto-claro: rgba(var(--tq-tinta-base), 0.74);
   /* Superfícies. O `surface.card` da marca (#251a07) é um marrom dessaturado: ao
      lado do preto puro, e ainda por baixo de foto de comida, ele lê como sujeira,
      não como superfície. Aqui as superfícies são quase-pretas com um fio de calor
@@ -120,6 +129,38 @@
   /* Tipografia da marca: Geométrica (Montserrat 900) e Neutra (Inter 400). */
   --tq-fonte-display: 'Totem Display', 'Segoe UI', Roboto, system-ui, sans-serif;
   --tq-fonte-corpo: 'Totem Corpo', 'Segoe UI', Roboto, Helvetica, sans-serif;
+  /* ── A TINTA-BASE ──────────────────────────────────────────────────────
+     Todo branco-com-alfa desta folha sai daqui, como três números para o
+     `rgba()`. Eram 17 `rgba(255,255,255,…)` literais espalhados por oito telas,
+     e cada um deles viraria texto branco sobre papel no fundo claro. Com um
+     token só, o quiosque inteiro vira de lado num bloco de CSS.
+
+     Três literais ficaram de fora, de propósito, e estão comentados no lugar:
+     o brilho do botão da espera (é um brilho branco, não tinta), e o anel do
+     spinner, que gira sobre o dourado nos dois fundos. */
+  --tq-tinta-base: 255, 255, 255;
+
+  /* ── A ESCADA ──────────────────────────────────────────────────────────
+     Chão → coluna → cartão, cada degrau um passo mais claro. Em tema escuro
+     elevação é CLARIDADE: sombra preta sobre preto não existe.
+
+     A COLUNA é derivada, não literal: ela fica entre o chão e o cartão, então
+     acompanha sozinha quando a loja troca um dos dois. O literal aqui é o que
+     vale em navegador sem `color-mix` — a versão derivada entra logo abaixo,
+     atrás de `@supports`, porque custom property com valor inválido não cai
+     para a declaração anterior: ela deixa o `background` sem valor nenhum. */
+  --tq-lado-bg: #161513;
+
+  /* O fio do cartão. É ele, junto com o degrau, que faz o cartão EXISTIR sem
+     foto — antes quem separava o cartão do chão era a fotografia, e um produto
+     em falta virava um buraco na grade. */
+  --tq-card-fio: rgba(var(--tq-tinta-base), 0.07);
+
+  /* O dourado do PREÇO. Não é cor de domínio e a loja não configura: no fundo
+     claro o dourado da marca dá 2,2:1 sobre branco e simplesmente não pode ser
+     texto. Cor que só tem uma resposta certa não vira campo. */
+  --tq-preco: var(--ds-destaque);
+
   /* Forma */
   --tq-raio: 18px;
   --tq-raio-2: 12px;
@@ -154,6 +195,95 @@
   -webkit-user-select: none;
 }
 
+/* ══ O FUNDO CLARO ═══════════════════════════════════════════════════════
+   A MESMA escada, espelhada. Não é outro desenho: mesmo viés quente no neutro
+   (R>G>B, como o #0f0e0d do padrão), mesma ausência de sombra, mesmo fio único.
+   O que muda é onde a escada começa — o chão passa a ser o tom mais cinza e o
+   cartão chega ao branco.
+
+   Este bloco redefine TOKENS, e nenhuma regra de componente. É o que faz a
+   troca de fundo custar um atributo: quem desenha continua sendo a folha de
+   cima, inteira, sem um segundo conjunto de regras para manter em dia.
+
+   As seis cores da loja (Personalização) entram DEPOIS, por CSSOM, no
+   `style` da própria raiz — e estilo inline vence qualquer seletor. Então
+   override continua vencendo aqui também, e o que a loja não escolheu cai
+   nestes valores em vez de cair nos do fundo escuro. É por isso que o cofre de
+   overrides é separado por fundo: um `texto: #ffffff` escolhido no escuro
+   transformaria esta tela em branco sobre papel.
+
+   A TINTA-BASE é a peça central: virando estes três números, os dezessete
+   brancos-com-alfa da folha viram tinta escura de uma vez. */
+.tq-raiz[data-fundo='claro'] {
+  --tq-tinta-base: 26, 23, 20;
+
+  /* A escada */
+  --tq-fundo: #eae8e4;
+  --tq-lado-bg: #f2f0ec;
+  --tq-superficie: #ffffff;
+
+  /* As seis de domínio, nos valores do fundo claro. Os mesmos que
+     `PADROES_POR_LAYOUT.CLARO` guarda no servidor — há teste amarrando os dois. */
+  --ds-texto: #1a1714;
+  --ds-texto-apoio: #665e55;
+
+  /* O preço. O dourado da marca dá 2,2:1 sobre branco: aqui ele é o dourado
+     profundo, que dá 6,4:1 e pode ser texto. */
+  --tq-preco: #8a5b00;
+
+  /* Superfícies de apoio, espelhadas. `--tq-preto-2` continua sendo "um passo
+     fora do chão" — só que agora o passo é para baixo. */
+  --tq-preto-2: #dedbd5;
+  --tq-superficie-2: #f7f5f1;
+  --tq-superficie-3: #e2ded7;
+
+  /* Semânticos: no claro eles precisam de tinta escura e chão claro, e não do
+     inverso. Cor semântica invertida é o defeito clássico de tema duplo — o
+     vermelho de erro vira rosa neon e some. */
+  --tq-perigo: #b3261e;
+  --tq-perigo-fraco: #fdecea;
+  --tq-aviso-fundo: #fdf3e0;
+  --tq-aviso-tinta: #7a5200;
+  --tq-ok: #1a7a45;
+  --tq-ok-fraco: #e8f4ec;
+
+  /* Sombra existe no claro (ao contrário do escuro, onde ela não aparece), mas
+     de leve: a escada continua sendo quem faz a elevação. */
+  --tq-sombra: 0 4px 16px rgba(26, 23, 20, 0.12);
+}
+
+/* A COLUNA, derivada: ela fica entre o chão e o cartão, então acompanha sozinha
+   quando a loja troca um dos dois em Personalização. Atrás de `@supports`
+   porque custom property com valor inválido não cai para a declaração anterior
+   — ela deixa o `background` sem valor nenhum, e a coluna sumiria num
+   navegador sem `color-mix`. Os literais acima são esse plano B. */
+@supports (color: color-mix(in srgb, red, blue)) {
+  .tq-raiz,
+  .tq-raiz[data-fundo='claro'] {
+    --tq-lado-bg: color-mix(in srgb, var(--tq-fundo) 70%, var(--tq-superficie));
+  }
+}
+
+/* A LOGO no fundo claro ganha uma PLACA escura.
+   `.tq-logo` é a logo PRÓPRIA do canal — um PNG transparente que a loja
+   preparou para o fundo escuro do totem. Sobre papel ela desapareceria. A placa
+   devolve o chão escuro que o arquivo espera, e é a mesma ideia que `.tq-placa`
+   já usa no caminho inverso (a logo do Cardápio Web, branca, sobre o preto).
+   É isto que dispensa pedir um segundo arquivo de logo à loja.
+
+   Vale em TODA tela onde a marca aparece — espera, escolha de modo e o
+   cabeçalho do catálogo —, e não só no cabeçalho: nas três o chão é claro. */
+.tq-raiz[data-fundo='claro'] .tq-logo {
+  box-sizing: border-box;
+  background: #141210;
+  border-radius: 22px;
+  padding: clamp(14px, 2.4vw, 30px);
+}
+.tq-raiz[data-fundo='claro'] .tq-topo-marca .tq-logo {
+  border-radius: 16px;
+  padding: clamp(10px, 1.4vw, 20px);
+}
+
 /* Aparelho deitado (paisagem): o cabeçalho e a barra encolhem para o catálogo
    não virar uma fresta. Nenhuma outra medida do desenho muda. */
 @media (max-height: 760px) {
@@ -184,7 +314,9 @@
   border: none;
   cursor: pointer;
 }
-.tq-raiz :focus-visible { outline: 3px solid var(--tq-preto); outline-offset: 3px; }
+/* A tinta, não o chão: no fundo claro `--tq-preto` é papel, e um anel de foco
+   cor de papel sobre papel é um anel de foco que não existe. */
+.tq-raiz :focus-visible { outline: 3px solid var(--tq-branco); outline-offset: 3px; }
 :where(.tq-raiz ul) { list-style: none; margin: 0; padding: 0; }
 :where(.tq-raiz h1, .tq-raiz h2, .tq-raiz h3) { margin: 0; }
 :where(.tq-raiz p) { margin: 0; }
@@ -227,12 +359,13 @@
 /* -- Spinner --------------------------------------------------------------- */
 .tq-spinner {
   width: 30px; height: 30px; border-radius: 50%; display: inline-block; flex-shrink: 0;
+  /* Branco literal: o anel gira sobre o dourado do botão nos dois fundos. */
   border: 3px solid rgba(255, 255, 255, 0.18);
-  border-top-color: var(--tq-preto);
+  border-top-color: var(--tq-tinta);   /* a tinta do botão dourado, preta nos dois fundos */
   animation: tq-gira 0.8s linear infinite;
   vertical-align: middle;
 }
-.tq-spinner.claro { border-color: rgba(255, 255, 255, 0.3); border-top-color: var(--tq-amarelo); }
+.tq-spinner.claro { border-color: rgba(var(--tq-tinta-base), 0.3); border-top-color: var(--tq-amarelo); }
 @keyframes tq-gira { to { transform: rotate(360deg); } }
 
 /* -- Ícones ---------------------------------------------------------------- */
@@ -276,13 +409,16 @@
 .tq-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 /* Sobre o preto (barra do pedido, faixa de fechamento) o desabilitado não pode
    virar um borrão: fundo próprio em vez de opacidade sobre amarelo. */
-.tq-sobre-preto .tq-btn:disabled { opacity: 1; background: var(--tq-superficie-3); color: rgba(255, 255, 255, 0.5); border-color: transparent; }
+.tq-sobre-preto .tq-btn:disabled { opacity: 1; background: var(--tq-superficie-3); color: rgba(var(--tq-tinta-base), 0.5); border-color: transparent; }
 
 /* -- Cabeçalho ------------------------------------------------------------- */
 .tq-topo {
   flex: 0 0 auto; height: var(--tq-topo-h);
   display: flex; align-items: center; gap: 20px; padding: 0 24px;
-  background: var(--tq-superficie); border-bottom: 1px solid var(--tq-borda);
+  background: var(--tq-superficie);
+  /* SEM fio embaixo. Entre o cabeçalho e o conteúdo já existe mudança de
+     superfície; um traço a 34% por cima disso não separava nada — desenhava uma
+     listra clara atravessando a tela. */
 }
 .tq-topo-btn {
   min-height: 56px; min-width: 56px; padding: 0 20px; border-radius: 14px;
@@ -306,7 +442,7 @@
    sem moldura e sem peso. Só ganha corpo quando pede confirmação. */
 .tq-topo-cancelar {
   flex: 0 0 auto; min-height: 56px; padding: 0 14px; border-radius: 12px;
-  background: none; border: none; color: rgba(255, 255, 255, 0.62);
+  background: none; border: none; color: rgba(var(--tq-tinta-base), 0.62);
   font-family: var(--tq-fonte-corpo); font-weight: 400; font-size: clamp(14px, 1.76vw, 19px);
 }
 .tq-topo-cancelar:active { color: var(--tq-branco); }
@@ -419,8 +555,8 @@
    painel de outra cor teria criado o "marrom sujo" que a marca não quer. */
 .tq-lado {
   position: relative; flex: 0 0 var(--tq-lado-l);
-  background: var(--tq-preto); min-width: 0;
-  border-right: 1px solid rgba(255, 255, 255, 0.09);
+  background: var(--tq-lado-bg); min-width: 0;
+  border-right: 1px solid rgba(var(--tq-tinta-base), 0.09);
   display: flex; flex-direction: column;
 }
 .tq-lado-rolagem {
@@ -451,7 +587,7 @@
    tablet não mostra. */
 .tq-lado-fade {
   position: absolute; left: 0; right: 0; bottom: 0; height: 40px; pointer-events: none;
-  background: linear-gradient(to top, var(--tq-preto), rgba(0, 0, 0, 0));
+  background: linear-gradient(to top, var(--tq-lado-bg), transparent);
 }
 /* Cada categoria é uma LINHA INSCRITA, não um bloco colado na borda: raio próprio e
    margem lateral. Foi a troca que mais mudou a percepção da coluna — item que encosta
@@ -466,7 +602,7 @@
   /* Não é branco puro: a lista inteira em #fff competia com o nome do produto na grade,
      que é o texto que o cliente veio ler. 82% ainda passa folgado em legibilidade
      (17,1:1 sobre o preto) e devolve a hierarquia. */
-  color: rgba(255, 255, 255, 0.82);
+  color: rgba(var(--tq-tinta-base), 0.82);
   font-family: var(--tq-fonte-display);
   font-weight: 600; font-size: clamp(13px, 1.76vw, 19px); line-height: 1.2;
   letter-spacing: 0.02em; text-transform: uppercase;
@@ -474,7 +610,7 @@
 }
 /* Respiro entre as linhas, no lugar das divisórias. */
 .tq-cat + .tq-cat { margin-top: 4px; }
-.tq-cat:hover { background: rgba(255, 255, 255, 0.05); color: var(--tq-branco); }
+.tq-cat:hover { background: rgba(var(--tq-tinta-base), 0.05); color: var(--tq-branco); }
 /* O nome da categoria SEMPRE aparece, e quebra por palavra. O `anywhere` de
    antes partia "ACOMPANHAMENTOS" letra a letra numa coluna estreita e deixava
    categorias reduzidas praticamente ao emoji do nome. */
@@ -558,7 +694,7 @@
    alguma coisa. Quem separa o card do preto é a superfície dele. */
 .tq-card {
   position: relative; display: flex; flex-direction: column; text-align: left; overflow: hidden;
-  background: var(--tq-superficie); border-radius: 18px;
+  background: var(--tq-superficie); border: 1px solid var(--tq-card-fio); border-radius: 18px;
   transition: transform 0.1s ease, box-shadow 0.15s ease;
 }
 .tq-card:active:not(:disabled) { transform: scale(0.99); }
@@ -595,7 +731,7 @@
    sozinha comia 385px de altura e empurrava nome e preço para fora do campo de
    leitura — três produtos por tela em vez de seis. */
 @media (min-width: 900px) { .tq-card .tq-foto { aspect-ratio: 3 / 2; } }
-.tq-foto-vazia { display: grid; place-items: center; color: rgba(255, 255, 255, 0.34); }
+.tq-foto-vazia { display: grid; place-items: center; color: rgba(var(--tq-tinta-base), 0.34); }
 
 /* -- Preço ----------------------------------------------------------------- */
 .tq-preco { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
@@ -604,7 +740,7 @@
    de alto contraste (8,8:1). Sem etiqueta colorida — o destaque é o valor. */
 .tq-apartir { color: var(--tq-texto-2); line-height: 1.1; }
 .tq-preco-de { font-size: clamp(14px, 1.76vw, 19px); color: var(--tq-texto-3); text-decoration: line-through; font-weight: 700; }
-.tq-preco-por { color: var(--ds-destaque); }
+.tq-preco-por { color: var(--tq-preco); }
 .tq-selo {
   align-self: flex-start; padding: 7px 16px; border-radius: 8px;
   background: var(--tq-preto); color: var(--tq-branco);
@@ -637,7 +773,7 @@
 .tq-barra-total { margin-left: auto; font-size: clamp(22px, 3.52vw, 38px); color: var(--tq-amarelo); }
 .tq-barra-vazia {
   display: flex; align-items: center; justify-content: center; gap: 12px;
-  min-height: calc(var(--tq-barra-h) - 32px); color: rgba(255, 255, 255, 0.55);
+  min-height: calc(var(--tq-barra-h) - 32px); color: rgba(var(--tq-tinta-base), 0.55);
   font-size: clamp(15px, 2.04vw, 22px); text-align: center;
 }
 .tq-qtd {
@@ -693,9 +829,9 @@
 .tq-det-nome { font-size: clamp(28px, 5.65vw, 61px); line-height: 1.02; letter-spacing: -0.015em; }
 .tq-det-desc { font-size: clamp(16px, 2.31vw, 25px); color: var(--tq-texto-claro); margin-top: 8px; }
 .tq-det-preco { flex: 0 0 auto; align-items: flex-end; text-align: right; }
-.tq-det-preco .tq-preco-valor { font-size: clamp(28px, 5vw, 54px); color: var(--tq-amarelo); }
+.tq-det-preco .tq-preco-valor { font-size: clamp(28px, 5vw, 54px); color: var(--tq-preco); }
 .tq-det-preco .tq-preco-de { color: var(--tq-texto-claro); }
-.tq-det-preco .tq-preco-por { color: var(--tq-amarelo); }
+.tq-det-preco .tq-preco-por { color: var(--tq-preco); }
 .tq-det { width: min(920px, 92%); margin: 0 auto; padding: 26px 0 40px; }
 
 /* Chips do que falta: atalho e diagnóstico ao mesmo tempo. Em combo, é o que
@@ -798,7 +934,7 @@
 .tq-op.falta .tq-op-nome { color: var(--tq-texto); }
 .tq-op.falta .tq-op-desc, .tq-op.falta .tq-op-preco { color: var(--tq-texto-2); }
 .tq-op-falta {
-  padding: 6px 12px; border-radius: 8px; background: rgba(255, 255, 255, 0.16); color: var(--tq-texto);
+  padding: 6px 12px; border-radius: 8px; background: rgba(var(--tq-tinta-base), 0.16); color: var(--tq-texto);
   font-family: var(--tq-fonte-display);
   font-weight: 800; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; white-space: nowrap;
 }
@@ -830,7 +966,7 @@
   /* Único ponto de digitação livre do quiosque: aqui a seleção volta a valer. */
   user-select: text; -webkit-user-select: text;
 }
-.tq-obs:focus { outline: none; border-color: var(--tq-preto); }
+.tq-obs:focus { outline: none; border-color: var(--tq-branco); }
 
 /* -- Rodapé de ação do item ------------------------------------------------ */
 .tq-rodape {
@@ -901,7 +1037,7 @@
 /* A quantidade abre o nome, sem ficha nem cor: é leitura de comanda. */
 .tq-linha-qtd { margin-right: 6px; }
 .tq-linha-ops { margin-top: 8px; font-size: clamp(15px, 1.94vw, 21px); color: var(--tq-texto-2); line-height: 1.5; }
-.tq-linha-ops li::before { content: '• '; color: rgba(255, 255, 255, 0.45); }
+.tq-linha-ops li::before { content: '• '; color: rgba(var(--tq-tinta-base), 0.45); }
 .tq-linha-obs { margin-top: 8px; font-size: clamp(14px, 1.76vw, 19px); font-style: italic; color: var(--tq-texto-2); }
 .tq-linha-mudou { margin-top: 8px; font-weight: 800; font-size: clamp(13px, 1.67vw, 18px); letter-spacing: 0.06em; text-transform: uppercase; }
 .tq-linha-lado { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 14px; }
@@ -933,7 +1069,7 @@
 .tq-metodo[aria-pressed='true'] {
   background: var(--tq-amarelo); border-color: var(--tq-amarelo-3); border-width: 3px; padding: 17px 21px;
 }
-.tq-metodo[aria-pressed='true'] .tq-op-marca { background: var(--tq-preto); border-color: var(--tq-preto); color: var(--tq-amarelo); }
+.tq-metodo[aria-pressed='true'] .tq-op-marca { background: var(--tq-branco); border-color: var(--tq-branco); color: var(--tq-amarelo); }
 .tq-metodo-nome { flex: 1 1 auto; font-family: var(--tq-fonte-display); font-weight: 600; font-size: clamp(21px, 3.06vw, 33px); }
 
 /* O recado de que nada é cobrado aqui deixa de ser rodapé e vira a primeira
@@ -1043,8 +1179,8 @@
   border-radius: 26px; padding: clamp(30px, 5vw, 54px) 24px clamp(32px, 5.65vw, 61px);
   background-image: repeating-linear-gradient(
     135deg,
-    rgba(255, 255, 255, 0) 0 26px,
-    rgba(255, 255, 255, 0.032) 26px 52px
+    rgba(var(--tq-tinta-base), 0) 0 26px,
+    rgba(var(--tq-tinta-base), 0.032) 26px 52px
   );
 }
 .tq-painel-rot { color: var(--tq-texto-claro); font-size: clamp(17px, 2.87vw, 31px); letter-spacing: 0.32em; }
@@ -1180,7 +1316,7 @@
 }
 .tq-espera-pontos span {
   width: 12px; height: 12px; border-radius: 50%;
-  background: rgba(255, 255, 255, 0.34);
+  background: rgba(var(--tq-tinta-base), 0.34);
 }
 .tq-espera-pontos span.ativo { background: var(--tq-amarelo); }
 
@@ -1288,7 +1424,7 @@
    `transform`, que não provoca layout. */
 .tq-lado-trilho {
   position: absolute; top: 14px; bottom: 14px; right: 0; width: 2px;
-  border-radius: 2px; background: rgba(255, 255, 255, 0.06);
+  border-radius: 2px; background: rgba(var(--tq-tinta-base), 0.06);
   overflow: hidden; pointer-events: none;
 }
 .tq-lado-polegar {
@@ -1323,8 +1459,11 @@
 .tq-topo-marca {
   flex: 0 0 var(--tq-lado-l); min-width: 0;
   display: grid; place-items: center; padding: 12px;
-  background: var(--tq-preto);
-  border-right: 1px solid rgba(255, 255, 255, 0.09);
+  /* O mesmo degrau da coluna: a caixa da logo é o TOPO dela, não outra coisa.
+     Com o chão do quiosque aqui, ela virava um bloco encaixado na coluna em vez
+     de ser a coluna — e no fundo claro isso ficava gritante. */
+  background: var(--tq-lado-bg);
+  border-right: 1px solid rgba(var(--tq-tinta-base), 0.09);
 }
 /* A logo do topo é menor que a da abertura: aqui ela identifica, não se apresenta. */
 .tq-topo-marca .tq-logo { width: 100%; max-height: 96px; }

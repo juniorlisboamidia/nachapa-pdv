@@ -3345,6 +3345,29 @@ body.theme-dark .apr-contagem, body.theme-dark .apr-qr-legenda, body.theme-dark 
    + `ttm-seg-on`), que é outra coisa. */
 .ttm-aparencia-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; }
 .ttm-secao-t { margin: 0 0 6px; font-size: 15px; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; color: var(--app-text-2); }
+/* "Cores DO FUNDO CLARO" — a segunda metade do título diz de qual conjunto a seção é.
+   Sem ela o gestor edita seis cores sem saber que existem doze. */
+.ttm-secao-de { font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--app-text-3); }
+
+/* ── Os dois fundos do totem ──
+   Cartões, e não um <select>: a escolha é VISUAL, e uma lista de duas palavras esconderia
+   justamente o que distingue um do outro. A escada de quatro faixas é a prévia honesta —
+   chão, coluna, cartão e o dourado do preço. */
+.ttm-fundos { display: flex; flex-wrap: wrap; gap: 12px; }
+.ttm-fundo-opt {
+  flex: 1 1 240px; display: flex; align-items: center; gap: 12px; text-align: left;
+  padding: 12px; border: 2px solid var(--app-border); border-radius: 12px;
+  background: var(--app-surface); cursor: pointer; min-height: 76px;
+  transition: border-color .15s, background .15s;
+}
+.ttm-fundo-opt:hover:not(:disabled) { border-color: #f0b46a; }
+.ttm-fundo-opt.on { border-color: #ea580c; background: var(--app-highlight); }
+.ttm-fundo-opt:disabled { opacity: .55; cursor: default; }
+.ttm-fundo-escada { flex: 0 0 auto; display: flex; width: 56px; height: 56px; border-radius: 9px; overflow: hidden; border: 1px solid var(--app-border); }
+.ttm-fundo-escada span { flex: 1 1 0; }
+.ttm-fundo-txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ttm-fundo-txt strong { font-size: 14px; color: var(--app-text); }
+.ttm-fundo-txt span { font-size: 12px; line-height: 1.35; color: var(--app-text-3); }
 /* Cores: seis campos, duas ou três colunas conforme couber. */
 .ttm-cores { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; margin-top: 14px; }
 .ttm-cor-linha { display: flex; gap: 8px; align-items: center; }

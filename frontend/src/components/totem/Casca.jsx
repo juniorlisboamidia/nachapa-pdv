@@ -11,7 +11,7 @@ import { PROPRIEDADES, propriedadesDe } from '../totemTema'
 //
 // `position: relative` é o que ancora o que flutua dentro do quiosque — aviso
 // passageiro, sobreposição de envio e o alerta de inatividade.
-export default function Casca({ children, tokens, posicaoCategorias = 'esquerda' }) {
+export default function Casca({ children, tokens, posicaoCategorias = 'esquerda', fundo = 'padrao' }) {
   const raizRef = useRef(null)
 
   // As cores do canal entram por CSSOM, uma propriedade de cada vez, e só as seis que o
@@ -31,8 +31,22 @@ export default function Casca({ children, tokens, posicaoCategorias = 'esquerda'
     for (const [prop, valor] of pares) el.style.setProperty(prop, valor)
   }, [tokens])
 
-  // A posição das categorias vira ATRIBUTO, e o CSS decide o resto. Nada de JSX duplicado
-  // nem de ordem de elementos trocada no React: a árvore é uma só, e quem inverte é uma
-  // regra de layout.
-  return <div className="tq-raiz" ref={raizRef} data-posicao-categorias={posicaoCategorias}>{children}</div>
+  // A posição das categorias e o FUNDO viram ATRIBUTO, e o CSS decide o resto. Nada de JSX
+  // duplicado nem de ordem de elementos trocada no React: a árvore é uma só, e quem
+  // inverte é uma regra de layout.
+  //
+  // O fundo em particular NÃO podia entrar pelo CSSOM acima. Aquele caminho escreve seis
+  // cores; o fundo é a escada inteira — o chão, a coluna, o fio, a tinta rebaixada, o
+  // dourado do preço. Escrever tudo isso por JavaScript seria mudar de lugar uma decisão
+  // de desenho. Aqui vai um atributo, e a folha resolve num bloco só.
+  return (
+    <div
+      className="tq-raiz"
+      ref={raizRef}
+      data-posicao-categorias={posicaoCategorias}
+      data-fundo={fundo}
+    >
+      {children}
+    </div>
+  )
 }

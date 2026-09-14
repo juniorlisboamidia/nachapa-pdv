@@ -200,15 +200,61 @@ const round2 = (n) => Math.round(n * 100) / 100;
    rede caindo, aparência corrompida), aqui são o que o admin vê como "padrão". Os dois
    têm de concordar, e há teste para isso. Mudar um sem o outro faz a tela de configuração
    mentir sobre o que o cliente está vendo. */
-export const PADROES = Object.freeze({
-  fundo: '#000000',       // --ds-fundo
-  cartao: '#131211',      // --tq-superficie (e não --ds-cartao: o marrom da marca lê como
-                          //   sujeira sob foto de comida — desvio consciente da spec §5.2)
-  texto: '#ffffff',       // --ds-texto
-  textoApoio: '#d79e00',  // --ds-texto-apoio
-  acaoFundo: '#d79e00',   // --ds-botao-fundo
-  acaoTexto: '#000000',   // --ds-botao-texto
+/* ── OS DOIS FUNDOS ───────────────────────────────────────────────────────────────────
+   O fundo não é uma sétima cor: é a RELAÇÃO entre as seis. Quem é mais claro que quem,
+   onde entra fio, o que o dourado significa. Por isso ele é uma escolha própria, e as seis
+   cores passam a ser ajuste fino POR CIMA da escolha.
+
+   PADRÃO é a escada de carvão: o chão é o tom mais escuro, a coluna sobe um passo, o
+   cartão sobe outro. O preto puro de antes saiu — com #000 embaixo e #131211 em cima, o
+   cartão era 1,2% mais claro que o chão, e quem separava um do outro era a FOTOGRAFIA, não
+   a interface. Sem foto (produto em falta, catálogo novo), a grade sumia.
+
+   CLARO é a mesma escada espelhada. Não é outro desenho: mesmo viés quente no neutro,
+   mesma ausência de sombra, mesmo fio único. O que muda é onde a escada começa.
+
+   O DOURADO DO PREÇO não está aqui de propósito. Ele é derivado do fundo, na folha
+   (`--tq-preco`), porque no claro o dourado da marca dá 2,2:1 sobre branco e simplesmente
+   não pode ser texto. Cor que a loja não pode escolher errado não vira campo. */
+export const PADROES_POR_LAYOUT = Object.freeze({
+  PADRAO: Object.freeze({
+    fundo: '#0f0e0d',       // --ds-fundo      · o chão do catálogo
+    cartao: '#1e1b18',      // --tq-superficie · e não --ds-cartao: o marrom da marca lê
+                            //   como sujeira sob foto de comida (spec §5.2)
+    texto: '#ffffff',       // --ds-texto
+    textoApoio: '#d79e00',  // --ds-texto-apoio
+    acaoFundo: '#d79e00',   // --ds-botao-fundo
+    acaoTexto: '#000000',   // --ds-botao-texto
+  }),
+  CLARO: Object.freeze({
+    fundo: '#eae8e4',
+    cartao: '#ffffff',
+    texto: '#1a1714',
+    textoApoio: '#665e55',  // 4,7:1 sobre o chão e 6,0:1 sobre o cartão
+    acaoFundo: '#d79e00',   // o dourado da marca aguenta ser CHAPA no claro…
+    acaoTexto: '#000000',   // …com tinta preta em cima: 8,8:1, o par do próprio guia
+  }),
 });
+
+/* Atalho para o fundo padrão. Continua exportado porque é o que a folha do quiosque
+   embarca como valor de partida, e há teste amarrando os dois. */
+export const PADROES = PADROES_POR_LAYOUT.PADRAO;
+
+export const LAYOUTS = Object.freeze(['PADRAO', 'CLARO']);
+export const LAYOUT_PADRAO = 'PADRAO';
+export const MOTIVO_LAYOUT = 'LAYOUT_INVALIDO';
+
+/* Fundo válido, ou `null`. Não normaliza caixa: isto vem de um seletor com duas opções,
+   como a posição das categorias. */
+export function normalizarLayout(valor) {
+  return LAYOUTS.includes(valor) ? valor : null;
+}
+
+/* LEITURA — o fundo que vale, com tolerância. Valor torto guardado no banco não derruba o
+   totem: ele cai no padrão e a loja continua vendendo. */
+export function layoutEfetivo(valor) {
+  return normalizarLayout(valor) ?? LAYOUT_PADRAO;
+}
 
 export const POSICOES = Object.freeze(['esquerda', 'direita']);
 export const POSICAO_PADRAO = 'esquerda';
@@ -254,20 +300,58 @@ export function validarPatch(bruto) {
   return { ok: erros.length === 0, definir, remover, erros };
 }
 
-/* Os overrides guardados + o patch = os overrides novos. O que sai fica FORA do objeto —
-   não vira `null` guardado, que seria um override de valor nulo em vez da ausência dele. */
-export function aplicarPatch(guardados, patch) {
-  const { tokens } = sanitizarTokens(guardados);
-  const novos = { ...tokens, ...(patch?.definir ?? {}) };
-  for (const chave of (patch?.remover ?? [])) delete novos[chave];
-  return novos;
+/* ── O COFRE: um conjunto de overrides POR FUNDO ──────────────────────────────────────
+   `TotemConfiguracao.tokens` guarda `{ PADRAO: {...}, CLARO: {...} }`.
+
+   Dois conjuntos, e não um, porque as cores de um fundo não servem no outro: um
+   `texto: '#ffffff'` escolhido no escuro transformaria o claro em branco sobre papel. Com
+   o cofre, trocar de fundo troca a paleta junto — e voltar traz de volta o que estava.
+
+   LEITURA TOLERANTE, e é ela que dispensa migração de dado: quem já tinha o formato ANTIGO
+   (um objeto plano com as seis chaves) é lido como o conjunto do fundo padrão, que é
+   exatamente o que aquelas cores sempre foram. A primeira gravação normaliza a forma.
+   Nada de `UPDATE` em coluna JSON de produção para converter o que a leitura já resolve. */
+export function lerCofre(bruto) {
+  const vazio = () => Object.fromEntries(LAYOUTS.map((l) => [l, {}]));
+  if (!ehObjeto(bruto)) return vazio();
+  // Formato antigo: nenhuma chave de fundo no topo, mas chaves de COR. Vira o padrão.
+  const temFundo = LAYOUTS.some((l) => ehObjeto(bruto[l]));
+  if (!temFundo) {
+    const cofre = vazio();
+    cofre[LAYOUT_PADRAO] = sanitizarTokens(bruto).tokens;
+    return cofre;
+  }
+  const cofre = vazio();
+  for (const l of LAYOUTS) cofre[l] = sanitizarTokens(bruto[l]).tokens;
+  return cofre;
 }
 
-/* As seis cores que o quiosque vai realmente desenhar: padrão por baixo, override por
-   cima. Sempre completo — a tela e o diagnóstico de contraste nunca recebem meia paleta. */
-export function coresEfetivas(guardados) {
-  const { tokens } = sanitizarTokens(guardados);
-  return { ...PADROES, ...tokens };
+/* Os overrides de UM fundo. Fundo torto cai no padrão, como em todo lugar. */
+export function tokensDoLayout(bruto, layout) {
+  return lerCofre(bruto)[layoutEfetivo(layout)];
+}
+
+/* Os overrides guardados + o patch = o COFRE novo, com um só conjunto tocado. O que sai
+   fica FORA do objeto — não vira `null` guardado, que seria um override de valor nulo em
+   vez da ausência dele. */
+export function aplicarPatch(guardados, patch, layout) {
+  const cofre = lerCofre(guardados);
+  const alvo = layoutEfetivo(layout);
+  const novos = { ...cofre[alvo], ...(patch?.definir ?? {}) };
+  for (const chave of (patch?.remover ?? [])) delete novos[chave];
+  return { ...cofre, [alvo]: novos };
+}
+
+/* As seis cores que o quiosque vai realmente desenhar NESTE fundo: padrão do fundo por
+   baixo, override do fundo por cima. Sempre completo — a tela e o diagnóstico de contraste
+   nunca recebem meia paleta.
+
+   O fundo é parâmetro e não é opcional na prática: sem ele o servidor devolveria a paleta
+   escura como efetiva enquanto a tela real está clara, e o diagnóstico de contraste diria
+   que está tudo bem medindo o par errado. */
+export function coresEfetivas(guardados, layout) {
+  const alvo = layoutEfetivo(layout);
+  return { ...PADROES_POR_LAYOUT[alvo], ...tokensDoLayout(guardados, alvo) };
 }
 
 /* O bloco `aparencia` do bootstrap público.
@@ -277,9 +361,11 @@ export function coresEfetivas(guardados) {
    aqui — o bootstrap é relido a cada 5 min por aparelho, e 200 KB de base64 nessa
    frequência é desperdício puro. Vai a versão, e o tablet busca os bytes uma vez. */
 export function aparenciaPublica({ config, dispositivo } = {}) {
-  const { tokens } = sanitizarTokens(config?.tokens);
+  // O fundo primeiro: é ele que diz QUAL conjunto de overrides desce para o tablet.
+  const layoutFundo = layoutEfetivo(config?.layoutFundo);
   return {
-    tokens,
+    layoutFundo,
+    tokens: tokensDoLayout(config?.tokens, layoutFundo),
     posicaoCategorias: posicaoEfetiva({
       override: dispositivo?.posicaoCategoriasOverride,
       padrao: config?.posicaoCategoriasPadrao,

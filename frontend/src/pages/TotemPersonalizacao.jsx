@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import api from '../services/api'
 import Toast from '../components/Toast'
+import ConfirmDialog from '../components/ConfirmDialog'
 import { razaoDeContraste, normalizarHex, AA_NORMAL } from '../components/totemTema'
 
 // Loja Digital › Totem › Personalização.
@@ -23,8 +24,25 @@ const ROTULOS = {
   fundo: 'Fundo', cartao: 'Cartão', texto: 'Texto',
   textoApoio: 'Texto de apoio', acaoFundo: 'Ação', acaoTexto: 'Texto da ação',
 }
+/* Os dois fundos. O rótulo é o que o gestor lê; a escada é a prévia — três degraus e o
+   dourado, que é literalmente o que distingue um do outro. */
+const FUNDOS = [
+  {
+    id: 'PADRAO',
+    nome: 'Fundo padrão',
+    resumo: 'Escuro. É como o totem sai de fábrica.',
+    escada: ['#0f0e0d', '#161513', '#1e1b18', '#fab319'],
+  },
+  {
+    id: 'CLARO',
+    nome: 'Fundo claro',
+    resumo: 'O mesmo desenho, espelhado. A logo ganha uma placa escura.',
+    escada: ['#eae8e4', '#f2f0ec', '#ffffff', '#8a5b00'],
+  },
+]
+
 const AJUDA = {
-  fundo: 'O preto da tela inteira.',
+  fundo: 'A tela inteira, atrás de tudo.',
   cartao: 'O bloco atrás de cada produto.',
   texto: 'Nome do produto, preço, títulos.',
   textoApoio: 'Descrições e informações secundárias.',
@@ -40,6 +58,10 @@ export default function TotemPersonalizacao() {
   const [dados, setDados] = useState(null)      // resposta do GET, o que está SALVO
   const [rascunho, setRascunho] = useState({})  // { chave: hex } — o que está na tela
   const [posicao, setPosicao] = useState('esquerda')
+  // O fundo que a loja está EDITANDO, que é sempre o que está salvo: trocar de fundo grava
+  // na hora, e não fica pendurado no botão Salvar junto com as cores. Ver `trocarFundo`.
+  const [fundo, setFundo] = useState('PADRAO')
+  const [confirmandoFundo, setConfirmandoFundo] = useState(null)
   const arquivoRef = useRef(null)
 
   // Não marca estado de forma síncrona: o efeito de montagem só AGENDA o trabalho.
@@ -50,6 +72,7 @@ export default function TotemPersonalizacao() {
       // que está no vidro, mesmo quando ela vem do padrão.
       setRascunho(r.data?.efetivas ?? {})
       setPosicao(r.data?.posicaoCategoriasPadrao ?? 'esquerda')
+      setFundo(r.data?.layoutFundo ?? 'PADRAO')
       setErro(null)
     })
     .catch(() => setErro('Não foi possível ler a aparência agora.'))
@@ -119,6 +142,38 @@ export default function TotemPersonalizacao() {
       setToast({ message: `${ROTULOS[chave]} voltou ao padrão.`, type: 'success' })
     } catch {
       setToast({ message: 'Não foi possível restaurar.', type: 'error' })
+    } finally { setSalvando(false) }
+  }
+
+  /* Trocar o fundo GRAVA na hora, e não espera o botão Salvar.
+
+     Não é atalho: as seis cores são guardadas por fundo, e é o fundo que diz qual conjunto
+     está em edição. Deixar a troca pendurada no Salvar junto com as cores criaria a
+     pergunta "em qual fundo estas cores vão cair?" — e qualquer resposta seria surpresa
+     para metade dos casos.
+
+     Por isso também a confirmação: se houver cor mexida e não salva, ela se perde, porque
+     pertence ao fundo que está saindo. O gestor decide, com o modal dizendo o que perde. */
+  async function trocarFundo(id) {
+    if (salvando || id === fundo) return
+    if (temMudanca) { setConfirmandoFundo(id); return }
+    await gravarFundo(id)
+  }
+
+  async function gravarFundo(id) {
+    setSalvando(true)
+    setConfirmandoFundo(null)
+    try {
+      const r = await api.put('/totem/aparencia', { layoutFundo: id })
+      setDados((d) => ({ ...d, ...r.data }))
+      // O rascunho é REFEITO das efetivas do fundo novo. Manter as cores anteriores na
+      // tela mostraria a paleta de um fundo sobre a prévia do outro.
+      setRascunho(r.data?.efetivas ?? {})
+      setFundo(r.data?.layoutFundo ?? id)
+      setPosicao(r.data?.posicaoCategoriasPadrao ?? posicao)
+      setToast({ message: `${FUNDOS.find((f) => f.id === id)?.nome} aplicado. Os totens trocam na próxima vez que carregarem o cardápio.`, type: 'success' })
+    } catch {
+      setToast({ message: 'Não foi possível trocar o fundo.', type: 'error' })
     } finally { setSalvando(false) }
   }
 
@@ -201,7 +256,9 @@ export default function TotemPersonalizacao() {
 
       {/* ── CORES ── */}
       <div className="table-card" style={{ padding: 16, marginBottom: 16 }}>
-        <h2 className="ttm-secao-t">Cores</h2>
+        <h2 className="ttm-secao-t">
+          Cores <span className="ttm-secao-de">do {FUNDOS.find((f) => f.id === fundo)?.nome.toLowerCase() ?? 'fundo padrão'}</span>
+        </h2>
         <div className="ttm-nota" style={{ marginTop: 0 }}>
           O que você não mudar continua com a cor padrão do totem.
         </div>
@@ -254,12 +311,45 @@ export default function TotemPersonalizacao() {
           </div>
         )}
 
-        <Previa cores={rascunho} />
+        <Previa cores={rascunho} padroes={padroes} />
       </div>
 
       {/* ── LAYOUT ── */}
       <div className="table-card" style={{ padding: 16, marginBottom: 16 }}>
         <h2 className="ttm-secao-t">Layout</h2>
+
+        {/* O fundo vem ANTES da posição das categorias: é a decisão maior das duas, e é
+            ela que define quais cores a seção acima está editando. */}
+        <div className="form-group">
+          <span className="form-label">Fundo</span>
+          <div className="ttm-fundos" role="radiogroup" aria-label="Fundo do totem">
+            {FUNDOS.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                role="radio"
+                aria-checked={fundo === f.id}
+                className={'ttm-fundo-opt' + (fundo === f.id ? ' on' : '')}
+                disabled={salvando}
+                onClick={() => trocarFundo(f.id)}
+              >
+                {/* A escada, que é literalmente o que separa um fundo do outro:
+                    chão, coluna, cartão e o dourado do preço. */}
+                <span className="ttm-fundo-escada" aria-hidden="true">
+                  {f.escada.map((cor) => <span key={cor} style={{ background: cor }} />)}
+                </span>
+                <span className="ttm-fundo-txt">
+                  <strong>{f.nome}</strong>
+                  <span>{f.resumo}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+          <div className="ttm-dica">
+            Cada fundo guarda as SUAS cores. Trocar aqui troca a paleta junto — e voltar traz de volta o que estava.
+          </div>
+        </div>
+
         <div className="form-group" style={{ margin: 0, maxWidth: 360 }}>
           <label className="form-label" htmlFor="apa-posicao">Posição das categorias</label>
           <select id="apa-posicao" className="form-input" value={posicao} disabled={salvando} onChange={(e) => setPosicao(e.target.value)}>
@@ -273,23 +363,37 @@ export default function TotemPersonalizacao() {
       <button type="button" className="btn btn-primary" onClick={salvar} disabled={!temMudanca || salvando}>
         {salvando ? 'Salvando…' : 'Salvar'}
       </button>
+
+      <ConfirmDialog
+        open={!!confirmandoFundo}
+        loading={salvando}
+        title="Trocar o fundo agora?"
+        message={confirmandoFundo ? FUNDOS.find((f) => f.id === confirmandoFundo)?.nome : ''}
+        description="Você mexeu em cores e ainda não salvou. Elas pertencem ao fundo atual e se perdem na troca — cada fundo guarda as suas."
+        confirmLabel="Trocar mesmo assim"
+        onConfirm={() => gravarFundo(confirmandoFundo)}
+        onCancel={() => setConfirmandoFundo(null)}
+      />
     </>
   )
 }
 
 // Prévia com as cores do rascunho, antes de salvar. Não é o quiosque inteiro: é um card de
 // produto e um botão, que é onde as seis cores se encontram.
-function Previa({ cores }) {
-  const c = (k, alt) => normalizarHex(cores[k]) ?? alt
+function Previa({ cores, padroes }) {
+  // A reserva vem dos PADRÕES DO FUNDO em vigor, e não de hexadecimais digitados aqui:
+  // com dois fundos, um literal escuro pintaria a prévia do claro de preto enquanto o
+  // gestor mexe. O padrão já é do fundo certo porque o servidor o devolve assim.
+  const c = (k) => normalizarHex(cores[k]) ?? padroes?.[k] ?? '#000000'
   return (
-    <div className="ttm-previa" style={{ background: c('fundo', '#000000') }}>
-      <div className="ttm-previa-card" style={{ background: c('cartao', '#131211') }}>
+    <div className="ttm-previa" style={{ background: c('fundo') }}>
+      <div className="ttm-previa-card" style={{ background: c('cartao') }}>
         <div className="ttm-previa-foto" />
-        <div className="ttm-previa-nome" style={{ color: c('texto', '#ffffff') }}>X BURGUER</div>
-        <div className="ttm-previa-desc" style={{ color: c('textoApoio', '#d79e00') }}>Carne 56G, queijo muçarela, alface e tomate</div>
-        <div className="ttm-previa-preco" style={{ color: c('texto', '#ffffff') }}>R$ 16,00</div>
+        <div className="ttm-previa-nome" style={{ color: c('texto') }}>X BURGUER</div>
+        <div className="ttm-previa-desc" style={{ color: c('textoApoio') }}>Carne 56G, queijo muçarela, alface e tomate</div>
+        <div className="ttm-previa-preco" style={{ color: c('texto') }}>R$ 16,00</div>
       </div>
-      <div className="ttm-previa-botao" style={{ background: c('acaoFundo', '#d79e00'), color: c('acaoTexto', '#000000') }}>
+      <div className="ttm-previa-botao" style={{ background: c('acaoFundo'), color: c('acaoTexto') }}>
         Ir para o pagamento
       </div>
     </div>

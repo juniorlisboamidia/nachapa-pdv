@@ -30,12 +30,19 @@
      lê como sujeira — a spec §5.2 registra o desvio. Quem desenha o cartão no quiosque é
      `--tq-superficie`, então é ele que a loja configura.
 
-   · As outras cinco apontam para tokens `--ds-*` porque os papéis do quiosque
-     (`--tq-preto`, `--tq-branco`, `--tq-amarelo`, `--tq-tinta`, `--tq-texto-2`) já são
-     `var()` deles. Escrever no `--ds-*` propaga para todos os papéis de uma vez; escrever
-     em cada papel deixaria um esquecido. */
+   · `fundo` aponta para `--tq-fundo` pelo mesmo motivo, e a partir da frente dos dois
+     fundos. `--ds-fundo` guarda o #000 da marca e continua lá como registro; o chão do
+     quiosque saiu do preto puro (#0f0e0d) porque com #000 embaixo e o cartão 1,2% mais
+     claro em cima quem separava um do outro era a FOTOGRAFIA, não a interface — e no
+     fundo claro ele é papel. Quem desenha o chão é `--tq-fundo`, então é ele que a loja
+     configura, e `--tq-preto` continua sendo apelido dele.
+
+   · As outras quatro apontam para tokens `--ds-*` porque os papéis do quiosque
+     (`--tq-branco`, `--tq-amarelo`, `--tq-tinta`, `--tq-texto-2`) já são `var()` deles.
+     Escrever no `--ds-*` propaga para todos os papéis de uma vez; escrever em cada papel
+     deixaria um esquecido. */
 export const PROPRIEDADES = Object.freeze({
-  fundo: '--ds-fundo',
+  fundo: '--tq-fundo',
   cartao: '--tq-superficie',
   texto: '--ds-texto',
   textoApoio: '--ds-texto-apoio',
@@ -64,6 +71,29 @@ export function propriedadesDe(tokens) {
     fora.push([PROPRIEDADES[chave], v])
   }
   return fora
+}
+
+/* Qual FUNDO o quiosque desenha.
+
+   O fundo não é uma sétima cor: é a RELAÇÃO entre as seis — quem é mais claro que quem,
+   onde entra fio, o que o dourado significa. Por isso ele não passa pelo mapa de
+   propriedades acima; ele vira um ATRIBUTO na raiz, e quem sabe o que fazer com ele é a
+   folha, num bloco só. Escrever a escada inteira por CSSOM seria mover para o JavaScript
+   uma decisão que é de desenho.
+
+   Minúsculo aqui porque é valor de atributo HTML, no mesmo formato de
+   `data-posicao-categorias`. O servidor fala 'PADRAO'/'CLARO'; a conversão é uma linha e
+   mora neste lado, que é o lado que escreve o atributo.
+
+   Valor desconhecido cai no padrão. É a mesma tolerância do resto: bootstrap velho, chave
+   nova que o servidor ainda não manda ou dado torto no banco não podem deixar a tela sem
+   fundo — eles caem no carvão e a loja continua vendendo. */
+export const FUNDOS = Object.freeze(['padrao', 'claro'])
+export const FUNDO_PADRAO = 'padrao'
+
+export function fundoDoTotem(aparencia) {
+  const v = typeof aparencia?.layoutFundo === 'string' ? aparencia.layoutFundo.toLowerCase() : ''
+  return FUNDOS.includes(v) ? v : FUNDO_PADRAO
 }
 
 /* Qual logo o quiosque mostra.

@@ -1,0 +1,13 @@
+-- Totem: o FUNDO do canal — 'PADRAO' (carvão) ou 'CLARO'. Aditiva.
+--
+-- Com default, então toda loja existente entra no fundo padrão sem backfill.
+--
+-- A coluna `tokens` NÃO é convertida aqui. A partir desta versão ela guarda um conjunto de
+-- overrides POR fundo — { "PADRAO": {...}, "CLARO": {...} } —, e o formato antigo (um
+-- objeto plano com as seis chaves) é lido como o conjunto do fundo padrão, que é
+-- exatamente o que aquelas cores sempre foram. Quem resolve isso é `lerCofre`, em
+-- backend/totemAparencia.js, e a primeira gravação normaliza a forma.
+--
+-- É de propósito: um UPDATE em coluna JSON de produção para converter o que a leitura já
+-- resolve é risco sem ganho — e ele teria de acertar de primeira, porque não tem volta.
+ALTER TABLE "TotemConfiguracao" ADD COLUMN "layoutFundo" TEXT NOT NULL DEFAULT 'PADRAO';
