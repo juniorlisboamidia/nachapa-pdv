@@ -3399,7 +3399,10 @@ body.theme-dark .apr-contagem, body.theme-dark .apr-qr-legenda, body.theme-dark 
   flex: 0 0 24%; display: grid; place-items: center; padding: 8px;
   border-right: 1px solid rgba(255, 255, 255, 0.09);
 }
-.ttm-pv-marca img { max-width: 100%; max-height: 44px; object-fit: contain; }
+/* Em PROPORÇÃO, não em pixels — a logo ocupa ~72% da altura da faixa no aparelho
+   (totem.css, `.tq-topo-faixa.com-capa .tq-topo-marca .tq-logo`), e a prévia mentiria se
+   mostrasse uma marca menor do que a que o cliente vai ver. */
+.ttm-pv-marca img { max-width: 100%; max-height: 78%; object-fit: contain; }
 .ttm-pv-inicial {
   width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center;
   font-size: 17px; font-weight: 800; line-height: 1;

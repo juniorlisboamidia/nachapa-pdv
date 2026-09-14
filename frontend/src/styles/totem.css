@@ -1372,4 +1372,25 @@
      de 1920. COM capa quem manda é a proporção, e este mínimo não morde. */
   .tq-topo-faixa { min-height: clamp(120px, 11vh, 210px); }
   .tq-topo-marca .tq-logo { max-height: 128px; }
+
+  /* ── A LOGO ACOMPANHA A CAPA ──────────────────────────────────────────────
+     O teto de 128px acima é em PIXELS, e pixel não sabe a altura da faixa em que está.
+     Com capa, a faixa é 3:1 sobre o que sobra depois da coluna de categorias — 274px no
+     alvo em pé. A logo ficava em 128 deles, e quase metade da caixa era preto vazio; numa
+     tela maior a marca encolhia em proporção enquanto a arte ao lado crescia.
+
+     Aqui o teto passa a ser da mesma família de unidade que o resto desta folha usa: a
+     largura da tela. A conta é direta — a faixa mede (100vw − 24vw) ÷ 3 ≈ 25,3vw de
+     altura, e 18vw é ~72% disso. No alvo a logo sai de 128px para ~194px, e a sobra deixa
+     de ser vazio para virar respiro.
+
+     Escopado a `.com-capa` de propósito: sem capa a faixa é uma fresta de ~150px, e uma
+     logo de 194px ali empurraria a faixa inteira para baixo. E escopado a ≥900px porque
+     abaixo disso a faixa fica curta demais para o teto caber — a logo esticaria a faixa,
+     a capa esticaria junto (`stretch`) e a arte perderia o 3:1 no `cover`. */
+  .tq-topo-faixa.com-capa .tq-topo-marca { padding: clamp(14px, 2.2vw, 34px); }
+  .tq-topo-faixa.com-capa .tq-topo-marca .tq-logo { max-height: clamp(120px, 18vw, 260px); }
+  /* A PLACA cresce menos. Ela é branca: no mesmo tamanho da logo transparente viraria um
+     bloco claro disputando a atenção com a arte, que é o oposto do que esta faixa quer. */
+  .tq-topo-faixa.com-capa .tq-topo-marca .tq-placa img { max-height: clamp(96px, 13vw, 190px); }
 }
