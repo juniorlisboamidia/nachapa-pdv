@@ -3445,6 +3445,11 @@ body.theme-dark .apr-contagem, body.theme-dark .apr-qr-legenda, body.theme-dark 
 /* Onde o produto já está, ao lado do Tirar. */
 .ttm-dst-onde { font-size: 11.5px; font-weight: 600; color: #ea580c; padding: 0 6px; }
 .ttm-dst-acoes .btn { min-width: 32px; padding: 4px 8px; }
+/* Botões só de ícone: quadrados, ícone centrado. O X é em NEGRITO — traço mais grosso que
+   o do menu, porque aqui ele é a ação, não uma seta de navegação. */
+.ttm-dst-acoes .ttm-dst-ico { width: 32px; height: 32px; min-width: 32px; padding: 0; display: inline-grid; place-items: center; }
+.ttm-ico { width: 16px; height: 16px; flex: 0 0 auto; }
+.ttm-ico-x { stroke-width: 3; }
 
 
 /* ── Os dois fundos do totem ──

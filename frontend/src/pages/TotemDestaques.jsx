@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import api from '../services/api'
 import Toast from '../components/Toast'
+import { Icon } from '../components/sidebarIcons.jsx'
 
 // Loja Digital › Totem › Personalização › Destaques da vitrine.
 //
@@ -195,9 +196,12 @@ export default function TotemDestaques() {
                               : <span className="ttm-dst-meta">{p.categoria} · {moeda(p.preco)}</span>}
                           </div>
                           <div className="ttm-dst-acoes">
-                            <button type="button" className="btn btn-secondary btn-sm" disabled={salvando || i === 0} onClick={() => mover(e.id, i, -1)} aria-label={`Subir ${p.nome ?? chave}`}>↑</button>
-                            <button type="button" className="btn btn-secondary btn-sm" disabled={salvando || i === chaves.length - 1} onClick={() => mover(e.id, i, 1)} aria-label={`Descer ${p.nome ?? chave}`}>↓</button>
-                            <button type="button" className="btn btn-danger btn-sm" disabled={salvando} onClick={() => tirar(chave)} aria-label={`Tirar ${p.nome ?? chave}`}>Tirar</button>
+                            {/* Ícones do mesmo conjunto do menu (Lucide, mesmo wrapper): botões de
+                                lista não podem ter uma cara e a sidebar outra. Só ícone, com o
+                                rótulo no aria-label. */}
+                            <button type="button" className="btn btn-secondary btn-sm ttm-dst-ico" disabled={salvando || i === 0} onClick={() => mover(e.id, i, -1)} aria-label={`Subir ${p.nome ?? chave}`} title="Subir"><Icon name="chevronUp" extra="ttm-ico" /></button>
+                            <button type="button" className="btn btn-secondary btn-sm ttm-dst-ico" disabled={salvando || i === chaves.length - 1} onClick={() => mover(e.id, i, 1)} aria-label={`Descer ${p.nome ?? chave}`} title="Descer"><Icon name="chevronDown" extra="ttm-ico" /></button>
+                            <button type="button" className="btn btn-danger btn-sm ttm-dst-ico" disabled={salvando} onClick={() => tirar(chave)} aria-label={`Tirar ${p.nome ?? chave}`} title="Tirar"><Icon name="x" extra="ttm-ico ttm-ico-x" /></button>
                           </div>
                         </li>
                       )
@@ -246,7 +250,7 @@ export default function TotemDestaques() {
                       {onde ? (
                         <>
                           <span className="ttm-dst-onde">{onde === 'superior' ? 'Superior' : 'Inferior'}</span>
-                          <button type="button" className="btn btn-danger btn-sm" disabled={salvando} onClick={() => tirar(p.chave)}>Tirar</button>
+                          <button type="button" className="btn btn-danger btn-sm ttm-dst-ico" disabled={salvando} onClick={() => tirar(p.chave)} aria-label={`Tirar ${p.nome ?? p.chave}`} title="Tirar"><Icon name="x" extra="ttm-ico ttm-ico-x" /></button>
                         </>
                       ) : (
                         <>

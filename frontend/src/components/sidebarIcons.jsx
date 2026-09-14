@@ -158,6 +158,16 @@ const ICONS = {
   // package, building-2, megaphone, users, wrench, monitor-smartphone, clipboard-check,
   // tag, tablet, cpu. Mesmo viewBox 24 e mesmo stroke do wrapper — só a chave muda.
   // Nenhum destes se repete entre categorias principais. (TV Indoor: monitor-play, quando existir.)
+  // Setas e X das listas ordenáveis (Totem › Destaques): chevron-up, chevron-down e x do
+  // Lucide, para os botões de lista falarem a mesma língua do menu.
+  chevronUp: <path d="m18 15-6-6-6 6" />,
+  chevronDown: <path d="m6 9 6 6 6-6" />,
+  x: (
+    <>
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
+    </>
+  ),
   casa: (
     <>
       <path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" />
