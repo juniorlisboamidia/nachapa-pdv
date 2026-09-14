@@ -57,7 +57,7 @@ import {
   normalizarPosicao, aparenciaPublica, diagnosticoDeContraste,
   LAYOUTS, MOTIVO_LAYOUT, normalizarLayout, layoutEfetivo, PADROES_POR_LAYOUT, tokensDoLayout,
   CHAMADA_PADRAO, CHAMADA_MAX, MOTIVO_CHAMADA, validarChamada,
-  TITULO_MAX, SUBTITULO_MAX, MOTIVO_TITULO, MOTIVO_SUBTITULO, validarTexto,
+  TITULO_MAX, SUBTITULO_MAX, MOTIVO_TITULO, MOTIVO_SUBTITULO, validarTexto, FUNDO_ESPERA_MEDIDA,
   LOGO_MAX_BYTES, validarLogoDataUrl, decodificarDataUrl, proximaVersaoLogo,
 } from './totemAparencia.js';
 // Totem › Destaques: os produtos da esteira da vitrine. O banco guarda ID; nome, preço e
@@ -9683,7 +9683,13 @@ app.get('/api/totem/aparencia/logo', async (req, res) => {
 // separado: os bytes moram em TotemEsperaFundo, e não na linha de configuração.
 const estadoDoFundo = (cfg, tem) => {
   const versao = Number.isInteger(cfg?.fundoEsperaVersao) && cfg.fundoEsperaVersao >= 0 ? cfg.fundoEsperaVersao : 0;
-  return { tem: tem === true, versao, url: `/api/totem/aparencia/fundo?v=${versao}`, limiteKb: Math.round(BANNER_IMG_MAX / 1024) };
+  return {
+    tem: tem === true, versao, url: `/api/totem/aparencia/fundo?v=${versao}`,
+    limiteKb: Math.round(BANNER_IMG_MAX / 1024),
+    // A medida vai do servidor para o admin não ter um número escrito à mão que a folha do
+    // quiosque possa desmentir depois.
+    medida: FUNDO_ESPERA_MEDIDA,
+  };
 };
 
 app.get('/api/totem/aparencia/fundo', async (req, res) => {

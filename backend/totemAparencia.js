@@ -284,6 +284,12 @@ export const MOTIVO_CHAMADA = 'CHAMADA_INVALIDA';
    Não têm PADRÃO de fábrica, ao contrário da chamada. Um botão sem texto é um botão
    quebrado, então lá o padrão é obrigatório; um título ausente é uma escolha de desenho
    legítima — a loja que só quer a foto e o botão não deve ser obrigada a inventar frase. */
+/* A medida recomendada da FOTO DE FUNDO da vitrine: a metade de cima da tela, e não a tela
+   inteira. A foto só aparece ali — recomendar 1080 × 1920 fazia a loja enquadrar uma arte
+   que teria metade cortada. 960 é exatamente 50% de 1920, e a folha do quiosque divide a
+   tela em duas metades iguais para o número ser verdade. */
+export const FUNDO_ESPERA_MEDIDA = Object.freeze({ largura: 1080, altura: 960 });
+
 export const TITULO_MAX = 40;
 export const SUBTITULO_MAX = 90;
 export const MOTIVO_TITULO = 'TITULO_INVALIDO';

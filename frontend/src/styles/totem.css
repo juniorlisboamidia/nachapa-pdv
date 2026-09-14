@@ -1239,7 +1239,9 @@
 }
 
 .tq-vit-alto {
-  position: relative; flex: 1 1 52%; min-height: 0; overflow: hidden;
+  /* METADE exata, e não "mais ou menos metade": a medida recomendada da foto é 1080 × 960,
+     e 960 é 50% de 1920. Se este número mudar, a medida em totemAparencia.js muda junto. */
+  position: relative; flex: 1 1 50%; min-height: 0; overflow: hidden;
   display: flex; flex-direction: column; justify-content: flex-end;
   padding: clamp(32px, 5vh, 88px) clamp(32px, 6vw, 72px) clamp(28px, 4vh, 64px);
 }
@@ -1274,7 +1276,7 @@
    Cada fileira é a lista DUPLICADA no JSX, e o deslocamento vai até -50%: a segunda cópia
    chega na posição exata em que a primeira começou, e o laço fecha sem salto. */
 .tq-vit-baixo {
-  flex: 1 1 48%; min-height: 0; overflow: hidden;
+  flex: 1 1 50%; min-height: 0; overflow: hidden;
   display: flex; flex-direction: column; justify-content: center;
   gap: clamp(14px, 2.2vh, 34px);
   padding-block: clamp(14px, 2vh, 32px);

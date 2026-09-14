@@ -240,7 +240,10 @@ export default function TotemPersonalizacao() {
     if (!arquivo) return
     setSalvando(true)
     try {
-      const dataUrl = await reduzirImagem(arquivo, 1920, 'image/jpeg')
+      // Lado maior a 1440, e não 1920: o alvo é 1080 × 960, então 1920 só engordaria o
+      // arquivo. A folga sobre 1080 existe para uma foto mandada em pé (errada, mas comum)
+      // não ficar com menos de 800px de largura depois de reduzida.
+      const dataUrl = await reduzirImagem(arquivo, 1440, 'image/jpeg')
       const r = await api.put('/totem/aparencia/fundo', { dataUrl })
       setDados((d) => ({ ...d, fundo: r.data.fundo }))
       setToast({ message: 'Foto de fundo atualizada.', type: 'success' })
@@ -338,24 +341,32 @@ export default function TotemPersonalizacao() {
           <div>
             <div className="form-group">
               <label className="form-label" htmlFor="apa-fundo">Foto de fundo</label>
-              <input
-                ref={fundoRef}
-                id="apa-fundo"
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                className="form-input"
-                disabled={salvando}
-                onChange={(e) => enviarFundo(e.target.files?.[0])}
-              />
-              <div className="ttm-dica">
-                Recomendado <strong>1080 × 1920 px</strong> — a tela usa a metade de cima e recorta o resto.
-                PNG, JPG ou WEBP, até {dados?.fundo?.limiteKb ?? 700} KB; a imagem é reduzida antes de subir.
+              <div className="ttm-fundo-linha">
+                <input
+                  ref={fundoRef}
+                  id="apa-fundo"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="form-input"
+                  disabled={salvando}
+                  onChange={(e) => enviarFundo(e.target.files?.[0])}
+                />
+                {/* Tirar é ação secundária: link ao lado do seletor, no mesmo estilo do
+                    "usar padrão" das cores — não um botão inteiro embaixo. */}
+                {dados?.fundo?.tem ? (
+                  <button type="button" className="btn btn-link ttm-usar-padrao" onClick={removerFundo} disabled={salvando}>
+                    Tirar a foto
+                  </button>
+                ) : null}
               </div>
-              {dados?.fundo?.tem ? (
-                <button type="button" className="btn btn-secondary" style={{ marginTop: 8 }} onClick={removerFundo} disabled={salvando}>
-                  Tirar a foto
-                </button>
-              ) : null}
+              <div className="ttm-dica">
+                {/* A medida é a do ESPAÇO onde a foto aparece — a metade de cima —, e vem do
+                    servidor para não haver número escrito à mão aqui que a folha do quiosque
+                    possa desmentir. */}
+                Recomendado <strong>{dados?.fundo?.medida?.largura ?? 1080} × {dados?.fundo?.medida?.altura ?? 960} px</strong> —
+                a foto ocupa a metade de cima da tela. PNG, JPG ou WEBP, até {dados?.fundo?.limiteKb ?? 700} KB;
+                a imagem é reduzida antes de subir.
+              </div>
             </div>
 
             <div className="form-group" style={{ maxWidth: 460 }}>
