@@ -72,7 +72,7 @@ const MAX_POLL_DISPLAY = 20        // 20 × 3 s = 60 s
 const MS_LIBERAR_NOVO = 20_000     // no 202, "Novo pedido" só aparece depois disso
 
 const MODOS = {
-  onsite: { titulo: 'Comer aqui', sub: 'Vou comer na loja', ico: 'prato' },
+  onsite: { titulo: 'Comer aqui', sub: 'Vou comer na loja', ico: 'casa' },
   takeout: { titulo: 'Levar', sub: 'Vou levar para viagem', ico: 'sacola' },
 }
 const KIND_LABEL = { money: 'Dinheiro', debit_card: 'Cartão de débito', credit_card: 'Cartão de crédito' }
@@ -708,7 +708,6 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
   if (tela === 'inicio') {
     conteudo = (
       <TelaInicio
-        loja={loja}
         modos={orderTypes.map((t) => ({ id: t, ...MODOS[t] }))}
         aoEscolher={escolherModo}
       />

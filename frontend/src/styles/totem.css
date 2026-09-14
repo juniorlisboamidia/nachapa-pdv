@@ -161,6 +161,11 @@
      texto. Cor que só tem uma resposta certa não vira campo. */
   --tq-preco: var(--ds-destaque);
 
+  /* Grão fino, em SVG embutido. Gradiente escuro grande faz BANDING em painel de
+     tablet — faixas visíveis onde a cor deveria ser contínua —, e um ruído de 4% quebra
+     as faixas sem sujar a tela. Embutido porque o quiosque roda com a rede caindo. */
+  --tq-grao: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.045'/%3E%3C/svg%3E");
+
   /* Forma */
   --tq-raio: 18px;
   --tq-raio-2: 12px;
@@ -468,13 +473,34 @@
    deixava o conteúdo ocupando menos da metade de uma tela de 1920 de altura, com
    preto morto em cima e embaixo. Aqui o bloco de ações CRESCE para tomar a
    sobra, e as medidas verticais olham a altura. */
+/* ── ESCOLHA DO MODO ───────────────────────────────────────────────────────
+   O CHÃO É DESENHADO, e é a única tela do quiosque que precisa disso: no repouso há a
+   arte da loja, no catálogo há as fotos dos produtos, aqui não há imagem nenhuma — o
+   bootstrap entrega `loja = { nome, logo }` e mais nada (spec §6.A). Chapada de preto,
+   ela era a tela mais fria do aparelho.
+
+   Duas brasas: uma subindo do rodapé, onde estão as barras douradas, e um resto de fogo
+   no topo. O brilho de baixo empurra a atenção PARA o alvo em vez de disputar com ele.
+   Mais o grão, que é o que impede o degradê de virar faixas no painel do tablet. */
 .tq-inicio {
-  flex: 1 1 auto; position: relative; background: var(--tq-preto); color: var(--tq-branco);
+  flex: 1 1 auto; position: relative; color: var(--tq-branco);
+  background:
+    radial-gradient(120% 62% at 50% 108%, rgba(215, 158, 0, 0.30) 0%, rgba(140, 84, 8, 0.14) 38%, transparent 72%),
+    radial-gradient(90% 50% at 50% -8%, rgba(122, 74, 20, 0.20) 0%, transparent 70%),
+    var(--tq-grao),
+    var(--tq-fundo);
   display: flex; flex-direction: column; justify-content: center;
-  gap: clamp(28px, 6vh, 130px); padding: clamp(36px, 4vh, 88px) clamp(36px, 5vw, 72px);
+  gap: clamp(28px, 5vh, 96px); padding: clamp(36px, 4vh, 88px) clamp(36px, 5vw, 72px);
 }
-.tq-inicio-topo { display: flex; align-items: center; gap: clamp(24px, 5.28vw, 57px); }
-@media (max-width: 599px) { .tq-inicio-topo { flex-direction: column; text-align: center; } }
+/* No fundo CLARO o mesmo laranja escureceria o papel em vez de aquecê-lo: sobre branco,
+   sombra colorida lê como sujeira. Aqui o calor vem do dourado sozinho, mais fraco, e o
+   fogo do topo sai de cena. */
+.tq-raiz[data-fundo='claro'] .tq-inicio {
+  background:
+    radial-gradient(120% 62% at 50% 108%, rgba(215, 158, 0, 0.26) 0%, rgba(215, 158, 0, 0.08) 42%, transparent 74%),
+    var(--tq-grao),
+    var(--tq-fundo);
+}
 
 /* A logo PRÓPRIA do canal: direto sobre o fundo, sem placa, sem card, sem moldura e sem
    sombra. Quem a enviou preparou o arquivo com transparência justamente para o preto do
@@ -497,40 +523,42 @@
   display: grid; place-items: center;
 }
 .tq-placa img { display: block; width: clamp(150px, 26vw, 340px); max-height: 20vh; object-fit: contain; }
-.tq-inicio-marca {
-  flex: 0 0 auto; width: clamp(130px, 17vw, 220px); aspect-ratio: 1; border-radius: 26px;
-  background: var(--tq-amarelo); color: var(--tq-tinta);
-  display: grid; place-items: center; font-size: clamp(64px, 9vw, 110px); line-height: 1;
+/* A pergunta cresceu junto com a saída da logo: ela é o único texto da tela agora, e
+   `text-wrap: balance` divide as duas linhas em pedaços parecidos em vez de deixar uma
+   palavra sozinha embaixo. */
+.tq-inicio-tit {
+  font-size: clamp(44px, 10vw, 148px); line-height: 0.94; letter-spacing: -0.02em;
+  text-wrap: balance; max-width: 14ch;
 }
 
-.tq-inicio-txt { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
-.tq-inicio-tit { font-size: clamp(44px, 8.6vw, 128px); line-height: 0.94; letter-spacing: -0.02em; }
-.tq-inicio-tit span { display: block; }
-.tq-inicio-sub { font-size: clamp(17px, 3.52vw, 38px); color: var(--tq-texto-claro); }
+/* BARRAS DEITADAS, uma sobre a outra — e não dois cartões lado a lado.
+   Com o texto na horizontal, "Vou levar para viagem" cabe numa linha só; num cartão
+   estreito ele quebrava em três. E é a única forma que aceita um terceiro modo (mesa,
+   retirada agendada) sem redesenhar a tela: entra como terceira barra e nada mais muda.
 
-/* Alvo grande, não paredão. 46vh (880px em 1920) deixava o ícone e o texto
-   boiando num campo amarelo vazio; 30vh dá um bloco alto e ainda preenchido. O
-   resto da altura vira respiro do conjunto, que é o que uma tela de repouso
-   pede. */
-/* Os dois cartões são o assunto da tela, e crescem para dizer isso. */
+   Sem altura fixa. Os cartões viviam travados em `34vh` e o resto da tela virava preto
+   morto; aqui a altura sai do conteúdo e o respiro fica no `gap` do conjunto. */
 .tq-modos {
-  flex: 0 1 auto; display: grid; grid-template-columns: 1fr 1fr;
-  gap: clamp(16px, 3.52vw, 38px); height: clamp(240px, 34vh, 620px);
+  flex: 0 0 auto; display: flex; flex-direction: column;
+  gap: clamp(16px, 2.6vh, 44px);
 }
-.tq-modos.um { grid-template-columns: minmax(0, 1fr); }
 .tq-modo {
-  background: var(--tq-amarelo); color: var(--tq-tinta); border-radius: 28px;
-  height: 100%; padding: clamp(24px, 4.81vw, 52px) 20px;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: clamp(18px, 3vh, 40px);
+  background: var(--tq-amarelo); color: var(--tq-tinta);
+  border-radius: clamp(18px, 3.6vw, 42px);
+  padding: clamp(22px, 5.4vw, 60px) clamp(22px, 5vw, 56px);
+  display: flex; flex-direction: row; align-items: center; text-align: left;
+  gap: clamp(18px, 4.4vw, 50px);
   transition: background 0.14s ease, transform 0.1s ease;
 }
 .tq-modo:active { background: var(--tq-amarelo-2); transform: scale(0.985); }
-/* A frase agora é a do cliente e é mais longa: quebra em duas linhas
-   equilibradas em vez de espremer o corpo do cartão. */
+/* O ícone é dimensionado AQUI e não no JSX: ele acompanha a mesma régua de `vw` do
+   rótulo ao lado (5,65vw), a 1,5× — 92px contra 61px no alvo em pé. Número em pixels no
+   componente faria os dois descolarem na primeira mudança de escala. */
+.tq-modo-ico { flex: 0 0 auto; width: clamp(40px, 8.4vw, 92px); height: clamp(40px, 8.4vw, 92px); }
+.tq-modo-txt { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .tq-modo-t {
   font-size: clamp(23px, 5.65vw, 61px); letter-spacing: 0.01em; text-transform: uppercase;
-  line-height: 1.05; text-wrap: balance; max-width: 12ch;
+  line-height: 1.05;
 }
 .tq-modo-s { font-size: clamp(15px, 2.87vw, 31px); opacity: 0.66; }
 /* O ícone acompanha a altura do cartão: em 96px fixos ele sumia dentro de um

@@ -8,27 +8,26 @@
 // produto. Emoji que faz parte do NOME de uma categoria vinda do Cardápio Web
 // continua aparecendo — aquilo é dado da loja, não interface (spec §5.4/§9.1).
 const ICONES = {
-  // Comer na loja: PRATO visto de cima, dois círculos concêntricos.
+  // ── O PAR DA ESCOLHA DE MODO ──────────────────────────────────────────────────────
+  // CASA e SACOLA, os dois desenhados na mesma família do resto do PDV: são os mesmos
+  // `house` e `shopping-bag` que `components/sidebarIcons.jsx` já usa no menu do admin,
+  // path por path. Um totem e um painel administrativo do mesmo produto não têm por que
+  // desenhar uma casa de dois jeitos.
   //
-  // Antes eram garfo e faca soltos. A dupla de talheres é legível, mas a 140px num
-  // cartão amarelo ela vira dois riscos verticais desequilibrados — muito traço, pouca
-  // forma. O prato é uma silhueta fechada, geométrica, e faz par de verdade com a
-  // silhueta fechada da sacola: as duas escolhas passam a ter o mesmo peso visual.
-  //
-  // Abstrato demais sozinho? Não neste lugar: ele vem com "Vou comer na loja" escrito
-  // embaixo, e o par prato/sacola é o vocabulário que qualquer praça de alimentação usa.
-  prato: (
+  // Antes eram PRATO (dois círculos concêntricos) e uma sacola própria. O prato era uma
+  // abstração que só funcionava porque vinha com a frase embaixo; a casa diz "aqui
+  // dentro" sem precisar de legenda, que é o que se quer num alvo visto de um metro.
+  casa: (
     <>
-      <circle cx="12" cy="12" r="8" />
-      <circle cx="12" cy="12" r="3.2" />
+      <path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" />
+      <path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
     </>
   ),
-  // Cantos arredondados no fundo e a alça um pouco mais alta: mesma família geométrica
-  // do prato, em vez do trapézio de cantos vivos de antes.
   sacola: (
     <>
-      <path d="M5.6 7.6h12.8l-1.1 12.3a1.7 1.7 0 0 1-1.7 1.5H8.4a1.7 1.7 0 0 1-1.7-1.5L5.6 7.6z" />
-      <path d="M9 7.6V5.9a3 3 0 0 1 6 0v1.7" />
+      <path d="M16 10a4 4 0 0 1-8 0" />
+      <path d="M3.103 6.034h17.794" />
+      <path d="M3.4 5.467a2 2 0 0 0-.4 1.2V20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6.667a2 2 0 0 0-.4-1.2l-2-2.667A2 2 0 0 0 17 2H7a2 2 0 0 0-1.6.8z" />
     </>
   ),
   carrinho: (
