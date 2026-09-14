@@ -343,9 +343,9 @@ export default function TotemPersonalizacao() {
           />
           {/* A prévia mostra em CAIXA ALTA porque é assim que o totem escreve — a folha
               aplica `text-transform`. Sem ela o gestor digita em minúsculas e leva um
-              susto no vidro. */}
+              susto no vidro. E mostra SÓ o texto: o botão não desenha mais nada além dele. */}
           <div className="ttm-chamada-previa" aria-hidden="true">
-            + {(chamadaLimpa || dados?.chamadaPadrao || 'Toque para começar').toUpperCase()}
+            {(chamadaLimpa || dados?.chamadaPadrao || 'Toque para começar').toUpperCase()}
           </div>
           <div id="apa-chamada-ajuda" className={chamadaLonga ? 'ttm-erro-campo' : 'ttm-dica'} role={chamadaLonga ? 'alert' : undefined}>
             {chamadaLonga

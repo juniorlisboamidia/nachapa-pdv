@@ -1240,7 +1240,7 @@
    interface. Meia largura fazia dela um botão no meio do preto. */
 .tq-espera-chamada {
   flex: 0 0 auto;
-  display: flex; align-items: center; justify-content: center; gap: 18px;
+  display: flex; align-items: center; justify-content: center;
   width: min(760px, 100%);
   min-height: clamp(96px, 12vh, 168px); padding: 20px clamp(28px, 5vw, 56px);
   border-radius: 20px;
@@ -1273,7 +1273,6 @@
   0% { background-position: 220% 0; }
   100% { background-position: -220% 0; }
 }
-.tq-espera-ico { flex: 0 0 auto; }
 
 /* -- Espera COM banner ----------------------------------------------------- */
 /* A arte é a tela. `position: relative` na raiz do botão para o véu e a chamada se

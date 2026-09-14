@@ -1,4 +1,3 @@
-import { Ico } from './icones'
 import LogoDaLoja from './LogoDaLoja'
 import useCarrossel from './useCarrossel'
 
@@ -76,8 +75,11 @@ export default function TelaEspera({ loja, banners, chamada, aoTocar }) {
         </div>
       )}
 
+      {/* Só o texto. O "+" que ficava à esquerda saiu junto com a chamada virar campo de
+          Personalização: um sinal fixo ao lado de uma frase que a loja escreve passa a
+          contradizer metade das frases possíveis — "Peça já o seu" com um mais na frente
+          não quer dizer nada. O botão mostra o que a loja digitou, e nada mais. */}
       <div className="tq-espera-chamada">
-        <Ico nome="mais" tam={40} traco={2.4} className="tq-espera-ico" />
         <span className="tq-disp tq-disp-forte">{texto}</span>
       </div>
 
