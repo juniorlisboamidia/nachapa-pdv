@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { aparelhoApi } from '../services/api'
 import { mensagemErro } from '../components/totemCarrinho'
 import TotemQuiosque from './TotemQuiosque'
+import TvIndoorPlayer from './TvIndoorPlayer'
 import Casca from '../components/totem/Casca'
 import TelaAviso from '../components/totem/TelaAviso'
 // A casca do quiosque vive em arquivo próprio, importado SÓ aqui: é esta página
@@ -152,13 +153,20 @@ export default function DispositivoPareamento() {
     if (sessao.aparelho.tipo === 'TOTEM') {
       return <TotemQuiosque loja={sessao.loja} onNaoPareado={verificar} />
     }
-    // TV_INDOOR: o aparelho está conectado, mas a tela dele é de outra fase.
+    // TV_INDOOR: a parede da loja. Sem casca do quiosque, sem tokens do totem, sem cara de
+    // página — é outro canal, e a folha dele (`styles/tv.css`) é carregada pelo próprio
+    // player. O mesmo endereço serve os dois porque quem decide é o COOKIE, não a URL.
+    if (sessao.aparelho.tipo === 'TV_INDOOR') {
+      return <TvIndoorPlayer aparelho={sessao.aparelho} loja={sessao.loja} />
+    }
+    // Tipo que esta versão do aparelho não conhece (um canal novo, tablet com build
+    // antigo). Não é erro do operador da loja, e não há nada para ele fazer aqui.
     return (
       <Casca>
         <TelaAviso
           icone="pausa"
-          titulo="Este aparelho é uma TV"
-          texto={`“${sessao.aparelho.nome}” está conectado${sessao.loja?.nome ? ` à loja ${sessao.loja.nome}` : ''}, mas a tela da TV ainda não está disponível. Nada a fazer aqui por enquanto.`}
+          titulo="Aparelho conectado"
+          texto={`“${sessao.aparelho.nome}” está conectado${sessao.loja?.nome ? ` à loja ${sessao.loja.nome}` : ''}, mas esta versão não conhece a tela deste tipo de aparelho.`}
           acoes={<button type="button" className="tq-btn tq-btn-claro" onClick={desconectar}>Desconectar este aparelho</button>}
         />
       </Casca>

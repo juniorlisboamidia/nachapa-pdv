@@ -166,9 +166,23 @@ export const grupos = [
           { to: '/totem/pagamentos', label: 'Formas de pagamento', icon: 'financeiro' },
         ],
       },
-      // Canal irmão, ainda placeholder: sem banco, sem endpoint, sem tela. Megafone porque
-      // TV indoor é mídia — e o `monitorSmartphone` já é a marca do grupo inteiro.
-      { to: '/tv-indoor', label: 'TV Indoor', icon: 'megaphone', area: 'aparelhos' },
+      // Canal IRMÃO do totem, com a mesma estrutura de subgrupo: as telas (os aparelhos),
+      // o acervo de imagens e a programação são naturezas diferentes, e o PDV resolve
+      // profundidade com subcategoria — nunca com item solto no mesmo nível.
+      //
+      // A ORDEM importa: `primeiraFolha` (Visão Geral) e o redirect de `/tv-indoor` apontam
+      // para a PRIMEIRA folha. Telas fica em cima porque é por onde a loja começa — sem uma
+      // TV cadastrada, conteúdo e playlist não têm onde aparecer.
+      //
+      // Megafone porque TV indoor é mídia; o `monitorSmartphone` já é a marca do grupo.
+      {
+        label: 'TV Indoor', icon: 'megaphone', area: 'aparelhos',
+        itens: [
+          { to: '/tv-indoor/telas', label: 'Telas', icon: 'cpu' },
+          { to: '/tv-indoor/conteudos', label: 'Conteúdos', icon: 'marketing' },
+          { to: '/tv-indoor/playlists', label: 'Playlists', icon: 'relatorios' },
+        ],
+      },
     ],
   },
 ];

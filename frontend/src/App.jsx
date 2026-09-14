@@ -54,6 +54,9 @@ import TotemPersonalizacao from './pages/TotemPersonalizacao'
 import TotemBanners from './pages/TotemBanners'
 import TotemDestaques from './pages/TotemDestaques'
 import DispositivoPareamento from './pages/DispositivoPareamento'
+import TvIndoorTelas from './pages/TvIndoorTelas'
+import TvIndoorConteudos from './pages/TvIndoorConteudos'
+import TvIndoorPlaylists from './pages/TvIndoorPlaylists'
 
 function TelaCarregando() {
   return (
@@ -167,7 +170,13 @@ export default function App() {
             <Route path="totem/banners" element={<Navigate to="/totem/banners/capa" replace />} />
             <Route path="totem/banners/:tipo" element={<TotemBanners />} />
             <Route path="totem/pagamentos" element={<EmConstrucao titulo="Formas de pagamento" descricao="Em breve." />} />
-            <Route path="tv-indoor" element={<EmConstrucao titulo="TV Indoor" descricao="Em breve." />} />
+            {/* TV Indoor — canal IRMÃO do totem: mesma área de permissão (`aparelhos`),
+                mesma infraestrutura de Dispositivo/pareamento/heartbeat, domínio próprio.
+                `/tv-indoor` cai na PRIMEIRA folha, como o `/totem` faz. */}
+            <Route path="tv-indoor" element={<Navigate to="/tv-indoor/telas" replace />} />
+            <Route path="tv-indoor/telas" element={<TvIndoorTelas />} />
+            <Route path="tv-indoor/conteudos" element={<TvIndoorConteudos />} />
+            <Route path="tv-indoor/playlists" element={<TvIndoorPlaylists />} />
             {/* Compatibilidade: os endereços antigos continuam abrindo o lugar novo. Link
                 anotado, favorito do navegador e aba esquecida aberta não podem virar 404. */}
             <Route path="aparelhos" element={<Navigate to="/totem/aparelhos" replace />} />

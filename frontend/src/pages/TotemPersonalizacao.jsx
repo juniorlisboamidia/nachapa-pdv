@@ -3,6 +3,7 @@ import api from '../services/api'
 import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
 import PreviaVitrine from '../components/PreviaVitrine'
+import { reduzirImagem } from '../lib/reduzirImagem'
 import { razaoDeContraste, normalizarHex, AA_NORMAL } from '../components/totemTema'
 
 // Loja Digital › Totem › Personalização.
@@ -224,7 +225,7 @@ export default function TotemPersonalizacao() {
     if (!arquivo) return
     setSalvando(true)
     try {
-      const dataUrl = await reduzirImagem(arquivo)
+      const dataUrl = await reduzirImagem(arquivo, 640, 'image/png')
       const r = await api.put('/totem/aparencia/logo', { dataUrl })
       setDados((d) => ({ ...d, logo: r.data.logo }))
       setToast({ message: 'Logo do totem atualizada.', type: 'success' })
@@ -612,29 +613,6 @@ function Previa({ cores, padroes }) {
   )
 }
 
-// Reduz no CLIENTE antes de subir: 300 KB é teto de servidor, não de logo. Uma imagem de
-// 4000px vinda do celular do gestor passaria do limite sem necessidade nenhuma.
-function reduzirImagem(arquivo, lado = 640, formato = 'image/png') {
-  return new Promise((resolve, reject) => {
-    const leitor = new FileReader()
-    leitor.onerror = () => reject(new Error('leitura'))
-    leitor.onload = () => {
-      const img = new Image()
-      img.onerror = () => reject(new Error('imagem'))
-      img.onload = () => {
-        const escala = Math.min(1, lado / Math.max(img.width, img.height))
-        const w = Math.max(1, Math.round(img.width * escala))
-        const h = Math.max(1, Math.round(img.height * escala))
-        const canvas = document.createElement('canvas')
-        canvas.width = w
-        canvas.height = h
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h)
-        // PNG preserva a transparência, que é o que uma logo costuma precisar. A foto de
-        // fundo pede JPEG: é fotografia, e transparência ali não serve para nada.
-        resolve(formato === 'image/jpeg' ? canvas.toDataURL('image/jpeg', 0.88) : canvas.toDataURL('image/png'))
-      }
-      img.src = leitor.result
-    }
-    leitor.readAsDataURL(arquivo)
-  })
-}
+// `reduzirImagem` mora em `lib/reduzirImagem.js` — era uma cópia daqui e outra de
+// TotemBanners, com assinaturas diferentes. A logo continua pedindo 640 px em PNG (é a
+// transparência que ela precisa preservar); quem diz isso agora é a chamada, não o padrão.

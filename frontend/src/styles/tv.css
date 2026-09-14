@@ -1,0 +1,104 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   TV INDOOR — o player (`/dispositivo` com um aparelho TV_INDOOR)
+
+   Arquivo do PLAYER e de mais nada. O prefixo `.tv-` existe para não encostar no
+   `.tq-` do quiosque do totem nem no `.ttm-` das telas de escritório: as três
+   famílias já conviveram no mesmo arquivo uma vez, e um seletor um pouco mais
+   genérico pintava a tela errada sem aviso.
+
+   Duas regras que valem para tudo aqui embaixo:
+     · é uma PAREDE, não uma página. Sem rolagem, sem cursor, sem seleção, sem
+       nada que pareça interface — ninguém toca nesta tela;
+     · o chão é preto de verdade (#000) e não o #0f0e0d do quiosque. Ali o preto
+       é superfície de uma tela tocada de perto, com cartões por cima; aqui a
+       arte ocupa tudo, e qualquer cinza vira uma moldura visível em volta dela
+       num painel de 50 polegadas.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.tv-raiz {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: #000;
+  /* `dvh` depois de `vh`: TV com WebView antiga não conhece o primeiro e usa o
+     segundo. Sem os dois, a barra de sistema de alguns aparelhos come uma faixa
+     da arte. */
+  height: 100vh;
+  height: 100dvh;
+  width: 100vw;
+  display: grid;
+  place-items: center;
+  /* Ninguém opera esta tela: nada de cursor, nada de seleção, nada de menu de
+     toque longo. Um cursor parado no meio da parede é o detalhe que denuncia
+     que aquilo é um navegador. */
+  cursor: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: #fff;
+}
+
+/* A ARTE. `cover` porque o formato recomendado é 16:9 numa TV 16:9 — nesse caso
+   ele não corta nada. Quando a arte vem noutra proporção, a escolha é entre
+   cortar a borda ou deixar tarja preta numa tela ligada o dia inteiro; tarja
+   preta lê como defeito, e a prévia do admin mostra exatamente este recorte. */
+.tv-arte {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+}
+
+/* A troca é um APARECER, e só. Sem deslizar, sem escalar, sem cruzar duas artes:
+   é troca de CONTEÚDO, não animação — e movimento gratuito numa parede que fica
+   horas ligada cansa quem trabalha na loja. Some com `prefers-reduced-motion`
+   (a classe nem é aplicada), mas a troca continua. */
+@keyframes tv-entrar { from { opacity: 0; } to { opacity: 1; } }
+.tv-arte.entrando { animation: tv-entrar 0.45s ease-out; }
+
+/* ── O institucional ──────────────────────────────────────────────────────
+   O repouso do canal: zero conteúdos elegíveis. Não é tela de erro, então não
+   há mensagem de sistema nenhuma — quem está na frente é o cliente da loja.
+   Um degradê muito leve em volta da marca, para o centro não parecer um
+   retângulo colado no preto. */
+.tv-institucional {
+  background: radial-gradient(ellipse 70% 70% at 50% 45%, #17161a 0%, #000 100%);
+  gap: clamp(20px, 3vh, 48px);
+  grid-auto-flow: row;
+  align-content: center;
+}
+
+.tv-logo {
+  max-width: min(46vw, 620px);
+  max-height: 40vh;
+  object-fit: contain;
+  display: block;
+}
+
+/* Sem logo, a inicial da loja num disco — o mesmo recurso do totem quando a
+   loja não subiu arte nenhuma. */
+.tv-inicial {
+  width: clamp(120px, 18vh, 260px);
+  height: clamp(120px, 18vh, 260px);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #d79e00;
+  color: #000;
+  font-weight: 800;
+  font-size: clamp(56px, 9vh, 132px);
+  line-height: 1;
+}
+
+.tv-nome {
+  font-size: clamp(22px, 3.4vh, 48px);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-align: center;
+  max-width: 80vw;
+  /* A cor é branco rebaixado: numa parede, branco puro num texto grande brilha
+     demais à noite. */
+  color: rgba(255, 255, 255, 0.86);
+}

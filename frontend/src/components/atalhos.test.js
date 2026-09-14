@@ -12,12 +12,14 @@ test('seções na ordem da sidebar, uma por grupo raiz com itens', () => {
 
 test('Visão Geral herda Loja Digital com Totem (pedidos) e TV Indoor, e Ferramentas sem eles', () => {
   const s = atalhosDaArvore(grupos);
-  // O Totem tem seis folhas e continua sendo UM card na Visão Geral: ele aponta para a
-  // primeira folha — `/totem/pedidos`, a mesma rota de sempre.
+  // Cada canal continua sendo UM card na Visao Geral, apontando para a PRIMEIRA folha
+  // dele. A TV virou subgrupo nesta frente, entao o destino dela deixou de ser a rota do
+  // placeholder e passou a ser a primeira folha, como no Totem.
   const ld = s.find((x) => x.titulo === 'Loja Digital');
   assert.deepEqual(ld.itens.map((i) => [i.label, i.to]), [
-    ['Totem', '/totem/pedidos'], ['TV Indoor', '/tv-indoor'],
+    ['Totem', '/totem/pedidos'], ['TV Indoor', '/tv-indoor/telas'],
   ]);
+  assert.equal(ld.itens.find((i) => i.label === 'TV Indoor').icon, 'megaphone');
   assert.equal(ld.itens.find((i) => i.label === 'Totem').icon, 'tablet');
   assert.deepEqual(s.find((x) => x.titulo === 'Ferramentas').itens.map((i) => i.label), ['Checklist', 'Etiquetas']);
 });

@@ -4,6 +4,7 @@ import api from '../services/api'
 import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
 import PreviaBannerTotem from '../components/PreviaBannerTotem'
+import { reduzirImagem } from '../lib/reduzirImagem'
 import { useAuth } from '../contexts/AuthContext'
 
 // Loja Digital › Totem › Aparência › Banners.
@@ -580,29 +581,6 @@ function textoAgenda(b) {
   return `Até ${f(b.fimEm)}`
 }
 
-/* Reduz no CLIENTE antes de subir. O teto do servidor é de segurança; aqui é onde a arte
-   de 4000px que veio do celular do gestor vira algo do tamanho da tela do totem.
-   JPEG a 88% porque banner é fotografia — PNG guardaria a mesma arte em três vezes o
-   tamanho, e transparência não serve para nada numa imagem que ocupa a tela inteira. */
-function reduzirImagem(arquivo, ladoMaior = 1920) {
-  return new Promise((resolve, reject) => {
-    const leitor = new FileReader()
-    leitor.onerror = () => reject(new Error('leitura'))
-    leitor.onload = () => {
-      const img = new Image()
-      img.onerror = () => reject(new Error('imagem'))
-      img.onload = () => {
-        const escala = Math.min(1, ladoMaior / Math.max(img.width, img.height))
-        const w = Math.max(1, Math.round(img.width * escala))
-        const h = Math.max(1, Math.round(img.height * escala))
-        const canvas = document.createElement('canvas')
-        canvas.width = w
-        canvas.height = h
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h)
-        resolve(canvas.toDataURL('image/jpeg', 0.88))
-      }
-      img.src = leitor.result
-    }
-    leitor.readAsDataURL(arquivo)
-  })
-}
+/* `reduzirImagem` mora em `lib/reduzirImagem.js`: estava duplicado aqui e em
+   TotemPersonalizacao com assinaturas diferentes, e a TV Indoor virou o terceiro
+   consumidor — três cópias de um canvas é onde uma delas começa a divergir em silêncio. */

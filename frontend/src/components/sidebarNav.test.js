@@ -122,7 +122,22 @@ test('Loja Digital é suíte de canais: Totem (sete itens) e TV Indoor', () => {
   assert.ok(totem.itens.find((n) => n.label === 'Banners').itens.every((n) => n.area === undefined));
   // Folha sem `area` herda a do pai — é o que faz o filtro do operador funcionar.
   assert.ok(totem.itens.every((n) => n.area === undefined));
-  assert.deepEqual(grupo(ld, 'TV Indoor'), { to: '/tv-indoor', label: 'TV Indoor', icon: 'megaphone', area: 'aparelhos' });
+  // A TV Indoor deixou de ser folha-placeholder e virou SUBGRUPO, com a mesma estrutura do
+  // Totem: os aparelhos, o acervo e a programação são naturezas diferentes.
+  const tv = grupo(ld, 'TV Indoor');
+  assert.equal(tv.area, 'aparelhos', 'a área é a MESMA do totem: quem cadastra o aparelho programa o que ele mostra');
+  assert.equal(tv.to, undefined, 'o subgrupo não é link: quem tem rota são as folhas');
+  assert.deepEqual(tv.itens.map((n) => [n.label, n.to]), [
+    ['Telas', '/tv-indoor/telas'],
+    ['Conteúdos', '/tv-indoor/conteudos'],
+    ['Playlists', '/tv-indoor/playlists'],
+  ]);
+  // Telas PRIMEIRO, e isto não é gosto: a `primeiraFolha` da Visão Geral e o redirect de
+  // `/tv-indoor` apontam para a primeira folha. Sem uma TV cadastrada, conteúdo e playlist
+  // não têm onde aparecer.
+  assert.equal(tv.itens[0].to, '/tv-indoor/telas');
+  // Folha sem `area` herda a do pai — é o que faz o filtro do operador funcionar.
+  assert.ok(tv.itens.every((n) => n.area === undefined));
 });
 
 test('operador com aparelhos vê só Loja Digital, com as duas suítes', () => {
@@ -132,6 +147,8 @@ test('operador com aparelhos vê só Loja Digital, com as duas suítes', () => {
   assert.deepEqual(labels(grupo(grupo(v, 'Loja Digital').itens, 'Totem').itens), [
     'Pedidos', 'Configurações', 'Gestão de totens', 'Cardápio', 'Personalização', 'Banners', 'Formas de pagamento',
   ]);
+  // A mesma área abre os DOIS canais: as folhas da TV herdam `aparelhos` do subgrupo.
+  assert.deepEqual(labels(grupo(grupo(v, 'Loja Digital').itens, 'TV Indoor').itens), ['Telas', 'Conteúdos', 'Playlists']);
 });
 
 test('operador com etiquetas vê Ferramentas com Etiquetas e NÃO vê Loja Digital', () => {
@@ -150,7 +167,9 @@ test('localizarRota abre o nível certo', () => {
   assert.deepEqual(localizarRota('/estoque').caminho, ['Produtos']);
   assert.deepEqual(localizarRota('/relatorios/meta').caminho, ['Relatórios']);
   assert.deepEqual(localizarRota('/checklist/painel').caminho, ['Ferramentas', 'Checklist']);
-  assert.deepEqual(localizarRota('/tv-indoor').caminho, ['Loja Digital']);
+  assert.deepEqual(localizarRota('/tv-indoor/telas').caminho, ['Loja Digital', 'TV Indoor']);
+  assert.deepEqual(localizarRota('/tv-indoor/conteudos').caminho, ['Loja Digital', 'TV Indoor']);
+  assert.deepEqual(localizarRota('/tv-indoor/playlists').caminho, ['Loja Digital', 'TV Indoor']);
   assert.deepEqual(localizarRota('/totem/pedidos').caminho, ['Loja Digital', 'Totem']);
   assert.deepEqual(localizarRota('/totem/cardapio').caminho, ['Loja Digital', 'Totem']);
   assert.deepEqual(localizarRota('/totem/aparelhos').caminho, ['Loja Digital', 'Totem']);
