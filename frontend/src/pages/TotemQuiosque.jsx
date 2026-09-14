@@ -709,6 +709,7 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
           titulo={aparencia?.tituloEspera}
           subtitulo={aparencia?.subtituloEspera}
           fundo={fundoDaEspera(aparencia)}
+          fraseMeio={aparencia?.fraseMeioEspera}
           destaques={boot?.destaques}
           aoTocar={comecarSessao}
         />

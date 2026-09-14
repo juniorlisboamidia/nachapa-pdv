@@ -31,7 +31,7 @@ import useCarrossel from './useCarrossel'
 // O carrossel gira imagem numa tela onde, por definição, não existe sessão. Ociosidade,
 // MS_AMBIGUO e o relógio capturado são outro domínio e não se encostam. Este componente só
 // existe enquanto `tela === 'espera'`: sair desmonta e limpa tudo, voltar remonta.
-export default function TelaEspera({ banners, chamada, titulo, subtitulo, fundo, destaques, aoTocar }) {
+export default function TelaEspera({ banners, chamada, titulo, subtitulo, fundo, fraseMeio, destaques, aoTocar }) {
   /* O texto do botão vem de Personalização, já resolvido pelo servidor. O literal aqui é
      a última rede: bootstrap de uma versão anterior não manda o campo, e um botão sem
      texto na tela que fica horas no vidro seria o pior lugar possível para descobrir. */
@@ -128,6 +128,15 @@ export default function TelaEspera({ banners, chamada, titulo, subtitulo, fundo,
               `aria-hidden` porque é apetite, não conteúdo: quem usa leitor de tela já tem o
               rótulo do botão dizendo o que a tela faz, e ouvir doze nomes de lanche antes
               disso seria ruído. */}
+          {/* A FAIXA que liga as duas metades: uma linha escura com a frase da loja, que
+              some nas pontas. Só existe quando há esteira embaixo — "Nossos produtos" sobre
+              nada seria uma promessa vazia. O texto vem já resolvido (padrão no servidor). */}
+          {filas.length ? (
+            <div className="tq-vit-faixa" aria-hidden="true">
+              <span className="tq-vit-faixa-txt tq-disp">{(typeof fraseMeio === 'string' && fraseMeio.trim()) || 'Nossos produtos'}</span>
+            </div>
+          ) : null}
+
           {filas.length ? (
             <div className="tq-vit-baixo" aria-hidden="true">
               {filas.map((fila) => (

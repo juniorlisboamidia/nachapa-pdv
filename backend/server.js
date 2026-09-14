@@ -58,6 +58,7 @@ import {
   LAYOUTS, MOTIVO_LAYOUT, normalizarLayout, layoutEfetivo, PADROES_POR_LAYOUT, tokensDoLayout,
   CHAMADA_PADRAO, CHAMADA_MAX, MOTIVO_CHAMADA, validarChamada,
   TITULO_MAX, SUBTITULO_MAX, MOTIVO_TITULO, MOTIVO_SUBTITULO, validarTexto, FUNDO_ESPERA_MEDIDA,
+  FRASE_MEIO_PADRAO, FRASE_MEIO_MAX, MOTIVO_FRASE_MEIO,
   LOGO_MAX_BYTES, validarLogoDataUrl, decodificarDataUrl, proximaVersaoLogo,
 } from './totemAparencia.js';
 // Totem › Destaques: os produtos da esteira da vitrine. O banco guarda ID; nome, preço e
@@ -9580,6 +9581,9 @@ app.get('/api/totem/aparencia', async (req, res) => {
       subtituloEspera: cfg?.subtituloEspera ?? null,
       tituloMax: TITULO_MAX,
       subtituloMax: SUBTITULO_MAX,
+      fraseMeioEspera: cfg?.fraseMeioEspera ?? null,
+      fraseMeioPadrao: FRASE_MEIO_PADRAO,
+      fraseMeioMax: FRASE_MEIO_MAX,
       overrides,
       efetivas,
       contraste: diagnosticoDeContraste(efetivas),
@@ -9637,6 +9641,7 @@ app.put('/api/totem/aparencia', async (req, res) => {
     for (const [chave, teto, motivo] of [
       ['tituloEspera', TITULO_MAX, MOTIVO_TITULO],
       ['subtituloEspera', SUBTITULO_MAX, MOTIVO_SUBTITULO],
+      ['fraseMeioEspera', FRASE_MEIO_MAX, MOTIVO_FRASE_MEIO],
     ]) {
       if (corpo[chave] === undefined) continue;
       const r = validarTexto(corpo[chave], teto);
@@ -9674,6 +9679,7 @@ app.put('/api/totem/aparencia', async (req, res) => {
       chamadaEspera: linha.chamadaEspera ?? null,
       tituloEspera: linha.tituloEspera ?? null,
       subtituloEspera: linha.subtituloEspera ?? null,
+      fraseMeioEspera: linha.fraseMeioEspera ?? null,
       overrides: tokensDoLayout(linha.tokens, layoutFundo),
       efetivas,
       contraste: diagnosticoDeContraste(efetivas),

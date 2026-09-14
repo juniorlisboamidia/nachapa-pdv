@@ -71,6 +71,8 @@ export default function TotemPersonalizacao() {
   // ausência NÃO tem padrão de fábrica: a tela simplesmente não desenha a linha.
   const [titulo, setTitulo] = useState('')
   const [subtitulo, setSubtitulo] = useState('')
+  // A frase da faixa entre as metades. '' = padrão ("Nossos produtos"), como a chamada.
+  const [fraseMeio, setFraseMeio] = useState('')
   const arquivoRef = useRef(null)
   const fundoRef = useRef(null)
 
@@ -86,6 +88,7 @@ export default function TotemPersonalizacao() {
       setChamada(r.data?.chamadaEspera ?? '')
       setTitulo(r.data?.tituloEspera ?? '')
       setSubtitulo(r.data?.subtituloEspera ?? '')
+      setFraseMeio(r.data?.fraseMeioEspera ?? '')
       setErro(null)
     })
     .catch(() => setErro('Não foi possível ler a aparência agora.'))
@@ -129,9 +132,13 @@ export default function TotemPersonalizacao() {
   const subtituloLongo = [...subtituloLimpo].length > subtituloMax
   const trocouTitulo = tituloLimpo !== (dados?.tituloEspera ?? '')
   const trocouSubtitulo = subtituloLimpo !== (dados?.subtituloEspera ?? '')
-  const algoLongo = chamadaLonga || tituloLongo || subtituloLongo
+  const fraseMeioLimpa = fraseMeio.trim()
+  const fraseMeioMax = dados?.fraseMeioMax ?? 30
+  const fraseMeioLonga = [...fraseMeioLimpa].length > fraseMeioMax
+  const trocouFraseMeio = fraseMeioLimpa !== (dados?.fraseMeioEspera ?? '')
+  const algoLongo = chamadaLonga || tituloLongo || subtituloLongo || fraseMeioLonga
   const temMudanca = Object.keys(patch).length > 0 || trocouPosicao || trocouChamada
-    || trocouTitulo || trocouSubtitulo
+    || trocouTitulo || trocouSubtitulo || trocouFraseMeio
 
   // Diagnóstico ao vivo, com as cores do RASCUNHO. Os pares vêm do servidor (é ele que
   // define quais importam); só a razão é recalculada aqui, para não ir ao servidor a
@@ -152,12 +159,14 @@ export default function TotemPersonalizacao() {
       if (trocouChamada) corpo.chamadaEspera = chamadaLimpa || null
       if (trocouTitulo) corpo.tituloEspera = tituloLimpo || null
       if (trocouSubtitulo) corpo.subtituloEspera = subtituloLimpo || null
+      if (trocouFraseMeio) corpo.fraseMeioEspera = fraseMeioLimpa || null
       const r = await api.put('/totem/aparencia', corpo)
       setDados((d) => ({ ...d, ...r.data }))
       setRascunho(r.data?.efetivas ?? rascunho)
       setChamada(r.data?.chamadaEspera ?? '')
       setTitulo(r.data?.tituloEspera ?? '')
       setSubtitulo(r.data?.subtituloEspera ?? '')
+      setFraseMeio(r.data?.fraseMeioEspera ?? '')
       setToast({ message: 'Aparência salva. Os totens aplicam na próxima vez que carregarem o cardápio.', type: 'success' })
     } catch (e) {
       const erros = e?.response?.data?.erros
@@ -411,6 +420,24 @@ export default function TotemPersonalizacao() {
               </div>
             </div>
 
+            <div className="form-group" style={{ maxWidth: 460 }}>
+              <label className="form-label" htmlFor="apa-frase-meio">Frase do meio</label>
+              <input
+                id="apa-frase-meio"
+                className={'form-input' + (fraseMeioLonga ? ' invalido' : '')}
+                value={fraseMeio}
+                disabled={salvando}
+                placeholder={dados?.fraseMeioPadrao ?? 'Nossos produtos'}
+                onChange={(e) => setFraseMeio(e.target.value)}
+                aria-invalid={fraseMeioLonga ? 'true' : undefined}
+              />
+              <div className={fraseMeioLonga ? 'ttm-erro-campo' : 'ttm-dica'} role={fraseMeioLonga ? 'alert' : undefined}>
+                {fraseMeioLonga
+                  ? `Passou de ${fraseMeioMax} caracteres.`
+                  : `A faixa entre a foto e as esteiras. Deixe em branco para usar “${dados?.fraseMeioPadrao ?? 'Nossos produtos'}”. Até ${fraseMeioMax} caracteres — o totem escreve em caixa alta.`}
+              </div>
+            </div>
+
             <div className="form-group" style={{ margin: 0, maxWidth: 460 }}>
               <label className="form-label" htmlFor="apa-chamada">Texto do botão</label>
               <input
@@ -443,6 +470,7 @@ export default function TotemPersonalizacao() {
               titulo={tituloLimpo}
               subtitulo={subtituloLimpo}
               chamada={chamadaLimpa || dados?.chamadaPadrao}
+              fraseMeio={fraseMeioLimpa || dados?.fraseMeioPadrao}
             />
           </div>
         </div>

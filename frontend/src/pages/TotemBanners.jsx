@@ -359,6 +359,7 @@ export default function TotemBanners() {
             titulo: aparencia?.tituloEspera,
             subtitulo: aparencia?.subtituloEspera,
             chamada: aparencia?.chamadaEspera || aparencia?.chamadaPadrao,
+            fraseMeio: aparencia?.fraseMeioEspera || aparencia?.fraseMeioPadrao,
           }}
         />
       </div>

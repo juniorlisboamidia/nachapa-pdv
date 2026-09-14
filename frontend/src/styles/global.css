@@ -3393,7 +3393,15 @@ body.theme-dark .apr-contagem, body.theme-dark .apr-qr-legenda, body.theme-dark 
   font-family: Montserrat, 'Segoe UI', sans-serif; font-weight: 900; font-size: 4cqw; letter-spacing: .01em;
   white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
 }
-.ttm-vit-baixo { flex: 1 1 50%; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-start; gap: 4cqw; padding: 3cqw 0 0; }
+.ttm-vit-alto { flex: 0 0 50%; }
+.ttm-vit-baixo { flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: space-evenly; gap: 0; padding: 1.5cqw 0; }
+/* A faixa do meio: escura nos dois fundos, some nas pontas, frase em caixa alta. */
+.ttm-vit-faixa {
+  flex: 0 0 auto; display: grid; place-items: center; height: 4cqw; background: #000;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
+}
+.ttm-vit-faixa span { color: #fff; font-family: Montserrat, 'Segoe UI', sans-serif; font-weight: 800; font-size: 1.9cqw; letter-spacing: .16em; white-space: nowrap; }
 .ttm-vit-fila { display: flex; gap: 3cqw; padding-left: 4cqw; }
 .ttm-vit-fila:nth-child(2) { padding-left: 14cqw; }
 .ttm-vit-card { flex: 0 0 auto; width: 27cqw; display: flex; flex-direction: column; gap: 1.6cqw; }

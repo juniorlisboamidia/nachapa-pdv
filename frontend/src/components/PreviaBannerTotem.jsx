@@ -135,6 +135,7 @@ export default function PreviaBannerTotem({
               titulo={vitrine?.titulo}
               subtitulo={vitrine?.subtitulo}
               chamada={vitrine?.chamada}
+              fraseMeio={vitrine?.fraseMeio}
             />
           </div>
         )

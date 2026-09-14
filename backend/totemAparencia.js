@@ -290,6 +290,14 @@ export const MOTIVO_CHAMADA = 'CHAMADA_INVALIDA';
    tela em duas metades iguais para o número ser verdade. */
 export const FUNDO_ESPERA_MEDIDA = Object.freeze({ largura: 1080, altura: 960 });
 
+/* A FRASE DO MEIO: a faixa que liga a metade de cima (foto) à de baixo (esteiras). Tem
+   padrão de fábrica, como a chamada — uma faixa vazia entre as duas metades seria um
+   traço sem sentido, e "Nossos produtos" é o que a faixa quer dizer na maioria das lojas.
+   Teto curto porque é UMA linha, em caixa alta e espaçada, sobre 1080px. */
+export const FRASE_MEIO_PADRAO = 'Nossos produtos';
+export const FRASE_MEIO_MAX = 30;
+export const MOTIVO_FRASE_MEIO = 'FRASE_MEIO_INVALIDA';
+
 export const TITULO_MAX = 40;
 export const SUBTITULO_MAX = 90;
 export const MOTIVO_TITULO = 'TITULO_INVALIDO';
@@ -455,6 +463,8 @@ export function aparenciaPublica({ config, dispositivo, temFundoEspera = false }
     // Estes dois podem ser `null`, e `null` aqui é informação: a tela não desenha a linha.
     tituloEspera: textoEfetivo(config?.tituloEspera, TITULO_MAX),
     subtituloEspera: textoEfetivo(config?.subtituloEspera, SUBTITULO_MAX),
+    // Com padrão, como a chamada: a faixa entre as metades nunca fica em branco.
+    fraseMeioEspera: textoEfetivo(config?.fraseMeioEspera, FRASE_MEIO_MAX) ?? FRASE_MEIO_PADRAO,
     // A foto de fundo, como a logo: só versão e presença. Os bytes têm rota própria e cache
     // versionado; mandá-los a cada 5 min por aparelho seria desperdício puro.
     fundoEsperaVersao: Number.isInteger(config?.fundoEsperaVersao) && config.fundoEsperaVersao >= 0 ? config.fundoEsperaVersao : 0,

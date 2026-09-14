@@ -974,6 +974,9 @@ model TotemConfiguracao {
   // linha, e isso é uma escolha de desenho legítima — não têm padrão de fábrica.
   tituloEspera            String?
   subtituloEspera         String?
+  // A frase da faixa entre as duas metades da vitrine. NULL = "Nossos produtos" (padrão
+  // em totemAparencia.js — não mora aqui, senão a string existiria em dois lugares).
+  fraseMeioEspera         String?
 
   // Versão da FOTO DE FUNDO da vitrine. Os bytes NÃO estão aqui: estão em TotemEsperaFundo,
   // porque esta linha é lida em todo bootstrap e uma foto de tela cheia dentro dela seria

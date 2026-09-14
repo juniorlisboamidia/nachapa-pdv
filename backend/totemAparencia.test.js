@@ -252,7 +252,7 @@ import {
   PADROES, PADROES_POR_LAYOUT, POSICOES, POSICAO_PADRAO,
   LAYOUTS, LAYOUT_PADRAO, normalizarLayout, layoutEfetivo, lerCofre, tokensDoLayout,
   CHAMADA_PADRAO, CHAMADA_MAX, validarChamada, chamadaEfetiva,
-  TITULO_MAX, SUBTITULO_MAX, validarTexto, textoEfetivo,
+  TITULO_MAX, SUBTITULO_MAX, validarTexto, textoEfetivo, FRASE_MEIO_PADRAO, FRASE_MEIO_MAX,
   normalizarPosicao, posicaoEfetiva, validarPatch, aplicarPatch, coresEfetivas, aparenciaPublica,
 } from './totemAparencia.js';
 
@@ -479,6 +479,13 @@ test('a foto de fundo viaja como versão + presença, nunca como bytes', () => {
   }
 });
 
+test('a frase do meio tem padrão de fábrica, como a chamada — a faixa nunca fica em branco', () => {
+  assert.equal(aparenciaPublica({}).fraseMeioEspera, FRASE_MEIO_PADRAO);
+  assert.equal(aparenciaPublica({ config: { fraseMeioEspera: '   ' } }).fraseMeioEspera, FRASE_MEIO_PADRAO);
+  assert.equal(aparenciaPublica({ config: { fraseMeioEspera: ' Os queridinhos ' } }).fraseMeioEspera, 'Os queridinhos');
+  assert.equal(aparenciaPublica({ config: { fraseMeioEspera: 'x'.repeat(FRASE_MEIO_MAX + 1) } }).fraseMeioEspera, FRASE_MEIO_PADRAO, 'longa demais no banco cai no padrão');
+});
+
 test('fundo inválido cai no padrão, nunca derruba a tela', () => {
   assert.equal(normalizarLayout('CLARO'), 'CLARO');
   assert.equal(normalizarLayout('claro'), null, 'não normaliza caixa: vem de um seletor');
@@ -635,7 +642,7 @@ test('🔴 a logo NUNCA vai no bootstrap', () => {
 
 test('bloco público tem só o que o quiosque desenha', () => {
   const pub = aparenciaPublica({ config: { tokens: { fundo: '#111111' }, posicaoCategoriasPadrao: 'direita' } });
-  assert.deepEqual(Object.keys(pub).sort(), ['chamadaEspera', 'fundoEsperaVersao', 'layoutFundo', 'logoVersao', 'posicaoCategorias', 'subtituloEspera', 'temFundoEspera', 'temLogoPersonalizada', 'tituloEspera', 'tokens']);
+  assert.deepEqual(Object.keys(pub).sort(), ['chamadaEspera', 'fraseMeioEspera', 'fundoEsperaVersao', 'layoutFundo', 'logoVersao', 'posicaoCategorias', 'subtituloEspera', 'temFundoEspera', 'temLogoPersonalizada', 'tituloEspera', 'tokens']);
   assert.equal(pub.posicaoCategorias, 'direita');
 });
 

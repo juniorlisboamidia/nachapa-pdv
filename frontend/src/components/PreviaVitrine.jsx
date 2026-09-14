@@ -20,7 +20,7 @@ const PADRAO = {
   acaoTexto: '#000000',
 }
 
-export default function PreviaVitrine({ cores, fundoUrl, titulo, subtitulo, chamada, esteira = true }) {
+export default function PreviaVitrine({ cores, fundoUrl, titulo, subtitulo, chamada, fraseMeio, esteira = true }) {
   const c = (k) => cores?.[k] || PADRAO[k]
   const botao = (typeof chamada === 'string' && chamada.trim()) || 'Toque para começar'
   // Sobre a foto o texto é sempre branco, porque há um véu escuro por baixo — é o mesmo
@@ -48,6 +48,11 @@ export default function PreviaVitrine({ cores, fundoUrl, titulo, subtitulo, cham
           </span>
         </div>
       </div>
+      {esteira ? (
+        <div className="ttm-vit-faixa">
+          <span>{((typeof fraseMeio === 'string' && fraseMeio.trim()) || 'Nossos produtos').toUpperCase()}</span>
+        </div>
+      ) : null}
       {esteira ? (
         <div className="ttm-vit-baixo">
           {[0, 1].map((fila) => (
