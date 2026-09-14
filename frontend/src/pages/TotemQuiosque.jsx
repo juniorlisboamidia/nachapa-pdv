@@ -784,13 +784,11 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
           pronto={pronto}
           podePedir={podePedir}
           qtd={aberto.qtd}
-          observacao={aberto.observacao}
           foco={aberto.foco}
           ehEdicao={!!aberto.uid}
           aoTocarOpcao={tocarOpcao}
           aoMenosOpcao={menosOpcao}
           aoMudarQtd={(d) => setAberto((a) => ({ ...a, qtd: Math.max(1, a.qtd + d) }))}
-          aoMudarObservacao={(txt) => setAberto((a) => ({ ...a, observacao: txt }))}
           aoAdicionar={adicionarAoCarrinho}
         />
       </>

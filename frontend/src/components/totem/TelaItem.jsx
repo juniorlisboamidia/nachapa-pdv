@@ -4,7 +4,6 @@ import Preco from './Preco'
 import Stepper from './Stepper'
 import ChipsPendentes from './ChipsPendentes'
 import BlocoGrupo from './BlocoGrupo'
-import BlocoObservacao from './BlocoObservacao'
 import { moeda } from './formato'
 import { destinoDeRolagem } from '../totemFoco'
 
@@ -22,8 +21,8 @@ import { destinoDeRolagem } from '../totemFoco'
 export default function TelaItem({
   nome, descricao, imagem,
   grupos, selecoes, pendentes, temObrigatorio,
-  preco, pronto, podePedir, qtd, observacao, ehEdicao, foco,
-  aoTocarOpcao, aoMenosOpcao, aoMudarQtd, aoMudarObservacao, aoAdicionar,
+  preco, pronto, podePedir, qtd, ehEdicao, foco,
+  aoTocarOpcao, aoMenosOpcao, aoMudarQtd, aoAdicionar,
 }) {
   const conteudoRef = useRef(null)
 
@@ -112,7 +111,17 @@ export default function TelaItem({
             />
           ))}
 
-          <BlocoObservacao valor={observacao} aoMudar={aoMudarObservacao} />
+          {/* AQUI HAVIA UM CAMPO DE OBSERVAÇÃO, e ele saiu porque não havia como
+              preencher: o totem é um monitor em pé, sem teclado físico, e o teclado
+              virtual do Android não é garantido num aparelho em modo quiosque. Um campo
+              que o cliente vê e não consegue usar é pior do que campo nenhum.
+
+              O CARRINHO CONTINUA CARREGANDO `observacao`, e é de propósito: o módulo puro
+              (`totemCarrinho.js`), o envio ao HUB e o contrato do Cardápio Web ficaram
+              intocados — o que muda é que o valor agora é sempre vazio. `LinhaCarrinho`
+              também segue sabendo desenhá-la, então o dia em que existir um caminho de
+              entrada (voz, teclado na tela, escolha por botões) nada precisa ser
+              redescoberto. */}
         </div>
       </div>
 

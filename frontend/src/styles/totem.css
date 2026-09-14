@@ -976,31 +976,6 @@
 .tq-op.bloqueada { opacity: 0.45; }
 
 /* -- Observação (spec §4.3) ------------------------------------------------ */
-/* Ação fechada por padrão: o recurso continua inteiro, mas deixa de gastar a
-   altura de um formulário no fim de toda tela de produto. */
-.tq-obs-abrir {
-  display: inline-flex; align-items: center; gap: 10px; margin-top: 22px;
-  min-height: 56px; padding: 0 20px; border-radius: 14px;
-  border: 2px dashed var(--tq-borda-forte); background: transparent; color: var(--tq-texto-2);
-  font-weight: 700; font-size: clamp(15px, 1.94vw, 21px);
-}
-.tq-obs-abrir:active { background: var(--tq-superficie); }
-.tq-obs-bloco {
-  margin-top: 22px; background: var(--tq-superficie); border: 1px solid var(--tq-borda);
-  border-radius: var(--tq-raio); padding: 18px 20px;
-}
-.tq-obs-cab { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; }
-.tq-obs-cab .tq-rotulo { color: var(--tq-texto-3); }
-.tq-obs-contador { margin-left: auto; color: var(--tq-texto-3); font-size: clamp(13px, 1.67vw, 18px); font-weight: 700; }
-.tq-obs {
-  width: 100%; min-height: 96px; padding: 12px 14px; resize: none;
-  border: 2px solid var(--tq-borda); border-radius: var(--tq-raio-2);
-  background: var(--tq-superficie); color: var(--tq-texto);
-  font: inherit; font-size: clamp(16px, 2.04vw, 22px);
-  /* Único ponto de digitação livre do quiosque: aqui a seleção volta a valer. */
-  user-select: text; -webkit-user-select: text;
-}
-.tq-obs:focus { outline: none; border-color: var(--tq-branco); }
 
 /* -- Rodapé de ação do item ------------------------------------------------ */
 .tq-rodape {
