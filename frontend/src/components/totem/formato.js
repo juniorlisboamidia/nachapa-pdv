@@ -10,6 +10,8 @@ export const moeda = (v) => Number(v ?? 0).toLocaleString('pt-BR', { style: 'cur
 // forma uma oferta de verdade — preço antigo ausente, igual ou menor que o novo — e
 // arredondado para o inteiro, como o Cardápio Web mostra.
 export function percentualDesconto(valor, valorPromocional) {
+  // `Number(null)` é 0 — e 0 é um preço, não uma ausência. Ausência sai antes da conta.
+  if (valor == null || valorPromocional == null) return 0
   const de = Number(valor)
   const por = Number(valorPromocional)
   if (!Number.isFinite(de) || !Number.isFinite(por) || de <= 0 || por < 0 || por >= de) return 0
