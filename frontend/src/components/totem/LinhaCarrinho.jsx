@@ -54,14 +54,14 @@ export default function LinhaCarrinho({ linha, aoEditar, aoRemover, aoMudarQtd }
         />
         <div className="tq-linha-acoes">
           <button type="button" className="tq-mini" onClick={aoEditar}>
-            <Ico nome="lapis" tam={18} /> Editar
+            <Ico nome="lapis" tam={22} /> Editar
           </button>
           <button
             type="button"
             className={'tq-mini perigo' + (confirmando ? ' confirmando' : '')}
             onClick={tocarRemover}
           >
-            <Ico nome="lixeira" tam={18} /> {confirmando ? 'Confirmar' : 'Remover'}
+            <Ico nome="lixeira" tam={22} /> {confirmando ? 'Confirmar' : 'Remover'}
           </button>
         </div>
       </div>

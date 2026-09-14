@@ -299,7 +299,9 @@
    ocupar o espaço que o alvo de produção tem de sobra. */
 /* Mais larga no alvo: em 226px "ACOMPANHAMENTOS" quebrava em duas linhas, e
    uma coluna de dez categorias vista a um metro precisa de linha inteira. */
-@media (min-width: 900px) { .tq-raiz { --tq-lado-l: clamp(230px, 24vw, 280px); } }
+/* 25vw: com o corpo abaixo (1,6vw) e sem quebra no meio da palavra, "ACOMPANHAMENTOS"
+   cabe numa linha em qualquer largura a partir de 900px — a conta é 15 letras × ~0,72em. */
+@media (min-width: 900px) { .tq-raiz { --tq-lado-l: clamp(240px, 25vw, 290px); } }
 
 /* RESET COM ESPECIFICIDADE ZERO.
    `:where()` existe aqui por um motivo caro: `.tq-raiz button` tem
@@ -624,26 +626,29 @@
    listrado; quem separa agora é o espaço, e quem marca o lugar é o preenchimento. */
 .tq-cat {
   width: 100%; min-height: clamp(72px, 4.8vh, 100px);
-  padding: 14px 16px; text-align: left;
+  padding: 16px 16px; text-align: left;
   display: flex; align-items: center;
   border-radius: 14px;
   /* Não é branco puro: a lista inteira em #fff competia com o nome do produto na grade,
-     que é o texto que o cliente veio ler. 82% ainda passa folgado em legibilidade
-     (17,1:1 sobre o preto) e devolve a hierarquia. */
-  color: rgba(var(--tq-tinta-base), 0.82);
+     que é o texto que o cliente veio ler. 88% (18,3:1 sobre o preto) lê bem a um metro
+     e ainda fica um degrau abaixo do nome do produto. */
+  color: rgba(var(--tq-tinta-base), 0.88);
   font-family: var(--tq-fonte-display);
   /* 600 é o peso REAL disponível: a família do totem tem dois arquivos, um declarado para
      500–700 e outro para 800–900. Pedir 700 não engrossaria nada (é o mesmo arquivo) e
      pedir 800 saltaria para o Montserrat 900, que numa coluna de dez linhas vira bloco.
      O meio-termo é o traço: 0,4px de contorno na própria cor engrossa a haste sem trocar
      de família e sem o negrito SINTÉTICO, que é o que a folha evita desde o começo. */
-  font-weight: 600; font-size: clamp(13px, 1.76vw, 19px); line-height: 1.2;
+  /* 1,6vw e não 1,76: o corpo anterior fazia a palavra longa NÃO caber na coluna e o
+     navegador partia "ACOMPANHAMENT/OS". Com este corpo ela cabe inteira; e a quebra
+     no meio da palavra sai de vez logo abaixo (`overflow-wrap: normal`). */
+  font-weight: 600; font-size: clamp(13px, 1.6vw, 18px); line-height: 1.22;
   -webkit-text-stroke: 0.4px currentColor;
-  letter-spacing: 0.02em; text-transform: uppercase;
+  letter-spacing: 0.015em; text-transform: uppercase;
   transition: background 0.14s ease, color 0.14s ease;
 }
 /* Respiro entre as linhas, no lugar das divisórias. */
-.tq-cat + .tq-cat { margin-top: 4px; }
+.tq-cat + .tq-cat { margin-top: 6px; }
 .tq-cat:hover { background: rgba(var(--tq-tinta-base), 0.05); color: var(--tq-branco); }
 /* O nome da categoria SEMPRE aparece, e quebra por palavra. O `anywhere` de
    antes partia "ACOMPANHAMENTOS" letra a letra numa coluna estreita e deixava
@@ -654,9 +659,13 @@
 .tq-cat-nome {
   display: block; width: 100%; overflow: hidden;
 }
+/* NUNCA no meio da palavra. `break-word` partia "ACOMPANHAMENT / OS" quando a palavra
+   não cabia — e uma categoria partida assim é ilegível a um metro. Agora só quebra
+   entre palavras; a palavra que ainda não couber (rara, com a largura e o corpo acima)
+   passa devagar quando a categoria está ativa, como já acontecia com o nome longo. */
 .tq-cat-txt {
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-  word-break: normal; overflow-wrap: break-word; hyphens: none;
+  word-break: normal; overflow-wrap: normal; hyphens: none;
 }
 /* Nome que não cabe: passa devagar, indo e voltando, com pausa nas pontas. Vira
    UMA linha enquanto anda — em duas linhas o movimento fica ilegível. Só a
@@ -692,15 +701,19 @@
   font-size: clamp(21px, 3.06vw, 33px);
   line-height: 1.1; letter-spacing: 0.01em; text-transform: uppercase;
 }
-.tq-secao > .tq-grade { padding-top: 12px; }
+.tq-secao > .tq-grade { padding-top: 14px; }
 @media (min-width: 900px) { .tq-secao-t { padding: 30px 28px 0; } }
 /* A primeira não precisa do respiro que separa uma categoria da anterior. */
 .tq-secao:first-child > .tq-secao-t { padding-top: 14px; }
 
 /* -- Grade ----------------------------------------------------------------- */
+/* `grid-auto-rows: 1fr`: TODAS as linhas de uma categoria com a mesma altura, não só os
+   dois cards de cada linha. Sem isto, um produto sem descrição ao lado de um com duas
+   linhas empurrava o preço para alturas diferentes de uma linha para a outra, e a grade
+   parecia torta. O preço continua ancorado no pé do card (`margin-top: auto`). */
 .tq-grade {
-  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px; padding: 20px; align-content: start;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 1fr;
+  gap: 20px; padding: 20px; align-content: start;
 }
 /* Esticar as linhas para encher a altura foi tentado e revertido: com quatro
    produtos o card virava um pôster de 830px, e o que a maioria das categorias
@@ -735,13 +748,9 @@
 /* Em falta: a foto acinzenta e o texto continua legível — o card não é uma ação. */
 .tq-card:disabled { cursor: not-allowed; }
 .tq-card:disabled .tq-foto { filter: grayscale(1); opacity: 0.6; }
+/* Uma medida só, em qualquer largura: o card do alvo e o do tablet pequeno tinham
+   padding e respiro diferentes, e a composição mudava de aparelho para aparelho. */
 .tq-card-txt { flex: 1 1 auto; display: flex; flex-direction: column; gap: 6px; padding: 16px 18px 18px; }
-/* Apertado de propósito no alvo: o respiro que sobrava entre a descrição e o
-   preço não era hierarquia, era altura desperdiçada em cada card da grade. */
-@media (min-width: 900px) {
-  .tq-card-txt { padding: 14px 18px 16px; gap: 4px; }
-  .tq-card-rod { padding-top: 6px; }
-}
 /* Nome de produto em CORPO, não display: Montserrat 900 num nome de três
    palavras vira uma barra preta e rouba a leitura da foto e do preço. O preço
    continua em display — é ele que precisa ancorar o card.
@@ -751,13 +760,19 @@
   font-family: var(--tq-fonte-display); font-weight: 600;
   font-size: clamp(20px, 2.87vw, 31px); line-height: 1.15; letter-spacing: 0.005em;
   word-break: normal; overflow-wrap: normal; hyphens: none;
+  /* Duas linhas no máximo: um nome de quatro palavras não vira um card mais alto que
+     os vizinhos. O nome completo está no detalhe, a um toque. */
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
+/* Descrição em branco rebaixado, e não no dourado de apoio: no card o dourado é do
+   PREÇO, e uma descrição na mesma cor disputava com ele. Menor e mais leve que o nome;
+   duas linhas e acabou. */
 .tq-card-desc {
-  font-size: clamp(14px, 1.85vw, 20px); color: var(--tq-texto-2); line-height: 1.3;
+  font-size: clamp(14px, 1.67vw, 18px); color: var(--tq-texto-3); line-height: 1.35;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
   word-break: normal; overflow-wrap: normal;
 }
-.tq-card-rod { margin-top: auto; padding-top: 12px; }
+.tq-card-rod { margin-top: auto; padding-top: 10px; }
 
 /* -- Foto ------------------------------------------------------------------ */
 .tq-foto { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; background: var(--tq-superficie-3); }
@@ -1018,46 +1033,72 @@
 
 /* ═══ V8 — carrinho ════════════════════════════════════════════════════════ */
 
-.tq-rodape.coluna { flex-direction: column; align-items: stretch; gap: 12px; }
+.tq-rodape.coluna { flex-direction: column; align-items: stretch; gap: 14px; }
+/* TOTAL, não subtotal: o número é o que o cliente paga — não há taxa nem entrega depois
+   dele. O rótulo em display e caixa alta, o valor em dourado e maior que qualquer preço
+   de linha: é a única coisa dourada da tela além do botão, e os dois dizem a mesma
+   coisa — "é isto, avance". */
 .tq-subtotal { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .tq-subtotal span { font-size: clamp(17px, 2.22vw, 24px); color: var(--tq-texto); font-weight: 700; }
 .tq-subtotal small { display: block; font-size: clamp(13px, 1.67vw, 18px); color: var(--tq-texto-3); font-weight: 600; }
 .tq-subtotal strong { font-size: clamp(26px, 4.17vw, 45px); }
+/* Só no CARRINHO (a tela de Pagamento usa o mesmo rodapé e fica como estava). */
+.tq-rodape-carrinho .tq-subtotal span {
+  font-family: var(--tq-fonte-display); font-weight: 900; letter-spacing: 0.08em; text-transform: uppercase;
+  font-size: clamp(16px, 2.04vw, 22px);
+}
+.tq-rodape-carrinho .tq-subtotal small {
+  font-family: var(--tq-fonte-corpo); font-weight: 600; letter-spacing: 0; text-transform: none; margin-top: 2px;
+}
+.tq-rodape-carrinho .tq-subtotal strong { font-size: clamp(30px, 4.6vw, 50px); color: var(--tq-amarelo); line-height: 1; }
+/* O avanço é o alvo maior da tela — e o estado "fechado" tem a MESMA altura para o
+   rodapé não pular quando a loja abre. */
+.tq-rodape-carrinho .tq-btn-largo, .tq-rodape-carrinho .tq-estado-largo { min-height: 84px; font-size: clamp(19px, 2.6vw, 28px); }
 .tq-rodape-botoes { display: flex; gap: 12px; }
 .tq-rodape-botoes > * { flex: 1 1 0; }
 
-.tq-lista { width: min(920px, 92%); margin: 0 auto; padding: 24px 0 40px; display: flex; flex-direction: column; gap: 14px; }
+.tq-lista { width: min(920px, 92%); margin: 0 auto; padding: 24px 0 40px; display: flex; flex-direction: column; gap: 16px; }
 .tq-linha {
-  display: flex; gap: 18px; align-items: flex-start;
+  display: flex; gap: 20px; align-items: flex-start;
   background: var(--tq-superficie); border: 1px solid var(--tq-borda);
-  border-radius: var(--tq-raio); padding: 18px;
+  border-radius: var(--tq-raio); padding: 20px;
 }
-.tq-linha.mudou { border-color: var(--tq-amarelo); border-left-color: var(--tq-amarelo); border-width: 3px; padding: 16px; }
+.tq-linha.mudou { border-color: var(--tq-amarelo); border-left-color: var(--tq-amarelo); border-width: 3px; padding: 18px; }
+/* "Adicionar mais itens" fecha a lista como uma linha a mais, na largura dela: alvo de
+   72px, contorno neutro — presente, mas um degrau abaixo do avanço amarelo do rodapé. */
+.tq-lista-mais { min-height: 72px; margin-top: 4px; }
 .tq-linha-mudou { display: inline-block; background: var(--tq-amarelo); color: var(--tq-tinta); padding: 4px 10px; border-radius: 6px; }
+/* A foto cresce para o tamanho de uma miniatura de verdade (120–160px): é ela que faz o
+   cliente reconhecer a linha sem ler — no carrinho o nome é confirmação, a foto é o
+   reconhecimento. */
 .tq-linha-foto {
-  flex: 0 0 auto; width: clamp(88px, 10vw, 116px); height: clamp(88px, 10vw, 116px);
-  aspect-ratio: auto; border-radius: var(--tq-raio-2); object-fit: cover;
+  flex: 0 0 auto; width: clamp(120px, 13vw, 160px); height: clamp(120px, 13vw, 160px);
+  aspect-ratio: auto; border-radius: 14px; object-fit: cover;
 }
 .tq-linha-corpo { flex: 1 1 auto; min-width: 0; }
 .tq-linha-nome {
   font-family: var(--tq-fonte-display); font-weight: 600;
-  font-size: clamp(18px, 2.59vw, 28px); line-height: 1.25;
+  font-size: clamp(20px, 2.78vw, 30px); line-height: 1.2;
 }
 /* A quantidade abre o nome, sem ficha nem cor: é leitura de comanda. */
-.tq-linha-qtd { margin-right: 6px; }
-.tq-linha-ops { margin-top: 8px; font-size: clamp(15px, 1.94vw, 21px); color: var(--tq-texto-2); line-height: 1.5; }
+.tq-linha-qtd { margin-right: 8px; }
+.tq-linha-ops { margin-top: 10px; font-size: clamp(15px, 1.94vw, 21px); color: var(--tq-texto-3); line-height: 1.5; }
 .tq-linha-ops li::before { content: '• '; color: rgba(var(--tq-tinta-base), 0.45); }
 .tq-linha-mudou { margin-top: 8px; font-weight: 800; font-size: clamp(13px, 1.67vw, 18px); letter-spacing: 0.06em; text-transform: uppercase; }
-.tq-linha-lado { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 14px; }
-.tq-linha-valor { font-size: clamp(21px, 3.06vw, 33px); white-space: nowrap; }
+.tq-linha-lado { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 16px; }
+.tq-linha-valor { font-size: clamp(22px, 3.2vw, 36px); white-space: nowrap; }
+/* Os alvos da LINHA são maiores que o stepper do detalhe (64px, não 56): aqui o cliente
+   mexe em várias linhas seguidas, em pé, e o dedo precisa acertar de primeira. */
+.tq-linha .tq-step { width: 64px; height: 64px; border-radius: 16px; }
+.tq-linha .tq-step-v { min-width: 56px; font-size: clamp(22px, 3.06vw, 33px); }
 /* Editar e remover afastados: destrutivo colado em ação comum, num vidro tocado
    em pé, é erro de toque garantido. */
-.tq-linha-acoes { display: flex; align-items: center; gap: 32px; }
+.tq-linha-acoes { display: flex; align-items: center; gap: 24px; }
 .tq-mini {
-  min-height: 56px; padding: 0 16px; border-radius: 12px;
+  min-height: 64px; padding: 0 22px; border-radius: 14px;
   border: 2px solid var(--tq-borda); background: var(--tq-superficie);
-  display: inline-flex; align-items: center; gap: 8px;
-  font-family: var(--tq-fonte-display); font-weight: 900; font-size: clamp(14px, 1.76vw, 19px);
+  display: inline-flex; align-items: center; gap: 10px;
+  font-family: var(--tq-fonte-display); font-weight: 900; font-size: clamp(15px, 1.94vw, 21px);
 }
 .tq-mini:active { transform: scale(0.98); }
 .tq-mini.perigo { border-color: rgba(255, 122, 110, 0.5); color: var(--tq-perigo); }
@@ -1615,7 +1656,10 @@
    tela. Pixel fixo só acertaria numa resolução.
    Vale SÓ quando há capa: sem ela a faixa mostra o título, e 3:1 reservaria 274px de
    altura para uma linha de texto. */
-.tq-topo-faixa.com-capa .tq-topo-capa { aspect-ratio: 3 / 1; }
+/* Teto de 16% da altura da tela: no alvo em pé (1080 × 1920) o 3:1 fica abaixo dele e
+   nada muda; num aparelho mais baixo a capa deixa de empurrar a primeira fileira de
+   produtos para fora da tela — e `cover` na imagem corta as pontas em vez de deformar. */
+.tq-topo-faixa.com-capa .tq-topo-capa { aspect-ratio: 3 / 1; max-height: 16vh; }
 /* `cover` porque a proporção pode não bater exatamente (uma arte 16:9 mandada por
    engano): corta as pontas em vez de distorcer a arte. */
 .tq-topo-capa-img {

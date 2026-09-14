@@ -15,6 +15,9 @@ export default function TelaCarrinho({ linhas, total, fechada = false, aoEditar,
   // o mesmo, o layout não muda, e a razão de não dar para avançar está escrita exatamente
   // onde o dedo ia tocar. A decisão é do módulo puro — aqui só se desenha.
   const acao = acaoDoCarrinho({ fechada, qtdLinhas: linhas.length })
+  // Só exibição: a contagem debaixo do rótulo é o mesmo número que a barra do catálogo
+  // mostra, para o cliente conferir que está tudo aqui.
+  const unidades = linhas.reduce((n, l) => n + (Number(l.qtd) || 0), 0)
   return (
     <>
       <div className="tq-conteudo">
@@ -36,16 +39,18 @@ export default function TelaCarrinho({ linhas, total, fechada = false, aoEditar,
                 aoMudarQtd={(d) => aoMudarQtd(l.uid, d)}
               />
             ))}
-            <button type="button" className="tq-btn tq-btn-claro" onClick={aoAdicionarMais}>
-              <Ico nome="mais" tam={22} /> Adicionar mais itens
+            <button type="button" className="tq-btn tq-btn-claro tq-lista-mais" onClick={aoAdicionarMais}>
+              <Ico nome="mais" tam={26} /> Adicionar mais itens
             </button>
           </div>
         )}
       </div>
 
-      <footer className="tq-rodape coluna">
+      <footer className="tq-rodape coluna tq-rodape-carrinho">
+        {/* "Total", não "Subtotal": não há taxa nem entrega somada depois — o número é o
+            que se paga. A revisão só reconfirma o preço com a loja, e avisa se mudou. */}
         <div className="tq-subtotal">
-          <span>Subtotal<small>o valor final é confirmado na revisão</small></span>
+          <span>Total<small>{unidades === 1 ? '1 item' : `${unidades} itens`}</small></span>
           <strong className="tq-disp tq-disp-forte tq-num">{moeda(total)}</strong>
         </div>
         {/* Fechado NÃO é um botão desabilitado: é um bloco de estado, sem `onClick` e sem
