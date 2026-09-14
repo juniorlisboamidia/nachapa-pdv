@@ -808,10 +808,12 @@
   width: calc(var(--tq-fita-caixa) * 1.54);
   right: calc(var(--tq-fita-caixa) * -0.378);
   top: calc(var(--tq-fita-caixa) * 0.27);
-  padding: calc(var(--tq-fita-caixa) * 0.058) 0;
+  padding: calc(var(--tq-fita-caixa) * 0.07) 0;
   transform: rotate(45deg);
+  /* Maior que no HUB (16px numa arte de 420px): o card do totem é lido a um metro, e a
+     faixa é a mesma caixa — a fonte cresce e a faixa engrossa junto para envolvê-la. */
   color: #fff; font-family: var(--tq-fonte-corpo); font-weight: 700;
-  font-size: clamp(12px, 1.48vw, 16px); line-height: 1.25; letter-spacing: 0.3px;
+  font-size: clamp(15px, 1.95vw, 21px); line-height: 1.2; letter-spacing: 0.3px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.28);
 }
 /* Selo de DESCONTO ("-20%") ao lado do preço antigo: pílula do Design System do HUB
