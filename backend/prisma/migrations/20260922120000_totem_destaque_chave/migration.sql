@@ -3,11 +3,17 @@
 -- (a batata dentro do combo). Com `cwItemId` os complementos ficavam fora do alcance e a
 -- loja não chegava aos doze.
 --
--- A tabela nasceu na 20260920 e nenhuma instalação a aplicou ainda, então não há linha a
--- converter. O DEFAULT '' existe só para o ADD COLUMN NOT NULL não falhar caso alguma
--- linha exista — e é removido em seguida, porque chave vazia não é chave.
+-- CONVERTE o que já existe, não substitui. A primeira versão desta migration presumia
+-- tabela vazia, dava DEFAULT '' às linhas e o índice único falhou em produção com seis
+-- destaques gravados (chave vazia duplicada). Um `cwItemId` antigo era SEMPRE um item base,
+-- e a chave projetada de um item base é `item:<id>` — então a conversão é exata e nenhuma
+-- escolha da loja se perde.
+--
+-- A ordem importa: a chave nasce anulável, é preenchida, e SÓ ENTÃO vira NOT NULL; o índice
+-- novo entra depois de a coluna velha (e o índice velho) saírem. Tudo numa transação.
+ALTER TABLE "TotemDestaque" ADD COLUMN "chave" TEXT;
+UPDATE "TotemDestaque" SET "chave" = 'item:' || "cwItemId";
+ALTER TABLE "TotemDestaque" ALTER COLUMN "chave" SET NOT NULL;
 DROP INDEX "TotemDestaque_empresaId_cwItemId_key";
 ALTER TABLE "TotemDestaque" DROP COLUMN "cwItemId";
-ALTER TABLE "TotemDestaque" ADD COLUMN "chave" TEXT NOT NULL DEFAULT '';
-ALTER TABLE "TotemDestaque" ALTER COLUMN "chave" DROP DEFAULT;
 CREATE UNIQUE INDEX "TotemDestaque_empresaId_chave_key" ON "TotemDestaque"("empresaId", "chave");
