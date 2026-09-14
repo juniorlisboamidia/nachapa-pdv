@@ -3359,7 +3359,10 @@ body.theme-dark .apr-contagem, body.theme-dark .apr-qr-legenda, body.theme-dark 
 /* O seletor de arquivo e o "tirar" na mesma linha: tirar a foto é ação secundária, e um
    botão inteiro embaixo dava a ela o mesmo peso de escolher. */
 .ttm-fundo-linha { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.ttm-fundo-linha .form-input { flex: 1 1 260px; }
+.ttm-fundo-linha .form-input { flex: 0 1 380px; }
+/* A foto que está no ar, em miniatura, ao lado do seletor: é o que diz "há uma foto aqui"
+   sem precisar de frase. 9:8, a mesma proporção da metade de cima. */
+.ttm-fundo-atual { flex: 0 0 auto; width: 72px; height: 64px; border-radius: 8px; object-fit: cover; border: 1px solid var(--app-border); background: #111; }
 .ttm-fundo-linha .ttm-usar-padrao { flex: 0 0 auto; white-space: nowrap; }
 .ttm-vit {
   container-type: inline-size; aspect-ratio: 9 / 16; width: 100%;
@@ -3385,7 +3388,7 @@ body.theme-dark .apr-contagem, body.theme-dark .apr-qr-legenda, body.theme-dark 
   font-family: Montserrat, 'Segoe UI', sans-serif; font-weight: 900; font-size: 4cqw; letter-spacing: .01em;
   white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
 }
-.ttm-vit-baixo { flex: 1 1 50%; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: center; gap: 4cqw; padding: 3cqw 0; }
+.ttm-vit-baixo { flex: 1 1 50%; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-start; gap: 4cqw; padding: 3cqw 0 0; }
 .ttm-vit-fila { display: flex; gap: 3cqw; padding-left: 4cqw; }
 .ttm-vit-fila:nth-child(2) { padding-left: 14cqw; }
 .ttm-vit-card { flex: 0 0 auto; width: 27cqw; display: flex; flex-direction: column; gap: 1.6cqw; }

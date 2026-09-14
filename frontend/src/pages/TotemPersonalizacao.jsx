@@ -342,6 +342,10 @@ export default function TotemPersonalizacao() {
             <div className="form-group">
               <label className="form-label" htmlFor="apa-fundo">Foto de fundo</label>
               <div className="ttm-fundo-linha">
+                {/* A foto que está no ar, em miniatura: é o sinal de que há uma foto aqui —
+                    sem ela, o seletor vazio dizia "nenhum arquivo escolhido" para uma tela
+                    que tem foto. E o "tirar" fica na mesma linha, ao lado do que ele tira. */}
+                {dados?.fundo?.tem ? <img className="ttm-fundo-atual" src={dados.fundo.url} alt="Foto de fundo atual" /> : null}
                 <input
                   ref={fundoRef}
                   id="apa-fundo"

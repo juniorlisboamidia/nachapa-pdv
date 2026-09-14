@@ -884,22 +884,25 @@ model TotemEsperaFundo {
 
 /* Os produtos que a esteira da tela de espera mostra.
 
-   Mesma forma de `TotemApresentacao`: uma linha por item do Cardápio Web, com o id DELE
-   (`cwItemId`) e nada mais. Nome, preço e foto NUNCA são copiados para cá — eles vêm do
-   catálogo vivo a cada bootstrap. Copiar transformaria esta tabela numa segunda fonte de
-   verdade sobre preço, que é exatamente o erro que o resto do totem evita.
+   Uma linha por produto do catálogo PROJETADO, e a chave é a dele: `item:12` para um item
+   base, `opcao:12:5:88` para um complemento expandido (a batata dentro do combo). Era
+   `cwItemId` numérico, e isso deixava metade do cardápio fora do alcance — os complementos
+   não são itens, são opções, e sem eles a loja não chegava aos doze.
 
-   Item que sai do cardápio vira ÓRFÃO: o bootstrap simplesmente não o encontra e ele não
-   aparece na esteira; o admin mostra a linha marcada, com um botão de limpar. É o mesmo
-   tratamento que a apresentação já dá. */
+   Nome, preço e foto NUNCA são copiados para cá — eles vêm do catálogo vivo a cada
+   bootstrap. Copiar transformaria esta tabela numa segunda fonte de verdade sobre preço,
+   que é exatamente o erro que o resto do totem evita.
+
+   Produto que sai do cardápio vira ÓRFÃO: o bootstrap não o encontra e ele não aparece na
+   esteira; o admin mostra a linha marcada, com um botão de limpar. */
 model TotemDestaque {
   id           Int      @id @default(autoincrement())
   empresaId    Int
-  cwItemId     Int
+  chave        String
   ordem        Int      @default(0)
   criadoEm     DateTime @default(now())
 
-  @@unique([empresaId, cwItemId])
+  @@unique([empresaId, chave])
   @@index([empresaId, ordem])
 }
 

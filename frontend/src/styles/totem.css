@@ -1235,7 +1235,11 @@
    troca de regras em vez de acumular: `.vitrine` desliga o respiro e o centramento que a
    composição de banner precisa, porque aqui quem divide a tela são as duas metades. */
 .tq-espera.vitrine {
-  justify-content: stretch; gap: 0; padding: 0; text-align: left;
+  /* `align-items: stretch` é o que faz as duas metades ocuparem a LARGURA toda. A casca
+     de banner centra os filhos (`align-items: center`), e herdado aqui isso encolhia a
+     metade de cima à largura do texto — a foto, absoluta dentro dela, ficava com bordas
+     pretas dos dois lados. */
+  align-items: stretch; justify-content: flex-start; gap: 0; padding: 0; text-align: left;
 }
 
 .tq-vit-alto {
@@ -1277,9 +1281,12 @@
    chega na posição exata em que a primeira começou, e o laço fecha sem salto. */
 .tq-vit-baixo {
   flex: 1 1 50%; min-height: 0; overflow: hidden;
-  display: flex; flex-direction: column; justify-content: center;
+  /* As esteiras começam COLADAS na foto (`flex-start`), e a sobra vai toda para o rodapé.
+     Centradas, elas deixavam um vão entre as metades — a sobra dividida em cima e embaixo
+     lê como duas telas separadas; sobra só no fim lê como "acabou". */
+  display: flex; flex-direction: column; justify-content: flex-start;
   gap: clamp(14px, 2.2vh, 34px);
-  padding-block: clamp(14px, 2vh, 32px);
+  padding: clamp(18px, 2.4vh, 36px) 0 0;
   background: var(--tq-fundo);
 }
 .tq-vit-trilho { overflow: hidden; }
@@ -1301,7 +1308,7 @@
   .tq-vit-fila { animation: none; }
 }
 .tq-vit-card {
-  flex: 0 0 auto; width: clamp(150px, 27vw, 300px);
+  flex: 0 0 auto; width: clamp(160px, 30vw, 330px);
   display: flex; flex-direction: column; gap: 6px;
 }
 .tq-vit-card img {

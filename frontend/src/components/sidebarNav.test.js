@@ -27,7 +27,7 @@ test('subitens de Ferramentas e Loja Digital com identidade própria', () => {
   // As folhas do Totem também se distinguem entre si: numa lista de seis, ícone
   // repetido faz duas telas diferentes parecerem a mesma de relance.
   const totem = grupo(grupo(grupos, 'Loja Digital').itens, 'Totem').itens;
-  assert.deepEqual(totem.map((n) => n.icon), ['relatorios', 'config', 'cpu', 'ficha', 'star', 'trophy', 'marketing', 'financeiro']);
+  assert.deepEqual(totem.map((n) => n.icon), ['relatorios', 'config', 'cpu', 'ficha', 'star', 'marketing', 'financeiro']);
   // Banners é SUBGRUPO: ele abre outro nível na sidebar em vez de abas dentro da página.
   const banners = totem.find((n) => n.label === 'Banners');
   assert.equal(banners.to, undefined, 'subgrupo não é link');
@@ -88,7 +88,7 @@ test('Ferramentas volta a ter só Checklist e Etiquetas', () => {
   assert.deepEqual(labels(grupo(grupos, 'Ferramentas').itens), ['Checklist', 'Etiquetas']);
 });
 
-test('Loja Digital é suíte de canais: Totem (oito itens) e TV Indoor', () => {
+test('Loja Digital é suíte de canais: Totem (sete itens) e TV Indoor', () => {
   const ld = grupo(grupos, 'Loja Digital').itens;
   assert.deepEqual(ld.map((n) => n.label), ['Totem', 'TV Indoor']);
   const totem = grupo(ld, 'Totem');
@@ -98,13 +98,22 @@ test('Loja Digital é suíte de canais: Totem (oito itens) e TV Indoor', () => {
   assert.equal(totem.to, undefined, 'o subgrupo não é link: quem tem rota são as folhas');
   assert.deepEqual(totem.itens.map((n) => n.label), [
     'Pedidos', 'Configurações', 'Gestão de totens', 'Cardápio',
-    'Personalização', 'Destaques da vitrine', 'Banners', 'Formas de pagamento',
+    'Personalização', 'Banners', 'Formas de pagamento',
   ]);
   // Seis folhas com rota própria; Banners é o único que abre outro nível.
   assert.deepEqual(totem.itens.filter((n) => n.to).map((n) => n.to), [
     '/totem/pedidos', '/totem/configuracoes', '/totem/aparelhos',
-    '/totem/cardapio', '/totem/personalizacao', '/totem/destaques', '/totem/pagamentos',
+    '/totem/cardapio', '/totem/pagamentos',
   ]);
+  // Personalização também abre outro nível: aparência e destaques são duas telas da mesma
+  // coisa, e o PDV resolve profundidade com subcategoria.
+  const personalizacao = totem.itens.find((n) => n.label === 'Personalização');
+  assert.equal(personalizacao.to, undefined, 'subgrupo não é link');
+  assert.deepEqual(personalizacao.itens.map((n) => [n.label, n.to]), [
+    ['Aparência', '/totem/personalizacao'],
+    ['Destaques da vitrine', '/totem/personalizacao/destaques'],
+  ]);
+  assert.equal(personalizacao.itens[0].end, true, '`end` para a Aparência não acender em /destaques');
   // Pedidos PRIMEIRO, e isto não é ordem alfabética nem gosto: a `primeiraFolha` da
   // Visão Geral e o redirect de `/totem` apontam para a primeira folha. Trocar a
   // ordem mudaria o destino dos dois em silêncio.
@@ -121,7 +130,7 @@ test('operador com aparelhos vê só Loja Digital, com as duas suítes', () => {
   assert.deepEqual(labels(v), ['Loja Digital']);
   assert.deepEqual(labels(grupo(v, 'Loja Digital').itens), ['Totem', 'TV Indoor']);
   assert.deepEqual(labels(grupo(grupo(v, 'Loja Digital').itens, 'Totem').itens), [
-    'Pedidos', 'Configurações', 'Gestão de totens', 'Cardápio', 'Personalização', 'Destaques da vitrine', 'Banners', 'Formas de pagamento',
+    'Pedidos', 'Configurações', 'Gestão de totens', 'Cardápio', 'Personalização', 'Banners', 'Formas de pagamento',
   ]);
 });
 
@@ -145,7 +154,8 @@ test('localizarRota abre o nível certo', () => {
   assert.deepEqual(localizarRota('/totem/pedidos').caminho, ['Loja Digital', 'Totem']);
   assert.deepEqual(localizarRota('/totem/cardapio').caminho, ['Loja Digital', 'Totem']);
   assert.deepEqual(localizarRota('/totem/aparelhos').caminho, ['Loja Digital', 'Totem']);
-  assert.deepEqual(localizarRota('/totem/personalizacao').caminho, ['Loja Digital', 'Totem']);
+  assert.deepEqual(localizarRota('/totem/personalizacao').caminho, ['Loja Digital', 'Totem', 'Personalização']);
+  assert.deepEqual(localizarRota('/totem/personalizacao/destaques').caminho, ['Loja Digital', 'Totem', 'Personalização']);
   // 🔴 TRÊS níveis: é o caminho inteiro que a sidebar usa para abrir no lugar certo.
   assert.deepEqual(localizarRota('/totem/banners/capa').caminho, ['Loja Digital', 'Totem', 'Banners']);
   assert.deepEqual(localizarRota('/totem/banners/espera').caminho, ['Loja Digital', 'Totem', 'Banners']);

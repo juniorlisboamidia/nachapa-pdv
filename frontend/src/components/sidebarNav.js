@@ -146,9 +146,15 @@ export const grupos = [
           // operador passa a ter de lembrar se o que procura está na sidebar ou lá dentro.
           // O PDV resolve profundidade com subcategoria, e Banners tem DOIS lugares —
           // então ele é subgrupo, e abre os dois no mesmo drill de sempre.
-          { to: '/totem/personalizacao', label: 'Personalização', icon: 'star' },
+          // Personalização é SUBGRUPO, como Banners: a aparência (marca, tela de espera,
+          // cores, layout) e os produtos da esteira são duas telas da mesma coisa, e o PDV
+          // resolve profundidade com subcategoria — nunca com um item solto no mesmo nível.
           {
-            to: '/totem/destaques', label: 'Destaques da vitrine', icon: 'trophy',
+            label: 'Personalização', icon: 'star',
+            itens: [
+              { to: '/totem/personalizacao', label: 'Aparência', end: true },
+              { to: '/totem/personalizacao/destaques', label: 'Destaques da vitrine' },
+            ],
           },
           {
             label: 'Banners', icon: 'marketing',

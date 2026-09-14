@@ -50,7 +50,7 @@ export default function TotemDestaques() {
   const buscar = useCallback(() => api.get('/totem/destaques')
     .then((r) => {
       setDados(r.data)
-      setIds((r.data?.escolhidos ?? []).map((d) => d.cwItemId))
+      setIds((r.data?.escolhidos ?? []).map((d) => d.chave))
       setErro(null)
     })
     .catch((e) => setErro(erroDe(e, 'Não foi possível ler os destaques agora.')))
@@ -64,10 +64,10 @@ export default function TotemDestaques() {
   // O catálogo indexado, para a coluna da esquerda desenhar cada escolhido sem varrer a
   // lista inteira a cada linha. Sem `useMemo` à mão: o React Compiler está ligado neste
   // projeto e já memoiza — escrevê-lo mesmo assim faz o compilador DESISTIR do arquivo.
-  const porId = new Map(catalogo.map((i) => [i.cwItemId, i]))
+  const porId = new Map(catalogo.map((i) => [i.chave, i]))
 
-  const escolhidos = ids.map((id) => porId.get(id) ?? { cwItemId: id, nome: null, orfao: true })
-  const gravados = (dados?.escolhidos ?? []).map((d) => d.cwItemId)
+  const escolhidos = ids.map((id) => porId.get(id) ?? { chave: id, nome: null, orfao: true })
+  const gravados = (dados?.escolhidos ?? []).map((d) => d.chave)
   const temMudanca = ids.length !== gravados.length || ids.some((id, i) => id !== gravados[i])
 
   const alvo = busca.trim().toLowerCase()
@@ -104,9 +104,9 @@ export default function TotemDestaques() {
     if (!temMudanca || salvando) return
     setSalvando(true)
     try {
-      const r = await api.put('/totem/destaques', { ids })
+      const r = await api.put('/totem/destaques', { chaves: ids })
       setDados((d) => ({ ...d, escolhidos: r.data?.escolhidos ?? [] }))
-      setIds((r.data?.escolhidos ?? []).map((d) => d.cwItemId))
+      setIds((r.data?.escolhidos ?? []).map((d) => d.chave))
       setToast({ message: 'Destaques salvos. Os totens aplicam na próxima vez que carregarem o cardápio.', type: 'success' })
     } catch (e) {
       setToast({ message: erroDe(e, 'Não foi possível salvar.'), type: 'error' })
@@ -150,25 +150,27 @@ export default function TotemDestaques() {
           ) : (
             <ul className="ttm-dst-lista">
               {escolhidos.map((p, i) => (
-                <li key={p.cwItemId} className={'ttm-dst' + (p.orfao ? ' orfao' : '')}>
+                <li key={p.chave} className={'ttm-dst' + (p.orfao ? ' orfao' : '')}>
                   <span className="ttm-dst-num">{i + 1}</span>
                   {p.imagem
                     ? <img className="ttm-dst-foto" src={p.imagem} alt="" />
                     : <span className="ttm-dst-foto vazia" aria-hidden="true" />}
                   <div className="ttm-dst-txt">
-                    <strong>{p.nome ?? `Produto #${p.cwItemId}`}</strong>
+                    <strong>{p.nome ?? `Produto #${p.chave}`}</strong>
                     {/* Os dois motivos de um escolhido não chegar ao vidro, e cada um tem uma
                         saída diferente: órfão se resolve aqui, sem foto se resolve no CW. */}
                     {p.orfao
                       ? <span className="ttm-dst-aviso">Saiu do cardápio — não aparece no totem</span>
                       : !p.imagem
                         ? <span className="ttm-dst-aviso">Sem foto no cardápio — não aparece na esteira</span>
-                        : <span className="ttm-dst-meta">{p.categoria} · {moeda(p.preco)}</span>}
+                        : p.emFalta
+                          ? <span className="ttm-dst-aviso">Em falta no cardápio — não aparece enquanto faltar</span>
+                          : <span className="ttm-dst-meta">{p.categoria} · {moeda(p.preco)}</span>}
                   </div>
                   <div className="ttm-dst-acoes">
-                    <button type="button" className="btn btn-secondary btn-sm" disabled={salvando || i === 0} onClick={() => mover(i, -1)} aria-label={`Subir ${p.nome ?? p.cwItemId}`}>↑</button>
-                    <button type="button" className="btn btn-secondary btn-sm" disabled={salvando || i === ids.length - 1} onClick={() => mover(i, 1)} aria-label={`Descer ${p.nome ?? p.cwItemId}`}>↓</button>
-                    <button type="button" className="btn btn-secondary btn-sm" disabled={salvando} onClick={() => alternar(p.cwItemId)} aria-label={`Tirar ${p.nome ?? p.cwItemId} da esteira`}>Tirar</button>
+                    <button type="button" className="btn btn-secondary btn-sm" disabled={salvando || i === 0} onClick={() => mover(i, -1)} aria-label={`Subir ${p.nome ?? p.chave}`}>↑</button>
+                    <button type="button" className="btn btn-secondary btn-sm" disabled={salvando || i === ids.length - 1} onClick={() => mover(i, 1)} aria-label={`Descer ${p.nome ?? p.chave}`}>↓</button>
+                    <button type="button" className="btn btn-secondary btn-sm" disabled={salvando} onClick={() => alternar(p.chave)} aria-label={`Tirar ${p.nome ?? p.chave} da esteira`}>Tirar</button>
                   </div>
                 </li>
               ))}
@@ -196,26 +198,28 @@ export default function TotemDestaques() {
           ) : (
             <ul className="ttm-dst-lista rolagem">
               {filtrados.map((p) => {
-                const dentro = ids.includes(p.cwItemId)
+                const dentro = ids.includes(p.chave)
                 return (
-                  <li key={p.cwItemId} className={'ttm-dst' + (dentro ? ' dentro' : '')}>
+                  <li key={p.chave} className={'ttm-dst' + (dentro ? ' dentro' : '')}>
                     {p.imagem
                       ? <img className="ttm-dst-foto" src={p.imagem} alt="" />
                       : <span className="ttm-dst-foto vazia" aria-hidden="true" />}
                     <div className="ttm-dst-txt">
-                      <strong>{p.nome ?? `Produto #${p.cwItemId}`}</strong>
+                      <strong>{p.nome ?? `Produto #${p.chave}`}</strong>
                       {/* O sem-foto aparece na lista, e marcado. Escondê-lo faria a loja
                           procurar um produto que está no cardápio e não achar, sem entender
                           por quê. */}
-                      {p.imagem
-                        ? <span className="ttm-dst-meta">{p.categoria} · {moeda(p.preco)}</span>
-                        : <span className="ttm-dst-aviso">Sem foto — não entra na esteira</span>}
+                      {!p.imagem
+                        ? <span className="ttm-dst-aviso">Sem foto — não entra na esteira</span>
+                        : p.emFalta
+                          ? <span className="ttm-dst-aviso">Em falta — não entra enquanto faltar</span>
+                          : <span className="ttm-dst-meta">{p.categoria} · {moeda(p.preco)}</span>}
                     </div>
                     <button
                       type="button"
                       className={'btn btn-sm ' + (dentro ? 'btn-secondary' : 'btn-primary')}
                       disabled={salvando}
-                      onClick={() => alternar(p.cwItemId)}
+                      onClick={() => alternar(p.chave)}
                     >
                       {dentro ? 'Tirar' : 'Pôr'}
                     </button>

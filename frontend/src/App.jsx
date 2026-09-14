@@ -162,7 +162,8 @@ export default function App() {
             <Route path="totem/aparelhos" element={<Aparelhos />} />
             <Route path="totem/cardapio" element={<TotemCardapio />} />
             <Route path="totem/personalizacao" element={<TotemPersonalizacao />} />
-            <Route path="totem/destaques" element={<TotemDestaques />} />
+            <Route path="totem/personalizacao/destaques" element={<TotemDestaques />} />
+            <Route path="totem/destaques" element={<Navigate to="/totem/personalizacao/destaques" replace />} />
             <Route path="totem/banners" element={<Navigate to="/totem/banners/capa" replace />} />
             <Route path="totem/banners/:tipo" element={<TotemBanners />} />
             <Route path="totem/pagamentos" element={<EmConstrucao titulo="Formas de pagamento" descricao="Em breve." />} />
