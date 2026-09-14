@@ -90,40 +90,34 @@ export default function NomesDeCategoria({ aoAvisar }) {
   }
 
   return (
-    <section style={{ marginBottom: 28 }}>
-      <div className="page-header" style={{ marginBottom: 10 }}>
-        <div>
-          <h2 style={{ fontSize: 18, margin: 0 }}>Nomes das categorias no totem</h2>
-          <div className="page-header-sub">
-            O nome do Cardápio Web serve ao cardápio digital, onde o emoji ajuda a achar a seção. No totem, a
-            coluna da esquerda é estreita: aqui você diz como cada categoria se chama <strong>na tela do
-            cliente</strong>. Ordem, itens e disponibilidade continuam vindo do Cardápio Web. Categoria sem nome
-            preenchido aparece como está lá.
-          </div>
+    <section className="table-card" style={{ padding: 16, marginBottom: 16 }}>
+      {/* O mesmo card de seção da Personalização: título, contagem e as ações numa linha.
+          A explicação de quatro linhas saiu — "em branco, vale o nome do Cardápio Web" é
+          tudo o que a tela precisa dizer. */}
+      <div className="ttm-cab-secao">
+        <h2 className="ttm-secao-t">Nomes das categorias</h2>
+        <span className="ttm-meta-txt">
+          {linhas.length} {linhas.length === 1 ? 'categoria' : 'categorias'}
+          {comSugestao.length > 0 ? ` · ${comSugestao.length} com emoji no nome` : ''} · em branco, vale o nome do Cardápio Web
+        </span>
+        <div className="ttm-cab-acao">
+          {comSugestao.length > 0 && (
+            <button type="button" className="btn btn-secondary btn-sm" onClick={aplicarSugestoes}>
+              Preencher sem emoji
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            disabled={!alteradas.length || salvando}
+            onClick={salvar}
+          >
+            {salvando ? 'Salvando…' : alteradas.length ? `Salvar ${alteradas.length}` : 'Salvar'}
+          </button>
         </div>
       </div>
 
-      <div className="ttm-filtros">
-        <span className="ttm-meta-txt">
-          {linhas.length} {linhas.length === 1 ? 'categoria' : 'categorias'}
-          {comSugestao.length > 0 ? ` · ${comSugestao.length} com emoji no nome` : ''}
-        </span>
-        {comSugestao.length > 0 && (
-          <button type="button" className="btn btn-secondary btn-sm" onClick={aplicarSugestoes}>
-            Preencher sem emoji
-          </button>
-        )}
-        <button
-          type="button"
-          className="btn btn-primary btn-sm"
-          disabled={!alteradas.length || salvando}
-          onClick={salvar}
-        >
-          {salvando ? 'Salvando…' : alteradas.length ? `Salvar ${alteradas.length}` : 'Salvar'}
-        </button>
-      </div>
-
-      <table className="hb-table">
+      <table className="hb-table hb-table-compact">
         <thead>
           <tr>
             <th>No Cardápio Web</th>

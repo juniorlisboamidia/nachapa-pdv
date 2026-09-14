@@ -194,19 +194,14 @@ export default function TotemCardapio() {
 
   return (
     <div>
+      {/* Uma linha de cabeçalho, e só. A explicação longa de antes (o que vem do CW, o que
+          é vitrine) virou seis linhas que ninguém lia duas vezes; o que a tela precisa dizer
+          cabe numa frase, e cada bloco explica o seu pedaço no próprio lugar. */}
       <div className="page-header">
         <div>
           <h1>Cardápio do totem</h1>
           <div className="page-header-sub">
-            Quem manda no cardápio é o <strong>Cardápio Web</strong>: item, preço, foto, disponibilidade e ordem vêm
-            de lá e se editam lá. Aqui ficam só as <strong>exceções de apresentação do totem</strong> — como um item
-            aparece no vidro e com que nome cada categoria é chamada.
-          </div>
-          <div className="page-header-sub">
-            Alguns itens do cardápio são só uma <strong>capa</strong>: “TRADICIONAIS 🍔” custa R$ 0,00 e guarda nove
-            hambúrgueres dentro de um grupo de escolha única. No modo <strong>Vitrine</strong> cada um desses
-            hambúrgueres vira um card próprio no totem, com foto, descrição e preço. O pedido enviado ao Cardápio Web
-            é exatamente o mesmo de antes.
+            Item, preço, foto e ordem vêm do Cardápio Web. Aqui: o nome das categorias, a fita e a vitrine de cada item.
           </div>
         </div>
       </div>
@@ -226,40 +221,39 @@ export default function TotemCardapio() {
         </div>
       ) : (
         <>
-          {/* Nome da categoria e vitrine do item são as duas decisões de
-              APRESENTAÇÃO do totem: moram na mesma tela, em blocos separados. */}
+          {/* Cada decisão de apresentação num CARD próprio, como em Personalização: nome
+              das categorias, itens, e — só quando existem — órfãs e sugestões. */}
           <NomesDeCategoria aoAvisar={setToast} />
 
-          <div className="ttm-filtros">
-            <span className="ttm-meta-txt">
-              {itens.length} {itens.length === 1 ? 'item no cardápio' : 'itens no cardápio'} ·{' '}
-              {expandidos} {expandidos === 1 ? 'em vitrine' : 'em vitrine'}
-              {invalidos > 0 ? ` · ${invalidos} com problema` : ''}
-            </span>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={carregar}>Atualizar</button>
-          </div>
-
-          {invalidos > 0 && (
-            <div className="ttm-alerta-admin">
-              <strong>{invalidos === 1 ? '1 configuração não está valendo' : `${invalidos} configurações não estão valendo`}.</strong>{' '}
-              O cardápio mudou e elas deixaram de ser possíveis. No totem esses itens já voltaram ao modo normal —
-              corrija o grupo aqui ou volte para Normal.
+          <div className="table-card" style={{ padding: 16, marginBottom: 16 }}>
+            <div className="ttm-cab-secao">
+              <h2 className="ttm-secao-t">Itens</h2>
+              <span className="ttm-meta-txt">
+                {itens.length} {itens.length === 1 ? 'item' : 'itens'} · {expandidos} em vitrine
+                {invalidos > 0 ? ` · ${invalidos} com problema` : ''}
+              </span>
+              <button type="button" className="btn btn-secondary btn-sm ttm-cab-acao" onClick={carregar}>Atualizar</button>
             </div>
-          )}
 
-          {itens.length === 0 ? (
-            <div className="empty-state">Nenhum item no cardápio desta loja. Assim que o Cardápio Web tiver itens, eles aparecem aqui.</div>
-          ) : (
-            <div className="table-card">
+            {invalidos > 0 && (
+              <div className="ttm-alerta-admin">
+                <strong>{invalidos === 1 ? '1 vitrine não está valendo' : `${invalidos} vitrines não estão valendo`}.</strong>{' '}
+                O cardápio mudou por baixo; no totem esses itens já voltaram ao normal. Corrija o grupo ou volte para Normal.
+              </div>
+            )}
+
+            {itens.length === 0 ? (
+              <div className="empty-state">Nenhum item no cardápio desta loja. Assim que o Cardápio Web tiver itens, eles aparecem aqui.</div>
+            ) : (
               <table className="hb-table hb-table-compact">
                 <thead>
                   <tr>
                     <th>Item</th>
                     <th>Categoria</th>
-                    <th style={{ textAlign: 'right' }}>Preço base</th>
-                    <th>Hoje</th>
-                    <th>Como mostrar no totem</th>
+                    <th style={{ textAlign: 'right' }}>Preço</th>
+                    <th>Exibição</th>
                     <th>Fita</th>
+                    <th>Como mostrar no totem</th>
                     <th style={{ textAlign: 'right' }}>Ações</th>
                   </tr>
                 </thead>
@@ -299,7 +293,7 @@ export default function TotemCardapio() {
                           <div className="ttm-meta-txt">#{item.cwItemId}</div>
                         </td>
                         <td>{item.categoria ?? '—'}</td>
-                        <td style={{ textAlign: 'right' }}>{moeda(item.precoBase)}</td>
+                        <td style={{ textAlign: 'right' }} className="ttm-nowrap">{moeda(item.precoBase)}</td>
                         <td>
                           {emVitrine
                             ? <span className="badge badge-green">Vitrine</span>
@@ -312,20 +306,31 @@ export default function TotemCardapio() {
                               não está valendo: {mensagemApresentacao(item.validacao?.codigo)} <Codigo codigo={item.validacao?.codigo} />
                             </div>
                           )}
-                          {/* Informativo, cor neutra: explica por que o card do totem vai
-                              dizer "a partir de" em vez de um preço fechado. */}
+                          {/* Informativo, cor neutra: o card do totem vai dizer "a partir
+                              de" em vez de um preço fechado. */}
                           {item.obrigatoriosAlem > 0 && (
-                            <div className="ttm-meta-txt">Tem outras escolhas obrigatórias: o card mostra “a partir de”.</div>
+                            <div className="ttm-meta-txt">Card mostra “a partir de”</div>
                           )}
+                        </td>
+                        <td>
+                          {/* A fita é do ITEM: em vitrine ela vai para cada card que sai dele.
+                              Grava ao escolher; o vazio tira. */}
+                          <select
+                            className="form-input ttm-fita-select"
+                            aria-label={`Fita de ${item.nome}`}
+                            value={fitas[chave] ?? ''}
+                            disabled={fitaEmVoo === chave || selos.length === 0}
+                            onChange={(e) => mudarFita(item, e.target.value)}
+                          >
+                            <option value="">Sem fita</option>
+                            {selos.map((s) => <option key={s.codigo} value={s.codigo}>{s.rotulo}</option>)}
+                          </select>
                         </td>
                         <td>
                           {neutro ? (
                             <div className="ttm-meta-txt">Sem grupo de escolha única com duas ou mais opções</div>
                           ) : (
                           <div className="ttm-apr-form">
-                            {item.candidato === true && !item.config && (
-                              <div className="ttm-meta-txt">Pode virar vitrine</div>
-                            )}
                             <select
                               className="form-input"
                               aria-label={`Modo de ${item.nome}`}
@@ -370,20 +375,6 @@ export default function TotemCardapio() {
                           </div>
                           )}
                         </td>
-                        <td>
-                          {/* A fita é do ITEM: em vitrine ela vai para cada card que sai dele.
-                              Grava ao escolher; o vazio tira. */}
-                          <select
-                            className="form-input ttm-fita-select"
-                            aria-label={`Fita de ${item.nome}`}
-                            value={fitas[chave] ?? ''}
-                            disabled={fitaEmVoo === chave || selos.length === 0}
-                            onChange={(e) => mudarFita(item, e.target.value)}
-                          >
-                            <option value="">Sem fita</option>
-                            {selos.map((s) => <option key={s.codigo} value={s.codigo}>{s.rotulo}</option>)}
-                          </select>
-                        </td>
                         <td style={{ textAlign: 'right' }}>
                           {/* Item neutro não tem o que salvar: sem select, sem botão. */}
                           {!neutro && (
@@ -402,23 +393,16 @@ export default function TotemCardapio() {
                   })}
                 </tbody>
               </table>
-            </div>
-          )}
-
-          {/* ── Órfãs ─────────────────────────────────────────────────────── */}
-          <div className="page-header" style={{ marginTop: 28 }}>
-            <div>
-              <h2 style={{ margin: 0 }}>Configurações órfãs</h2>
-              <div className="page-header-sub">
-                Itens que foram configurados aqui e depois <strong>saíram do cardápio</strong> (ou saíram do delivery).
-                Não fazem mal nenhum ao totem — ele já ignora —, mas ficam guardadas até alguém remover.
-              </div>
-            </div>
+            )}
           </div>
-          {orfas.length === 0 ? (
-            <div className="empty-state">Nenhuma configuração órfã. Tudo que está salvo aponta para um item que existe.</div>
-          ) : (
-            <div className="table-card">
+
+          {/* ── Órfãs: só quando existem. Um card vazio dizendo "nenhuma" era ruído. ── */}
+          {orfas.length > 0 && (
+            <div className="table-card" style={{ padding: 16, marginBottom: 16 }}>
+              <div className="ttm-cab-secao">
+                <h2 className="ttm-secao-t">Configurações órfãs</h2>
+                <span className="ttm-meta-txt">Vitrines de itens que saíram do cardápio. O totem já as ignora; remover só limpa o registro.</span>
+              </div>
               <table className="hb-table hb-table-compact">
                 <thead>
                   <tr>
@@ -456,21 +440,14 @@ export default function TotemCardapio() {
             </div>
           )}
 
-          {/* ── Sugestões ─────────────────────────────────────────────────── */}
-          <div className="page-header" style={{ marginTop: 28 }}>
-            <div>
-              <h2 style={{ margin: 0 }}>Sugestões</h2>
-              <div className="page-header-sub">
-                Itens com cara de capa: preço baixo ou zerado, um único grupo obrigatório de escolha única e várias
-                opções dentro. É <strong>palpite</strong>: “Usar” só preenche o formulário do item lá em cima —
-                nada é ligado sem você clicar em Salvar.
+          {/* ── Sugestões: só quando há alguma. "Usar" preenche o formulário do item; quem
+                 salva é o humano. ── */}
+          {sugestoes.length > 0 && (
+            <div className="table-card" style={{ padding: 16, marginBottom: 16 }}>
+              <div className="ttm-cab-secao">
+                <h2 className="ttm-secao-t">Sugestões de vitrine</h2>
+                <span className="ttm-meta-txt">Itens com cara de capa. “Usar” só preenche o formulário lá em cima — nada liga sem Salvar.</span>
               </div>
-            </div>
-          </div>
-          {sugestoes.length === 0 ? (
-            <div className="empty-state">Nenhuma sugestão no momento.</div>
-          ) : (
-            <div className="table-card">
               <table className="hb-table hb-table-compact">
                 <thead>
                   <tr>

@@ -3358,6 +3358,12 @@ body.theme-dark .apr-contagem, body.theme-dark .apr-qr-legenda, body.theme-dark 
 /* O select da fita no Cardápio do totem: largura própria, para a coluna não engolir a
    tabela — "Mais pedido" cabe folgado em 150px. */
 .ttm-fita-select { width: 150px; min-width: 150px; }
+/* Cabeçalho de um card de seção (Cardápio do totem): título, contagem e ações numa linha,
+   ações encostadas à direita. Substitui o par page-header + ttm-filtros, que deixava cada
+   bloco solto na página com dois respiros entre título e tabela. */
+.ttm-cab-secao { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.ttm-cab-secao .ttm-secao-t { margin: 0; }
+.ttm-cab-acao { margin-left: auto; display: flex; gap: 8px; }
 .ttm-vit-split { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 32px; align-items: start; margin-top: 16px; }
 /* Recorte 9:10 da vitrine 9:16 — a metade de cima, a faixa e o começo da esteira — para a
    prévia ter a altura dos campos, não o dobro. O pé esvai no chão do template. */
