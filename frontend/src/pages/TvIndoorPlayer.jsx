@@ -107,11 +107,26 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
   const lista = paraExibir({ itens, agoraMs, falhados })
   const total = lista.length
 
-  // ── O que impede a TV de piscar ───────────────────────────────────────────
-  // O índice só volta a zero quando a programação muda DE VERDADE. Um refresh que devolve
-  // a mesma lista tem a mesma assinatura, e o rodízio continua de onde estava.
-  const chave = assinatura(lista)
-  useEffect(() => { setIndice(0) }, [chave]) // eslint-disable-line react-hooks/set-state-in-effect
+  // ── O que impede a TV de piscar (e o que devolve a chance a quem falhou) ──
+  // A assinatura é da programação CRUA (o que o servidor mandou), não da lista já
+  // filtrada. São duas coisas diferentes, e a distinção resolve dois problemas de uma vez:
+  //
+  //  · NÃO PISCAR. Refresh que devolve a mesma programação tem a mesma assinatura, e o
+  //    rodízio continua de onde estava. Com a lista filtrada dava no mesmo — até aqui.
+  //
+  //  · NOVA CHANCE PARA QUEM FALHOU. Esta tela não remonta NUNCA: ela fica ligada por
+  //    semanas. Com a assinatura da lista filtrada, um id que entrou em `falhados` ficava
+  //    lá para sempre — a loja corrigia a arte, a versão subia, a URL mudava, e aquele
+  //    conteúdo continuava fora até alguém reiniciar o navegador da TV. Com a assinatura
+  //    CRUA, trocar a arte (ou a programação) muda a chave e limpa a lista de falhados.
+  //
+  //  · E não há laço: marcar uma falha muda a lista filtrada, mas NÃO muda a crua — então
+  //    o efeito não dispara de novo e o item não volta imediatamente para falhar outra vez.
+  const chave = assinatura(itens)
+  useEffect(() => {
+    setIndice(0)
+    setFalhados((s) => (s.size ? new Set() : s))
+  }, [chave]) // eslint-disable-line react-hooks/set-state-in-effect
 
   const atual = lista[Math.min(indice, Math.max(0, total - 1))] ?? null
 

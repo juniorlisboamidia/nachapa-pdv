@@ -144,3 +144,22 @@ test('proximoIndice é circular e nunca devolve NaN', () => {
   assert.equal(proximoIndice(0, 0), 0, 'lista vazia não pode virar índice inválido')
   assert.equal(proximoIndice(NaN, 3), 1)
 })
+
+// ── Guarda estática do player ────────────────────────────────────────────────
+// O comportamento abaixo mora no JSX (`pages/TvIndoorPlayer.jsx`) e não num módulo puro,
+// mas é o que mais provavelmente alguém desfaz sem perceber — então fica preso por
+// leitura de código, no mesmo estilo das guardas do backend.
+test('🔴 o player assina a programação CRUA, não a lista filtrada', async () => {
+  const fs = await import('node:fs')
+  const player = fs.readFileSync(new URL('../pages/TvIndoorPlayer.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  const semComentarios = player.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+  // Com `assinatura(lista)` a TV também não piscava — mas um id que entrou em `falhados`
+  // ficaria lá para sempre: esta tela NUNCA remonta, e a loja corrigir a arte não devolvia
+  // a chance ao conteúdo. Com a crua, trocar a arte muda a chave e limpa os falhados.
+  assert.match(semComentarios, /const chave = assinatura\(itens\)/, 'a chave sai da programação crua')
+  assert.equal(/assinatura\(lista\)/.test(semComentarios), false, 'assinar a lista filtrada prende o falhado para sempre')
+  assert.match(semComentarios, /setFalhados\(\(s\) => \(s\.size \? new Set\(\) : s\)\)/,
+    'a mudança de programação precisa dar nova chance a quem falhou')
+  // E o institucional continua sendo a saída para "nada no ar".
+  assert.match(semComentarios, /if \(!atual\) return <Institucional/, 'sem conteúdo elegível, a TV mostra a marca')
+})

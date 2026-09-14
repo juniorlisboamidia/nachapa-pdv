@@ -125,7 +125,10 @@ test('(b) todo acesso ao Prisma no bloco público passa pelo escopo do aparelho'
   const linhas = semComentarios(blocoPublico()).split('\n');
   const alvos = [];
   linhas.forEach((linha, i) => {
-    if (/prisma\.(dispositivo|empresa|pedidoTotemEnvio|totemApresentacao)\./.test(linha)) {
+    // Os models da TV entram aqui pelo mesmo motivo dos do totem: o bloco público é
+    // compartilhado pelos dois canais, e uma consulta nova sem escopo é exatamente o que
+    // esta varredura existe para pegar.
+    if (/prisma\.(dispositivo|empresa|pedidoTotemEnvio|totemApresentacao|tvPlaylist|tvConteudo)\./.test(linha)) {
       // O where pode estar na mesma linha ou nas 3 seguintes (chamada multilinha).
       alvos.push({ linha: i + 1, trecho: linhas.slice(i, i + 4).join('\n') });
     }
