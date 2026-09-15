@@ -3776,6 +3776,43 @@ body.theme-dark .hb-table tr.ttm-linha-revisao:hover td { background: #3a2612; }
   background: #111; display: grid; place-items: center; border: 1px solid var(--app-border);
 }
 .tvi-previa img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* A prévia do vídeo usa a mesma moldura 16:9. `contain`, e NÃO `cover` como a
+   imagem: aqui o gestor está conferindo o arquivo, e esconder o que a TV vai
+   cortar seria justamente perder a informação que ele veio buscar. */
+.tvi-previa video { width: 100%; height: 100%; object-fit: contain; display: block; background: #111; }
+
+/* ── Vídeos: espaço, arquivo escolhido e progresso ─────────────────────────
+   Três informações que só existem porque vídeo pesa. */
+
+/* O consumo da loja, ANTES de escolher o arquivo. Cota descoberta no erro do
+   upload é cota descoberta depois de esperar o envio inteiro. */
+.tvi-espaco { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 12px 0 4px; }
+.tvi-espaco-barra {
+  flex: 1 1 220px; max-width: 360px; height: 8px; border-radius: 999px; overflow: hidden;
+  background: var(--app-border);
+}
+.tvi-espaco-uso { display: block; height: 100%; background: var(--brand-gold); transition: width 0.2s ease-out; }
+/* Perto do teto a barra muda de cor — a régua é a mesma, o aviso é que muda. */
+.tvi-espaco-uso.cheio { background: #dc2626; }
+
+/* O nome do arquivo físico embaixo do nome que o gestor deu: são coisas
+   diferentes, e quando ele sobe "final_v3_OK.mp4" é isto que o faz perceber. */
+.tvi-arquivo-nome { font-size: 11.5px; margin-top: 2px; }
+
+/* O que o navegador leu do arquivo escolhido. Chips, e não frase: são medidas
+   independentes, e algumas podem simplesmente não vir. */
+.tvi-arquivo-resumo {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 12.5px;
+  color: var(--app-text-2); padding: 10px 12px; border: 1px solid var(--app-border);
+  border-radius: 10px; background: var(--app-surface-2);
+}
+.tvi-arquivo-resumo strong { color: var(--app-text); font-weight: 600; word-break: break-all; }
+
+/* Progresso REAL do upload: são os bytes que o navegador já entregou, não uma
+   animação fingindo trabalho. */
+.tvi-progresso { display: flex; flex-direction: column; gap: 6px; }
+.tvi-progresso-barra { height: 10px; border-radius: 999px; overflow: hidden; background: var(--app-border); }
+.tvi-progresso-barra span { display: block; height: 100%; background: var(--brand-gold); transition: width 0.15s linear; }
 
 /* As playlists como abas: a loja tem duas ou três, e um seletor esconderia a
    contagem de cada uma — que é o que responde "qual está montada?". */
@@ -3873,6 +3910,13 @@ body.theme-dark .hb-table tr.ttm-linha-revisao:hover td { background: #3a2612; }
    lugar dela diz o que aquela linha é, sem inventar uma imagem que não existe. */
 .tvi-mini-board {
   display: grid; place-items: center; background: #16140f; color: var(--brand-gold);
+  font-size: 10px; font-weight: 800; letter-spacing: 0.08em;
+}
+/* O vídeo tem placa própria, e não a mesma do board com outro texto: na
+   programação os três tipos aparecem lado a lado, e a cor é o que diferencia
+   de relance sem ninguém precisar ler. */
+.tvi-mini-video {
+  display: grid; place-items: center; background: #101418; color: #7dd3fc;
   font-size: 10px; font-weight: 800; letter-spacing: 0.08em;
 }
 

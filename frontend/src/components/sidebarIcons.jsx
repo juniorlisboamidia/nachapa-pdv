@@ -206,6 +206,14 @@ const ICONS = {
       <path d="M8 6v8" />
     </>
   ),
+  /* Câmera de vídeo: a silhueta que qualquer pessoa lê como "filme" sem legenda.
+     Um triângulo de play seria ambíguo — ele diz "reproduzir", não "acervo de vídeos". */
+  video: (
+    <>
+      <path d="m16 10 4.6-2.3a1 1 0 0 1 1.4.9v6.8a1 1 0 0 1-1.4.9L16 14" />
+      <rect width="14" height="10" x="2" y="7" rx="2" />
+    </>
+  ),
   users: (
     <>
       <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />

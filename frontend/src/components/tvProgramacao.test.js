@@ -13,7 +13,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   FAIXA, desvioDoRelogio, noAr, paraExibir, duracaoMs, assinatura, proximaParaPrecarregar,
-  proximoIndice, ehMenuBoard, chaveDoItem,
+  proximoIndice, ehMenuBoard, ehVideo, chaveDoItem,
 } from './tvProgramacao.js'
 
 const T = (iso) => new Date(iso).getTime()
@@ -21,6 +21,8 @@ const AGORA = T('2026-09-14T12:00:00.000Z')
 const conteudo = (extra) => ({ tipo: 'imagem', id: 1, ativo: true, imagemUrl: '/img/1?v=1', imagemVersao: 1, duracaoSegundos: 10, ...extra })
 // Um MENU BOARD como o servidor o entrega: já resolvido, com preço e selo prontos.
 const board = (extra) => ({ tipo: 'menu_board', id: 9, duracaoSegundos: 20, layout: 'GRADE', titulo: 'Burgers', produtos: [{ id: '1', nome: 'X', preco: 10 }], ...extra })
+// Um VÍDEO como o servidor o entrega: URL versionada e a duração só como informação.
+const video = (extra) => ({ tipo: 'video', id: 7, ativo: true, arquivoUrl: '/api/public/aparelho/tv/video/7/arquivo?v=2', arquivoVersao: 2, duracaoMs: 31_000, ...extra })
 
 // ── Relógio ──────────────────────────────────────────────────────────────────
 test('desvioDoRelogio: a TV atrasada é corrigida pelo servidor', () => {
@@ -278,4 +280,97 @@ test('🔴 a ARTE do gestor não recebe overlay de tema', async () => {
   const css = fs.readFileSync(new URL('../styles/tv.css', import.meta.url), 'utf8')
   const regra = css.slice(css.indexOf('.tv-arte {'), css.indexOf('}', css.indexOf('.tv-arte {')))
   assert.equal(/filter|opacity|background/.test(regra), false, 'a folha também não pode tingir a arte')
+})
+
+// ── Vídeo ────────────────────────────────────────────────────────────────────
+// O terceiro tipo de item. O que estes testes defendem é sempre a mesma frase: quem dá a
+// hora de um vídeo é o ARQUIVO, e não o relógio do player.
+
+test('ehVideo separa os três tipos sem confundir ids iguais', () => {
+  assert.equal(ehVideo(video()), true)
+  assert.equal(ehVideo(board()), false)
+  assert.equal(ehVideo(conteudo()), false)
+  assert.equal(ehMenuBoard(video()), false)
+})
+
+test('vídeo SEM arquivo não vai para a tela', () => {
+  // O servidor já não deveria mandá-lo (a régua pública descarta), mas a TV não depende
+  // disso: um item sem `arquivoUrl` vira um `<video src="">` e um quadro preto na parede.
+  const lista = paraExibir({ itens: [video({ arquivoUrl: null }), conteudo()], agoraMs: AGORA })
+  assert.deepEqual(lista.map((i) => i.tipo), ['imagem'])
+})
+
+test('vídeo obedece à MESMA agenda da imagem — a janela diz quando pode COMEÇAR', () => {
+  const futuro = video({ inicioEm: '2026-09-14T18:00:00Z' })
+  assert.equal(noAr(futuro, AGORA), false)
+  assert.equal(noAr(video({ inicioEm: '2026-09-14T06:00:00Z', fimEm: '2026-09-14T23:00:00Z' }), AGORA), true)
+  // Uma régua só para os dois tipos: duas réguas divergem, e a que divergisse deixaria a
+  // TV tocando o que a gestão jura que está fora do ar.
+  assert.equal(noAr(conteudo({ inicioEm: '2026-09-14T18:00:00Z' }), AGORA), false)
+})
+
+test('a chave do vídeo carrega a VERSÃO do arquivo — substituir o arquivo dá nova chance', () => {
+  // `falhados` guarda chaves. Sem a versão na chave, um vídeo corrompido que falhou uma vez
+  // continuaria fora mesmo depois de o gestor subir o arquivo certo — numa tela que não
+  // remonta há semanas, isso é definitivo.
+  assert.equal(chaveDoItem(video({ arquivoVersao: 2 })), 'v:7:2')
+  assert.notEqual(chaveDoItem(video({ arquivoVersao: 3 })), chaveDoItem(video({ arquivoVersao: 2 })))
+  // E os três tipos não colidem com o MESMO id.
+  assert.notEqual(chaveDoItem(video({ id: 3, arquivoVersao: 0 })), chaveDoItem(conteudo({ id: 3 })))
+  assert.notEqual(chaveDoItem(video({ id: 3, arquivoVersao: 0 })), chaveDoItem(board({ id: 3 })))
+})
+
+test('trocar o ARQUIVO muda a assinatura; trocar só o nome não muda', () => {
+  const antes = assinatura([video({ arquivoVersao: 2 })])
+  assert.notEqual(assinatura([video({ arquivoVersao: 3 })]), antes, 'arquivo novo é mudança estrutural')
+  assert.equal(assinatura([video({ arquivoVersao: 2, nome: 'outro nome' })]), antes, 'nome é de admin, não da parede')
+})
+
+test('o vídeo NÃO é pré-carregado', () => {
+  // Pré-carregar uma arte custa uma imagem; pré-carregar um vídeo custa a banda da loja
+  // inteira — e o `<video>` já começa a baixar sozinho quando nasce.
+  assert.deepEqual(proximaParaPrecarregar([conteudo({ id: 1 }), video({ id: 7 })], 0), [])
+  // A arte seguinte continua sendo pré-carregada normalmente.
+  assert.deepEqual(proximaParaPrecarregar([video({ id: 7 }), conteudo({ id: 1 })], 0), ['/img/1?v=1'])
+})
+
+// ── Vídeo: guardas estáticas do player ───────────────────────────────────────
+test('🔴 o vídeo fica FORA do temporizador de rotação', async () => {
+  // Dois donos do mesmo item seria o fim: o `setTimeout` de 10 s mataria um filme de 40 s.
+  const fs = await import('node:fs')
+  const player = fs.readFileSync(new URL('../pages/TvIndoorPlayer.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  const codigo = player.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').map((l) => l.split('//')[0]).join('\n')
+  const i = codigo.indexOf('setTimeout(')
+  assert.ok(i > 0, 'o player precisa ter o temporizador de rotação')
+  const guarda = codigo.slice(codigo.lastIndexOf('useEffect', i), i)
+  assert.match(guarda, /ehVideo\(atual\)/, 'o efeito da rotação precisa recusar o vídeo')
+})
+
+test('🔴 o vídeo da parede é mudo, embutido e sem controles', async () => {
+  // `muted` + `playsInline` não são estética: sem os dois o navegador não inicia sozinho, e
+  // uma TV de loja não tem quem clique. `controls` na parede seria um convite ao cliente.
+  const fs = await import('node:fs')
+  const item = fs.readFileSync(new URL('./tv/VideoItem.jsx', import.meta.url), 'utf8')
+  const tag = item.slice(item.indexOf('<video'), item.indexOf('/>', item.indexOf('<video')))
+  for (const exigido of ['muted', 'autoPlay', 'playsInline', 'controls={false}']) {
+    assert.ok(tag.includes(exigido), `o <video> da TV precisa de ${exigido}`)
+  }
+  // Nada de duração fixa: quem avança é o `ended`.
+  assert.ok(item.includes("addEventListener('ended'"), 'o avanço é pelo evento ended')
+  // Sem comentários: o cabeçalho do arquivo FALA de `setTimeout` justamente para explicar
+  // por que ele não existe aqui, e a guarda é sobre o código, não sobre a prosa.
+  const semProsa = item.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').map((l) => l.split('//')[0]).join('\n')
+  assert.equal(/setTimeout/.test(semProsa), false, 'nenhum cronômetro decide o fim de um vídeo')
+})
+
+test('🔴 existe watchdog de travamento, e ele olha o PROGRESSO do tempo', async () => {
+  // `ended` sozinho não basta: um arquivo ruim deixa a TV em buffering eterno, sem erro
+  // nenhum. O que separa "vídeo longo" de "vídeo travado" é o `currentTime` andar.
+  const fs = await import('node:fs')
+  const item = fs.readFileSync(new URL('./tv/VideoItem.jsx', import.meta.url), 'utf8')
+  assert.match(item, /currentTime/, 'o vigia precisa ler o tempo corrente')
+  assert.match(item, /setInterval/, 'o vigia é periódico')
+  assert.match(item, /clearInterval/, 'e ele é desligado no unmount — a TV fica semanas ligada')
+  // A rejeição do autoplay é FALHA daquela mídia, nunca um "toque para reproduzir".
+  assert.match(item, /\.catch\(\(\) => falhar\('autoplay'\)\)/)
 })

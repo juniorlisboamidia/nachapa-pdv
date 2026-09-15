@@ -56,6 +56,7 @@ import TotemDestaques from './pages/TotemDestaques'
 import DispositivoPareamento from './pages/DispositivoPareamento'
 import TvIndoorTelas from './pages/TvIndoorTelas'
 import TvIndoorConteudos from './pages/TvIndoorConteudos'
+import TvIndoorVideos from './pages/TvIndoorVideos'
 import TvIndoorPlaylists from './pages/TvIndoorPlaylists'
 import TvIndoorMenuBoards from './pages/TvIndoorMenuBoards'
 import TvIndoorAparencia from './pages/TvIndoorAparencia'
@@ -178,6 +179,7 @@ export default function App() {
             <Route path="tv-indoor" element={<Navigate to="/tv-indoor/telas" replace />} />
             <Route path="tv-indoor/telas" element={<TvIndoorTelas />} />
             <Route path="tv-indoor/conteudos" element={<TvIndoorConteudos />} />
+            <Route path="tv-indoor/videos" element={<TvIndoorVideos />} />
             <Route path="tv-indoor/playlists" element={<TvIndoorPlaylists />} />
             <Route path="tv-indoor/menu-boards" element={<TvIndoorMenuBoards />} />
             <Route path="tv-indoor/aparencia" element={<TvIndoorAparencia />} />

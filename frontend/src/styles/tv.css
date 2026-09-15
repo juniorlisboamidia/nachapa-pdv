@@ -68,6 +68,23 @@
 @keyframes tv-entrar { from { opacity: 0; } to { opacity: 1; } }
 .tv-arte.entrando { animation: tv-entrar 0.45s ease-out; }
 
+/* ── O vídeo ──────────────────────────────────────────────────────────────
+   Mesma régua da arte: `cover`, porque tarja preta numa parede lê como
+   defeito. E `background` do fundo da marca para cobrir o instante entre o
+   elemento nascer e o primeiro quadro decodificar — sem isso a troca de um
+   board colorido para um vídeo dá um lampejo do branco do navegador.
+
+   Sem animação de entrada aqui: o vídeo JÁ começa com o próprio movimento, e
+   um fade por cima do primeiro quadro só atrasaria o que já está acontecendo. */
+.tv-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+  background: var(--tvmb-fundo);
+}
+
 /* ── O institucional ──────────────────────────────────────────────────────
    O repouso do canal: zero conteúdos elegíveis. Não é tela de erro, então não
    há mensagem de sistema nenhuma — quem está na frente é o cliente da loja.

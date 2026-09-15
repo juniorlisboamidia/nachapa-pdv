@@ -22,6 +22,7 @@ export const duracaoMs = (conteudo) => duracaoEmMs(conteudo?.duracaoSegundos, FA
    servidor (a coluna nasce com DEFAULT 'IMAGEM') e o que faz uma TV com build anterior
    continuar entendendo a programação. */
 export const ehMenuBoard = (item) => item?.tipo === 'menu_board'
+export const ehVideo = (item) => item?.tipo === 'video'
 
 /* Este item está no ar AGORA?
 
@@ -36,6 +37,10 @@ export function noAr(item, agoraMs) {
   if (!item) return false
   if (ehMenuBoard(item)) return Array.isArray(item.produtos) && item.produtos.length > 0
   if (item.ativo !== true) return false
+  // VÍDEO passa pela MESMA régua de agenda da imagem — e essa régua responde "pode
+  // COMEÇAR?". Um vídeo que já está tocando quando o `fimEm` passa TERMINA: quem garante
+  // isso é o player, que só reavalia a lista entre itens. Cortar no meio é pior do que
+  // exibir vinte segundos além da janela.
   return dentroDaJanela(item, agoraMs)
 }
 
@@ -55,13 +60,22 @@ export function paraExibir({ itens, agoraMs, falhados } = {}) {
     if (fora.has(chaveDoItem(item))) return false
     // Arte sem URL existiria só para falhar no carregamento; board sem produto seria tela
     // vazia. Os dois caem na mesma pergunta, cada um com a régua dele.
-    if (!ehMenuBoard(item) && !item.imagemUrl) return false
+    if (ehVideo(item) && !item.arquivoUrl) return false
+    if (!ehMenuBoard(item) && !ehVideo(item) && !item.imagemUrl) return false
     return noAr(item, agoraMs)
   })
 }
 
 /* A chave de um item na programação. `tipo:id` porque as duas listas têm ids próprios. */
-export const chaveDoItem = (item) => `${ehMenuBoard(item) ? 'b' : 'i'}:${item?.id}`
+/* A chave de um item na programação — por TIPO, porque as três listas têm ids próprios.
+
+   No VÍDEO a chave inclui a VERSÃO do arquivo: um vídeo que falhou e foi substituído merece
+   chance nova sem esperar a programação inteira mudar. */
+export const chaveDoItem = (item) => {
+  if (ehMenuBoard(item)) return `b:${item?.id}`
+  if (ehVideo(item)) return `v:${item?.id}:${item?.arquivoVersao ?? 0}`
+  return `i:${item?.id}`
+}
 
 /* A assinatura da lista exibida: mudou de verdade, ou o refresh só devolveu o mesmo?
 
@@ -74,6 +88,9 @@ export const chaveDoItem = (item) => `${ehMenuBoard(item) ? 'b' : 'i'}:${item?.i
 export function assinatura(lista) {
   return (Array.isArray(lista) ? lista : [])
     .map((item) => {
+      // O ARQUIVO novo é mudança estrutural daquela mídia — a URL muda e a TV precisa
+      // buscá-la. O NOME administrativo não entra: renomear não reinicia o rodízio.
+      if (ehVideo(item)) return `v${item?.id}:${item?.arquivoVersao ?? 0}`
       if (!ehMenuBoard(item)) return `i${item?.id}:${item?.imagemVersao ?? 0}:${item?.duracaoSegundos ?? 0}`
       // O PREÇO NÃO ENTRA na assinatura, e isso é o coração do menu board: preço mudou no
       // Cardápio Web, a tela se redesenha com o valor novo no próximo refresh SEM reiniciar
@@ -97,5 +114,9 @@ export function proximaParaPrecarregar(lista, indice) {
   // retângulos vazios enchendo um a um na frente do cliente. É a lista inteira do board, e
   // não a tela toda — são poucas imagens, e só as do próximo item.
   if (ehMenuBoard(proxima)) return (proxima.produtos ?? []).map((p) => p?.imagemUrl).filter(Boolean)
+  // VÍDEO não é pré-carregado, e isso é deliberado: baixar 200 MB do próximo enquanto o
+  // atual toca é a maneira mais rápida de estourar a banda da loja e travar o que está na
+  // tela. O `<video>` cuida do próprio buffer quando chega a vez dele.
+  if (ehVideo(proxima)) return []
   return proxima.imagemUrl ? [proxima.imagemUrl] : []
 }

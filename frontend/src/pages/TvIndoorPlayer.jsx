@@ -12,8 +12,11 @@
 //   · NÃO PISCA. A programação é relida a cada 60 s, e um refresh que devolve o mesmo não
 //     reinicia o rodízio (`assinatura`). Sem isso, a primeira imagem voltaria a cada minuto;
 //   · imagem que falha é PULADA; todas falharem cai no institucional;
-//   · a programação alterna ARTE e MENU BOARD no mesmo motor — um `setTimeout` por item,
-//     com a duração daquele item. Não há um segundo player: o que muda é o que se desenha.
+//   · a programação alterna ARTE, MENU BOARD e VÍDEO no mesmo motor. Não há um segundo
+//     player: o que muda é o que se desenha e QUEM DÁ A HORA. Arte e board correm por um
+//     `setTimeout` com a duração daquele item; o vídeo corre pelo próprio `ended`, porque
+//     duração de vídeo não é escolha do gestor — é o arquivo. Um cronômetro por cima disso
+//     cortaria o filme no meio ou deixaria o último quadro parado na parede.
 //
 // ── O QUE ELA NÃO É ───────────────────────────────────────────────────────────────────
 // Não há toque, não há sessão, não há pedido. O V1 é promocional/institucional — a TV não
@@ -26,8 +29,9 @@
 // tarja preta numa tela ligada o dia inteiro. Tarja preta lê como defeito.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { aparelhoApi } from '../services/api'
-import { assinatura, chaveDoItem, desvioDoRelogio, duracaoMs, ehMenuBoard, paraExibir, proximaParaPrecarregar, proximoIndice } from '../components/tvProgramacao'
+import { assinatura, chaveDoItem, desvioDoRelogio, duracaoMs, ehMenuBoard, ehVideo, paraExibir, proximaParaPrecarregar, proximoIndice } from '../components/tvProgramacao'
 import MenuBoard from '../components/tv/MenuBoard'
+import VideoItem from '../components/tv/VideoItem'
 import { aplicar as aplicarTemaTv } from '../components/tvIndoorTema'
 import '../styles/tv.css'
 
@@ -157,14 +161,20 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
 
   const atual = lista[Math.min(indice, Math.max(0, total - 1))] ?? null
 
+  const avancar = useCallback(() => setIndice((i) => proximoIndice(i, total)), [total])
+
   // A rotação: um `setTimeout` por vez, com a duração DAQUELE conteúdo. Não um intervalo
   // fixo, senão a duração por item não significaria nada. Com um conteúdo só não há
   // temporizador nenhum — a imagem fica parada, como deve.
+  //
+  // VÍDEO fica FORA deste relógio. Quem avança é o `ended` do elemento (ou o watchdog, se
+  // travar). Deixar o `setTimeout` correr junto seria um segundo dono do mesmo item: o que
+  // chegasse primeiro venceria, e um vídeo de 40 s morreria nos 10 s do padrão.
   useEffect(() => {
-    if (total < 2 || !atual) return undefined
-    const t = setTimeout(() => setIndice((i) => proximoIndice(i, total)), duracaoMs(atual))
+    if (total < 2 || !atual || ehVideo(atual)) return undefined
+    const t = setTimeout(avancar, duracaoMs(atual))
     return () => clearTimeout(t)
-  }, [atual, total])
+  }, [atual, total, avancar])
 
   // Pré-carrega SÓ a próxima: o que importa é que a troca não mostre um quadro vazio, e TV
   // de loja não tem memória para a lista inteira.
@@ -204,6 +214,24 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
         <div key={`b${atual.id}`} className={'tv-board' + (reduzido ? '' : ' entrando')}>
           <MenuBoard board={atual} tokens={aparencia?.tokens} />
         </div>
+      </div>
+    )
+  }
+
+  // VÍDEO: mesma casca, mesmo fundo, sem cronômetro. O `<video>` avisa quando acabou, e um
+  // vídeo que não consegue tocar é marcado como falho — marcar já o TIRA da lista filtrada,
+  // e o item seguinte ocupa este mesmo índice. Não há um "avançar" separado a chamar aqui.
+  if (ehVideo(atual)) {
+    return (
+      <div className="tv-raiz" ref={raizRef}>
+        <VideoItem
+          item={atual}
+          // Com um item só, quem repete é o `loop` do elemento: um `ended` que avançasse
+          // para o mesmo índice remontaria o elemento e daria um piscar preto a cada volta.
+          unico={total < 2}
+          aoTerminar={avancar}
+          aoFalhar={() => marcarFalha(atual)}
+        />
       </div>
     )
   }
