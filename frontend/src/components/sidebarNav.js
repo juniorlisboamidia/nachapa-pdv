@@ -190,6 +190,10 @@ export const grupos = [
           // ordem da sidebar é a ordem em que a loja monta as coisas, e o board é o passo
           // que se aprende por último (é preciso ter cardápio no CW para ele fazer sentido).
           { to: '/tv-indoor/menu-boards', label: 'Menu Boards', icon: 'ficha' },
+          // Programação depois dos acervos e das playlists: ela APONTA para playlists, e
+          // não existe o que programar antes de haver uma. Antes da Aparência porque decide
+          // o QUE aparece, e aparência é o COMO.
+          { to: '/tv-indoor/programacao', label: 'Programação', icon: 'calendario' },
           // Aparência por último: é o ajuste fino, e só faz sentido depois de existir algo
           // na tela para ver pintado.
           { to: '/tv-indoor/aparencia', label: 'Aparência', icon: 'star' },

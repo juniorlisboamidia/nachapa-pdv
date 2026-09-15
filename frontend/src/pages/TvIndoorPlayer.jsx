@@ -12,6 +12,13 @@
 //   · NÃO PISCA. A programação é relida a cada 60 s, e um refresh que devolve o mesmo não
 //     reinicia o rodízio (`assinatura`). Sem isso, a primeira imagem voltaria a cada minuto;
 //   · imagem que falha é PULADA; todas falharem cai no institucional;
+//   · a GRADE SEMANAL é do SERVIDOR. A TV não sabe que dia é nem que horas são na loja —
+//     ela recebe "esta é a programação agora" e "reconsulte neste instante". O delay sai de
+//     `proximaTrocaEm - agoraServidor`, os dois do mesmo relógio, então uma TV com a hora
+//     errada troca na hora certa do mesmo jeito;
+//   · TROCA DE GRADE NÃO CORTA VÍDEO. Se a playlist efetiva mudar com um filme no ar, a
+//     programação nova fica PENDENTE e entra no `ended` — a mesma regra do vídeo cuja
+//     janela termina enquanto ele toca;
 //   · a programação alterna ARTE, MENU BOARD e VÍDEO no mesmo motor. Não há um segundo
 //     player: o que muda é o que se desenha e QUEM DÁ A HORA. Arte e board correm por um
 //     `setTimeout` com a duração daquele item; o vídeo corre pelo próprio `ended`, porque
@@ -53,6 +60,14 @@ const MS_HEARTBEAT = 60_000
 // bastante para não virar um laço apertado de tentativa e erro quando a mídia está mesmo
 // quebrada — nesse caso o ciclo é institucional, tentativa, institucional, sem custo.
 const MS_REANIMAR = 30_000
+// A folga ao pedir a programação na virada da grade. Pedir no instante EXATO chegaria ao
+// servidor alguns milissegundos antes por causa da latência, e ele responderia a grade
+// antiga — a TV só trocaria no polling seguinte, um minuto depois.
+const MS_FOLGA_TROCA = 1_500
+// Teto de um `setTimeout`. Uma grade com uma regra só, daqui a cinco dias, pediria uma
+// espera enorme; em vez disso a TV reconsulta em algumas horas e reagenda com o relógio do
+// servidor na mão. Também evita o estouro de 32 bits do `setTimeout`.
+const MS_MAX_ESPERA = 6 * 60 * 60_000
 const VERSAO = 'tv-v1'
 
 export default function TvIndoorPlayer({ aparelho, loja }) {
@@ -67,19 +82,52 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
   // anterior), não pode trocar um tema válido que já está na tela pelos defaults. Só uma
   // resposta VÁLIDA substitui a aparência.
   const [aparencia, setAparencia] = useState(null)
+  /* A programação que CHEGOU mas ainda não entrou, porque há um vídeo tocando.
+
+     É ESTADO, e não uma ref, porque ela muda o que se desenha: um vídeo único normalmente
+     repete pelo atributo `loop`, e aí o `ended` nunca dispara. Com uma troca esperando, ele
+     precisa deixar de repetir — senão a grade nova ficaria presa até o fim do expediente.
+     Uma ref não provocaria esse render, e o bug seria invisível até alguém reclamar que a
+     TV "não mudou às 18h". */
+  const [pendente, setPendente] = useState(null)
   // Guarda o desvio entre refreshes: a agenda continua correta mesmo se um refresh falhar.
   const desvioRef = useRef(0)
   const raizRef = useRef(null)
+  /* `programacaoRef`/`videoNoArRef`: a decisão de adiar uma troca acontece dentro do
+     `.then` de uma promessa, que não enxerga o render atual. Refs são lidas e escritas
+     FORA do render — no `.then` e em efeitos —, nunca durante ele. */
+  const programacaoRef = useRef(null)
+  const videoNoArRef = useRef(false)
 
   // ── A programação, e o refresh que não interrompe nada ────────────────────
   const buscar = useCallback(() => {
     aparelhoApi.get('/public/aparelho/tv/programacao')
       .then((r) => {
-        setProgramacao(r.data ?? null)
+        const nova = r.data ?? null
         // Só troca o tema quando vem um bloco de verdade. Sem isto, um servidor de versão
         // anterior (ou uma resposta degradada) apagaria a identidade da loja da parede.
-        if (r.data?.aparencia?.tokens) setAparencia(r.data.aparencia)
-        desvioRef.current = desvioDoRelogio(r.data?.agoraServidor, Date.now())
+        if (nova?.aparencia?.tokens) setAparencia(nova.aparencia)
+        desvioRef.current = desvioDoRelogio(nova?.agoraServidor, Date.now())
+
+        /* TROCA DE GRADE COM VÍDEO NO AR. A playlist efetiva mudou enquanto um filme toca:
+           a programação nova espera o `ended` em vez de cortar no meio. É a mesma regra do
+           vídeo cuja janela de agenda termina durante a reprodução — e ela vale aqui pelo
+           mesmo motivo: cortar um vídeo pela metade lê como defeito na parede.
+
+           Arte e menu board NÃO esperam: eles trocam na hora, e é o que se quer.
+
+           Se a playlist efetiva for a MESMA, aplica-se direto. A assinatura cuida do resto:
+           conteúdo idêntico não reinicia o rodízio, e conteúdo que o gestor editou de
+           verdade deve mesmo recomeçar. */
+        const idDe = (prog) => prog?.programacaoTela?.playlistEfetivaId ?? prog?.playlist?.id ?? null
+        const idNovo = idDe(nova)
+        const idAtual = idDe(programacaoRef.current)
+        if (videoNoArRef.current && idAtual !== null && idNovo !== idAtual) {
+          setPendente(nova)
+          return
+        }
+        setPendente(null)
+        setProgramacao(nova)
       })
       // Rede fora não apaga o que já está tocando: a TV segue com a última programação boa
       // e tenta de novo no minuto seguinte. Sem nenhuma programação, cai no institucional.
@@ -95,6 +143,32 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
     document.addEventListener('visibilitychange', aoVisivel)
     return () => { clearInterval(t); document.removeEventListener('visibilitychange', aoVisivel) }
   }, [buscar])
+
+  /* Os espelhos que o `.then` da busca precisa ler. Efeito sem array de dependências: roda
+     depois de todo render, e escrever em ref durante o render é render impuro (o React
+     Compiler está ligado neste projeto). */
+  useEffect(() => { programacaoRef.current = programacao })
+
+  /* ── A TROCA NA VIRADA, sem depender do relógio da TV ──────────────────────
+     O servidor manda `agoraServidor` e `proximaTrocaEm`. A espera é a DIFERENÇA entre os
+     dois — ambos do mesmo relógio —, então uma TV com a hora errada, ou num fuso qualquer,
+     reconsulta no instante certo do mesmo jeito. É por isso que a conta não é
+     `proximaTrocaEm - Date.now()`.
+
+     Quem decide qual regra venceu continua sendo o servidor: a TV só sabe QUANDO perguntar
+     de novo. O polling de 60 s permanece como rede de segurança — se este temporizador
+     falhar, a troca acontece com até um minuto de atraso em vez de não acontecer. */
+  const proximaTrocaEm = programacao?.programacaoTela?.proximaTrocaEm ?? null
+  const agoraServidor = programacao?.agoraServidor ?? null
+  useEffect(() => {
+    if (!proximaTrocaEm || !agoraServidor) return undefined
+    const alvo = Date.parse(proximaTrocaEm)
+    const base = Date.parse(agoraServidor)
+    if (!Number.isFinite(alvo) || !Number.isFinite(base)) return undefined
+    const espera = Math.min(Math.max(alvo - base + MS_FOLGA_TROCA, 1000), MS_MAX_ESPERA)
+    const t = setTimeout(buscar, espera)
+    return () => clearTimeout(t)
+  }, [proximaTrocaEm, agoraServidor, buscar])
 
   // A paleta na casca do player: pinta o institucional e o chão atrás de tudo. Escrita por
   // CSSOM, propriedade conhecida a propriedade conhecida — a mesma disciplina do board.
@@ -186,6 +260,11 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
     return () => clearTimeout(t)
   }, [atual, total, avancar])
 
+  /* O espelho que o `.then` da busca lê para decidir se ADIA uma troca de grade. Num efeito
+     (depois do commit), e não no corpo do componente: escrever numa ref durante o render é
+     render impuro, e o React Compiler está ligado neste projeto. */
+  useEffect(() => { videoNoArRef.current = ehVideo(atual) })
+
   // Pré-carrega SÓ a próxima: o que importa é que a troca não mostre um quadro vazio, e TV
   // de loja não tem memória para a lista inteira.
   // Pré-carrega o PRÓXIMO item: uma arte, ou as fotos dos produtos do próximo menu board —
@@ -219,6 +298,17 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
 
      O laço não aperta: se a mídia estiver mesmo quebrada, o ciclo é institucional por 30 s,
      uma tentativa, institucional de novo. Nada pisca, nada acumula. */
+  /* A programação que estava esperando o vídeo terminar entra AGORA.
+
+     Devolve se aplicou, porque quem chama precisa saber: no `ended`, aplicar a pendente
+     substitui o avanço (a playlist nova começa do primeiro item, não do segundo da velha). */
+  const aplicarPendente = () => {
+    if (!pendente) return false
+    setPendente(null)
+    setProgramacao(pendente)
+    return true
+  }
+
   const tudoFalhou = total === 0 && (itens?.length ?? 0) > 0
   useEffect(() => {
     if (!tudoFalhou) return undefined
@@ -258,9 +348,14 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
           item={atual}
           // Com um item só, quem repete é o `loop` do elemento: um `ended` que avançasse
           // para o mesmo índice remontaria o elemento e daria um piscar preto a cada volta.
-          unico={total < 2}
-          aoTerminar={avancar}
-          aoFalhar={() => marcarFalha(atual)}
+          // Mas se há programação PENDENTE, ele deixa de ser único — tem para onde ir.
+          unico={total < 2 && !pendente}
+          // O filme acabou: se a grade mudou enquanto ele tocava, a playlist nova entra
+          // aqui — e não o próximo item da playlist velha, que já não é a programação.
+          aoTerminar={() => { if (!aplicarPendente()) avancar() }}
+          // Falhou (erro ou travamento): a programação pendente também entra. Um vídeo
+          // quebrado não pode segurar a grade nova até o fim do expediente.
+          aoFalhar={() => { marcarFalha(atual); aplicarPendente() }}
         />
       </div>
     )

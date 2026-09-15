@@ -3814,6 +3814,50 @@ body.theme-dark .hb-table tr.ttm-linha-revisao:hover td { background: #3a2612; }
 .tvi-progresso-barra { height: 10px; border-radius: 999px; overflow: hidden; background: var(--app-border); }
 .tvi-progresso-barra span { display: block; height: 100%; background: var(--brand-gold); transition: width 0.15s linear; }
 
+/* ── Programação semanal ──────────────────────────────────────────────────
+   O topo responde, sem clique, as quatro perguntas que levam alguém a abrir
+   esta tela: o que está no ar, quando muda, qual é o padrão e em que fuso os
+   horários são lidos. */
+.tvi-grade-topo {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-top: 12px;
+}
+.tvi-grade-cartao {
+  display: flex; flex-direction: column; gap: 4px; padding: 12px 14px;
+  border: 1px solid var(--app-border); border-radius: 10px; background: var(--app-surface-2);
+}
+.tvi-grade-rotulo { font-size: 11.5px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--app-text-2); }
+.tvi-grade-valor { font-size: 15px; line-height: 1.3; }
+.tvi-grade-cartao .form-input { min-height: 34px; font-size: 13px; }
+
+/* Os dias como CHIPS: sete alvos grandes, o estado à vista, e nenhuma lista
+   suspensa escondendo o que já foi escolhido. */
+.tvi-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.tvi-chip {
+  min-width: 46px; min-height: 36px; padding: 0 10px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--app-border); background: var(--app-surface); color: var(--app-text);
+  font-size: 13px; font-weight: 600;
+}
+.tvi-chip:hover { border-color: var(--app-text-3); }
+.tvi-chip.on { background: var(--brand-gold); border-color: var(--brand-gold); color: var(--brand-gold-ink); }
+
+.tvi-atalhos { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+.tvi-atalho {
+  background: none; border: none; padding: 0; cursor: pointer; font: inherit; font-size: 12.5px;
+  font-weight: 600; color: var(--brand-gold-ink-alt, var(--app-text-2)); text-decoration: underline;
+}
+
+/* "+1 dia" na janela que atravessa a meia-noite. Discreto e ao lado do horário,
+   porque é ali que a dúvida nasce ("18:00 — 02:00 de quando?"). */
+.tvi-vira-noite {
+  margin-left: 8px; padding: 1px 6px; border-radius: 999px; font-size: 11px; font-weight: 700;
+  background: var(--app-border); color: var(--app-text-2);
+}
+
+/* O aviso de sobreposição NÃO é erro: é informação. Cor de atenção, nunca de
+   falha — a sobreposição é um recurso, e quem vence é quem está acima. */
+.tvi-aviso-overlap { color: #b45309; }
+body.theme-dark .tvi-aviso-overlap { color: #fbbf24; }
+
 /* As playlists como abas: a loja tem duas ou três, e um seletor esconderia a
    contagem de cada uma — que é o que responde "qual está montada?". */
 .tvi-abas { display: flex; gap: 8px; flex-wrap: wrap; }

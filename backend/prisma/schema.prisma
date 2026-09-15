@@ -804,6 +804,11 @@ model Dispositivo {
 
   envios PedidoTotemEnvio[]
 
+  // A GRADE SEMANAL desta tela. `tvPlaylistId` acima continua sendo o que era, e passa a se
+  // chamar PLAYLIST PADRÃO: o que toca quando nenhuma regra está valendo agora. Uma TV sem
+  // regra nenhuma se comporta exatamente como antes desta migration.
+  regrasTv TvProgramacaoRegra[]
+
   @@index([empresaId])
   @@index([empresaId, tipo])
   @@index([tvPlaylistId])
@@ -1137,8 +1142,9 @@ model TvPlaylist {
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
-  itens TvPlaylistItem[]
-  telas Dispositivo[]
+  itens  TvPlaylistItem[]
+  telas  Dispositivo[]
+  regras TvProgramacaoRegra[]
 
   @@index([empresaId])
 }
@@ -1260,6 +1266,16 @@ model TvIndoorConfiguracao {
   logoTipo   String?
   logoBytes  Int?
 
+  // O fuso DA LOJA, em IANA — nunca offset fixo ("-03:00"), que é o retrato de um instante e
+  // não um fuso: no dia em que a região adotar horário de verão, a grade inteira escorrega
+  // uma hora sem ninguém perceber. Validado contra o runtime em `tvGradeSemanal.js` antes de
+  // gravar, porque uma string torta aqui derrubaria a programação pública de uma loja — e o
+  // lugar onde isso apareceria é a parede, não um log.
+  //
+  // Mora aqui, e não em `Empresa`: o PDV não tem fuso por empresa hoje, e criar um seria
+  // decidir por outros canais (Totem, Checklist, Ponto) numa frente que é da TV.
+  fusoHorario String @default("America/Sao_Paulo")
+
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
@@ -1291,6 +1307,59 @@ model TvIndoorLogo {
 // Sem FK para o CW: o cardápio é de outro sistema e pode mudar embaixo de nós. As
 // referências vivem em `configuracao` e são resolvidas por texto, como no resto do PDV.
 // ─────────────────────────────────────────────────────────────────────────────
+// A GRADE SEMANAL de uma tela: "das 18h às 23h, de segunda a sexta, esta TV usa a playlist
+// Jantar". É domínio do PDV e não encosta em HUB nem em Cardápio Web — descobrir qual
+// playlist está no ar não pode custar uma chamada externa.
+//
+// ── NÃO CONFUNDIR COM A AGENDA DO CONTEÚDO ────────────────────────────────────────────
+// `TvConteudo.inicioEm/fimEm` diz "esta campanha existe de 01/10 a 15/10". Isto aqui diz
+// "neste horário, esta tela usa esta playlist". As duas se aplicam EM SEQUÊNCIA: a grade
+// escolhe a playlist, a agenda filtra os itens dela.
+//
+// ── HORÁRIO EM MINUTOS ────────────────────────────────────────────────────────────────
+// `inicioMin`/`fimMin` são minutos desde a meia-noite LOCAL (0–1439). Inteiro porque a
+// comparação é a operação inteira, e porque a primeira vez que alguém gravasse "8:00" sem
+// zero à esquerda a ordenação de strings quebraria em silêncio.
+//
+// `inicioMin > fimMin` significa que a janela ATRAVESSA A MEIA-NOITE (sexta 18:00 → 02:00),
+// e o dia marcado é o de INÍCIO. `inicioMin == fimMin` é recusado na escrita: "24 horas" e
+// "zero minutos" são leituras igualmente defensáveis do mesmo dado.
+model TvProgramacaoRegra {
+  id            Int @id @default(autoincrement())
+  empresaId     Int
+  dispositivoId Int
+  playlistId    Int
+
+  ativo Boolean @default(true)
+  // ISO-8601: 1 = segunda … 7 = domingo. Numérico e independente de idioma — nunca
+  // "Segunda-feira", que muda com a tradução e não ordena.
+  dias      Int[]
+  inicioMin Int
+  fimMin    Int
+
+  // PRIORIDADE é POSIÇÃO, não número digitado: a primeira regra elegível vence, e o gestor
+  // move com ↑/↓. A lista sobe inteira em transação — trocar vizinhos deixa buracos e
+  // empates quando duas abas mexem juntas.
+  ordem Int @default(0)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  // CASCADE nos dois lados, e por razões diferentes. No dispositivo: a tela deixou de
+  // existir, a grade dela não significa mais nada. Na playlist: uma regra apontando para
+  // playlist inexistente seria uma tela sem programação num horário em que o gestor jura
+  // que configurou — pior do que a regra sumir junto.
+  //
+  // Repare que é DIFERENTE de `Dispositivo.tvPlaylistId`, que é SetNull: lá a tela sobrevive
+  // sem playlist e cai no institucional, que é um estado legítimo. Aqui não há o que
+  // sobreviver.
+  dispositivo Dispositivo @relation(fields: [dispositivoId], references: [id], onDelete: Cascade)
+  playlist    TvPlaylist  @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
+  @@index([empresaId, dispositivoId, ordem])
+  @@index([playlistId])
+}
+
 model TvMenuBoard {
   id              Int      @id @default(autoincrement())
   empresaId       Int

@@ -259,7 +259,7 @@ test('🔴 refresh sem bloco de aparência NÃO apaga o tema que está na tela',
   const codigo = player.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').map((l) => l.split('//')[0]).join('\n')
   // Só uma resposta VÁLIDA substitui a aparência: um servidor de versão anterior, ou uma
   // resposta degradada, não pode apagar a identidade da loja da parede.
-  assert.match(codigo, /if \(r\.data\?\.aparencia\?\.tokens\) setAparencia\(r\.data\.aparencia\)/)
+  assert.match(codigo, /if \(nova\?\.aparencia\?\.tokens\) setAparencia\(nova\.aparencia\)/)
   // E a aparência vive em estado PRÓPRIO, fora de `programacao` — senão o `.catch` que
   // preserva a programação não a alcançaria.
   assert.match(codigo, /const \[aparencia, setAparencia\] = useState\(null\)/)
@@ -340,7 +340,10 @@ test('🔴 o vídeo fica FORA do temporizador de rotação', async () => {
   const fs = await import('node:fs')
   const player = fs.readFileSync(new URL('../pages/TvIndoorPlayer.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
   const codigo = player.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').map((l) => l.split('//')[0]).join('\n')
-  const i = codigo.indexOf('setTimeout(')
+  // A âncora é `duracaoMs(atual)`, e NÃO o primeiro `setTimeout` do arquivo: o player tem
+  // mais de um temporizador (a virada da grade é outro), e ancorar no primeiro fazia esta
+  // guarda medir o efeito errado — passando ou falhando por acidente.
+  const i = codigo.indexOf('duracaoMs(atual)')
   assert.ok(i > 0, 'o player precisa ter o temporizador de rotação')
   const guarda = codigo.slice(codigo.lastIndexOf('useEffect', i), i)
   assert.match(guarda, /ehVideo\(atual\)/, 'o efeito da rotação precisa recusar o vídeo')
@@ -409,3 +412,52 @@ test('🔴 falha não é sentença perpétua — a programação é reanimada', 
   assert.match(efeito, /setTimeout/, 'a reanimação espera — não é um laço apertado')
   assert.match(efeito, /new Set\(\)/, 'e ela LIMPA os falhados, devolvendo a chance a todos')
 })
+
+// ── Grade semanal: a troca na virada, e o vídeo que não é cortado ────────────
+test('🔴 a virada é agendada pelo relógio do SERVIDOR, não pelo da TV', async () => {
+  // Uma TV de loja com a hora errada é o caso comum, não a exceção. A espera sai da
+  // DIFERENÇA entre dois instantes do mesmo relógio (`proximaTrocaEm - agoraServidor`);
+  // usar `Date.now()` aqui faria a troca acontecer na hora errada em toda tela desajustada.
+  const fs = await import('node:fs')
+  const player = fs.readFileSync(new URL('../pages/TvIndoorPlayer.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  const codigo = player.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').map((l) => l.split('//')[0]).join('\n')
+
+  const i = codigo.indexOf('const alvo = Date.parse(proximaTrocaEm)')
+  assert.ok(i > 0, 'o player precisa agendar a virada')
+  const efeito = codigo.slice(i, codigo.indexOf('}, [proximaTrocaEm', i))
+  assert.match(efeito, /Date\.parse\(agoraServidor\)/, 'a base é o relógio do servidor');
+  assert.match(efeito, /alvo - base/, 'a espera é a diferença entre os dois');
+  assert.equal(/Date\.now\(\)/.test(efeito), false, 'o relógio da TV não entra na conta');
+  assert.match(efeito, /clearTimeout/, 'e o temporizador é desfeito ao mudar');
+  // O polling continua existindo como rede de segurança.
+  assert.match(codigo, /setInterval\(buscar, MS_PROGRAMACAO\)/);
+});
+
+test('🔴 troca de grade NÃO corta um vídeo no meio', async () => {
+  const fs = await import('node:fs')
+  const player = fs.readFileSync(new URL('../pages/TvIndoorPlayer.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  const codigo = player.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').map((l) => l.split('//')[0]).join('\n')
+
+  // Só ADIA quando há vídeo no ar E a playlist efetiva é OUTRA. Arte e menu board trocam na
+  // hora, e a mesma playlist entra direto (a assinatura cuida de não reiniciar o rodízio).
+  assert.match(codigo, /if \(videoNoArRef\.current && idAtual !== null && idNovo !== idAtual\)/);
+  assert.match(codigo, /setPendente\(nova\)/);
+  // E a pendente entra pelos DOIS caminhos de fim de vídeo: terminou, ou falhou.
+  assert.match(codigo, /aoTerminar=\{\(\) => \{ if \(!aplicarPendente\(\)\) avancar\(\) \}\}/);
+  assert.match(codigo, /aoFalhar=\{\(\) => \{ marcarFalha\(atual\); aplicarPendente\(\) \}\}/);
+  // Com troca pendente, o vídeo único deixa de repetir — senão o `ended` nunca dispararia e
+  // a grade nova ficaria presa até o fim do expediente.
+  assert.match(codigo, /unico=\{total < 2 && !pendente\}/);
+});
+
+test('🔴 quem decide a grade é o SERVIDOR — a TV não recalcula nada', async () => {
+  // A TV não recebe as regras e não sabe que dia é na loja. Se ela calculasse, teríamos dois
+  // algoritmos temporais para manter em sincronia — e eles divergiriam no primeiro ajuste.
+  const fs = await import('node:fs')
+  const player = fs.readFileSync(new URL('../pages/TvIndoorPlayer.jsx', import.meta.url), 'utf8')
+  const modulo = fs.readFileSync(new URL('./tvProgramacao.js', import.meta.url), 'utf8')
+  for (const [nome, fonte] of [['player', player], ['módulo da programação', modulo]]) {
+    assert.equal(/getDay\(\)|diaSemana|toLocaleTimeString|Intl\.DateTimeFormat/.test(fonte), false,
+      `o ${nome} não pode resolver a grade`)
+  }
+});

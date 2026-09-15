@@ -213,8 +213,13 @@ test('🔴 sem playlist (ou com o banco fora) a TV recebe programação VAZIA, n
   // Numa parede da loja, um 500 é uma tela de erro que fica lá o dia inteiro. O fallback
   // institucional é um estado legítimo — e é para ele que a TV cai.
   const bloco = semComentarios(handler('/api/public/aparelho/tv/programacao', 'get'));
-  assert.match(bloco, /if \(!ap\.tvPlaylistId\) return vazia\(\)/, 'sem playlist → vazia');
-  assert.match(bloco, /if \(!playlist\) return vazia\(\)/, 'playlist de outra loja → vazia, não 403');
+  assert.match(bloco, /if \(grade\.playlistId === null\) return vazia\(\)/, 'sem playlist efetiva → vazia');
+  assert.match(bloco, /if \(!playlist \|\| !corpo\) return vazia\(/, 'playlist de outra loja → vazia, não 403');
+  // A grade NÃO pode ter virado um segundo caminho para a tela ficar sem nada: a playlist
+  // padrão continua sendo o fundo do poço antes do institucional.
+  assert.match(bloco, /playlistPadraoId: ap\.tvPlaylistId/, 'o padrão da TELA é o fallback da grade');
+  // E ler a grade não pode derrubar a parede num deploy anterior à migration.
+  assert.match(bloco, /prisma\.tvProgramacaoRegra\.findMany\([\s\S]{0,400}?\}\)\.catch\(\(\) => \[\]\)/, 'sem a tabela de regras, a TV segue no padrão');
   assert.match(bloco, /res\.status\(200\)\.json\(\{ playlist: null/, 'o catch responde 200 com lista vazia');
   assert.equal(/res\.status\(500\)\.json/.test(bloco), false, 'nada de 500 numa parede da loja');
 });
@@ -454,4 +459,79 @@ test('🔴 nenhuma constante de topo é usada antes de ser declarada', async () 
     }
   }
   assert.deepEqual(problemas, [], problemas.join(' | '));
+});
+
+// ── Programação semanal: isolamento e integridade ────────────────────────────
+// Vazamento entre lojas não é erro de lógica: é um `where` que alguém esqueceu. Estas
+// guardas leem o código e cobram o escopo em TODA consulta da grade — inclusive nas que já
+// recebem um id na URL, que é onde a distração acontece.
+test('🔴 nenhuma consulta da grade roda sem empresaId', () => {
+  const bloco = semComentarios(fonte.slice(
+    fonte.indexOf('// ── Programação semanal (ADMIN) ──'),
+    fonte.indexOf('// ── Aparência (ADMIN) ──'),
+  ));
+  assert.ok(bloco.length > 500, 'o bloco da programação precisa existir');
+  // A varredura acha a CHAMADA e olha os argumentos dela por uma janela fixa, em vez de
+  // tentar casar as chaves de fechamento: a primeira versão desta guarda usava uma regex de
+  // bloco e perdia silenciosamente as chamadas escritas numa linha só — uma guarda que não
+  // enxerga metade do arquivo é pior que nenhuma, porque passa a sensação de cobertura.
+  const chamadas = [...bloco.matchAll(/prisma\.(tvProgramacaoRegra|tvPlaylist|dispositivo|tvIndoorConfiguracao)\.(findFirst|findMany|deleteMany|upsert)\(/g)];
+  assert.ok(chamadas.length >= 8, `esperava várias leituras/escritas amplas, achei ${chamadas.length}`);
+  for (const c of chamadas) {
+    // `update`/`create` por id já vieram de uma leitura escopada logo acima; o que não pode
+    // existir é uma LEITURA ou um DELETE amplo sem empresa.
+    const argumentos = bloco.slice(c.index, c.index + 320);
+    assert.match(argumentos, /empresaId/, `consulta sem empresaId: ${argumentos.slice(0, 120)}`);
+  }
+});
+
+test('🔴 regra só nasce em tela que é TV desta loja', () => {
+  const helper = semComentarios(fonte.slice(fonte.indexOf('async function telaDeTv'), fonte.indexOf('async function gradeParaAdmin')));
+  assert.match(helper, /empresaId/, 'a tela é procurada dentro da empresa');
+  assert.match(helper, /tipo: 'TV_INDOOR'/, 'e precisa ser uma TV — totem não tem grade');
+});
+
+test('🔴 a playlist da regra é conferida contra as da PRÓPRIA loja', () => {
+  const bloco = semComentarios(fonte.slice(
+    fonte.indexOf('// ── Programação semanal (ADMIN) ──'),
+    fonte.indexOf('// ── Aparência (ADMIN) ──'),
+  ));
+  // O domínio recusa id fora do conjunto; o conjunto é montado com `where: { empresaId }`.
+  const criacoes = bloco.split('validarEntradaRegra').slice(1);
+  assert.ok(criacoes.length >= 2, 'criação e edição passam pelo domínio');
+  assert.equal(
+    (bloco.match(/prisma\.tvPlaylist\.findMany\(\{ where: \{ empresaId \}/g) ?? []).length, 2,
+    'as duas escritas montam o conjunto de playlists da empresa',
+  );
+});
+
+test('🔴 a reordenação exige a lista COMPLETA daquela tela', () => {
+  // Aceitar um subconjunto deixaria as regras de fora com ordem indefinida — e ordem
+  // indefinida é prioridade indefinida, que é o oposto do que a grade promete.
+  const rota = semComentarios(handler('/api/tv-indoor/programacao/regras/ordem', 'put'));
+  assert.match(rota, /pedidos\.length !== conhecidos\.size/);
+  assert.match(rota, /new Set\(pedidos\)\.size !== pedidos\.length/, 'id repetido é recusado');
+  assert.match(rota, /pedidos\.some\(\(id\) => !conhecidos\.has\(id\)\)/, 'id de outra tela é recusado');
+  assert.match(rota, /\$transaction/, 'a ordem inteira sobe numa transação só');
+});
+
+test('🔴 o fuso é validado antes de ser gravado', () => {
+  // Uma string torta aqui derrubaria a resolução da grade de TODAS as telas da loja, e o
+  // lugar onde isso apareceria é a parede.
+  const rota = semComentarios(handler('/api/tv-indoor/programacao/fuso', 'put'));
+  assert.match(rota, /if \(!fusoValido\(fuso\)\)/);
+  assert.match(rota, /status\(400\)/);
+});
+
+test('🔴 o admin e a parede usam a MESMA resolução temporal', () => {
+  // Duplicar o algoritmo faria os dois discordarem sobre o mesmo instante — e quem estivesse
+  // certo seria sempre o outro. `resolverGrade` é a única fonte, nos dois lados.
+  const publica = semComentarios(handler('/api/public/aparelho/tv/programacao', 'get'));
+  const admin = semComentarios(fonte.slice(fonte.indexOf('async function gradeParaAdmin'), fonte.indexOf('app.get(\'/api/tv-indoor/programacao\'')));
+  assert.match(publica, /resolverGrade\(/);
+  assert.match(admin, /resolverGrade\(/);
+  // E nenhum dos dois reimplementa dia da semana / hora local na mão.
+  for (const [nome, bloco] of [['pública', publica], ['admin', admin]]) {
+    assert.equal(/getDay\(\)|getHours\(\)|toLocaleTimeString/.test(bloco), false, `${nome} não pode calcular hora local à mão`);
+  }
 });

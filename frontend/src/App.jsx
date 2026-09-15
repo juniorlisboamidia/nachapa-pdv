@@ -58,6 +58,7 @@ import TvIndoorTelas from './pages/TvIndoorTelas'
 import TvIndoorConteudos from './pages/TvIndoorConteudos'
 import TvIndoorVideos from './pages/TvIndoorVideos'
 import TvIndoorPlaylists from './pages/TvIndoorPlaylists'
+import TvIndoorProgramacao from './pages/TvIndoorProgramacao'
 import TvIndoorMenuBoards from './pages/TvIndoorMenuBoards'
 import TvIndoorAparencia from './pages/TvIndoorAparencia'
 
@@ -182,6 +183,7 @@ export default function App() {
             <Route path="tv-indoor/videos" element={<TvIndoorVideos />} />
             <Route path="tv-indoor/playlists" element={<TvIndoorPlaylists />} />
             <Route path="tv-indoor/menu-boards" element={<TvIndoorMenuBoards />} />
+            <Route path="tv-indoor/programacao" element={<TvIndoorProgramacao />} />
             <Route path="tv-indoor/aparencia" element={<TvIndoorAparencia />} />
             {/* Compatibilidade: os endereços antigos continuam abrindo o lugar novo. Link
                 anotado, favorito do navegador e aba esquecida aberta não podem virar 404. */}

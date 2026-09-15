@@ -96,6 +96,13 @@ import {
   validarEntrada as validarMenuBoard, resolverMenuBoard, menuBoardPublico, menuBoardParaAdmin,
   validarItensPlaylist, itensParaGravar as itensPlaylistParaGravar,
 } from './tvMenuBoard.js';
+// TV Indoor › GRADE SEMANAL: qual playlist esta tela usa NESTE instante. Domínio puro, sem
+// relógio escondido — o instante entra por parâmetro e o fuso é o DA LOJA, nunca o do VPS.
+import {
+  DIAS as GRADE_DIAS, FUSO_PADRAO as GRADE_FUSO_PADRAO, MOTIVO_FUSO as GRADE_MOTIVO_FUSO,
+  resolverGrade, regraParaAdmin, validarEntradaRegra, conferirJanela as conferirJanelaRegra,
+  fusoValido, fusoOuPadrao, cruzaCom as regrasSeCruzam,
+} from './tvGradeSemanal.js';
 // O catálogo da loja com ÚLTIMO-ESTADO-BOM. Serviço NEUTRO: o caminho
 // empresaId → clienteId → HUB → CW é o mesmo do totem, e nenhum navegador fala com o CW.
 import { catalogoDaLoja } from './catalogoDaLoja.js';
@@ -9195,19 +9202,63 @@ app.get('/api/public/aparelho/tv/programacao', async (req, res) => {
     // `.catch` próprio — sem a tabela (deploy antes da migration) a TV usa os defaults do
     // canal, nunca um erro na parede.
     const aparencia = await aparenciaDaTv(ap);
+
+    /* ── A GRADE decide QUAL playlist, antes de qualquer item ──────────────────
+       Duas perguntas em sequência, e nunca fundidas: a grade escolhe a playlist (domínio
+       PDV, nenhuma chamada externa), e só depois a agenda de cada conteúdo filtra os itens
+       dela. É por isso que descobrir "o que está no ar agora" nunca custa uma ida ao HUB.
+
+       O `.catch` em cada consulta é deliberado: um deploy que ainda não rodou a migration
+       não pode derrubar a parede. Sem tabela de regras, a TV volta a se comportar como
+       antes desta frente — playlist padrão, e nada mais. */
+    const [cfg, regras] = await Promise.all([
+      prisma.tvIndoorConfiguracao.findFirst({
+        where: whereDoAparelho(ap, {}), select: { fusoHorario: true },
+      }).catch(() => null),
+      prisma.tvProgramacaoRegra.findMany({
+        where: { dispositivoId: ap.id, ...whereDoAparelho(ap, {}) },
+        orderBy: [{ ordem: 'asc' }, { id: 'asc' }],
+        select: TV_REGRA_CAMPOS,
+      }).catch(() => []),
+    ]);
+    const grade = resolverGrade({
+      agoraMs: agora,
+      fuso: cfg?.fusoHorario,
+      regras,
+      // `tvPlaylistId` NÃO mudou de papel — mudou de nome. Ele é a PLAYLIST PADRÃO: o que
+      // toca quando nenhuma regra está valendo. Uma tela sem regra nenhuma resolve
+      // exatamente como antes desta migration.
+      playlistPadraoId: ap.tvPlaylistId ?? null,
+    });
+    // O bloco que a TV usa para agendar a própria reconsulta na virada, sem depender do
+    // relógio absoluto dela: o delay sai de `proximaTrocaEm - agoraServidor`.
+    const daGrade = (extra) => ({
+      programacaoTela: {
+        playlistEfetivaId: null,
+        origem: grade.origem,
+        regraId: grade.regraId,
+        fuso: grade.fuso,
+        proximaTrocaEm: grade.proximaTrocaEm === null ? null : new Date(grade.proximaTrocaEm).toISOString(),
+        // As REGRAS não viajam: a TV não precisa delas para nada, e o que não viaja não
+        // vaza nem diverge. Ela só precisa saber o que tocar e quando reconsultar.
+        ...extra,
+      },
+    });
     const vazia = (extra) => res.json({
       tela: { id: ap.id, nome: ap.nome },
       playlist: null,
       aparencia,
+      ...daGrade(),
       ...tvProgramacaoPublica([], agora),
       ...extra,
     });
-    if (!ap.tvPlaylistId) return vazia();
+    if (grade.playlistId === null) return vazia();
+
     // `whereDoAparelho(ap, {})` inline, como nas rotas de imagem: a variável `escopo` é
     // reservada ao bootstrap do totem, e a guarda estática só a aceita nascendo de
     // `whereDoAparelho(ap, body)`.
-    const playlist = await prisma.tvPlaylist.findFirst({
-      where: { id: ap.tvPlaylistId, ...whereDoAparelho(ap, {}) },
+    const carregarPlaylist = (id) => prisma.tvPlaylist.findFirst({
+      where: { id, ...whereDoAparelho(ap, {}) },
       select: {
         id: true, nome: true,
         itens: {
@@ -9221,19 +9272,56 @@ app.get('/api/public/aparelho/tv/programacao', async (req, res) => {
         },
       },
     });
-    if (!playlist) return vazia();
-    const loja = await lojaDoAparelho(ap, {}).catch(() => null);
+
     // Os MENU BOARDS resolvidos contra o catálogo ATUAL. Só se vai ao HUB quando a
     // programação realmente tem board — uma playlist só de artes não paga esse custo.
-    const boards = await boardsDaProgramacao(ap, playlist.itens);
+    const montar = async (pl) => {
+      const boards = await boardsDaProgramacao(ap, pl.itens);
+      // `videoPublico`/`videoElegivel` entram por injeção: `tvIndoor.js` é o contrato da
+      // programação, e não precisa conhecer o domínio de cada tipo de mídia.
+      return tvProgramacaoPublica(pl.itens, agora, { boards, videoPublico, videoElegivel });
+    };
+
+    let playlist = await carregarPlaylist(grade.playlistId);
+    let corpo = playlist ? await montar(playlist) : null;
+    let caiuNoPadrao = false;
+
+    /* FALLBACK OPERACIONAL. A regra apontava para uma playlist que existe mas que, NESTE
+       instante, não tem nada reproduzível — tudo agendado para amanhã, tudo desligado, o
+       vídeo ainda sem arquivo. Uma programação especial vazia não pode calar a comunicação
+       da loja, então a tela cai para a PLAYLIST PADRÃO INTEIRA.
+
+       Cair para a padrão, e não completar a especial com itens avulsos: misturar as duas
+       produziria uma terceira programação que ninguém montou. */
+    const padraoId = ap.tvPlaylistId ?? null;
+    const vaziaAgora = !playlist || (corpo?.itens?.length ?? 0) === 0;
+    if (vaziaAgora && grade.origem === 'REGRA' && padraoId && padraoId !== grade.playlistId) {
+      const padrao = await carregarPlaylist(padraoId);
+      if (padrao) {
+        const corpoPadrao = await montar(padrao);
+        if ((corpoPadrao.itens?.length ?? 0) > 0) {
+          playlist = padrao;
+          corpo = corpoPadrao;
+          caiuNoPadrao = true;
+        }
+      }
+    }
+    if (!playlist || !corpo) return vazia(daGrade({ playlistEfetivaId: null }));
+
+    const loja = await lojaDoAparelho(ap, {}).catch(() => null);
     res.json({
       tela: { id: ap.id, nome: ap.nome },
       loja: loja ? lojaPublica(loja) : null,
       playlist: { id: playlist.id, nome: playlist.nome },
       aparencia,
-      // `videoPublico`/`videoElegivel` entram por injeção: `tvIndoor.js` é o contrato da
-      // programação, e não precisa conhecer o domínio de cada tipo de mídia.
-      ...tvProgramacaoPublica(playlist.itens, agora, { boards, videoPublico, videoElegivel }),
+      ...daGrade({
+        playlistEfetivaId: playlist.id,
+        // Quando a regra venceu mas a playlist dela estava vazia, a origem HONESTA é o
+        // padrão: é ele que está no ar. `regraId` fica para o admin entender o porquê.
+        origem: caiuNoPadrao ? 'PADRAO' : grade.origem,
+        caiuNoPadrao,
+      }),
+      ...corpo,
     });
   } catch (err) {
     console.error('[public/aparelho tv programacao]', err?.code ?? err?.name ?? 'erro');
@@ -10470,6 +10558,32 @@ const videoAdmin = (v, agora) => videoParaAdmin({ ...v, arquivoBytes: v.arquivoB
 const MB_CABECALHO = { id: true, nome: true, ativo: true, layout: true, duracaoSegundos: true };
 const MB_CAMPOS = { ...MB_CABECALHO, configuracao: true };
 
+// A regra da grade como o domínio a espera. `playlist` vem junto só pelo NOME, para o
+// admin escrever "Jantar" em vez de "playlist 12" — os itens dela não entram aqui.
+const TV_REGRA_CAMPOS = {
+  id: true, dispositivoId: true, playlistId: true, ativo: true,
+  dias: true, inicioMin: true, fimMin: true, ordem: true,
+  playlist: { select: { id: true, nome: true } },
+};
+
+// O fuso DA LOJA. Sem configuração (ou sem a tabela, num deploy antes da migration) cai no
+// padrão do canal — nunca no fuso do processo, que é justamente o que esta frente evita.
+async function fusoDaEmpresa(empresaId) {
+  const cfg = await prisma.tvIndoorConfiguracao
+    .findFirst({ where: { empresaId }, select: { fusoHorario: true } })
+    .catch(() => null);
+  return fusoOuPadrao(cfg?.fusoHorario);
+}
+
+// As regras de UMA tela, na ordem que É a prioridade. O `empresaId` viaja junto mesmo já
+// tendo o `dispositivoId`: sem ele, um id de outra loja associado por engano devolveria a
+// grade dela — e o escopo é o que torna isso impossível em vez de improvável.
+const regrasDaTela = (empresaId, dispositivoId) => prisma.tvProgramacaoRegra.findMany({
+  where: { empresaId, dispositivoId },
+  orderBy: [{ ordem: 'asc' }, { id: 'asc' }],
+  select: TV_REGRA_CAMPOS,
+});
+
 const TV_PLAYLIST_INCLUDE = {
   id: true, nome: true,
   itens: {
@@ -10931,6 +11045,186 @@ app.get('/api/tv-indoor/videos/manutencao', async (req, res) => {
     ]);
     res.json({ orfaos, temporariosRemovidos: temporarios.length, removeu: remover, usadoBytes: await midiaFs.usoDaEmpresa(empresaId) });
   } catch (err) { console.error('[tv-indoor/videos manutencao]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// ── Programação semanal (ADMIN) ─────────────────────────────────────────────
+// A GRADE de cada tela: qual playlist ela usa em cada faixa de horário. Domínio do PDV —
+// nenhuma destas rotas encosta no HUB ou no Cardápio Web.
+//
+// ISOLAMENTO: toda consulta leva `empresaId`, inclusive as que já recebem um id na URL.
+// É justamente onde a distração acontece ("já tenho o id, para que o empresaId?"), e é
+// onde um id de outra loja passaria a valer.
+
+// A tela precisa ser DESTA empresa e precisa ser uma TV. Um totem não tem grade — e deixar
+// passar seria gravar regra numa linha que nenhuma rota lê, o que o gestor descobriria só
+// quando a programação não acontecesse.
+async function telaDeTv(empresaId, bruto) {
+  const id = Number(bruto);
+  if (!Number.isSafeInteger(id) || id <= 0) return null;
+  return prisma.dispositivo.findFirst({
+    where: { id, empresaId, tipo: 'TV_INDOOR' },
+    select: { id: true, nome: true, tvPlaylistId: true },
+  });
+}
+
+// A grade de uma tela, com o "agora" JÁ RESOLVIDO pela MESMA função que a rota pública usa.
+// Duplicar o algoritmo no frontend faria o admin e a parede discordarem sobre o mesmo
+// instante — e quem estivesse certo seria sempre o outro.
+async function gradeParaAdmin(empresaId, tela) {
+  const [fuso, regras] = await Promise.all([
+    fusoDaEmpresa(empresaId),
+    regrasDaTela(empresaId, tela.id),
+  ]);
+  const agoraMs = Date.now();
+  const grade = resolverGrade({ agoraMs, fuso, regras, playlistPadraoId: tela.tvPlaylistId ?? null });
+  const nomeDe = (id) => regras.find((r) => r.playlistId === id)?.playlist?.nome ?? null;
+  return {
+    tela: { id: tela.id, nome: tela.nome, playlistPadraoId: tela.tvPlaylistId ?? null },
+    fuso,
+    regras: regras.map(regraParaAdmin),
+    agora: {
+      playlistId: grade.playlistId,
+      playlistNome: grade.origem === 'REGRA' ? nomeDe(grade.playlistId) : null,
+      origem: grade.origem,
+      regraId: grade.regraId,
+      agoraServidor: new Date(agoraMs).toISOString(),
+      proximaTrocaEm: grade.proximaTrocaEm === null ? null : new Date(grade.proximaTrocaEm).toISOString(),
+    },
+  };
+}
+
+// A tela da Programação: as TVs, as playlists e — se uma tela for escolhida — a grade dela.
+// Uma chamada só: abrir a página e já ver o que está no ar agora é o ponto da página.
+app.get('/api/tv-indoor/programacao', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const [telas, playlists] = await Promise.all([
+      prisma.dispositivo.findMany({
+        where: { empresaId, tipo: 'TV_INDOOR' },
+        orderBy: [{ nome: 'asc' }, { id: 'asc' }],
+        select: { id: true, nome: true, tvPlaylistId: true },
+      }),
+      prisma.tvPlaylist.findMany({
+        where: { empresaId }, orderBy: [{ nome: 'asc' }, { id: 'asc' }], select: { id: true, nome: true },
+      }),
+    ]);
+    const pedida = req.query?.dispositivoId;
+    const escolhida = pedida ? telas.find((t) => String(t.id) === String(pedida)) : telas[0];
+    res.json({
+      telas: telas.map((t) => ({ id: t.id, nome: t.nome, playlistPadraoId: t.tvPlaylistId ?? null })),
+      playlists,
+      dias: GRADE_DIAS,
+      fusoPadrao: GRADE_FUSO_PADRAO,
+      ...(escolhida ? await gradeParaAdmin(empresaId, escolhida) : { tela: null, regras: [], agora: null, fuso: await fusoDaEmpresa(empresaId) }),
+    });
+  } catch (err) { console.error('[tv-indoor/programacao]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// O FUSO da loja. Vive na configuração do canal, e é validado contra o runtime antes de
+// gravar: uma string torta aqui derrubaria a resolução da grade de todas as telas.
+app.put('/api/tv-indoor/programacao/fuso', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const fuso = String(req.body?.fusoHorario ?? '').trim();
+    if (!fusoValido(fuso)) {
+      return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros: [{ campo: 'fusoHorario', motivo: GRADE_MOTIVO_FUSO }] });
+    }
+    await prisma.tvIndoorConfiguracao.upsert({
+      where: { empresaId }, create: { empresaId, fusoHorario: fuso }, update: { fusoHorario: fuso },
+    });
+    res.json({ ok: true, fuso });
+  } catch (err) { console.error('[tv-indoor/programacao fuso]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// Criar regra. Ela entra NO FIM da lista — a posição mais conservadora que existe: uma regra
+// nova nunca rouba a vez de uma que já estava funcionando. O gestor sobe com ↑ se quiser.
+app.post('/api/tv-indoor/programacao/regras', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const tela = await telaDeTv(empresaId, req.body?.dispositivoId);
+    if (!tela) return res.status(404).json({ erro: 'NAO_ENCONTRADO' });
+    const minhas = await prisma.tvPlaylist.findMany({ where: { empresaId }, select: { id: true } });
+    const v = validarEntradaRegra(req.body, { exigirTudo: true, playlists: new Set(minhas.map((x) => x.id)) });
+    const janela = conferirJanelaRegra(v.dados, null);
+    const erros = [...v.erros, ...(janela ? [janela] : [])];
+    if (erros.length) return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros });
+    const ultima = await prisma.tvProgramacaoRegra.findFirst({
+      where: { empresaId, dispositivoId: tela.id }, orderBy: { ordem: 'desc' }, select: { ordem: true },
+    });
+    await prisma.tvProgramacaoRegra.create({
+      data: { empresaId, dispositivoId: tela.id, ...v.dados, ordem: (ultima?.ordem ?? -1) + 1 },
+    });
+    res.status(201).json({ ok: true, ...(await gradeParaAdmin(empresaId, tela)) });
+  } catch (err) { console.error('[tv-indoor/programacao regras POST]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+app.put('/api/tv-indoor/programacao/regras/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ erro: 'ID_INVALIDO' });
+    const atual = await prisma.tvProgramacaoRegra.findFirst({ where: { id, empresaId }, select: TV_REGRA_CAMPOS });
+    if (!atual) return res.status(404).json({ erro: 'NAO_ENCONTRADO' });
+    const minhas = await prisma.tvPlaylist.findMany({ where: { empresaId }, select: { id: true } });
+    const v = validarEntradaRegra(req.body, { playlists: new Set(minhas.map((x) => x.id)) });
+    const janela = conferirJanelaRegra(v.dados, atual);
+    const erros = [...v.erros, ...(janela ? [janela] : [])];
+    if (erros.length) return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros });
+    await prisma.tvProgramacaoRegra.update({ where: { id }, data: v.dados });
+    const tela = await telaDeTv(empresaId, atual.dispositivoId);
+    res.json({ ok: true, ...(tela ? await gradeParaAdmin(empresaId, tela) : {}) });
+  } catch (err) { console.error('[tv-indoor/programacao regras PUT]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+app.delete('/api/tv-indoor/programacao/regras/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ erro: 'ID_INVALIDO' });
+    const atual = await prisma.tvProgramacaoRegra.findFirst({ where: { id, empresaId }, select: { dispositivoId: true } });
+    if (!atual) return res.status(404).json({ erro: 'NAO_ENCONTRADO' });
+    const { count } = await prisma.tvProgramacaoRegra.deleteMany({ where: { id, empresaId } });
+    if (!count) return res.status(404).json({ erro: 'NAO_ENCONTRADO' });
+    const tela = await telaDeTv(empresaId, atual.dispositivoId);
+    res.json({ ok: true, ...(tela ? await gradeParaAdmin(empresaId, tela) : {}) });
+  } catch (err) { console.error('[tv-indoor/programacao regras DELETE]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+/* A ORDEM, que É a prioridade. A lista inteira sobe de uma vez e o servidor reescreve por
+   POSIÇÃO, em transação — o mesmo caminho da programação da playlist, e pela mesma razão:
+   trocar dois vizinhos deixa buracos e empates quando duas abas mexem juntas.
+
+   Os ids são conferidos contra as regras DAQUELA tela: mandar um id de outra tela (ou de
+   outra loja) não reordena nada, recusa. */
+app.put('/api/tv-indoor/programacao/regras/ordem', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const tela = await telaDeTv(empresaId, req.body?.dispositivoId);
+    if (!tela) return res.status(404).json({ erro: 'NAO_ENCONTRADO' });
+    const pedidos = Array.isArray(req.body?.ids) ? req.body.ids.map((x) => Number(x)) : null;
+    if (!pedidos || pedidos.some((x) => !Number.isSafeInteger(x) || x <= 0)) {
+      return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros: [{ campo: 'ids', motivo: 'ITENS_INVALIDOS' }] });
+    }
+    const minhas = await prisma.tvProgramacaoRegra.findMany({
+      where: { empresaId, dispositivoId: tela.id }, select: { id: true },
+    });
+    const conhecidos = new Set(minhas.map((r) => r.id));
+    // A lista precisa ser a MESMA, sem faltar nem sobrar: aceitar um subconjunto deixaria as
+    // regras de fora com ordem indefinida, e ordem indefinida é prioridade indefinida.
+    if (pedidos.length !== conhecidos.size || new Set(pedidos).size !== pedidos.length || pedidos.some((id) => !conhecidos.has(id))) {
+      return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros: [{ campo: 'ids', motivo: 'ITENS_INVALIDOS' }] });
+    }
+    await prisma.$transaction(pedidos.map((id, i) => prisma.tvProgramacaoRegra.updateMany({
+      where: { id, empresaId, dispositivoId: tela.id }, data: { ordem: i },
+    })));
+    res.json({ ok: true, ...(await gradeParaAdmin(empresaId, tela)) });
+  } catch (err) { console.error('[tv-indoor/programacao regras ordem]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
 });
 
 // ── Aparência (ADMIN) ───────────────────────────────────────────────────────

@@ -152,8 +152,13 @@ export default function TvIndoorTelas() {
     }
   }
 
-  // A associação é a única ação PRÓPRIA do canal. Grava ao escolher: é uma decisão só, num
-  // seletor, e o resultado aparece no próprio seletor.
+  /* A associação é a única ação PRÓPRIA do canal. Grava ao escolher: é uma decisão só, num
+     seletor, e o resultado aparece no próprio seletor.
+
+     Esta playlist é a PADRÃO da tela: o que ela reproduz quando nenhuma regra de horário
+     está valendo. A coluna é a mesma de sempre (`tvPlaylistId`) — o que mudou com a
+     Programação Semanal foi o NOME, não o papel. Uma TV sem regra nenhuma continua tocando
+     exatamente isto o tempo todo. */
   async function mudarPlaylist(tela, valor) {
     setSalvandoPlaylist(tela.id)
     try {
@@ -275,7 +280,7 @@ export default function TvIndoorTelas() {
                 <th>TV</th>
                 <th>Conexão</th>
                 <th>Sinal</th>
-                <th>Programação</th>
+                <th>Playlist padrão</th>
                 <th style={{ textAlign: 'right' }}>Ações</th>
               </tr>
             </thead>
@@ -317,12 +322,12 @@ export default function TvIndoorTelas() {
                     <td>
                       <select
                         className="form-input tvi-sel-playlist"
-                        aria-label={`Programação de ${t.nome}`}
+                        aria-label={`Playlist padrão de ${t.nome}`}
                         value={t.tvPlaylistId ?? ''}
                         disabled={salvandoPlaylist === t.id || playlists.length === 0}
                         onChange={(e) => mudarPlaylist(t, e.target.value)}
                       >
-                        <option value="">Sem programação</option>
+                        <option value="">Nenhuma</option>
                         {playlists.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
                       </select>
                       {playlists.length === 0 && (
