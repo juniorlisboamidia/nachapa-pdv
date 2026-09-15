@@ -535,3 +535,68 @@ test('🔴 o admin e a parede usam a MESMA resolução temporal', () => {
     assert.equal(/getDay\(\)|getHours\(\)|toLocaleTimeString/.test(bloco), false, `${nome} não pode calcular hora local à mão`);
   }
 });
+
+// ── Monitoramento: barato, isolado e sem autoridade ──────────────────────────
+test('🔴 o monitoramento NÃO fala com o HUB nem com o Cardápio Web', () => {
+  // Abrir a tela de diagnóstico de cinquenta paredes não pode disparar cinquenta bootstraps
+  // de catálogo. O custo de OLHAR não pode ser maior que o de operar.
+  const rota = semComentarios(handler('/api/tv-indoor/monitoramento', 'get'));
+  for (const proibido of ['catalogoDaLoja', 'boardsDaProgramacao', 'catalogoParaMenuBoard', 'hubApi', 'fetch(']) {
+    assert.equal(rota.includes(proibido), false, `o monitoramento não pode chamar ${proibido}`);
+  }
+});
+
+test('🔴 os nomes são resolvidos em LOTE — nada de N+1 com cem TVs', () => {
+  const rota = semComentarios(handler('/api/tv-indoor/monitoramento', 'get'));
+  // Uma consulta por TIPO, com `in`, e não uma por tela × item.
+  assert.match(rota, /id: \{ in: \[\.\.\.conjunto\] \}/);
+  // O recorte termina no `res.json(` DESTA rota: `handler()` vai até o próximo `app.`, e a
+  // seção seguinte começa com funções auxiliares — sem este limite a guarda leria o código
+  // de outra rota e falharia por um motivo que não é o dela.
+  const inicioMap = rota.indexOf('dispositivos.map(')
+  const dentroDoMap = rota.slice(inicioMap, rota.indexOf('res.json(', inicioMap));
+  assert.ok(dentroDoMap.length > 100, 'o recorte do laço precisa existir');
+  assert.equal(/prisma\./.test(dentroDoMap), false, 'nenhuma consulta dentro do laço das telas');
+});
+
+test('🔴 os ids que a TV reporta NÃO furam o escopo da empresa', () => {
+  // Eles vêm do payload de um navegador. Entram só como filtro de uma consulta que já está
+  // escopada — uma TV da empresa A reportando o vídeo da B não faz o nome da B aparecer.
+  const rota = semComentarios(handler('/api/tv-indoor/monitoramento', 'get'));
+  const consultas = [...rota.matchAll(/prisma\.\w+\.findMany\(\{ where: \{[^}]*\}/g)];
+  assert.ok(consultas.length >= 5, `esperava as consultas em lote, achei ${consultas.length}`);
+  for (const c of consultas) assert.match(c[0], /empresaId/, `consulta sem escopo: ${c[0].slice(0, 90)}`);
+});
+
+test('🔴 o snapshot gravado é RELIDO pelo sanitizador antes de virar diagnóstico', () => {
+  // O que está no banco foi gravado por uma versão anterior desta rota. Confiar na forma do
+  // que está gravado é confiar num contrato que já mudou uma vez.
+  const rota = semComentarios(handler('/api/tv-indoor/monitoramento', 'get'));
+  assert.match(rota, /sanitizarTelemetriaTv\(d\.heartbeatJson\?\.tv\)/);
+});
+
+test('🔴 telemetria de TV não é aceita de um TOTEM', () => {
+  // Guardar um dado que nenhuma rota lê é criar algo que um dia alguém lerá como se
+  // significasse alguma coisa.
+  const rota = semComentarios(handler('/api/public/aparelho/heartbeat', 'post'));
+  assert.match(rota, /ap\.tipo === 'TV_INDOOR' \? sanitizarTelemetriaTv\(req\.body\?\.tv\) : null/);
+});
+
+test('🔴 o heartbeat continua sendo o MESMO request — nenhuma rota nova de escrita', () => {
+  // A frequência é a mesma e o dado é do mesmo instante. Um segundo timer bateria no banco
+  // em dobro para dizer, com meio segundo de diferença, o que este já poderia ter dito.
+  const publicas = semComentarios(fonte.slice(fonte.indexOf("app.post('/api/public/aparelho/heartbeat'")));
+  assert.equal(/app\.(post|put)\('\/api\/public\/aparelho\/(telemetria|diagnostico|status)/.test(publicas), false);
+  // E o snapshot vive no `heartbeatJson`, que é substituído inteiro — "só o mais recente"
+  // por construção, sem tabela crescendo uma linha por minuto.
+  assert.equal(/model TvTelemetria|model TvLogPlayer|model TvFalha/.test(fonte), false);
+});
+
+test('🔴 a telemetria não decide NADA operacional', () => {
+  // Ela é observação. Se mentir, o pior que acontece é o admin mostrar diagnóstico errado —
+  // nunca a TV se comportar diferente.
+  const publica = semComentarios(handler('/api/public/aparelho/tv/programacao', 'get'));
+  for (const proibido of ['heartbeatJson', 'telemetria', 'req.body']) {
+    assert.equal(publica.includes(proibido), false, `a programação não pode ler ${proibido}`);
+  }
+});

@@ -179,6 +179,11 @@ export const grupos = [
         label: 'TV Indoor', icon: 'megaphone', area: 'aparelhos',
         itens: [
           { to: '/tv-indoor/telas', label: 'Telas', icon: 'cpu' },
+          // Monitoramento logo depois de Telas, e NÃO dentro delas: "cadastrar um aparelho"
+          // e "descobrir por que a parede está errada" são tarefas de momentos diferentes, e
+          // entupir a gestão com diagnóstico faria as duas piores. Fica em cima porque é a
+          // pergunta com pressa — as outras folhas são trabalho planejado.
+          { to: '/tv-indoor/monitoramento', label: 'Monitoramento', icon: 'analise' },
           { to: '/tv-indoor/conteudos', label: 'Conteúdos', icon: 'marketing' },
           // Vídeos é folha PRÓPRIA, e não uma aba dentro de Conteúdos: os dois são acervos,
           // mas o de vídeo tem consumo de disco, envio com progresso e um estado que a

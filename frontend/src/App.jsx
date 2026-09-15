@@ -55,6 +55,7 @@ import TotemBanners from './pages/TotemBanners'
 import TotemDestaques from './pages/TotemDestaques'
 import DispositivoPareamento from './pages/DispositivoPareamento'
 import TvIndoorTelas from './pages/TvIndoorTelas'
+import TvIndoorMonitoramento from './pages/TvIndoorMonitoramento'
 import TvIndoorConteudos from './pages/TvIndoorConteudos'
 import TvIndoorVideos from './pages/TvIndoorVideos'
 import TvIndoorPlaylists from './pages/TvIndoorPlaylists'
@@ -179,6 +180,7 @@ export default function App() {
                 `/tv-indoor` cai na PRIMEIRA folha, como o `/totem` faz. */}
             <Route path="tv-indoor" element={<Navigate to="/tv-indoor/telas" replace />} />
             <Route path="tv-indoor/telas" element={<TvIndoorTelas />} />
+            <Route path="tv-indoor/monitoramento" element={<TvIndoorMonitoramento />} />
             <Route path="tv-indoor/conteudos" element={<TvIndoorConteudos />} />
             <Route path="tv-indoor/videos" element={<TvIndoorVideos />} />
             <Route path="tv-indoor/playlists" element={<TvIndoorPlaylists />} />

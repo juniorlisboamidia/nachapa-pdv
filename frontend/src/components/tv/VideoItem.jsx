@@ -25,7 +25,7 @@
 import { useEffect, useRef } from 'react'
 import { MS_VIGIA, avaliar, inicio } from '../tvVigiaVideo'
 
-export default function VideoItem({ item, unico, aoTerminar, aoFalhar }) {
+export default function VideoItem({ item, unico, aoTerminar, aoFalhar, aoTocar, aoAguardar }) {
   const ref = useRef(null)
   // O estado do vigia. Em ref, não em estado do React: ele não deve provocar render nenhum —
   // é um vigia, não uma fonte de tela.
@@ -41,8 +41,8 @@ export default function VideoItem({ item, unico, aoTerminar, aoFalhar }) {
   // A escrita é num efeito SEM array de dependências (roda depois de todo render), e não
   // no corpo do componente: escrever numa ref durante o render é render impuro, e o
   // React Compiler está ligado neste projeto.
-  const avisos = useRef({ aoTerminar, aoFalhar, unico })
-  useEffect(() => { avisos.current = { aoTerminar, aoFalhar, unico } })
+  const avisos = useRef({ aoTerminar, aoFalhar, unico, aoTocar, aoAguardar })
+  useEffect(() => { avisos.current = { aoTerminar, aoFalhar, unico, aoTocar, aoAguardar } })
 
   const url = item?.arquivoUrl
   const chave = `${item?.id}:${item?.arquivoVersao ?? 0}`
@@ -85,6 +85,13 @@ export default function VideoItem({ item, unico, aoTerminar, aoFalhar }) {
     el.addEventListener('error', () => falhar('erro'))
     // `stalled`/`waiting` sozinhos NÃO são falha: o navegador os dispara a cada rebuffer
     // normal. Quem decide é o watchdog, olhando se o tempo anda.
+    //
+    // Eles servem ao DIAGNÓSTICO, e só: "carregando" e "tocando" são a única distinção que
+    // muda o que alguém faria a respeito. Nenhum deles interrompe nada.
+    const tocando = () => avisos.current.aoTocar?.()
+    const esperando = () => avisos.current.aoAguardar?.()
+    el.addEventListener('playing', tocando)
+    el.addEventListener('waiting', esperando)
 
     const vigia = setInterval(() => {
       if (!vivo || !el) return
@@ -108,6 +115,8 @@ export default function VideoItem({ item, unico, aoTerminar, aoFalhar }) {
       vivo = false
       clearInterval(vigia)
       el.removeEventListener('ended', terminou)
+      el.removeEventListener('playing', tocando)
+      el.removeEventListener('waiting', esperando)
       // Parar e soltar a fonte: sem isto, o navegador continua baixando o vídeo que saiu da
       // tela, e numa playlist de cinco itens isso é a banda da loja inteira.
       try {

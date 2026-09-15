@@ -3858,6 +3858,45 @@ body.theme-dark .hb-table tr.ttm-linha-revisao:hover td { background: #3a2612; }
 .tvi-aviso-overlap { color: #b45309; }
 body.theme-dark .tvi-aviso-overlap { color: #fbbf24; }
 
+/* ── Monitoramento ────────────────────────────────────────────────────────
+   Os números do topo existem para uma pergunta: "tem algo errado agora?".
+   Por isso o cartão de ATENÇÃO tem cor e os outros não — se tudo fosse
+   colorido, nada chamaria atenção. */
+.tvi-mon-resumo {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 16px;
+}
+.tvi-mon-cartao {
+  display: flex; flex-direction: column; gap: 2px; padding: 12px 14px;
+  border: 1px solid var(--app-border); border-radius: 10px; background: var(--app-surface);
+}
+.tvi-mon-cartao.alerta { border-color: #f59e0b; background: #fffbeb; }
+.tvi-mon-cartao.off { border-color: #ef4444; background: #fef2f2; }
+body.theme-dark .tvi-mon-cartao.alerta { background: rgba(245, 158, 11, 0.12); }
+body.theme-dark .tvi-mon-cartao.off { background: rgba(239, 68, 68, 0.12); }
+.tvi-mon-numero { font-size: 26px; line-height: 1.1; font-variant-numeric: tabular-nums; }
+
+/* A bolinha é redundante com o selo, de propósito: cor sozinha não pode ser a
+   única portadora de informação, e forma + texto sobrevivem a quem não
+   distingue as cores. */
+.tvi-mon-linha { display: flex; align-items: flex-start; gap: 12px; padding: 12px; border: 1px solid var(--app-border); border-radius: 10px; }
+.tvi-ponto { width: 10px; height: 10px; border-radius: 50%; margin-top: 6px; flex: 0 0 auto; background: var(--app-text-3); }
+.tvi-ponto.ok { background: #16a34a; }
+.tvi-ponto.alerta { background: #f59e0b; }
+.tvi-ponto.off { background: #ef4444; }
+.tvi-ponto.neutro { background: var(--app-text-3); }
+
+/* O aviso vem ANTES dos metadados e com peso: é o que a pessoa veio ler. */
+.tvi-mon-aviso { font-size: 13px; font-weight: 600; color: #b45309; margin: 2px 0; }
+body.theme-dark .tvi-mon-aviso { color: #fbbf24; }
+
+.tvi-mon-secao { font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--app-text-2); margin: 0 0 8px; }
+.tvi-mon-par { display: grid; grid-template-columns: minmax(120px, 34%) 1fr; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--app-border); }
+.tvi-mon-par:last-child { border-bottom: none; }
+.tvi-mon-chave { font-size: 12.5px; color: var(--app-text-2); }
+.tvi-mon-valor { font-size: 13.5px; }
+/* O código técnico é para o suporte: discreto, monoespaçado, nunca o destaque. */
+.tvi-mon-codigo { font-size: 11.5px; padding: 1px 6px; border-radius: 6px; background: var(--app-surface-2); color: var(--app-text-2); }
+
 /* As playlists como abas: a loja tem duas ou três, e um seletor esconderia a
    contagem de cada uma — que é o que responde "qual está montada?". */
 .tvi-abas { display: flex; gap: 8px; flex-wrap: wrap; }

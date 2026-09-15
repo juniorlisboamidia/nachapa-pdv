@@ -40,6 +40,10 @@ import { assinatura, chaveDoItem, desvioDoRelogio, duracaoMs, ehMenuBoard, ehVid
 import MenuBoard from '../components/tv/MenuBoard'
 import VideoItem from '../components/tv/VideoItem'
 import { aplicar as aplicarTemaTv } from '../components/tvIndoorTema'
+/* TELEMETRIA: o estado da parede, para o diagnóstico do admin. É OBSERVAÇÃO — nada que
+   venha daqui decide o que tocar, e se este módulo inteiro parasse, o player seguiria
+   igual. Ele não tem timer: quem leva o snapshot é o heartbeat que já existia. */
+import * as telemetria from '../components/tvTelemetria'
 import '../styles/tv.css'
 
 // A programação se refaz a cada minuto: é o que faz uma troca no PDV aparecer na parede
@@ -122,6 +126,10 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
         const idDe = (prog) => prog?.programacaoTela?.playlistEfetivaId ?? prog?.playlist?.id ?? null
         const idNovo = idDe(nova)
         const idAtual = idDe(programacaoRef.current)
+        // A sincronização é marcada aqui, no caminho de SUCESSO. O `.catch` abaixo
+        // deliberadamente NÃO a atualiza — é essa ausência que o servidor lê como "não
+        // sincroniza há X minutos", sem precisar de uma mensagem dizendo isso.
+        telemetria.programacaoRecebida(nova)
         if (videoNoArRef.current && idAtual !== null && idNovo !== idAtual) {
           setPendente(nova)
           return
@@ -131,7 +139,8 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
       })
       // Rede fora não apaga o que já está tocando: a TV segue com a última programação boa
       // e tenta de novo no minuto seguinte. Sem nenhuma programação, cai no institucional.
-      .catch(() => {})
+      // A falha é REGISTRADA para o diagnóstico, e só isso: a parede não muda por causa dela.
+      .catch(() => { telemetria.falhou(telemetria.FALHAS.PROGRAMACAO) })
   }, [])
 
   useEffect(() => {
@@ -185,9 +194,16 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
   // escritório, que o painel da loja é mesmo 1920 × 1080.
   useEffect(() => {
     const bater = () => {
+      /* O snapshot pega CARONA no heartbeat que já existia: mesma frequência, mesmo
+         instante, mesma requisição. Um segundo timer bateria no banco em dobro para dizer,
+         com meio segundo de diferença, o que este já diz.
+
+         `snapshot()` só LÊ o registro — o heartbeat não controla o player, e o player não
+         espera o heartbeat. */
       aparelhoApi.post('/public/aparelho/heartbeat', {
         versao: VERSAO,
         tela: { w: window.innerWidth, h: window.innerHeight },
+        tv: telemetria.snapshot(),
       }).catch(() => { /* sinal de vida não é crítico: quem falhou já aparece offline */ })
     }
     bater()
@@ -265,6 +281,16 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
      render impuro, e o React Compiler está ligado neste projeto. */
   useEffect(() => { videoNoArRef.current = ehVideo(atual) })
 
+  /* O registro de telemetria acompanha o que ESTÁ na tela. Num efeito (depois do commit), e
+     não em render: escrever estado externo durante o render é render impuro.
+
+     `total` e a existência de programação entram junto porque é aqui — e só aqui — que as
+     três razões para a tela mostrar a marca da loja ainda são distinguíveis: ninguém
+     configurou playlist, a playlist não tem nada exibível agora, ou tudo falhou. */
+  useEffect(() => {
+    telemetria.itemNoAr(atual, { total, temProgramacao: (itens?.length ?? 0) > 0 })
+  })
+
   // Pré-carrega SÓ a próxima: o que importa é que a troca não mostre um quadro vazio, e TV
   // de loja não tem memória para a lista inteira.
   // Pré-carrega o PRÓXIMO item: uma arte, ou as fotos dos produtos do próximo menu board —
@@ -312,6 +338,9 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
   const tudoFalhou = total === 0 && (itens?.length ?? 0) > 0
   useEffect(() => {
     if (!tudoFalhou) return undefined
+    // Registra o quadro inteiro, não só a última mídia: "todas falharam" é um diagnóstico
+    // diferente de "uma falhou", e é o que separa defeito de soluço.
+    telemetria.falhou(telemetria.FALHAS.TUDO_FALHOU)
     const t = setTimeout(() => setFalhados((s) => (s.size ? new Set() : s)), MS_REANIMAR)
     return () => clearTimeout(t)
   }, [tudoFalhou])
@@ -355,7 +384,21 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
           aoTerminar={() => { if (!aplicarPendente()) avancar() }}
           // Falhou (erro ou travamento): a programação pendente também entra. Um vídeo
           // quebrado não pode segurar a grade nova até o fim do expediente.
-          aoFalhar={() => { marcarFalha(atual); aplicarPendente() }}
+          //
+          // O motivo vira CÓDIGO no diagnóstico — "travou" e "o navegador recusou tocar"
+          // pedem providências diferentes, e no admin isso vira uma frase em português.
+          aoFalhar={(motivo) => {
+            telemetria.falhou(
+              motivo === 'travado' ? telemetria.FALHAS.VIDEO_TRAVOU
+                : motivo === 'autoplay' ? telemetria.FALHAS.VIDEO_AUTOPLAY
+                  : telemetria.FALHAS.VIDEO_CARGA,
+              { tipo: 'VIDEO', id: atual.id, versao: atual.arquivoVersao },
+            )
+            marcarFalha(atual)
+            aplicarPendente()
+          }}
+          aoTocar={() => telemetria.videoNoEstado('PLAYING')}
+          aoAguardar={() => telemetria.videoNoEstado('BUFFERING')}
         />
       </div>
     )
@@ -374,7 +417,7 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
         className={'tv-arte' + (reduzido ? '' : ' entrando')}
         src={atual.imagemUrl}
         alt=""
-        onError={() => marcarFalha(atual)}
+        onError={() => { telemetria.falhou(telemetria.FALHAS.IMAGEM, { tipo: 'IMAGEM', id: atual.id, versao: atual.imagemVersao }); marcarFalha(atual) }}
       />
     </div>
   )

@@ -96,6 +96,12 @@ import {
   validarEntrada as validarMenuBoard, resolverMenuBoard, menuBoardPublico, menuBoardParaAdmin,
   validarItensPlaylist, itensParaGravar as itensPlaylistParaGravar,
 } from './tvMenuBoard.js';
+// TV Indoor › TELEMETRIA: o que a parede está REALMENTE fazendo. Observação pura — nada
+// que a TV reporte muda playlist, agenda, isolamento ou o que é servido.
+import {
+  sanitizarSnapshot as sanitizarTelemetriaTv, telaMonitorada, resumo as resumoMonitoramento,
+  ordenar as ordenarMonitoramento,
+} from './tvTelemetria.js';
 // TV Indoor › GRADE SEMANAL: qual playlist esta tela usa NESTE instante. Domínio puro, sem
 // relógio escondido — o instante entra por parâmetro e o fuso é o DA LOJA, nunca o do VPS.
 import {
@@ -8715,11 +8721,30 @@ app.post('/api/public/aparelho/heartbeat', async (req, res) => {
     const ap = await exigirAparelho(req, res); if (!ap) return;
     const agora = new Date();
     const dim = (v) => { const n = Math.trunc(Number(v)); return Number.isFinite(n) && n > 0 && n <= 20000 ? n : null; };
+    /* O heartbeat carrega DUAS perguntas diferentes na mesma requisição: "o aparelho está
+       vivo?" (que é o que ele sempre respondeu) e, só para TV, "o que ele está fazendo?".
+
+       Piggyback em vez de rota nova porque a frequência é EXATAMENTE a mesma e o dado é
+       EXATAMENTE do mesmo instante. Um segundo timer bateria no banco em dobro para dizer,
+       com meio segundo de diferença, o que este já poderia ter dito.
+
+       `heartbeatJson` é substituído inteiro a cada batida — então guardar o snapshot aqui é
+       "só o mais recente" por construção, sem tabela que cresça uma linha por minuto e sem
+       migration nenhuma.
+
+       O bloco `tv` só existe em TV_INDOOR. Num totem ele é simplesmente ignorado: aceitar
+       telemetria de TV num aparelho que não é TV seria guardar um dado que nenhuma rota lê,
+       e que um dia alguém leria como se significasse algo. */
+    const telemetria = ap.tipo === 'TV_INDOOR' ? sanitizarTelemetriaTv(req.body?.tv) : null;
     const heartbeatJson = {
       versao: String(req.body?.versao ?? '').slice(0, 40),
       tela: { w: dim(req.body?.tela?.w), h: dim(req.body?.tela?.h) },
       userAgent: (req.get('user-agent') || '').slice(0, 200),
       ip: req.ip,
+      // `null` quando o player é anterior a esta frente. Isso NÃO é defeito: a TV continua
+      // online e tocando, e o monitoramento a mostra como "sem telemetria" — é o que permite
+      // deploy progressivo sem a sala de gestão achar que metade da rede caiu.
+      tv: telemetria,
     };
     await prisma.dispositivo.updateMany({ where: { id: ap.id, ...whereDoAparelho(ap, req.body) }, data: { ultimoHeartbeatEm: agora, heartbeatJson } });
     res.json({ ok: true, agora });
@@ -10558,6 +10583,14 @@ const videoAdmin = (v, agora) => videoParaAdmin({ ...v, arquivoBytes: v.arquivoB
 const MB_CABECALHO = { id: true, nome: true, ativo: true, layout: true, duracaoSegundos: true };
 const MB_CAMPOS = { ...MB_CABECALHO, configuracao: true };
 
+// Minutos → "HH:MM" para descrever uma regra no monitoramento. Reexportado do domínio da
+// grade de propósito: um segundo formatador aqui divergiria do primeiro no dia em que
+// alguém mudasse um dos dois.
+const horaDeMinutosTv = (min) => {
+  const p = (x) => String(x).padStart(2, '0');
+  return `${p(Math.floor(min / 60))}:${p(min % 60)}`;
+};
+
 // A regra da grade como o domínio a espera. `playlist` vem junto só pelo NOME, para o
 // admin escrever "Jantar" em vez de "playlist 12" — os itens dela não entram aqui.
 const TV_REGRA_CAMPOS = {
@@ -11045,6 +11078,94 @@ app.get('/api/tv-indoor/videos/manutencao', async (req, res) => {
     ]);
     res.json({ orfaos, temporariosRemovidos: temporarios.length, removeu: remover, usadoBytes: await midiaFs.usoDaEmpresa(empresaId) });
   } catch (err) { console.error('[tv-indoor/videos manutencao]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// ── Monitoramento (ADMIN) ───────────────────────────────────────────────────
+/* "Esta TV está realmente funcionando?" — a pergunta que Online/Offline não responde.
+ *
+ * ⚠️ ESTA ROTA NÃO FALA COM O HUB NEM COM O CARDÁPIO WEB. Tudo que ela precisa está no
+ * Dispositivo, no snapshot do heartbeat e nos models locais da TV. Monitorar cinquenta
+ * telas não pode disparar cinquenta bootstraps de catálogo — o custo de OLHAR não pode ser
+ * maior que o de operar.
+ *
+ * ESCALA: quatro consultas no total, independentemente do número de TVs. Os ids reportados
+ * são reunidos por TIPO e resolvidos em LOTE; um `findFirst` por tela × item seria N+1 e,
+ * com cem paredes, transformaria uma tela de diagnóstico num incidente próprio.
+ *
+ * ISOLAMENTO: os ids vêm do payload de um navegador e NÃO autorizam nada. Eles entram
+ * apenas como filtro de uma consulta que já está escopada por `empresaId` — uma TV da
+ * empresa A reportando o vídeo 44 da B não faz o nome da B aparecer aqui: o `in` não acha
+ * a linha, e o item vira "removido".
+ */
+app.get('/api/tv-indoor/monitoramento', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const agora = new Date();
+    const agoraMs = agora.getTime();
+    const dispositivos = await prisma.dispositivo.findMany({
+      where: { empresaId, tipo: 'TV_INDOOR' },
+      orderBy: [{ nome: 'asc' }, { id: 'asc' }],
+    });
+
+    // Os ids que as telas reportaram, reunidos por tipo — inclusive os da ÚLTIMA FALHA, que
+    // também viram nome no detalhe ("o vídeo que travou foi o Promo Antiga").
+    const ids = { IMAGEM: new Set(), MENU_BOARD: new Set(), VIDEO: new Set() };
+    const playlistIds = new Set();
+    const regraIds = new Set();
+    const snaps = new Map();
+    for (const d of dispositivos) {
+      // Relê pelo sanitizador: o que está no banco foi gravado por uma versão anterior desta
+      // rota, e confiar na forma do que está gravado é confiar num contrato que já mudou uma
+      // vez. Custa nada e fecha a porta.
+      const snap = sanitizarTelemetriaTv(d.heartbeatJson?.tv);
+      snaps.set(d.id, snap);
+      if (!snap) continue;
+      for (const alvo of [snap.itemAtual, snap.falhas?.ultima]) {
+        if (alvo?.tipo && alvo?.id && ids[alvo.tipo]) ids[alvo.tipo].add(alvo.id);
+      }
+      if (snap.programacao.playlistId) playlistIds.add(snap.programacao.playlistId);
+      if (snap.programacao.regraId) regraIds.add(snap.programacao.regraId);
+      if (d.tvPlaylistId) playlistIds.add(d.tvPlaylistId);
+    }
+
+    // O `empresaId` fica ESCRITO em cada consulta, e não escondido dentro do helper. Duas
+    // razões: quem lê a linha vê o escopo sem seguir uma indireção, e a guarda estática do
+    // canal consegue conferir — uma guarda que não enxerga o escopo não protege nada.
+    const emLote = (conjunto) => ({ id: { in: [...conjunto] } });
+    const [conteudos, boards, videos, playlists, regras] = await Promise.all([
+      ids.IMAGEM.size ? prisma.tvConteudo.findMany({ where: { ...emLote(ids.IMAGEM), empresaId }, select: { id: true, nome: true } }) : [],
+      ids.MENU_BOARD.size ? prisma.tvMenuBoard.findMany({ where: { ...emLote(ids.MENU_BOARD), empresaId }, select: { id: true, nome: true } }) : [],
+      ids.VIDEO.size ? prisma.tvVideo.findMany({ where: { ...emLote(ids.VIDEO), empresaId }, select: { id: true, nome: true } }) : [],
+      playlistIds.size ? prisma.tvPlaylist.findMany({ where: { ...emLote(playlistIds), empresaId }, select: { id: true, nome: true } }) : [],
+      regraIds.size ? prisma.tvProgramacaoRegra.findMany({ where: { ...emLote(regraIds), empresaId }, select: { id: true, dias: true, inicioMin: true, fimMin: true } }) : [],
+    ]);
+
+    const mapa = (linhas) => new Map(linhas.map((x) => [x.id, x.nome]));
+    const porTipo = { IMAGEM: mapa(conteudos), MENU_BOARD: mapa(boards), VIDEO: mapa(videos) };
+    const nomeDaPlaylist = mapa(playlists);
+    // A regra vira uma descrição legível usando as MESMAS funções da grade — o admin não
+    // reimplementa "Seg–Sex 18:00 — 23:00" com um segundo formatador que um dia divergiria.
+    const descricaoDaRegra = new Map(regras.map((r) => [r.id, `${r.dias.join('/')} · ${horaDeMinutosTv(r.inicioMin)} — ${horaDeMinutosTv(r.fimMin)}`]));
+
+    const telas = dispositivos.map((d) => telaMonitorada({
+      aparelho: aparelhoAdmin(d, agora),
+      snapshot: snaps.get(d.id),
+      agoraMs,
+      recebidoEmMs: d.ultimoHeartbeatEm ? new Date(d.ultimoHeartbeatEm).getTime() : null,
+      nomeDoItem: (tipo, id) => porTipo[tipo]?.get(id) ?? null,
+      nomeDaPlaylist: (id) => nomeDaPlaylist.get(id) ?? null,
+      nomeDaRegra: (id) => descricaoDaRegra.get(id) ?? null,
+    }));
+
+    res.json({
+      agoraServidor: agora.toISOString(),
+      resumo: resumoMonitoramento(telas),
+      // A ordenação é do SERVIDOR: a soma dos cartões e a ordem da lista saem da mesma
+      // fonte, então nunca discordam.
+      telas: ordenarMonitoramento(telas),
+    });
+  } catch (err) { console.error('[tv-indoor/monitoramento]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
 });
 
 // ── Programação semanal (ADMIN) ─────────────────────────────────────────────

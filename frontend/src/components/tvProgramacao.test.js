@@ -444,7 +444,14 @@ test('🔴 troca de grade NÃO corta um vídeo no meio', async () => {
   assert.match(codigo, /setPendente\(nova\)/);
   // E a pendente entra pelos DOIS caminhos de fim de vídeo: terminou, ou falhou.
   assert.match(codigo, /aoTerminar=\{\(\) => \{ if \(!aplicarPendente\(\)\) avancar\(\) \}\}/);
-  assert.match(codigo, /aoFalhar=\{\(\) => \{ marcarFalha\(atual\); aplicarPendente\(\) \}\}/);
+  // A guarda mede o INVARIANTE (a pendente entra quando o vídeo falha), e não a forma exata
+  // do handler: ele ganhou o registro de telemetria no meio, e uma guarda presa ao texto
+  // teria quebrado por uma mudança que não mexeu no comportamento nenhum.
+  const iFalhar = codigo.indexOf('aoFalhar={(motivo)')
+  assert.ok(iFalhar > 0, 'o vídeo precisa tratar a falha')
+  const handlerFalha = codigo.slice(iFalhar, codigo.indexOf('aoTocar=', iFalhar))
+  assert.match(handlerFalha, /marcarFalha\(atual\)/)
+  assert.match(handlerFalha, /aplicarPendente\(\)/)
   // Com troca pendente, o vídeo único deixa de repetir — senão o `ended` nunca dispararia e
   // a grade nova ficaria presa até o fim do expediente.
   assert.match(codigo, /unico=\{total < 2 && !pendente\}/);
