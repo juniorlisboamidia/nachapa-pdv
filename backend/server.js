@@ -10443,6 +10443,30 @@ app.get('/api/tv-indoor/conteudos/:id/imagem', async (req, res) => {
 // status de cada um para mostrar a sequência, e uma segunda chamada por playlist deixaria
 // a tela piscando em lista.
 // Campos do menu board SEM a configuração: a listagem de playlists só precisa do cabeçalho.
+/* ⚠️ A POSIÇÃO DESTE BLOCO É PARTE DO CÓDIGO, não arrumação.
+
+   `TV_PLAYLIST_INCLUDE`, logo abaixo, é um literal de objeto no topo do módulo: ele é
+   AVALIADO no import, não quando alguma rota roda. Um `const` declarado depois dele ainda
+   está na temporal dead zone nesse instante, e a referência estoura com
+
+       ReferenceError: Cannot access 'TV_VIDEO_CAMPOS' before initialization
+
+   antes do `app.listen` — ou seja, o processo nem sobe. Foi exatamente o que derrubou o
+   PDV em produção quando este bloco morava lá embaixo, junto dos limites de vídeo.
+
+   Os usos dentro de corpos de função (rotas, helpers) são adiados e aceitam qualquer ordem.
+   O que NÃO aceita é ser consumido por outro `const` de topo. Se for mover algo daqui,
+   mova para CIMA. */
+const TV_VIDEO_CAMPOS = {
+  id: true, nome: true, ativo: true, inicioEm: true, fimEm: true,
+  arquivoVersao: true, arquivoTipo: true, arquivoBytes: true, storageKey: true,
+  duracaoMs: true, largura: true, altura: true, nomeOriginal: true,
+};
+
+// `arquivoBytes` é BigInt no banco (um vídeo passa de 2 GB em tese) e o JSON não o serializa.
+// A conversão acontece num lugar só, na fronteira — e não espalhada por cada rota.
+const videoAdmin = (v, agora) => videoParaAdmin({ ...v, arquivoBytes: v.arquivoBytes === null || v.arquivoBytes === undefined ? null : Number(v.arquivoBytes) }, agora);
+
 const MB_CABECALHO = { id: true, nome: true, ativo: true, layout: true, duracaoSegundos: true };
 const MB_CAMPOS = { ...MB_CABECALHO, configuracao: true };
 
@@ -10930,16 +10954,6 @@ const mbEnv = (nome, padraoMb) => {
 const VIDEO_MAX_BYTES = Number(process.env.PDV_VIDEO_MAX_MB) > 0 ? mbEnv('PDV_VIDEO_MAX_MB', 200) : VIDEO_MAX_PADRAO;
 const VIDEO_COTA_BYTES = mbEnv('PDV_VIDEO_COTA_MB', 2048);
 const DISCO_MIN_BYTES = mbEnv('PDV_DISCO_MIN_MB', 2048);
-const TV_VIDEO_CAMPOS = {
-  id: true, nome: true, ativo: true, inicioEm: true, fimEm: true,
-  arquivoVersao: true, arquivoTipo: true, arquivoBytes: true, storageKey: true,
-  duracaoMs: true, largura: true, altura: true, nomeOriginal: true,
-};
-
-// `arquivoBytes` é BigInt no banco (um vídeo passa de 2 GB em tese) e o JSON não o serializa.
-// A conversão acontece num lugar só, na fronteira — e não espalhada por cada rota.
-const videoAdmin = (v, agora) => videoParaAdmin({ ...v, arquivoBytes: v.arquivoBytes === null || v.arquivoBytes === undefined ? null : Number(v.arquivoBytes) }, agora);
-
 // A logo da EMPRESA é o fallback neutro da marca (nunca a do totem). Só a PRESENÇA
 // interessa aqui — os bytes dela não passam por esta rota.
 async function temLogoDaEmpresa(empresaId) {

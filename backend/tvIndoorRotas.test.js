@@ -413,3 +413,45 @@ test('🔴 a aparência da TV não lê NADA do totem', () => {
   // A logo NEUTRA da empresa é permitida — ela é da EMPRESA, não de canal nenhum.
   assert.match(canal, /prisma\.empresa\.findUnique/);
 });
+
+// ── Ordem de avaliação do módulo (temporal dead zone) ────────────────────────
+// Esta guarda nasceu de uma queda em PRODUÇÃO, e é a única do arquivo que não fala de TV
+// Indoor: ela fala de JavaScript.
+//
+// `TV_PLAYLIST_INCLUDE` é um literal de objeto no TOPO do módulo — avaliado no import, não
+// quando uma rota roda. Quando ele passou a referenciar `TV_VIDEO_CAMPOS`, que estava
+// declarado 480 linhas ABAIXO, o `server.js` parou de carregar:
+//
+//     ReferenceError: Cannot access 'TV_VIDEO_CAMPOS' before initialization
+//
+// O processo morria antes do `app.listen` e o PM2 reiniciava em loop. `node --check` não
+// pega isso: a sintaxe está perfeita, o erro é de ORDEM.
+//
+// Uso dentro de corpo de função aceita qualquer ordem (é adiado). O que não aceita é um
+// `const` de topo consumindo outro declarado depois — e é só isso que esta guarda mede.
+test('🔴 nenhuma constante de topo é usada antes de ser declarada', async () => {
+  const fs = await import('node:fs');
+  const fonte = fs.readFileSync(new URL('./server.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+
+  // Onde cada constante de topo NASCE. Só as do topo (coluna zero): as de dentro de função
+  // têm o escopo delas e não participam da avaliação do módulo.
+  const nascimento = new Map();
+  for (const m of fonte.matchAll(/^const ([A-Z][A-Z0-9_]*) =/gm)) nascimento.set(m[1], m.index);
+
+  // Os literais de objeto de topo — `const X = {` até o `};` na coluna zero. São eles que
+  // avaliam no import, e portanto os únicos que podem cair na dead zone.
+  const literais = [...fonte.matchAll(/^const ([A-Z][A-Z0-9_]*) = \{\n[\s\S]*?^\};$/gm)];
+  assert.ok(literais.length >= 3, 'o arquivo precisa ter literais de topo para esta guarda valer');
+
+  const problemas = [];
+  for (const bloco of literais) {
+    const corpo = bloco[0];
+    for (const ref of new Set([...corpo.matchAll(/\b[A-Z][A-Z0-9_]{2,}\b/g)].map((r) => r[0]))) {
+      if (ref === bloco[1]) continue;
+      const onde = nascimento.get(ref);
+      if (onde === undefined) continue;            // não é constante nossa de topo
+      if (onde > bloco.index) problemas.push(`${bloco[1]} usa ${ref}, que só nasce depois`);
+    }
+  }
+  assert.deepEqual(problemas, [], problemas.join(' | '));
+});
