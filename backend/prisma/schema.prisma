@@ -1162,23 +1162,77 @@ model TvPlaylist {
 model TvPlaylistItem {
   id          Int    @id @default(autoincrement())
   playlistId  Int
-  tipo        String @default("IMAGEM") // IMAGEM | MENU_BOARD — régua em tvMenuBoard.js
+  tipo        String @default("IMAGEM") // IMAGEM | MENU_BOARD | VIDEO — régua em tvMenuBoard.js
   conteudoId  Int?
   menuBoardId Int?
+  videoId     Int?
   ordem       Int    @default(0)
 
   playlist  TvPlaylist   @relation(fields: [playlistId], references: [id], onDelete: Cascade)
   conteudo  TvConteudo?  @relation(fields: [conteudoId], references: [id], onDelete: Cascade)
   menuBoard TvMenuBoard? @relation(fields: [menuBoardId], references: [id], onDelete: Cascade)
+  // CASCADE: excluir o vídeo remove as ocorrências dele nas playlists, na mesma transação.
+  // Sem isso o CHECK da migration transformaria "excluir um vídeo" num erro de constraint.
+  video     TvVideo?     @relation(fields: [videoId], references: [id], onDelete: Cascade)
 
   // O mesmo item não entra duas vezes na mesma playlist: seria a mesma tela duas vezes por
   // volta — quase sempre engano, e o custo de proibir é zero. No Postgres, NULLs não colidem
-  // num índice único, então os dois convivem sem atrapalhar um ao outro.
+  // num índice único, então os três convivem sem atrapalhar um ao outro.
   @@unique([playlistId, conteudoId])
   @@unique([playlistId, menuBoardId])
+  @@unique([playlistId, videoId])
   @@index([playlistId, ordem])
   @@index([conteudoId])
   @@index([menuBoardId])
+  @@index([videoId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VÍDEO — o terceiro tipo de item da programação.
+//
+// ⚠️ OS BYTES NÃO ESTÃO AQUI, e essa é a diferença central em relação a `TvConteudoImagem`.
+// `storageKey` é uma chave OPACA que aponta para um arquivo em `PDV_MEDIA_DIR`, FORA do
+// repositório. BYTEA foi certo para imagens de 700 KB e é errado para vídeo: o driver do
+// Postgres materializa o blob inteiro no heap a cada requisição (150 MB × 3 TVs derruba o
+// processo), atender um Range exigiria `substring()` no SQL a cada seek do navegador, e o
+// dump do banco — hoje copiado inteiro — passaria a gigabytes.
+// Consistência DB↔filesystem em docs/…/2026-09-14-tv-video-v1-design.md §2.
+// ─────────────────────────────────────────────────────────────────────────────
+model TvVideo {
+  id        Int     @id @default(autoincrement())
+  empresaId Int
+  nome      String
+  ativo     Boolean @default(true)
+
+  // Agenda em INSTANTE ABSOLUTO, como o resto do canal. Ela decide se o vídeo pode COMEÇAR:
+  // um vídeo que já está tocando quando o `fimEm` passa TERMINA (cortar no meio é pior do
+  // que exibir vinte segundos além da janela). Quem garante isso é o player.
+  inicioEm DateTime?
+  fimEm    DateTime?
+
+  // Sobe SÓ quando o arquivo muda. Trocar nome ou agenda não encosta aqui — a TV guarda o
+  // vídeo por um ano com `immutable`, e rebaixar tudo por causa de um título seria mandar a
+  // loja inteira baixar 200 MB de novo.
+  arquivoVersao Int     @default(0)
+  arquivoTipo   String?
+  arquivoBytes  BigInt?
+  storageKey    String?
+
+  // INFORMATIVAS: vieram do `<video>` do navegador de quem enviou, porque o servidor não tem
+  // ffprobe. O player NUNCA as usa — ele avança no evento `ended`, que é a única fonte
+  // confiável de "acabou". Servem para o admin escrever "0:32 · 1920×1080" na listagem.
+  duracaoMs    Int?
+  largura      Int?
+  altura       Int?
+  // Só para exibir no admin. JAMAIS autoridade para o filesystem.
+  nomeOriginal String?
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  itens TvPlaylistItem[]
+
+  @@index([empresaId])
 }
 
 // A APARÊNCIA do canal: seis cores e uma logo, PRÓPRIAS da TV Indoor.

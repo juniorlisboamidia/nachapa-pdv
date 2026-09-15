@@ -295,7 +295,11 @@ export function menuBoardParaAdmin(b) {
 
 /* ── Itens polimórficos da playlist ─────────────────────────────────────────────────── */
 
-export const TIPOS_ITEM = Object.freeze(['IMAGEM', 'MENU_BOARD']);
+export const TIPOS_ITEM = Object.freeze(['IMAGEM', 'MENU_BOARD', 'VIDEO']);
+
+/* Qual coluna cada tipo usa. Um mapa em vez de três `if`: acrescentar um quarto tipo um dia
+   é uma linha aqui, e não uma caça a condicionais espalhados. */
+const REFERENCIA_DE = Object.freeze({ IMAGEM: 'conteudoId', MENU_BOARD: 'menuBoardId', VIDEO: 'videoId' });
 export const MOTIVO_TIPO = 'TIPO_INVALIDO';
 export const MOTIVO_REFERENCIA = 'REFERENCIA_INVALIDA';
 
@@ -312,25 +316,30 @@ export const MOTIVO_REFERENCIA = 'REFERENCIA_INVALIDA';
    saberia qual sumiu. E é por aqui que o board da empresa B não entra na playlist da A. */
 export function validarItensPlaylist(bruto, disponiveis) {
   if (!Array.isArray(bruto)) return { ok: false, motivo: MOTIVO_ITENS };
-  const conteudos = disponiveis?.conteudos instanceof Set ? disponiveis.conteudos : new Set();
-  const boards = disponiveis?.boards instanceof Set ? disponiveis.boards : new Set();
+  const permitidos = {
+    IMAGEM: disponiveis?.conteudos instanceof Set ? disponiveis.conteudos : new Set(),
+    MENU_BOARD: disponiveis?.boards instanceof Set ? disponiveis.boards : new Set(),
+    VIDEO: disponiveis?.videos instanceof Set ? disponiveis.videos : new Set(),
+  };
   const vistos = new Set();
   const saida = [];
   for (const bruta of bruto) {
     const item = objeto(bruta);
     const tipo = item.tipo === undefined ? 'IMAGEM' : item.tipo;
     if (!TIPOS_ITEM.includes(tipo)) return { ok: false, motivo: MOTIVO_TIPO };
-    const id = Number(tipo === 'IMAGEM' ? item.conteudoId : item.menuBoardId);
+    const campo = REFERENCIA_DE[tipo];
+    const id = Number(item[campo]);
     if (!Number.isSafeInteger(id) || id <= 0) return { ok: false, motivo: MOTIVO_REFERENCIA };
-    // Os dois preenchidos é corpo malformado, e aceitar "o que fizer sentido" esconderia
-    // um erro de quem chamou.
-    if (item.conteudoId != null && item.menuBoardId != null) return { ok: false, motivo: MOTIVO_REFERENCIA };
+    // MAIS DE UMA referência preenchida é corpo malformado, e aceitar "a que faz sentido"
+    // esconderia um erro de quem chamou — além de ser exatamente o que o CHECK do banco
+    // recusaria, com um 500 no lugar de uma frase.
+    const preenchidas = Object.values(REFERENCIA_DE).filter((c) => item[c] !== null && item[c] !== undefined);
+    if (preenchidas.length > 1) return { ok: false, motivo: MOTIVO_REFERENCIA };
     const chave = `${tipo}:${id}`;
     if (vistos.has(chave)) return { ok: false, motivo: MOTIVO_ITENS };
     vistos.add(chave);
-    const permitido = tipo === 'IMAGEM' ? conteudos.has(id) : boards.has(id);
-    if (!permitido) return { ok: false, motivo: MOTIVO_REFERENCIA };
-    saida.push(tipo === 'IMAGEM' ? { tipo, conteudoId: id } : { tipo, menuBoardId: id });
+    if (!permitidos[tipo].has(id)) return { ok: false, motivo: MOTIVO_REFERENCIA };
+    saida.push({ tipo, [campo]: id });
   }
   return { ok: true, itens: saida };
 }
@@ -340,8 +349,11 @@ export function itensParaGravar(playlistId, itens) {
   return arranjo(itens).map((item, i) => ({
     playlistId,
     tipo: item.tipo,
+    // As outras duas vão explicitamente NULAS: é o que o CHECK do banco exige, e deixar
+    // `undefined` faria o Prisma omitir a coluna num update.
     conteudoId: item.tipo === 'IMAGEM' ? item.conteudoId : null,
     menuBoardId: item.tipo === 'MENU_BOARD' ? item.menuBoardId : null,
+    videoId: item.tipo === 'VIDEO' ? item.videoId : null,
     ordem: i,
   }));
 }

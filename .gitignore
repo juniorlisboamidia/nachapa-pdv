@@ -5,3 +5,6 @@ dist/
 backend/generated/
 *.log
 tmp/
+
+# Mídia de vídeo em desenvolvimento (em produção vai para PDV_MEDIA_DIR, fora do repo).
+.media/

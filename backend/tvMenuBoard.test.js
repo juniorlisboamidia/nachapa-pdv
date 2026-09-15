@@ -276,7 +276,7 @@ test('menuBoardParaAdmin abre sem catálogo nenhum', () => {
 });
 
 // ── Item polimórfico da playlist ─────────────────────────────────────────────
-const MEUS = { conteudos: new Set([1, 2]), boards: new Set([7, 8]) };
+const MEUS = { conteudos: new Set([1, 2]), boards: new Set([7, 8]), videos: new Set([4, 5]) };
 
 test('a playlist aceita imagem e board misturados, na ordem', () => {
   const v = validarItensPlaylist([
@@ -303,15 +303,40 @@ test('🔴 item sem tipo é IMAGEM — é o que faz a playlist antiga continuar 
   assert.deepEqual(v.itens, [{ tipo: 'IMAGEM', conteudoId: 1 }]);
 });
 
-test('🔴 item polimórfico inválido é recusado: nunca os dois, nunca nenhum', () => {
+test('🔴 item polimórfico inválido é recusado: nunca dois, nunca nenhum', () => {
+  // Mais de uma referência é corpo malformado — e é exatamente o que o CHECK do banco
+  // recusaria, com um 500 no lugar de uma frase.
   assert.equal(validarItensPlaylist([{ tipo: 'IMAGEM', conteudoId: 1, menuBoardId: 7 }], MEUS).motivo, MOTIVO_REFERENCIA);
   assert.equal(validarItensPlaylist([{ tipo: 'MENU_BOARD', conteudoId: 1, menuBoardId: 7 }], MEUS).motivo, MOTIVO_REFERENCIA);
+  assert.equal(validarItensPlaylist([{ tipo: 'VIDEO', videoId: 4, conteudoId: 1 }], MEUS).motivo, MOTIVO_REFERENCIA);
   assert.equal(validarItensPlaylist([{ tipo: 'IMAGEM' }], MEUS).motivo, MOTIVO_REFERENCIA);
   assert.equal(validarItensPlaylist([{ tipo: 'MENU_BOARD' }], MEUS).motivo, MOTIVO_REFERENCIA);
+  assert.equal(validarItensPlaylist([{ tipo: 'VIDEO' }], MEUS).motivo, MOTIVO_REFERENCIA);
   assert.equal(validarItensPlaylist([{ tipo: 'IMAGEM', conteudoId: 0 }], MEUS).motivo, MOTIVO_REFERENCIA);
-  assert.equal(validarItensPlaylist([{ tipo: 'VIDEO', conteudoId: 1 }], MEUS).motivo, MOTIVO_TIPO);
+  assert.equal(validarItensPlaylist([{ tipo: 'AUDIO', conteudoId: 1 }], MEUS).motivo, MOTIVO_TIPO);
   assert.equal(validarItensPlaylist(null, MEUS).motivo, MOTIVO_ITENS);
-  assert.deepEqual(TIPOS_ITEM, ['IMAGEM', 'MENU_BOARD']);
+  assert.deepEqual(TIPOS_ITEM, ['IMAGEM', 'MENU_BOARD', 'VIDEO']);
+});
+
+test('🔴 a playlist aceita os TRÊS tipos misturados, na ordem', () => {
+  const v = validarItensPlaylist([
+    { tipo: 'IMAGEM', conteudoId: 2 },
+    { tipo: 'MENU_BOARD', menuBoardId: 7 },
+    { tipo: 'VIDEO', videoId: 4 },
+    { tipo: 'IMAGEM', conteudoId: 1 },
+    { tipo: 'VIDEO', videoId: 5 },
+  ], MEUS);
+  assert.equal(v.ok, true);
+  assert.deepEqual(v.itens.map((i) => i.tipo), ['IMAGEM', 'MENU_BOARD', 'VIDEO', 'IMAGEM', 'VIDEO']);
+  assert.deepEqual(v.itens[2], { tipo: 'VIDEO', videoId: 4 });
+});
+
+test('playlist só de VÍDEO também funciona', () => {
+  assert.equal(validarItensPlaylist([{ tipo: 'VIDEO', videoId: 4 }], MEUS).ok, true);
+});
+
+test('🔴 vídeo de OUTRA empresa é recusado, nunca filtrado', () => {
+  assert.equal(validarItensPlaylist([{ tipo: 'VIDEO', videoId: 99 }], MEUS).motivo, MOTIVO_REFERENCIA);
 });
 
 test('🔴 board de OUTRA empresa é RECUSADO, nunca filtrado em silêncio', () => {
@@ -327,10 +352,17 @@ test('o mesmo item repetido na playlist é recusado; tipos diferentes com o mesm
   assert.equal(validarItensPlaylist([{ tipo: 'IMAGEM', conteudoId: 1 }, { tipo: 'MENU_BOARD', menuBoardId: 7 }], MEUS).ok, true);
 });
 
-test('itensParaGravar numera pela POSIÇÃO e deixa a outra referência NULA', () => {
-  assert.deepEqual(itensParaGravar(3, [{ tipo: 'MENU_BOARD', menuBoardId: 7 }, { tipo: 'IMAGEM', conteudoId: 1 }]), [
-    { playlistId: 3, tipo: 'MENU_BOARD', conteudoId: null, menuBoardId: 7, ordem: 0 },
-    { playlistId: 3, tipo: 'IMAGEM', conteudoId: 1, menuBoardId: null, ordem: 1 },
+test('itensParaGravar numera pela POSIÇÃO e deixa as OUTRAS referências NULAS', () => {
+  // Explicitamente nulas: é o que o CHECK do banco exige, e `undefined` faria o Prisma
+  // omitir a coluna num update — deixando a referência velha para trás.
+  assert.deepEqual(itensParaGravar(3, [
+    { tipo: 'MENU_BOARD', menuBoardId: 7 },
+    { tipo: 'IMAGEM', conteudoId: 1 },
+    { tipo: 'VIDEO', videoId: 4 },
+  ]), [
+    { playlistId: 3, tipo: 'MENU_BOARD', conteudoId: null, menuBoardId: 7, videoId: null, ordem: 0 },
+    { playlistId: 3, tipo: 'IMAGEM', conteudoId: 1, menuBoardId: null, videoId: null, ordem: 1 },
+    { playlistId: 3, tipo: 'VIDEO', conteudoId: null, menuBoardId: null, videoId: 4, ordem: 2 },
   ]);
   assert.deepEqual(itensParaGravar(3, null), []);
 });

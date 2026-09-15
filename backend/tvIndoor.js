@@ -165,18 +165,23 @@ export function conteudoParaAdmin(c, agoraMs) {
    conteúdo inteiro (com status e agenda), o board traz o cabeçalho dele (nome, layout,
    quantos itens) — a listagem do admin NÃO resolve catálogo, porque ela precisa abrir mesmo
    com o HUB fora do ar. Quem resolve é a tela de edição do board e a programação da TV. */
-export function playlistParaAdmin(p, agoraMs, boardParaAdmin) {
+export function playlistParaAdmin(p, agoraMs, boardParaAdmin, videoParaAdmin) {
   const itens = arranjo(p?.itens)
     .slice()
     .sort((a, b) => (a.ordem - b.ordem) || (a.id - b.id))
     .map((i) => {
       // `tipo` ausente é IMAGEM: é o contrato da coluna (DEFAULT 'IMAGEM') e o que faz uma
       // linha gravada antes do Menu Board continuar valendo.
-      const tipo = i?.tipo === 'MENU_BOARD' ? 'MENU_BOARD' : 'IMAGEM';
+      const tipo = i?.tipo === 'MENU_BOARD' || i?.tipo === 'VIDEO' ? i.tipo : 'IMAGEM';
       if (tipo === 'MENU_BOARD') {
         if (!i?.menuBoard) return null;
         const board = typeof boardParaAdmin === 'function' ? boardParaAdmin(i.menuBoard) : i.menuBoard;
         return { tipo, itemId: i.id, board };
+      }
+      if (tipo === 'VIDEO') {
+        if (!i?.video) return null;
+        const video = typeof videoParaAdmin === 'function' ? videoParaAdmin(i.video, agoraMs) : i.video;
+        return { tipo, itemId: i.id, video };
       }
       if (!i?.conteudo) return null;
       return { tipo, itemId: i.id, conteudo: conteudoParaAdmin(i.conteudo, agoraMs) };
@@ -189,7 +194,11 @@ export function playlistParaAdmin(p, agoraMs, boardParaAdmin) {
     // Quantos estão NO AR agora: é a pergunta que o gestor faz olhando a lista, e um
     // "8 conteúdos" que inclui 6 encerrados não responde nada. Board conta pelo liga-desliga
     // — a elegibilidade dele depende do catálogo, que esta listagem não consulta.
-    noAr: itens.filter((i) => (i.tipo === 'IMAGEM' ? i.conteudo.status === 'ATIVO' : i.board?.ativo !== false)).length,
+    noAr: itens.filter((i) => {
+      if (i.tipo === 'IMAGEM') return i.conteudo.status === 'ATIVO';
+      if (i.tipo === 'VIDEO') return i.video?.status === 'ATIVO';
+      return i.board?.ativo !== false;
+    }).length,
   };
 }
 
@@ -214,14 +223,26 @@ export function programacaoPublica(itens, agoraMs, opcoes) {
   // HUB); aqui só se monta a sequência. Board sem entrada no mapa — ou resolvido como
   // inelegível — simplesmente não entra: o player segue para o próximo item.
   const boards = opcoes?.boards instanceof Map ? opcoes.boards : new Map();
+  // Como o vídeo vira item público. Injetado para este módulo não importar `tvVideo.js` —
+  // ele é o contrato da programação, não o domínio de cada tipo de mídia.
+  const paraVideo = typeof opcoes?.videoPublico === 'function' ? opcoes.videoPublico : null;
+  const videoNoAr = typeof opcoes?.videoElegivel === 'function' ? opcoes.videoElegivel : null;
   const lista = arranjo(itens)
     .slice()
     .sort((a, b) => (a.ordem - b.ordem) || (a.id - b.id))
     .map((i) => {
-      const tipo = i?.tipo === 'MENU_BOARD' ? 'MENU_BOARD' : 'IMAGEM';
+      const tipo = i?.tipo === 'MENU_BOARD' || i?.tipo === 'VIDEO' ? i.tipo : 'IMAGEM';
       if (tipo === 'MENU_BOARD') {
         const id = i?.menuBoardId ?? i?.menuBoard?.id;
         return id == null ? null : (boards.get(String(id)) ?? null);
+      }
+      if (tipo === 'VIDEO') {
+        const v = i?.video;
+        // Sem arquivo, desligado ou fora da janela: não viaja. A régua é a mesma que o
+        // player usaria, e mandá-lo assim mesmo só daria trabalho para a TV descartar.
+        if (!v || !paraVideo) return null;
+        if (videoNoAr && !videoNoAr(v, agoraMs)) return null;
+        return paraVideo(v);
       }
       const c = i?.conteudo;
       // Conteúdo sem arte não viaja: existiria só para falhar no carregamento.

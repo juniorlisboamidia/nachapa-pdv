@@ -106,6 +106,18 @@ import {
   aplicarPatch as tvAparenciaPatch, aparenciaParaAdmin as tvAparenciaAdmin,
   aparenciaPublica as tvAparenciaPublica, proximaVersaoLogo as proximaVersaoLogoTv,
 } from './tvIndoorAparencia.js';
+// TV Indoor › Vídeo: o terceiro tipo de item. Os BYTES ficam no filesystem (ver
+// `armazenamentoMidia.js`), nunca no banco — e nunca passam pelo heap inteiros.
+import {
+  validarEntrada as validarVideo, conferirJanela as conferirJanelaVideo,
+  videoParaAdmin, videoPublico, limitesDeVideo, elegivel as videoElegivel,
+} from './tvVideo.js';
+import {
+  MAX_BYTES_PADRAO as VIDEO_MAX_PADRAO, validarContainer, cabe as videoCabe,
+  metadataInformativa, proximaVersaoArquivo, BYTES_PARA_RECONHECER,
+} from './midiaVideo.js';
+import { interpretarRange, cabecalhosDeMidia } from './rangeHttp.js';
+import * as midiaFs from './armazenamentoMidia.js';
 
 // Campos do banner SEM a arte. Existe como constante para que nenhuma consulta esqueça o
 // `select` e arraste blobs — a arte mora em outra tabela justamente por isso, e este
@@ -9203,6 +9215,7 @@ app.get('/api/public/aparelho/tv/programacao', async (req, res) => {
             id: true, ordem: true, tipo: true,
             conteudo: { select: TV_CAMPOS },
             menuBoard: { select: MB_CAMPOS },
+            video: { select: TV_VIDEO_CAMPOS },
           },
           orderBy: [{ ordem: 'asc' }, { id: 'asc' }],
         },
@@ -9218,13 +9231,72 @@ app.get('/api/public/aparelho/tv/programacao', async (req, res) => {
       loja: loja ? lojaPublica(loja) : null,
       playlist: { id: playlist.id, nome: playlist.nome },
       aparencia,
-      ...tvProgramacaoPublica(playlist.itens, agora, { boards }),
+      // `videoPublico`/`videoElegivel` entram por injeção: `tvIndoor.js` é o contrato da
+      // programação, e não precisa conhecer o domínio de cada tipo de mídia.
+      ...tvProgramacaoPublica(playlist.itens, agora, { boards, videoPublico, videoElegivel }),
     });
   } catch (err) {
     console.error('[public/aparelho tv programacao]', err?.code ?? err?.name ?? 'erro');
     // Banco fora do ar, ou tabela ausente (deploy sem migration): a TV recebe programação
     // vazia e mostra o fallback institucional, em vez de um erro numa parede da loja.
     res.status(200).json({ playlist: null, agoraServidor: new Date().toISOString(), itens: [] });
+  }
+});
+
+/* Serve um arquivo de vídeo com suporte a HTTP RANGE.
+ *
+ * Isto NÃO é o `responderImagem`, e copiá-lo teria sido o erro: ele não conhece Range e
+ * responderia 200 sempre. O `<video>` do Chromium pede um trecho para descobrir a duração,
+ * outro para começar, e outro a cada vez que o buffer esvazia; sem 206 alguns WebViews nem
+ * iniciam a reprodução, e todos baixam o arquivo inteiro antes do primeiro quadro.
+ *
+ * O tamanho vem do DISCO, não do banco: se os dois divergirem, quem manda é o que existe.
+ * E o corpo é um `createReadStream` do intervalo — o processo nunca vê o arquivo inteiro.
+ */
+async function responderVideo(req, res, video, marca) {
+  const tamanho = await midiaFs.tamanhoDaChave(video.storageKey);
+  if (tamanho === null) return res.status(404).end();
+  const etag = `W/"${marca}"`;
+  const veredito = interpretarRange(req.headers.range, tamanho);
+  const { status, cabecalhos, corpo } = cabecalhosDeMidia({ veredito, tamanho, tipo: video.arquivoTipo, etag });
+  res.set(cabecalhos);
+  // 304 SÓ numa requisição sem Range: devolvê-lo para um pedido de trecho quebra o buffer do
+  // `<video>`, que fica esperando bytes que não vêm.
+  if (veredito.tipo !== 'parcial' && req.headers['if-none-match'] === etag) return res.status(304).end();
+  res.status(status);
+  if (!corpo) return res.end();
+  if (req.method === 'HEAD') return res.end();
+  const fluxo = midiaFs.lerTrecho(video.storageKey, corpo.inicio, corpo.fim);
+  if (!fluxo) return res.status(404).end();
+  // Cliente que fecha a conexão no meio (a TV trocou de item): destrói o stream em vez de
+  // deixar o descritor aberto.
+  res.on('close', () => fluxo.destroy());
+  fluxo.on('error', () => { if (!res.headersSent) res.status(500); res.end(); });
+  return fluxo.pipe(res);
+}
+
+// O ARQUIVO de um vídeo, para a TV. Mesmas regras de identidade de todo o canal: aparelho
+// autenticado, tipo TV_INDOOR, empresa do COOKIE, id conferido contra o escopo e a VERSÃO
+// dentro do WHERE — `?v=` de outra geração é 404, nunca os bytes atuais sob número velho.
+//
+// A `storageKey` NUNCA vem do pedido: ela sai da linha que o escopo encontrou.
+app.get('/api/public/aparelho/tv/video/:id/arquivo', async (req, res) => {
+  try {
+    const ap = await exigirAparelho(req, res); if (!ap) return;
+    if (!exigirTvIndoor(ap, res)) return;
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).end();
+    const versao = Number(req.query?.v);
+    if (!Number.isSafeInteger(versao) || versao < 1) return res.status(404).end();
+    const video = await prisma.tvVideo.findFirst({
+      where: { id, arquivoVersao: versao, ...whereDoAparelho(ap, {}) },
+      select: { arquivoVersao: true, arquivoTipo: true, storageKey: true },
+    });
+    if (!video?.storageKey || !video.arquivoTipo) return res.status(404).end();
+    await responderVideo(req, res, video, `tvv-${ap.empresaId}-${id}-${video.arquivoVersao}`);
+  } catch (err) {
+    console.error('[public/aparelho tv video]', err?.code ?? err?.name ?? 'erro');
+    if (!res.headersSent) res.status(500).end();
   }
 });
 
@@ -10379,13 +10451,16 @@ const TV_PLAYLIST_INCLUDE = {
   itens: {
     // POLIMÓRFICO: cada item traz a referência que lhe cabe, e só ela. O `tipo` é o que
     // permite à mesma programação alternar arte promocional e menu board.
-    select: { id: true, ordem: true, tipo: true, conteudo: { select: TV_CAMPOS }, menuBoard: { select: MB_CABECALHO } },
+    select: {
+      id: true, ordem: true, tipo: true,
+      conteudo: { select: TV_CAMPOS }, menuBoard: { select: MB_CABECALHO }, video: { select: TV_VIDEO_CAMPOS },
+    },
     orderBy: [{ ordem: 'asc' }, { id: 'asc' }],
   },
 };
 
 // A playlist para o admin, com o cabeçalho de cada board já no formato da tela.
-const tvPlaylistAdmin = (linha) => tvPlaylistParaAdmin(linha, Date.now(), menuBoardParaAdmin);
+const tvPlaylistAdmin = (linha) => tvPlaylistParaAdmin(linha, Date.now(), menuBoardParaAdmin, videoAdmin);
 
 app.get('/api/tv-indoor/playlists', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
@@ -10445,13 +10520,15 @@ app.put('/api/tv-indoor/playlists/:id/itens', async (req, res) => {
     // empresa B não entra na playlist da A — e o domínio RECUSA o que não estiver neles, em
     // vez de filtrar: filtrar deixaria a tela dizendo "salvo" com menos itens do que o
     // gestor escolheu, sem ele saber qual sumiu.
-    const [meusConteudos, meusBoards] = await Promise.all([
+    const [meusConteudos, meusBoards, meusVideos] = await Promise.all([
       prisma.tvConteudo.findMany({ where: { empresaId }, select: { id: true } }),
       prisma.tvMenuBoard.findMany({ where: { empresaId }, select: { id: true } }).catch(() => []),
+      prisma.tvVideo.findMany({ where: { empresaId }, select: { id: true } }).catch(() => []),
     ]);
     const disponiveis = {
       conteudos: new Set(meusConteudos.map((c) => c.id)),
       boards: new Set(meusBoards.map((b) => b.id)),
+      videos: new Set(meusVideos.map((v) => v.id)),
     };
     // Contrato ADITIVO: `itens` é o corpo polimórfico novo; `ids` continua aceito e vira
     // uma lista só de imagens — é o formato que a tela usava antes do Menu Board.
@@ -10619,6 +10696,219 @@ app.get('/api/tv-indoor/menu-boards/:id/previa', async (req, res) => {
   } catch (err) { console.error('[tv-indoor/menu-boards previa]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
 });
 
+// ── Vídeos (ADMIN) ──────────────────────────────────────────────────────────
+// O terceiro tipo de item da programação. A diferença de escala em relação à imagem muda
+// tudo: os bytes vão para o FILESYSTEM (`armazenamentoMidia.js`), o upload é STREAMING (o
+// arquivo nunca existe inteiro no heap) e o download é por RANGE.
+app.get('/api/tv-indoor/videos', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const linhas = await prisma.tvVideo.findMany({
+      where: { empresaId }, select: TV_VIDEO_CAMPOS, orderBy: [{ criadoEm: 'desc' }, { id: 'desc' }],
+    });
+    const agora = Date.now();
+    const usado = await midiaFs.usoDaEmpresa(empresaId).catch(() => 0);
+    res.json({
+      videos: linhas.map((v) => videoAdmin(v, agora)),
+      agoraServidor: new Date(agora).toISOString(),
+      limites: { ...limitesDeVideo({ maxBytes: VIDEO_MAX_BYTES, cotaBytes: VIDEO_COTA_BYTES }), usadoBytes: usado },
+    });
+  } catch (err) { console.error('[tv-indoor/videos]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// Criar o CADASTRO. O arquivo sobe depois, por rota própria: separar os dois é o que permite
+// a tela mostrar progresso de upload sem segurar o formulário, e é o que faz um PUT de nome
+// nunca encostar na versão do arquivo.
+app.post('/api/tv-indoor/videos', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const v = validarVideo(req.body, { exigirNome: true });
+    const janela = conferirJanelaVideo(v.dados, null);
+    const erros = [...v.erros, ...(janela ? [janela] : [])];
+    if (erros.length) return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros });
+    const criado = await prisma.tvVideo.create({ data: { empresaId, ...v.dados }, select: TV_VIDEO_CAMPOS });
+    res.status(201).json({ ok: true, video: videoAdmin(criado, Date.now()) });
+  } catch (err) { console.error('[tv-indoor/videos POST]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+app.put('/api/tv-indoor/videos/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ erro: 'ID_INVALIDO' });
+    const atual = await prisma.tvVideo.findFirst({ where: { id, empresaId }, select: TV_VIDEO_CAMPOS });
+    if (!atual) return res.status(404).json({ erro: 'NAO_ENCONTRADO' });
+    const v = validarVideo(req.body);
+    const janela = conferirJanelaVideo(v.dados, atual);
+    const erros = [...v.erros, ...(janela ? [janela] : [])];
+    if (erros.length) return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros });
+    // `v.dados` nunca contém arquivo nem versão — o domínio não os aceita. É o que impede
+    // um PUT de nome de fazer a loja inteira rebaixar 200 MB.
+    const linha = await prisma.tvVideo.update({ where: { id }, data: v.dados, select: TV_VIDEO_CAMPOS });
+    res.json({ ok: true, video: videoAdmin(linha, Date.now()) });
+  } catch (err) { console.error('[tv-indoor/videos PUT]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+/* O UPLOAD. Corpo CRU, em streaming.
+ *
+ * Não é multipart, e a razão é boa: o backend tem oito dependências e nenhuma de upload.
+ * Trazer multer/busboy para receber um arquivo por vez seria dependência nova para resolver
+ * um problema que `req.pipe` resolve. O `express.json` global não atrapalha porque só age em
+ * `application/json` — um corpo `video/mp4` atravessa intocado, e é justamente isso que
+ * permite ler o stream aqui.
+ *
+ * A ORDEM importa, e ela é a garantia de consistência (ver §2 do doc):
+ *   1. grava num `.tmp`, contando bytes e reconhecendo o container no primeiro pedaço;
+ *   2. valida container e limites;
+ *   3. move para o definitivo, com chave NOVA;
+ *   4. grava no banco;
+ *   5. só ENTÃO apaga o arquivo antigo.
+ * Se o passo 4 falhar, o arquivo novo é removido — nada aponta para nada. Se o 5 falhar,
+ * sobra um órfão e o banco está correto. Um órfão custa disco; o contrário custa uma TV
+ * preta, e é por isso que a assimetria é deliberada.
+ */
+app.put('/api/tv-indoor/videos/:id/arquivo', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  let tmp = null;
+  let chaveNova = null;
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ erro: 'ID_INVALIDO' });
+    const atual = await prisma.tvVideo.findFirst({ where: { id, empresaId }, select: TV_VIDEO_CAMPOS });
+    if (!atual) return res.status(404).json({ erro: 'NAO_ENCONTRADO' });
+
+    // O container é reconhecido no PRIMEIRO pedaço do stream — nada além disso é lido para
+    // decidir, e o resto do arquivo nunca entra no heap.
+    let veredito = null;
+    const recebido = await midiaFs.receberParaTemporario(req, {
+      limiteBytes: VIDEO_MAX_BYTES,
+      aoPrimeiroPedaco: (b) => { if (b.length >= BYTES_PARA_RECONHECER) veredito = validarContainer(b); },
+    });
+    if (!recebido.ok) {
+      return res.status(recebido.motivo === 'UPLOAD_INTERROMPIDO' ? 400 : 413)
+        .json({ erro: 'ENTRADA_INVALIDA', erros: [{ campo: 'arquivo', motivo: recebido.motivo }] });
+    }
+    tmp = recebido.caminhoTmp;
+    if (!veredito) veredito = validarContainer(recebido.primeiros);
+    if (!veredito.ok) {
+      await midiaFs.removerSilencioso(tmp); tmp = null;
+      return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros: [{ campo: 'arquivo', motivo: veredito.motivo }] });
+    }
+
+    // Os três limites: arquivo, cota da empresa e margem de disco do servidor.
+    const [usado, livre] = await Promise.all([
+      midiaFs.usoDaEmpresa(empresaId).catch(() => 0),
+      midiaFs.espacoLivre().catch(() => null),
+    ]);
+    // O que este vídeo já ocupava não conta contra a cota: substituir não é acumular.
+    const jaOcupado = Number(atual.arquivoBytes ?? 0);
+    const veredictoTamanho = videoCabe({
+      tamanho: recebido.bytes, maxBytes: VIDEO_MAX_BYTES,
+      usadoBytes: Math.max(0, usado - jaOcupado), cotaBytes: VIDEO_COTA_BYTES,
+      livreBytes: livre, margemBytes: DISCO_MIN_BYTES,
+    });
+    if (!veredictoTamanho.ok) {
+      await midiaFs.removerSilencioso(tmp); tmp = null;
+      return res.status(413).json({ erro: 'ENTRADA_INVALIDA', erros: [{ campo: 'arquivo', motivo: veredictoTamanho.motivo }], limite: veredictoTamanho.limite ?? null });
+    }
+
+    // Chave NOVA sempre: a antiga só é apagada depois de o banco confirmar a troca.
+    chaveNova = midiaFs.novaChave(empresaId, veredito.extensao);
+    const movido = await midiaFs.promover(tmp, chaveNova);
+    tmp = null;
+    if (!movido.ok) return res.status(500).json({ erro: 'ERRO_INTERNO' });
+
+    const meta = metadataInformativa({
+      duracaoMs: req.get('x-video-duracao-ms'), largura: req.get('x-video-largura'), altura: req.get('x-video-altura'),
+    });
+    // O nome original é METADATA de exibição. Ele nunca toca o caminho — a chave foi gerada
+    // acima, e `caminhoDaChave` recusaria qualquer coisa fora do diretório de qualquer forma.
+    const nomeOriginal = String(req.get('x-video-nome') ?? '').slice(0, 120) || null;
+
+    let linha;
+    try {
+      linha = await prisma.tvVideo.update({
+        where: { id },
+        data: {
+          arquivoVersao: proximaVersaoArquivo(atual.arquivoVersao),
+          arquivoTipo: veredito.tipo, arquivoBytes: BigInt(recebido.bytes), storageKey: chaveNova,
+          ...meta, nomeOriginal,
+        },
+        select: TV_VIDEO_CAMPOS,
+      });
+    } catch (err) {
+      // O banco falhou DEPOIS de o arquivo estar no lugar: remove o novo e não deixa rastro.
+      await midiaFs.removerChave(chaveNova);
+      throw err;
+    }
+
+    // Só agora o antigo sai. Se isto falhar, sobra um órfão — e o banco está certo, que é o
+    // que importa. A rota de manutenção varre órfãos.
+    if (atual.storageKey && atual.storageKey !== chaveNova) await midiaFs.removerChave(atual.storageKey);
+    res.json({ ok: true, video: videoAdmin(linha, Date.now()) });
+  } catch (err) {
+    if (tmp) await midiaFs.removerSilencioso(tmp);
+    console.error('[tv-indoor/videos arquivo PUT]', err);
+    if (!res.headersSent) res.status(500).json({ erro: 'ERRO_INTERNO' });
+  }
+});
+
+// Excluir. O BANCO é a autoridade: a linha some primeiro (e com ela, por CASCADE, as
+// ocorrências nas playlists), e só então o arquivo. Se a limpeza física falhar, fica um
+// órfão — o registro NÃO ressuscita.
+app.delete('/api/tv-indoor/videos/:id', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).json({ erro: 'ID_INVALIDO' });
+    const atual = await prisma.tvVideo.findFirst({ where: { id, empresaId }, select: { id: true, storageKey: true } });
+    if (!atual) return res.status(404).json({ erro: 'NAO_ENCONTRADO' });
+    const { count } = await prisma.tvVideo.deleteMany({ where: { id, empresaId } });
+    if (!count) return res.status(404).json({ erro: 'NAO_ENCONTRADO' });
+    if (atual.storageKey) await midiaFs.removerChave(atual.storageKey);
+    res.json({ ok: true });
+  } catch (err) { console.error('[tv-indoor/videos DELETE]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// O arquivo para a PRÉVIA do admin. Mesmo suporte a Range do público: o `<video>` do
+// navegador do gestor pede trechos igual ao da TV.
+app.get('/api/tv-indoor/videos/:id/arquivo', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id <= 0) return res.status(400).end();
+    const v = await prisma.tvVideo.findFirst({ where: { id, empresaId }, select: { arquivoVersao: true, arquivoTipo: true, storageKey: true } });
+    if (!v?.storageKey || !v.arquivoTipo) return res.status(404).end();
+    await responderVideo(req, res, v, `tvv-${empresaId}-${id}-${v.arquivoVersao}`);
+  } catch (err) { console.error('[tv-indoor/videos arquivo]', err); if (!res.headersSent) res.status(500).end(); }
+});
+
+// MANUTENÇÃO do armazenamento: temporários velhos e arquivos órfãos.
+//
+// Filesystem e banco não compartilham transação, e a ordem escolhida (o banco manda) prefere
+// deixar um órfão a deixar o banco apontando para um arquivo que não existe. Esta rota é
+// como o órfão sai — explicitamente, nunca por varredura automática em segundo plano.
+app.get('/api/tv-indoor/videos/manutencao', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
+  try {
+    const vivas = (await prisma.tvVideo.findMany({ where: { empresaId }, select: { storageKey: true } }))
+      .map((v) => v.storageKey).filter(Boolean);
+    const remover = req.query?.remover === '1';
+    const [orfaos, temporarios] = await Promise.all([
+      midiaFs.varrerOrfaos(empresaId, vivas, { remover }),
+      remover ? midiaFs.limparTemporarios() : Promise.resolve([]),
+    ]);
+    res.json({ orfaos, temporariosRemovidos: temporarios.length, removeu: remover, usadoBytes: await midiaFs.usoDaEmpresa(empresaId) });
+  } catch (err) { console.error('[tv-indoor/videos manutencao]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
 // ── Aparência (ADMIN) ───────────────────────────────────────────────────────
 // A identidade visual PRÓPRIA do canal. Seis cores e uma logo, que alcançam o fallback
 // institucional e os três layouts de Menu Board — e NÃO a arte que o gestor enviou: uma
@@ -10627,6 +10917,28 @@ app.get('/api/tv-indoor/menu-boards/:id/previa', async (req, res) => {
 // A configuração é OPCIONAL: empresa sem linha desenha com os defaults embarcados, e é por
 // isso que o GET responde 200 com os padrões em vez de 404.
 const TV_AP_CAMPOS = { id: true, tokens: true, logoVersao: true, logoTipo: true, logoBytes: true };
+
+// ── Limites de vídeo, todos por env ────────────────────────────────────────
+// Defaults escolhidos olhando a infraestrutura, não sorteados: 200 MB cobre 1080p bem
+// comprimido com folga (acima disso quase sempre é arte mal exportada); 2 GB de cota impede
+// uma loja de lotar o disco do servidor; 2 GB de margem livre é o que o VPS precisa para não
+// morrer por disco cheio enquanto o Postgres escreve.
+const mbEnv = (nome, padraoMb) => {
+  const n = Number(process.env[nome]);
+  return (Number.isFinite(n) && n > 0 ? n : padraoMb) * 1024 * 1024;
+};
+const VIDEO_MAX_BYTES = Number(process.env.PDV_VIDEO_MAX_MB) > 0 ? mbEnv('PDV_VIDEO_MAX_MB', 200) : VIDEO_MAX_PADRAO;
+const VIDEO_COTA_BYTES = mbEnv('PDV_VIDEO_COTA_MB', 2048);
+const DISCO_MIN_BYTES = mbEnv('PDV_DISCO_MIN_MB', 2048);
+const TV_VIDEO_CAMPOS = {
+  id: true, nome: true, ativo: true, inicioEm: true, fimEm: true,
+  arquivoVersao: true, arquivoTipo: true, arquivoBytes: true, storageKey: true,
+  duracaoMs: true, largura: true, altura: true, nomeOriginal: true,
+};
+
+// `arquivoBytes` é BigInt no banco (um vídeo passa de 2 GB em tese) e o JSON não o serializa.
+// A conversão acontece num lugar só, na fronteira — e não espalhada por cada rota.
+const videoAdmin = (v, agora) => videoParaAdmin({ ...v, arquivoBytes: v.arquivoBytes === null || v.arquivoBytes === undefined ? null : Number(v.arquivoBytes) }, agora);
 
 // A logo da EMPRESA é o fallback neutro da marca (nunca a do totem). Só a PRESENÇA
 // interessa aqui — os bytes dela não passam por esta rota.
@@ -10784,6 +11096,14 @@ app.put('/api/tv-indoor/telas/:id/playlist', async (req, res) => {
     const d = await prisma.dispositivo.findFirst({ where: { id, empresaId } });
     res.json({ ok: true, tela: aparelhoAdmin(d, new Date()) });
   } catch (err) { console.error('[tv-indoor/telas playlist PUT]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// O armazenamento de mídia, no boot. O caminho feliz não depende de alguém lembrar de criar
+// o diretório no VPS — mas, se não der para escrever, é melhor saber agora e alto do que
+// descobrir no primeiro upload de uma loja.
+midiaFs.prepararArmazenamento().then((r) => {
+  if (r.ok) console.log(`[midia] armazenamento pronto em ${r.dir}`);
+  else console.error(`[midia] SEM ESCRITA em ${r.dir} (${r.erro}) — o upload de vídeo vai falhar`);
 });
 
 // ── Job do totem (§5.4): 60 s, in-process, com lock ─────────────────────────
