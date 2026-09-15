@@ -41,8 +41,8 @@ export default function VideoItem({ item, unico, aoTerminar, aoFalhar }) {
   // A escrita é num efeito SEM array de dependências (roda depois de todo render), e não
   // no corpo do componente: escrever numa ref durante o render é render impuro, e o
   // React Compiler está ligado neste projeto.
-  const avisos = useRef({ aoTerminar, aoFalhar })
-  useEffect(() => { avisos.current = { aoTerminar, aoFalhar } })
+  const avisos = useRef({ aoTerminar, aoFalhar, unico })
+  useEffect(() => { avisos.current = { aoTerminar, aoFalhar, unico } })
 
   const url = item?.arquivoUrl
   const chave = `${item?.id}:${item?.arquivoVersao ?? 0}`
@@ -63,8 +63,20 @@ export default function VideoItem({ item, unico, aoTerminar, aoFalhar }) {
 
     const terminou = () => {
       if (!vivo) return
-      // Com um vídeo só na playlist, o `loop` do elemento cuida da repetição e `ended` nem
-      // dispara. Este caminho é o da playlist com mais de um item.
+      // VÍDEO ÚNICO: o `loop` do elemento deveria repetir sozinho e `ended` nem deveria
+      // disparar. Se disparou, o navegador não honrou o atributo — e aí reiniciamos à mão,
+      // em vez de deixar o último quadro congelado na parede pelo resto do dia.
+      //
+      // Avisar o player aqui seria pior que inútil: ele avançaria para o MESMO índice, o
+      // `<video>` não remontaria (a chave não muda) e a tela ficaria parada de qualquer jeito.
+      if (avisos.current.unico) {
+        try {
+          el.currentTime = 0
+          el.play()?.catch?.(() => { /* a próxima amostra do vigia decide */ })
+        } catch { /* elemento já desmontado */ }
+        progresso.current = inicio(Date.now())
+        return
+      }
       vivo = false
       avisos.current.aoTerminar?.()
     }

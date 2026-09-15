@@ -43,6 +43,16 @@ const MS_PROGRAMACAO = 60_000
 // gestão. Duplicar essa infraestrutura por canal seria criar um segundo lugar para ela
 // divergir.
 const MS_HEARTBEAT = 60_000
+// Quanto a parede espera antes de PERDOAR as falhas e tentar tudo de novo.
+//
+// Sem isto, uma falha é sentença perpétua: `falhados` só é limpo quando a programação MUDA,
+// e numa playlist estável ela nunca muda. Um soluço de rede de 12 s tirava o único vídeo do
+// ar e a TV ficava no institucional até alguém recarregar o navegador da loja.
+//
+// 30 s é o equilíbrio: curto para o cliente na fila não achar que a tela morreu, longo o
+// bastante para não virar um laço apertado de tentativa e erro quando a mídia está mesmo
+// quebrada — nesse caso o ciclo é institucional, tentativa, institucional, sem custo.
+const MS_REANIMAR = 30_000
 const VERSAO = 'tv-v1'
 
 export default function TvIndoorPlayer({ aparelho, loja }) {
@@ -195,6 +205,26 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
     const k = chaveDoItem(item)
     return s.has(k) ? s : new Set(s).add(k)
   })
+
+  /* ── A parede se reanima ───────────────────────────────────────────────────
+     TUDO falhou, mas a programação NÃO está vazia. São duas situações diferentes e a
+     distinção é o ponto: playlist vazia é repouso (institucional, e está certo); playlist
+     cheia com tudo marcado como falho é DEFEITO, e defeito na TV de uma loja se resolve
+     tentando de novo, não desistindo.
+
+     Antes disto, `falhados` só era esquecido quando a assinatura da programação mudava.
+     Numa playlist estável ela nunca muda — então a primeira falha era definitiva até
+     alguém ir até a loja recarregar o navegador. Com um vídeo único, qualquer soluço
+     apagava a parede para sempre.
+
+     O laço não aperta: se a mídia estiver mesmo quebrada, o ciclo é institucional por 30 s,
+     uma tentativa, institucional de novo. Nada pisca, nada acumula. */
+  const tudoFalhou = total === 0 && (itens?.length ?? 0) > 0
+  useEffect(() => {
+    if (!tudoFalhou) return undefined
+    const t = setTimeout(() => setFalhados((s) => (s.size ? new Set() : s)), MS_REANIMAR)
+    return () => clearTimeout(t)
+  }, [tudoFalhou])
 
   // Movimento decorativo respeita a preferência do sistema; a TROCA em si não é
   // decoração — é o conteúdo — e continua acontecendo.

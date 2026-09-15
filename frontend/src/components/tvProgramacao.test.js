@@ -374,3 +374,38 @@ test('🔴 existe watchdog de travamento, e ele olha o PROGRESSO do tempo', asyn
   // A rejeição do autoplay é FALHA daquela mídia, nunca um "toque para reproduzir".
   assert.match(item, /\.catch\(\(\) => falhar\('autoplay'\)\)/)
 })
+
+// ── Loop eterno: a parede não desiste sozinha ────────────────────────────────
+// Duas guardas para a mesma promessa — "o vídeo repete até alguém desativar". Ela vale
+// mais do que parece: quem está na frente da tela é o cliente da loja, e uma parede parada
+// não avisa ninguém de que parou.
+test('🔴 vídeo ÚNICO reinicia sozinho quando o `ended` escapa do loop', async () => {
+  // O atributo `loop` deveria bastar e `ended` nem deveria disparar. Se o navegador não
+  // honrar, avisar o player seria inútil: ele avançaria para o MESMO índice, o `<video>`
+  // não remontaria (a chave não muda) e o último quadro ficaria congelado o dia inteiro.
+  const fs = await import('node:fs')
+  const item = fs.readFileSync(new URL('./tv/VideoItem.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  const i = item.indexOf('const terminou')
+  assert.ok(i > 0, 'o tratamento de `ended` precisa existir')
+  const corpo = item.slice(i, item.indexOf('el.addEventListener', i))
+  assert.match(corpo, /unico/, 'o caminho do vídeo único precisa ser tratado no `ended`')
+  assert.match(corpo, /currentTime = 0/, 'e ele reinicia a reprodução à mão')
+})
+
+test('🔴 falha não é sentença perpétua — a programação é reanimada', async () => {
+  // `falhados` só era esquecido quando a assinatura da programação MUDAVA. Numa playlist
+  // estável ela nunca muda, então a primeira falha valia até alguém ir à loja recarregar o
+  // navegador. Com um vídeo único, qualquer soluço apagava a parede para sempre.
+  const fs = await import('node:fs')
+  const player = fs.readFileSync(new URL('../pages/TvIndoorPlayer.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  const codigo = player.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').map((l) => l.split('//')[0]).join('\n')
+
+  assert.match(codigo, /const MS_REANIMAR = /, 'precisa haver uma espera antes de tentar de novo')
+  // A condição tem de separar playlist VAZIA (repouso legítimo, institucional e ponto) de
+  // playlist CHEIA com tudo falho (defeito, e defeito se tenta de novo).
+  assert.match(codigo, /const tudoFalhou = total === 0 && \(itens\?\.length \?\? 0\) > 0/)
+  const i = codigo.indexOf('tudoFalhou')
+  const efeito = codigo.slice(i, codigo.indexOf('}, [tudoFalhou])', i))
+  assert.match(efeito, /setTimeout/, 'a reanimação espera — não é um laço apertado')
+  assert.match(efeito, /new Set\(\)/, 'e ela LIMPA os falhados, devolvendo a chance a todos')
+})
