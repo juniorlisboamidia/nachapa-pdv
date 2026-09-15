@@ -12,7 +12,7 @@
 //
 // A ordem é reescrita por POSIÇÃO no servidor: a lista inteira sobe de uma vez, em
 // transação. Trocar dois vizinhos deixaria buracos e empates quando duas abas mexem juntas.
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import api from '../services/api'
 import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -60,7 +60,11 @@ export default function TvIndoorPlaylists() {
   const [acervo, setAcervo] = useState('CONTEUDOS')
   const [ocupado, setOcupado] = useState(false)
   const [selecionada, setSelecionada] = useState(null) // id
-  const [nova, setNova] = useState('')
+  // Criar e renomear usam o MESMO modal. Antes, criar era um campo solto no cabeçalho com o
+  // botão desabilitado enquanto vazio — o gestor apertava, nada acontecia, e a tela não
+  // dizia que faltava o nome. Um modal com um campo só resolve as duas coisas: deixa
+  // explícito que há algo a preencher e tem onde a recusa aparecer.
+  const [criando, setCriando] = useState(false)
   const [renomeando, setRenomeando] = useState(null)   // { id, nome }
   const [excluindo, setExcluindo] = useState(null)
 
@@ -93,23 +97,18 @@ export default function TvIndoorPlaylists() {
     ?? playlists[0]
     ?? null
 
-  async function criar(e) {
-    e.preventDefault()
-    const nome = nova.trim()
-    if (!nome || ocupado) return
+  async function criar(nome) {
     setOcupado(true)
     try {
       const r = await api.post('/tv-indoor/playlists', { nome })
-      setNova('')
+      setCriando(false)
       await buscar()
       if (r.data?.playlist?.id) setSelecionada(r.data.playlist.id)
       setToast({ message: 'Playlist criada. Agora adicione os conteúdos.', type: 'success' })
     } catch (e2) { setToast({ message: erroDe(e2, 'Não foi possível criar.'), type: 'error' }) } finally { setOcupado(false) }
   }
 
-  async function renomear() {
-    const nome = String(renomeando?.nome ?? '').trim()
-    if (!nome || ocupado) return
+  async function renomear(nome) {
     setOcupado(true)
     try {
       await api.put(`/tv-indoor/playlists/${renomeando.id}`, { nome })
@@ -209,23 +208,17 @@ export default function TvIndoorPlaylists() {
         <div className="ttm-cab-secao">
           <h2 className="ttm-secao-t">Playlists</h2>
           <span className="ttm-meta-txt">{playlists.length} {playlists.length === 1 ? 'playlist' : 'playlists'}</span>
-          <form className="ttm-cab-acao" onSubmit={criar}>
-            <input
-              className="form-input"
-              style={{ width: 200 }}
-              placeholder="Nome da nova playlist"
-              maxLength={60}
-              value={nova}
-              onChange={(e) => setNova(e.target.value)}
-              aria-label="Nome da nova playlist"
-            />
-            <button type="submit" className="btn btn-primary btn-sm" disabled={ocupado || !nova.trim()}>Criar</button>
-          </form>
+          <div className="ttm-cab-acao">
+            <button type="button" className="btn btn-primary btn-sm" disabled={ocupado} onClick={() => setCriando(true)}>
+              Nova playlist
+            </button>
+          </div>
         </div>
 
         {playlists.length === 0 ? (
           <div className="empty-state">
-            Nenhuma playlist ainda. Crie uma acima — depois é só escolher os conteúdos e associá-la a uma TV.
+            Nenhuma playlist ainda. Crie a primeira em <strong>Nova playlist</strong> — depois é só escolher os
+            conteúdos e associá-la a uma TV.
           </div>
         ) : (
           <div className="tvi-abas" role="tablist">
@@ -417,28 +410,26 @@ export default function TvIndoorPlaylists() {
         </div>
       )}
 
+      {criando && (
+        <ModalNome
+          titulo="Nova playlist"
+          dica="Só para você se achar na lista. O cliente não vê. Ex.: “TV do balcão”."
+          confirmar="Criar"
+          ocupado={ocupado}
+          aoFechar={() => setCriando(false)}
+          aoConfirmar={criar}
+        />
+      )}
+
       {renomeando && (
-        <div className="modal-overlay">
-          <div className="modal" style={{ maxWidth: 420 }}>
-            <div className="modal-header"><h2>Renomear playlist</h2></div>
-            <div style={{ padding: 16 }}>
-              <label className="form-label" htmlFor="tvi-pl-nome">Nome</label>
-              <input
-                id="tvi-pl-nome"
-                className="form-input"
-                maxLength={60}
-                value={renomeando.nome}
-                onChange={(e) => setRenomeando((r) => ({ ...r, nome: e.target.value }))}
-              />
-            </div>
-            <div className="ttm-banner-rodape">
-              <button type="button" className="btn btn-secondary" disabled={ocupado} onClick={() => setRenomeando(null)}>Cancelar</button>
-              <button type="button" className="btn btn-primary" disabled={ocupado || !renomeando.nome.trim()} onClick={renomear}>
-                {ocupado ? 'Salvando…' : 'Salvar'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ModalNome
+          titulo="Renomear playlist"
+          valor={renomeando.nome}
+          confirmar="Salvar"
+          ocupado={ocupado}
+          aoFechar={() => setRenomeando(null)}
+          aoConfirmar={renomear}
+        />
       )}
 
       <ConfirmDialog
@@ -453,5 +444,70 @@ export default function TvIndoorPlaylists() {
         onCancel={() => setExcluindo(null)}
       />
     </>
+  )
+}
+
+// ── Modal de um campo só ────────────────────────────────────────────────────
+// Criar e renomear pedem a mesma coisa — um nome — então são a mesma tela. Duas cópias
+// divergiriam no primeiro ajuste, e já divergiam: a de renomear nem dica tinha.
+//
+// O botão NÃO fica desabilitado por campo vazio. Desabilitado é o pior estado aqui: o
+// gestor aperta, nada acontece, e a tela não diz o que falta nem onde. Quem recusa é
+// `tentar()`, que escreve o motivo embaixo do campo e devolve o cursor para lá.
+function ModalNome({ titulo, valor, dica, confirmar, ocupado, aoFechar, aoConfirmar }) {
+  const [nome, setNome] = useState(valor ?? '')
+  const [erro, setErro] = useState(null)
+  const campoRef = useRef(null)
+
+  // Foco no campo ao abrir: o modal existe por causa dele, e obrigar um clique a mais para
+  // começar a digitar seria devolver metade do problema que ele veio resolver.
+  useEffect(() => {
+    campoRef.current?.focus()
+    campoRef.current?.select()
+  }, [])
+
+  function tentar() {
+    if (ocupado) return
+    const limpo = nome.trim()
+    if (!limpo) {
+      setErro('Dê um nome para achar esta playlist na lista.')
+      campoRef.current?.focus()
+      return
+    }
+    aoConfirmar(limpo)
+  }
+
+  return (
+    // Fecha só por botão — regra do projeto. E é um `form`: assim o Enter confirma, que é
+    // o que qualquer pessoa tenta primeiro num campo de texto sozinho.
+    <div className="modal-overlay">
+      <form className="modal" style={{ maxWidth: 440 }} onSubmit={(e) => { e.preventDefault(); tentar() }}>
+        <div className="modal-header"><h2>{titulo}</h2></div>
+        <div style={{ padding: 16 }}>
+          <label className="form-label" htmlFor="tvi-pl-nome">
+            Nome <span className="ttm-obrigatorio" aria-hidden="true">*</span>
+          </label>
+          <input
+            id="tvi-pl-nome"
+            ref={campoRef}
+            className={'form-input' + (erro ? ' invalido' : '')}
+            maxLength={60}
+            value={nome}
+            onChange={(e) => { setNome(e.target.value); if (erro) setErro(null) }}
+            aria-required="true"
+            aria-invalid={erro ? 'true' : undefined}
+          />
+          {erro
+            ? <div className="ttm-erro-campo" role="alert">{erro}</div>
+            : dica ? <div className="ttm-dica">{dica}</div> : null}
+        </div>
+        <div className="ttm-banner-rodape">
+          <button type="button" className="btn btn-secondary" disabled={ocupado} onClick={aoFechar}>Cancelar</button>
+          <button type="submit" className="btn btn-primary" disabled={ocupado}>
+            {ocupado ? 'Salvando…' : confirmar}
+          </button>
+        </div>
+      </form>
+    </div>
   )
 }
