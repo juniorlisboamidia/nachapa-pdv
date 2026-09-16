@@ -16,8 +16,8 @@
 // problema, se não está. Playlist, sincronização e resolução são apoio — e apoio não pode
 // disputar atenção com o problema.
 // A extensão `.js` é obrigatória: o Vite resolveria sem ela, mas o `node --test` não — e
-// este módulo é importado pelos dois. É a mesma armadilha que mantém `niimbotB1.test.js`
-// vermelho no projeto.
+// este módulo é importado pelos dois. Omitir a extensão passa no build e só quebra na
+// suíte, que é o pior lugar para descobrir.
 import { haQuanto } from '../lib/duracaoRelativa.js'
 
 // O rótulo do tipo, em português e por extenso. `VIDEO #14` é como o banco pensa; ninguém

@@ -191,7 +191,7 @@ export function desconectar() {
 // O QUE ESTA FUNÇÃO É: uma prévia/conferência do bitmap que a lib vai gerar. Ela NÃO
 // está no caminho da impressão — quem converte de verdade é a `imageToPacked` da lib,
 // dentro de printImage(). Existe porque é a única parte do driver que dá para exercitar
-// sem a impressora na mão (ver niimbotB1.test.js) e porque permite conferir na tela o
+// sem a impressora na mão (ver niimbotB1.navegador.js) e porque permite conferir na tela o
 // que vai sair no papel.
 //
 // Por isso ela ESPELHA a imageToPacked, passo a passo, e só vale enquanto espelhar:
