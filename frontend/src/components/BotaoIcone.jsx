@@ -22,9 +22,10 @@ const DESENHOS = {
   descer: <path d="M12 5v13M6 12l6 6 6-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />,
   // A mesma lixeira dos Banners: o gesto de remover precisa ter um desenho só no sistema.
   lixeira: <g fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><path d="M4 7h16" /><path d="M9.5 7V5h5v2" /><path d="M6.5 7l1 12.5h9L17.5 7" /><path d="M10 11v5.5M14 11v5.5" /></g>,
-  // "Tirar da lista" NÃO é "excluir": o produto continua no cardápio, ele só sai daqui. Um
-  // traço, e não uma lixeira — o ícone precisa dizer qual das duas coisas vai acontecer.
-  tirar: <path d="M6 12h12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />,
+  // "Tirar da lista" NÃO é "excluir": o produto continua no cardápio, ele só sai daqui — por
+  // isso um X, e não a lixeira. O traço que estava aqui antes lia como "menos"/"diminuir",
+  // que é outra operação; o X diz "remove este daqui" sem prometer que algo foi apagado.
+  tirar: <path d="M7 7l10 10M17 7L7 17" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />,
   lapis: <g fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20h4L19 9a2.1 2.1 0 0 0-3-3L5 17v3z" /><path d="M14.5 6.5l3 3" /></g>,
   olho: <><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z" fill="none" stroke="currentColor" strokeWidth="1.7" /><circle cx="12" cy="12" r="2.8" fill="none" stroke="currentColor" strokeWidth="1.7" /></>,
 }

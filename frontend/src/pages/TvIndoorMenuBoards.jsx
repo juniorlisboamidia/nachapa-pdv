@@ -540,7 +540,7 @@ function Editor({ valor, layouts, identidade, limites, ocupado, aoFechar, aoSalv
                           <BotaoIcone icone="descer" titulo={`Descer ${p?.nome ?? 'produto'}`} disabled={i === escolhidos.length - 1} onClick={() => mover(i, 1)} />
                           {/* TIRAR não é excluir: o produto continua no cardápio, só sai deste
                               board. Por isso um traço, e não a lixeira — e sem `perigo`. */}
-                          <BotaoIcone icone="tirar" titulo={`Tirar ${p?.nome ?? 'produto'} do board`} onClick={() => alternarProduto(e.cwItemId)} />
+                          <BotaoIcone icone="tirar" perigo titulo={`Tirar ${p?.nome ?? 'produto'} do board`} onClick={() => alternarProduto(e.cwItemId)} />
                         </span>
                       </li>
                     )

@@ -303,7 +303,7 @@ export default function TvIndoorPlaylists() {
                         <BotaoIcone icone="subir" titulo={`Subir ${c.nome}`} disabled={ocupado || i === 0} onClick={() => mover(i, -1)} />
                         <BotaoIcone icone="descer" titulo={`Descer ${c.nome}`} disabled={ocupado || i === atual.itens.length - 1} onClick={() => mover(i, 1)} />
                         {/* Tirar da programação: o conteúdo continua no acervo. */}
-                        <BotaoIcone icone="tirar" titulo={`Tirar ${c.nome} da playlist`} disabled={ocupado} onClick={() => remover(i)} />
+                        <BotaoIcone icone="tirar" perigo titulo={`Tirar ${c.nome} da playlist`} disabled={ocupado} onClick={() => remover(i)} />
                       </span>
                     </li>
                   )
