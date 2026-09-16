@@ -1,6 +1,17 @@
-// Roda no navegador (precisa de canvas). Chame de um console ou de uma página
-// temporária: import('./lib/niimbotB1.test.js').then(m => m.run())
-import { canvasParaBitmap } from './niimbotB1'
+// Conferência do `canvasParaBitmap` — a única parte do driver da B1 que dá para
+// exercitar sem a impressora na mão.
+//
+// RODA NO NAVEGADOR, não no `node --test`: precisa de `document.createElement('canvas')`,
+// e o driver importa `niimbot-web-bluetooth`, que é um script clássico que se instala em
+// `window`. Nenhum dos dois existe no Node.
+//
+// Por isso o arquivo NÃO se chama `.test.js`: o glob `src/**/*.test.js` da suíte o
+// carregaria junto com os testes puros e ele falharia sempre — um vermelho permanente que
+// não significa nada ensina a ignorar vermelhos, e o próximo pode ser de verdade.
+//
+// Para rodar, no console de uma página do app:
+//   import('./lib/niimbotB1.navegador.js').then(m => m.run())
+import { canvasParaBitmap } from './niimbotB1.js'
 
 export function run() {
   const c = document.createElement('canvas')
