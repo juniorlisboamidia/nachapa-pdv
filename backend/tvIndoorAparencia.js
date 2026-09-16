@@ -36,11 +36,17 @@ export const CHAVES = Object.freeze(['fundo', 'superficie', 'texto', 'textoApoio
    sobre o que a loja está vendo. */
 export const PADROES = Object.freeze({
   fundo: '#0b0a09',
-  // Transparente no padrão: hoje o card do menu board não tem caixa — quem separa um do
-  // outro é o espaço. Configurar esta cor passa a desenhar a caixa, que é exatamente o que
-  // "superfície" significa. O default fica sem cor para não inventar uma moldura que o
-  // desenho atual não tem.
-  superficie: '#0b0a09',
+  /* A SUPERFÍCIE é o card, e ela não nasce mais igual ao fundo.
+
+     Enquanto as duas eram `#0b0a09`, o card não existia: o menu board era texto e foto
+     soltos sobre um fundo, e é isso que fazia a peça parecer dados em vez de cartaz. Um
+     tom quente apenas dois degraus acima do fundo basta para o olho agrupar mídia, nome e
+     preço numa unidade — sem transformar a tela num painel administrativo cheio de caixas.
+
+     ⚠️ Isto é DEFAULT visual, e muda a aparência de boards que nunca configuraram cor. Foi
+     decisão explícita da etapa de refino; quem já escolheu uma superfície continua com a
+     dela. */
+  superficie: '#17130d',
   texto: '#ffffff',
   textoApoio: '#b8b8b8',
   destaque: '#d79e00',

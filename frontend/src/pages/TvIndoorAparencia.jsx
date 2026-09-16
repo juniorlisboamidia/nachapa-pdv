@@ -155,7 +155,7 @@ export default function TvIndoorAparencia() {
 
       <div className="page-header">
         <div>
-          <h1>Aparência da TV</h1>
+          <h1>Identidade da TV</h1>
           <div className="page-header-sub">
             A identidade do canal: a logo e seis cores. Elas pintam a <strong>tela de repouso</strong> e os
             <strong> menu boards</strong> — as artes que você envia continuam exatamente como foram criadas.

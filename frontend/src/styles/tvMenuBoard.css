@@ -29,7 +29,12 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 .tvmb-caixa {
-  --tvmb-escala: 1;              /* o ResizeObserver do componente sobrescreve com a medida real */
+  /* O ResizeObserver do componente sobrescreve com a medida real. O `1` NÃO é um padrão
+     útil: ele desenharia o palco em 1920×1080 dentro de uma caixa de 420px, recortado à
+     direita e embaixo — que é exatamente o defeito que a prévia mostrava. Ele existe só
+     para o `transform` nunca ser inválido; quem impede o quadro errado de aparecer é a
+     `visibility` abaixo. */
+  --tvmb-escala: 1;
 
   /* ── OS SEIS TOKENS DO CANAL ──────────────────────────────────────────
      Estes valores são o CHÃO: o que a TV desenha quando nada chega (cold
@@ -49,7 +54,11 @@
      não tem caixa — quem separa um do outro é o espaço. Configurar esta cor
      passa a desenhar a caixa, que é exatamente o que "superfície" significa. */
   --tvmb-fundo: #0b0a09;
-  --tvmb-superficie: #0b0a09;
+  /* O CARD. Dois degraus acima do fundo — o bastante para o olho agrupar mídia, nome e
+     preço numa unidade, sem virar painel administrativo cheio de caixas. Enquanto esta cor
+     era igual ao fundo, o menu board era texto e foto soltos, e era isso que o fazia
+     parecer dados em vez de cartaz. */
+  --tvmb-superficie: #17130d;
   --tvmb-texto: #ffffff;
   --tvmb-texto-2: #b8b8b8;
   --tvmb-destaque: #d79e00;
@@ -58,6 +67,36 @@
      partir do token `texto`, e é isso que a faz aparecer num fundo claro — uma
      divisória branca fixa sumiria justamente na paleta clara. */
   --tvmb-linha: rgba(255, 255, 255, 0.14);
+  /* DERIVADA também: o chão atrás de uma foto que não veio e o realce do protagonista.
+     Texto a 7% — clara sobre fundo escuro, escura sobre fundo claro, sozinha. */
+  --tvmb-superficie-2: rgba(255, 255, 255, 0.07);
+
+  /* ── ESCALA TIPOGRÁFICA ────────────────────────────────────────────────
+     UMA escala para os cinco templates. Antes cada um tinha os próprios
+     `font-size`, e era isso que fazia cinco composições parecerem cinco
+     sistemas de design diferentes. Os templates agora escolhem um DEGRAU;
+     nenhum inventa um tamanho.
+
+     Os números são pensados para 1920×1080 vistos a três metros — a distância
+     de quem está na fila, não a de quem edita no monitor. */
+  --tvmb-fs-titulo: 64px;
+  --tvmb-fs-sub: 30px;
+  /* Nome do produto, do protagonista ao item de lista. */
+  --tvmb-fs-nome-1: 80px;
+  --tvmb-fs-nome-2: 46px;
+  --tvmb-fs-nome-3: 34px;
+  --tvmb-fs-nome-4: 30px;
+  /* Descrição. */
+  --tvmb-fs-desc-1: 32px;
+  --tvmb-fs-desc-2: 24px;
+  --tvmb-fs-desc-3: 21px;
+  /* Preço atual: é o par do nome, nunca o dobro dele. */
+  --tvmb-fs-preco-1: 96px;
+  --tvmb-fs-preco-2: 52px;
+  --tvmb-fs-preco-3: 42px;
+  /* Preço anterior e metadados. */
+  --tvmb-fs-de: 28px;
+  --tvmb-fs-selo: 22px;
 
   position: relative;
   width: 100%;
@@ -68,7 +107,17 @@
   color: var(--tvmb-texto);
 }
 
-/* O palco tem o tamanho REAL e é encolhido a partir do canto superior esquerdo. */
+/* O palco tem o tamanho REAL e é encolhido a partir do canto superior esquerdo.
+
+   ── POR QUE ELE NASCE INVISÍVEL ────────────────────────────────────────────
+   Entre a montagem e a primeira medida existe pelo menos um quadro em que a
+   escala ainda não foi calculada. Nesse quadro o palco tem 1920×1080 de
+   verdade, e a caixa (~420px na prévia) mostra só o canto superior esquerdo —
+   o "conteúdo cortado à direita" que se via no editor.
+
+   `visibility: hidden` resolve sem custo: ele reserva o espaço (o layout não
+   pula) e não pinta nada. A classe só entra quando existe largura válida E
+   escala escrita, então é impossível ver o palco fora de escala. */
 .tvmb-palco {
   position: absolute;
   top: 0;
@@ -77,14 +126,20 @@
   height: 1080px;
   transform: scale(var(--tvmb-escala));
   transform-origin: top left;
+  visibility: hidden;
 }
+.tvmb-caixa.medido .tvmb-palco { visibility: visible; }
 
+/* O ARTBOARD. Safe area generosa e IGUAL nos cinco: TV de loja com overscan mal
+   configurado é a regra, não a exceção, e informação colada na borda simplesmente
+   desaparece. 80px na horizontal são ~4% da largura, que é a margem que os fabricantes
+   costumam comer. */
 .tvmb-tela {
   width: 1920px;
   height: 1080px;
   display: flex;
   flex-direction: column;
-  padding: 56px 72px 64px;
+  padding: 64px 80px 72px;
   box-sizing: border-box;
 }
 
@@ -98,27 +153,38 @@
 
    O `margin-bottom` mora aqui e não no título — com o título ausente e só o
    subtítulo presente, o espaçamento tem de continuar o mesmo. */
+/* O CABEÇALHO como COMPOSIÇÃO, e não como uma faixa onde o título foi espremido.
+
+   Quatro estados, todos previstos: logo + título + subtítulo, título + subtítulo, só
+   título, e nada. No último o elemento nem é renderizado — nada de espaço reservado.
+
+   O filete entre a logo e o texto só aparece quando existem os dois: ele separa duas
+   informações, e sem uma delas separaria nada de coisa nenhuma. */
 .tvmb-cabeca {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 32px;
-  margin-bottom: 40px;
+  gap: 36px;
+  margin-bottom: 44px;
   min-height: 0;
 }
-.tvmb-cabeca-txt { min-width: 0; }
+.tvmb-cabeca-txt { min-width: 0; display: flex; flex-direction: column; }
+.tvmb-logo + .tvmb-cabeca-txt {
+  padding-left: 36px;
+  border-left: 2px solid var(--tvmb-linha);
+}
 /* A logo tem TETO de altura e `contain`: a marca da loja pode vir em qualquer
    proporção, e esticá-la seria deformar a identidade de quem paga por ela. */
 .tvmb-logo {
   flex: 0 0 auto;
-  height: 88px;
-  max-width: 320px;
+  height: 96px;
+  max-width: 300px;
   object-fit: contain;
   object-position: left center;
 }
 .tvmb-subtitulo {
-  margin: 8px 0 0;
-  font-size: 32px;
+  margin: 10px 0 0;
+  font-size: var(--tvmb-fs-sub);
   font-weight: 500;
   line-height: 1.15;
   color: var(--tvmb-texto-2);
@@ -126,10 +192,10 @@
 
 .tvmb-titulo {
   margin: 0;
-  font-size: 68px;
+  font-size: var(--tvmb-fs-titulo);
   font-weight: 900;
-  line-height: 1;
-  letter-spacing: 0.02em;
+  line-height: 1.02;
+  letter-spacing: 0.01em;
   text-transform: uppercase;
   color: var(--tvmb-destaque);
   flex: 0 0 auto;
@@ -146,9 +212,9 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.tvmb-desc-card { font-size: 22px; -webkit-line-clamp: 2; }
-.tvmb-desc-vt { font-size: 30px; -webkit-line-clamp: 3; }
-.tvmb-desc-of { font-size: 34px; -webkit-line-clamp: 3; max-width: 760px; }
+.tvmb-desc-card { font-size: var(--tvmb-fs-desc-3); -webkit-line-clamp: 2; }
+.tvmb-desc-vt { font-size: var(--tvmb-fs-desc-2); -webkit-line-clamp: 2; }
+.tvmb-desc-of { font-size: var(--tvmb-fs-desc-1); -webkit-line-clamp: 3; }
 
 .tvmb-corpo { flex: 1 1 auto; min-height: 0; display: flex; }
 
@@ -171,13 +237,13 @@
   border-radius: 999px;
   background: var(--tvmb-destaque);
   color: var(--tvmb-texto-destaque);
-  font-size: 22px;
+  font-size: var(--tvmb-fs-selo);
   font-weight: 900;
   line-height: 1;
   white-space: nowrap;
 }
 .tvmb-preco-valor {
-  font-size: 44px;
+  font-size: var(--tvmb-fs-preco-3);
   font-weight: 900;
   line-height: 1;
   color: var(--tvmb-destaque);
@@ -214,23 +280,46 @@
    `auto-rows` fixo e `justify-content: center`: com menos de 8 produtos os
    cards NÃO esticam para preencher — um card de 900 px ao lado de um de 440 lê
    como defeito. A grade centraliza o que há. */
+/* GRADE 4 × 2 — o catálogo visual.
+
+   A largura é MATEMÁTICA, não `flex-shrink`: 4 × 418 + 3 × 28 = 1756, contra 1760
+   de área útil (1920 − 160 de safe area). Cabe com folga de 4px e não depende de
+   nenhum encolhimento.
+
+   Com menos de 8 produtos a grade NÃO estica os cards: ela centraliza o que há.
+   Um card de 900px ao lado de um de 418 lê como defeito. */
 .tvmb-grade {
   flex: 1 1 auto;
   display: grid;
-  grid-template-columns: repeat(4, 408px);
-  grid-auto-rows: 428px;
-  gap: 32px 32px;
+  grid-template-columns: repeat(4, 418px);
+  grid-auto-rows: 372px;
+  gap: 28px;
   justify-content: center;
-  align-content: start;
+  align-content: center;
+  min-height: 0;
 }
-.tvmb-card { display: flex; flex-direction: column; background: var(--tvmb-superficie); }
-/* O chão atrás da foto acompanha a SUPERFÍCIE: com a paleta clara, um buraco
+/* O CARD como UNIDADE — a mudança que separa "peça gráfica" de "dados sobre um
+   fundo".
+
+   A mídia SANGRA até as bordas de cima (o `overflow:hidden` do card recorta pelo
+   raio), e o texto tem área interna própria. Sem sombra: numa TV, sombra vira
+   borrão cinza; quem separa o card do fundo é a cor da superfície e o filete. */
+.tvmb-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--tvmb-superficie);
+  border: 1px solid var(--tvmb-linha);
+  border-radius: 20px;
+  overflow: hidden;
+  min-height: 0;
+}
+/* O chão atrás da foto é a SUPERFÍCIE ELEVADA: com a paleta clara, um buraco
    preto embaixo de cada card seria a única coisa escura da tela. */
-.tvmb-card-midia { position: relative; width: 100%; height: 230px; overflow: hidden; border-radius: 16px; background: var(--tvmb-superficie); }
-.tvmb-card-txt { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: space-between; gap: 12px; padding: 18px 4px 0; }
+.tvmb-card-midia { position: relative; width: 100%; flex: 1 1 auto; min-height: 0; overflow: hidden; background: var(--tvmb-superficie-2); }
+.tvmb-card-txt { flex: 0 0 auto; display: flex; flex-direction: column; gap: 10px; padding: 18px 20px 20px; }
 .tvmb-card-nome {
   margin: 0;
-  font-size: 34px;
+  font-size: var(--tvmb-fs-nome-3);
   font-weight: 700;
   line-height: 1.1;
   /* Duas linhas e para: um nome de cinco palavras não pode empurrar o preço para
@@ -245,64 +334,112 @@
    O menu tradicional: nome à esquerda, pontilhado, preço à direita. O
    pontilhado é `repeating-linear-gradient` e não uma fileira de pontos: ele se
    estica sozinho e nunca sobra meio ponto na borda. */
-.tvmb-lista { flex: 1 1 auto; list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+/* ── LISTA — 5 + 5 em DUAS COLUNAS ────────────────────────────────────────
+   Dez itens numa coluna só desperdiçam metade de uma tela 16:9 e obrigam linhas
+   de 1760px de largura, em que o olho perde o caminho entre o nome e o preço.
+   Em duas colunas de 852px cada, o pontilhado é curto e a leitura fecha.
+
+   `grid-auto-flow: column` com duas linhas-tronco: os cinco primeiros descem na
+   coluna esquerda e os cinco seguintes na direita — que é a ordem em que o
+   gestor os escolheu. Preenchendo por linha, o item 2 apareceria à direita do 1,
+   e a ordem da seleção deixaria de ser legível. */
+.tvmb-lista {
+  flex: 1 1 auto;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(5, auto);
+  grid-auto-flow: column;
+  align-content: center;
+  gap: 10px 56px;
+  min-height: 0;
+}
+/* Cada item é uma LINHA-CARD: superfície própria, raio e área interna. É o que
+   o separa de "texto solto sobre o fundo" sem virar uma caixa pesada. */
 .tvmb-linha {
   display: flex;
-  align-items: baseline;
-  gap: 20px;
-  padding: 14px 0;
-  border-bottom: 1px solid var(--tvmb-linha);
+  align-items: center;
+  gap: 18px;
+  padding: 12px 18px;
+  background: var(--tvmb-superficie);
+  border: 1px solid var(--tvmb-linha);
+  border-radius: 14px;
+  min-width: 0;
 }
-.tvmb-linha:last-child { border-bottom: none; }
 /* A miniatura opcional da LISTA. Quadrada e pequena: aqui a foto ilustra, não
    vende — quem vende neste template é o nome e o preço. */
 .tvmb-linha-midia {
   flex: 0 0 auto;
-  width: 96px;
-  height: 96px;
-  border-radius: 12px;
+  width: 84px;
+  height: 84px;
+  border-radius: 10px;
   overflow: hidden;
-  background: var(--tvmb-superficie);
+  /* Elevada, e não a superfície: dentro de um card de superfície, o chão da foto
+     que não veio precisa se distinguir do card — senão vira um vazio sem forma. */
+  background: var(--tvmb-superficie-2);
   align-self: center;
 }
 .tvmb-linha-midia .tvmb-foto { width: 100%; height: 100%; }
-/* Com foto a linha respira menos entre itens: a altura do retrato já separa. */
-.tvmb-lista.com-foto .tvmb-linha { align-items: center; padding: 10px 0; }
+/* A ALTURA da linha é FIXA, com ou sem foto: é isso que mantém as duas colunas
+   alinhadas quando só alguns produtos têm imagem — o caso normal do cardápio que
+   este template existe para atender. Um item sem foto não pode encolher e
+   desalinhar a coluna vizinha. */
+.tvmb-linha { min-height: 104px; }
+.tvmb-lista.com-foto .tvmb-linha { padding: 10px 16px; }
 
 .tvmb-linha-txt { flex: 0 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-.tvmb-linha-nome { font-size: 40px; font-weight: 700; line-height: 1.05; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tvmb-linha-txt { flex: 1 1 auto; }
+.tvmb-linha-nome { font-size: var(--tvmb-fs-nome-4); font-weight: 700; line-height: 1.05; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
 .tvmb-linha-desc {
-  font-size: 24px;
+  font-size: var(--tvmb-fs-desc-3);
   color: var(--tvmb-texto-2);
   line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 1100px;
+  display: block;
 }
 .tvmb-pontilhado {
   flex: 1 1 auto;
   height: 4px;
-  min-width: 40px;
-  transform: translateY(-8px);
+  min-width: 24px;
+  align-self: center;
   background-image: radial-gradient(circle, var(--tvmb-linha) 2px, transparent 2px);
   background-size: 14px 4px;
   background-repeat: repeat-x;
 }
 .tvmb-preco-linha { flex: 0 0 auto; align-items: flex-end; text-align: right; }
-.tvmb-preco-linha .tvmb-preco-valor { font-size: 46px; }
+.tvmb-preco-linha .tvmb-preco-valor { font-size: var(--tvmb-fs-preco-3); }
+.tvmb-preco-linha .tvmb-preco-de { font-size: 22px; }
+.tvmb-preco-linha .tvmb-desconto { font-size: 18px; padding: 3px 9px; }
 
-/* ── DESTAQUE + GRADE ─────────────────────────────────────────────────────
-   Um produto grande à esquerda, até quatro à direita em 2 × 2. */
-.tvmb-destaque { flex: 1 1 auto; display: grid; grid-template-columns: 860px 1fr; gap: 40px; min-height: 0; }
-.tvmb-hero { display: flex; flex-direction: column; min-height: 0; }
-.tvmb-hero-midia { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; border-radius: 20px; background: var(--tvmb-superficie); }
+/* ── DESTAQUE — assimetria INTENCIONAL ────────────────────────────────────
+   Um protagonista à esquerda e quatro coadjuvantes em 2 × 2 à direita.
+
+   A assimetria é o ponto: 812 + 36 + 912 = 1760, exatamente a área útil. O
+   protagonista tem quase o mesmo espaço dos quatro juntos, e sua hierarquia é
+   claramente superior — nome num degrau acima, preço num degrau acima, foto
+   ocupando quase toda a altura. Se os cinco parecessem do mesmo tamanho, este
+   template não teria razão de existir ao lado da Grade. */
+.tvmb-destaque { flex: 1 1 auto; display: grid; grid-template-columns: 812px 912px; gap: 36px; min-height: 0; }
+.tvmb-hero {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--tvmb-superficie);
+  border: 1px solid var(--tvmb-linha);
+  border-radius: 24px;
+  overflow: hidden;
+}
+.tvmb-hero-midia { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; background: var(--tvmb-superficie-2); }
 .tvmb-hero-midia .tvmb-selo { font-size: 26px; padding: 10px 20px; }
-.tvmb-hero-txt { flex: 0 0 auto; padding-top: 22px; display: flex; flex-direction: column; gap: 10px; }
-.tvmb-hero-nome { margin: 0; font-size: 56px; font-weight: 900; line-height: 1.02; }
+.tvmb-hero-txt { flex: 0 0 auto; padding: 26px 30px 30px; display: flex; flex-direction: column; gap: 12px; }
+.tvmb-hero-nome { margin: 0; font-size: var(--tvmb-fs-nome-2); font-weight: 900; line-height: 1.02; }
 .tvmb-hero-desc {
   margin: 0;
-  font-size: 26px;
+  font-size: var(--tvmb-fs-desc-2);
   color: var(--tvmb-texto-2);
   line-height: 1.25;
   display: -webkit-box;
@@ -310,9 +447,12 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.tvmb-preco-hero .tvmb-preco-valor { font-size: 64px; }
-.tvmb-preco-hero .tvmb-preco-de { font-size: 30px; }
-.tvmb-secundarios { display: grid; grid-template-columns: repeat(2, 1fr); grid-auto-rows: 1fr; gap: 28px; min-height: 0; }
+.tvmb-preco-hero .tvmb-preco-valor { font-size: var(--tvmb-fs-preco-2); }
+.tvmb-preco-hero .tvmb-preco-de { font-size: var(--tvmb-fs-de); }
+/* Os quatro secundários herdam o card da Grade; o que muda é o tamanho do nome,
+   um degrau abaixo — é a hierarquia que faz o protagonista ser protagonista. */
+.tvmb-secundarios { display: grid; grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(2, 1fr); gap: 28px; min-height: 0; }
+.tvmb-secundarios .tvmb-card-nome { font-size: var(--tvmb-fs-nome-4); }
 .tvmb-secundarios .tvmb-card-midia { height: 180px; }
 .tvmb-secundarios .tvmb-card-nome { font-size: 30px; }
 .tvmb-secundarios .tvmb-preco-valor { font-size: 38px; }
@@ -322,27 +462,42 @@
    menos itens, muito mais área. Com dois ou um produto os cards NÃO esticam
    para preencher — eles centralizam, porque um card de 1200px ao lado de um
    de 560 lê como defeito, e um card sozinho esticado lê como erro de layout. */
+/* ── VITRINE — três cards grandes ─────────────────────────────────────────
+   A largura agora é MATEMÁTICA e não depende de `flex-shrink`: `grid` com três
+   colunas `1fr` e gap de 36 divide 1760 exatamente (3 × 562,67 + 2 × 36). Antes
+   eram `flex 0 1 560px`, que somavam 1760 contra 1744 de área útil e só cabiam
+   porque encolhiam 16px — apertado por acidente, não por projeto.
+
+   A mídia fica com ~62% da altura do card: é o que dá presença de fotografia sem
+   espremer nome e preço, que são o motivo de alguém parar na frente da tela. */
 .tvmb-vitrine {
   flex: 1 1 auto;
-  display: flex;
-  justify-content: center;
-  gap: 40px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 36px;
   min-height: 0;
 }
 .tvmb-vt {
-  flex: 0 1 560px;
   display: flex;
   flex-direction: column;
   min-height: 0;
   background: var(--tvmb-superficie);
-  border-radius: 24px;
+  border: 1px solid var(--tvmb-linha);
+  border-radius: 26px;
   overflow: hidden;
 }
-.tvmb-vt-midia { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.tvmb-vt-midia {
+  position: relative;
+  flex: 1 1 62%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--tvmb-superficie-2);
+}
 .tvmb-vt-midia .tvmb-selo { font-size: 24px; padding: 9px 18px; }
-.tvmb-vt-txt { flex: 0 0 auto; padding: 28px 30px 32px; display: flex; flex-direction: column; gap: 12px; }
-.tvmb-vt-nome { margin: 0; font-size: 44px; font-weight: 800; line-height: 1.05; }
-.tvmb-preco-vt .tvmb-preco-valor { font-size: 52px; }
+.tvmb-vt-txt { flex: 0 0 auto; padding: 30px 32px 34px; display: flex; flex-direction: column; gap: 14px; }
+.tvmb-vt-nome { margin: 0; font-size: var(--tvmb-fs-nome-2); font-weight: 800; line-height: 1.05; }
+.tvmb-preco-vt .tvmb-preco-valor { font-size: var(--tvmb-fs-preco-2); }
+.tvmb-preco-vt .tvmb-preco-de { font-size: var(--tvmb-fs-de); }
 
 /* ── OFERTA EM DESTAQUE ───────────────────────────────────────────────────
    Um produto, composição de campanha: foto na metade esquerda, texto
@@ -352,11 +507,23 @@
    o nome continua grande o bastante para disputar o olhar: um preço gigante
    sozinho vende desconto, não vende produto — e foi esse o erro que já
    corrigimos no card do totem. */
+/* ── OFERTA — peça promocional, não card ampliado ─────────────────────────
+   Foto dominante à esquerda (900 + 72 + 788 = 1760, a área útil exata) e o
+   conteúdo comercial respirando à direita, ancorado no centro vertical.
+
+   A diferença entre isto e "um card grande" é a ausência de moldura em volta do
+   conjunto: a foto sangra num bloco próprio e o texto vive no fundo da peça, do
+   jeito que um cartaz é montado. Cercar os dois numa caixa devolveria a
+   aparência de card.
+
+   O preço é o maior elemento da tela, mas o nome fica logo atrás — um preço
+   gigante sozinho vende desconto, não vende produto (há teste travando a razão
+   entre os dois em 1,5×). */
 .tvmb-of {
   flex: 1 1 auto;
   display: grid;
-  grid-template-columns: 940px 1fr;
-  gap: 64px;
+  grid-template-columns: 900px 788px;
+  gap: 72px;
   min-height: 0;
   align-items: center;
 }
@@ -366,17 +533,16 @@
   min-height: 0;
   border-radius: 28px;
   overflow: hidden;
-  background: var(--tvmb-superficie);
+  background: var(--tvmb-superficie-2);
 }
 .tvmb-of-midia .tvmb-selo { font-size: 30px; padding: 12px 24px; }
-.tvmb-of-txt { min-width: 0; display: flex; flex-direction: column; gap: 20px; }
-.tvmb-of-nome { margin: 0; font-size: 86px; font-weight: 900; line-height: 1; }
-.tvmb-preco-of { gap: 10px; }
-.tvmb-preco-of .tvmb-preco-valor { font-size: 104px; }
-.tvmb-preco-of .tvmb-preco-de { font-size: 42px; }
-.tvmb-preco-of .tvmb-desconto { font-size: 34px; padding: 8px 18px; }
+.tvmb-of-txt { min-width: 0; display: flex; flex-direction: column; gap: 22px; }
+.tvmb-of-nome { margin: 0; font-size: var(--tvmb-fs-nome-1); font-weight: 900; line-height: 1; }
+.tvmb-preco-of { gap: 12px; }
+.tvmb-preco-of .tvmb-preco-valor { font-size: var(--tvmb-fs-preco-1); }
+.tvmb-preco-of .tvmb-preco-de { font-size: 40px; }
+.tvmb-preco-of .tvmb-desconto { font-size: 34px; padding: 8px 20px; }
 
-/* Na OFERTA e na VITRINE o board tem menos elementos, e por isso a margem de
-   segurança pode ser maior: informação colada na borda some em TV com overscan
-   mal configurado, que é a regra e não a exceção em loja. */
-.tvmb-tela.tvmb-oferta, .tvmb-tela.tvmb-vitrine { padding: 64px 88px 72px; }
+/* A safe area agora é a MESMA nos cinco (declarada em `.tvmb-tela`): cinco
+   margens diferentes fariam os templates parecerem peças de sistemas distintos
+   quando alternam na mesma parede, a cada vinte segundos. */

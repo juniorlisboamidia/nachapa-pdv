@@ -12,7 +12,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import {
-  PROPRIEDADES, CHAVES, PADROES, PROP_DIVISORIA, ALPHA_DIVISORIA,
+  PROPRIEDADES, CHAVES, PADROES, PROP_DIVISORIA, ALPHA_DIVISORIA, PROP_ELEVADA, ALPHA_ELEVADA,
   efetivas, derivados, aplicar, paresDe, comAlpha,
 } from './tvIndoorTema.js'
 // O backend, para provar que os defaults não divergiram.
@@ -41,7 +41,10 @@ test('🔴 chave desconhecida NUNCA vira CSS', () => {
   aplicar(el, { '--tvmb-fundo': '#ff0000', background: '#ff0000', __proto__: '#ff0000', cartao: '#ff0000' })
   // Só as seis conhecidas foram escritas — nenhuma das chaves inventadas virou propriedade.
   for (const [, prop] of el.props) assert.notEqual(prop, '#ff0000')
-  assert.equal([...el.props.keys()].every((p) => Object.values(PROPRIEDADES).includes(p) || p === PROP_DIVISORIA), true)
+  // As únicas propriedades aceitas são as seis do mapa e as DERIVADAS (divisória e
+  // superfície elevada), que nascem no código e nunca de uma chave do banco.
+  const permitidas = [...Object.values(PROPRIEDADES), PROP_DIVISORIA, PROP_ELEVADA]
+  assert.equal([...el.props.keys()].every((p) => permitidas.includes(p)), true)
   // E o valor gravado em `--tvmb-fundo` é o PADRÃO, não o que veio com a chave torta.
   assert.equal(el.props.get('--tvmb-fundo'), PADROES.fundo)
 })
@@ -83,12 +86,28 @@ test('efetivas: overrides por cima dos padrões; entrada torta devolve os padrõ
 })
 
 // ── Divisória derivada ───────────────────────────────────────────────────────
-test('🔴 a divisória é derivada do TEXTO — é o que a faz aparecer num fundo claro', () => {
-  assert.deepEqual(derivados({ texto: '#ffffff' }), [[PROP_DIVISORIA, `rgba(255, 255, 255, ${ALPHA_DIVISORIA})`]])
-  assert.deepEqual(derivados({ texto: '#000000' }), [[PROP_DIVISORIA, `rgba(0, 0, 0, ${ALPHA_DIVISORIA})`]])
+test('🔴 as derivadas saem do TEXTO — é o que as faz aparecer num fundo claro', () => {
+  // Uma cor fixa funcionaria numa paleta e sumiria na outra: divisória branca some no fundo
+  // claro, e um cinza fixo de superfície elevada some no escuro. Saindo do texto, as duas
+  // acompanham a paleta sozinhas.
+  assert.deepEqual(derivados({ texto: '#ffffff' }), [
+    [PROP_DIVISORIA, `rgba(255, 255, 255, ${ALPHA_DIVISORIA})`],
+    [PROP_ELEVADA, `rgba(255, 255, 255, ${ALPHA_ELEVADA})`],
+  ])
+  assert.deepEqual(derivados({ texto: '#000000' }), [
+    [PROP_DIVISORIA, `rgba(0, 0, 0, ${ALPHA_DIVISORIA})`],
+    [PROP_ELEVADA, `rgba(0, 0, 0, ${ALPHA_ELEVADA})`],
+  ])
   // Sem token, vale o padrão — nunca uma lista vazia que deixaria a lista sem linha.
-  assert.equal(derivados({}).length, 1)
-  assert.equal(derivados(null).length, 1)
+  assert.equal(derivados({}).length, 2)
+  assert.equal(derivados(null).length, 2)
+})
+
+test('🔴 fundo e superfície NÃO nascem com a mesma cor', () => {
+  // Enquanto foram iguais, o card não existia: o menu board era texto e foto soltos sobre um
+  // fundo, e era isso que fazia a peça parecer dados em vez de cartaz.
+  assert.notEqual(PADROES.fundo, PADROES.superficie)
+  assert.notEqual(PADROES_SERVIDOR.fundo, PADROES_SERVIDOR.superficie)
 })
 
 test('comAlpha só aceita hexadecimal canônico e alpha na faixa', () => {
@@ -98,14 +117,17 @@ test('comAlpha só aceita hexadecimal canônico e alpha na faixa', () => {
 })
 
 // ── Escrita no nó ────────────────────────────────────────────────────────────
-test('aplicar escreve as seis + a divisória', () => {
+test('aplicar escreve as seis + as DERIVADAS', () => {
   const el = no()
   aplicar(el, { fundo: '#101010', destaque: '#ff0000' })
   assert.equal(el.props.get('--tvmb-fundo'), '#101010')
   assert.equal(el.props.get('--tvmb-destaque'), '#ff0000')
   assert.equal(el.props.get('--tvmb-texto'), PADROES.texto)
   assert.ok(el.props.get(PROP_DIVISORIA).startsWith('rgba('))
-  assert.equal(el.props.size, 7)
+  // A elevada entrou na etapa de refino: é o chão atrás de uma foto que não veio e o realce
+  // do card protagonista. Derivada, não um sétimo campo configurável.
+  assert.ok(el.props.get('--tvmb-superficie-2').startsWith('rgba('))
+  assert.equal(el.props.size, 8)
 })
 
 test('🔴 tirar um override volta ao padrão no MESMO nó, sem recarregar', () => {

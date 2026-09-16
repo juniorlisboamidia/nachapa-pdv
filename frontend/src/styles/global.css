@@ -3923,6 +3923,10 @@ body.theme-dark .tvi-mon-cartao.off { background: rgba(239, 68, 68, 0.12); }
 
 .tvi-mb-switches { display: flex; flex-direction: column; gap: 8px; }
 .tvi-mb-switch { display: flex; align-items: center; gap: 10px; font-size: 13px; cursor: pointer; }
+/* O atalho para a identidade: discreto, no lugar onde a dúvida nasce. Não é um
+   botão — é uma referência dentro da dica, para não competir com as ações reais
+   do editor. */
+.tvi-mb-identidade { color: var(--brand-gold-ink-alt, var(--app-text-2)); font-weight: 600; text-decoration: underline; }
 
 .tvi-mon-frase { display: block; }
 .tvi-mon-rodape-falha { display: block; margin-top: 3px; font-size: 11.5px; color: var(--app-text-2); }

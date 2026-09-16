@@ -201,7 +201,9 @@ export const grupos = [
           { to: '/tv-indoor/programacao', label: 'Programação', icon: 'calendario' },
           // Aparência por último: é o ajuste fino, e só faz sentido depois de existir algo
           // na tela para ver pintado.
-          { to: '/tv-indoor/aparencia', label: 'Aparência', icon: 'star' },
+          // A ROTA continua `/tv-indoor/aparencia`: o que muda é o rótulo. Trocar o caminho
+          // quebraria links salvos e o histórico de quem já usa a tela, sem ganho nenhum.
+          { to: '/tv-indoor/aparencia', label: 'Identidade da TV', icon: 'star' },
         ],
       },
     ],

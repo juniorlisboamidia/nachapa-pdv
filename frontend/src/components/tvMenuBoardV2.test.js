@@ -42,9 +42,13 @@ test('🔴 o renderer não reinventa regra de preço, promoção nem disponibili
 
 // ── Os cinco templates ───────────────────────────────────────────────────────
 test('os cinco templates existem no renderer e na folha', () => {
-  for (const t of ['GRADE', 'DESTAQUE', 'LISTA', 'VITRINE', 'OFERTA']) {
+  // A âncora é o SELETOR DE CORPO que cada template desenha, e não o nome do template numa
+  // regra qualquer: a versão anterior desta guarda casava com `.tvmb-oferta`, que só existia
+  // num override de padding — apagar o override "apagava o template" aos olhos do teste.
+  const corpo = { GRADE: '.tvmb-grade', DESTAQUE: '.tvmb-destaque', LISTA: '.tvmb-lista', VITRINE: '.tvmb-vitrine', OFERTA: '.tvmb-of' }
+  for (const [t, seletor] of Object.entries(corpo)) {
     assert.match(renderer, new RegExp(`template === '${t}'`), `falta desenhar ${t}`)
-    assert.match(css, new RegExp(`\\.tvmb-${t.toLowerCase()}\\b`), `falta a folha de ${t}`)
+    assert.match(css, new RegExp(`\\${seletor} \\{`), `falta a folha de ${t} (${seletor})`)
   }
 })
 
@@ -87,13 +91,51 @@ test('a fita pode ser desligada, mas a COR dela nunca vem do tema', () => {
   assert.equal(/tvmb-selo[^}]*var\(--tvmb/.test(css.slice(css.indexOf('.tvmb-selo'), css.indexOf('.tvmb-selo') + 400)), false)
 })
 
+const degrau = (nome) => Number(new RegExp(`--tvmb-${nome}:\\s*(\\d+)px`).exec(css)?.[1])
+
 test('🔴 o preço da OFERTA cresce, mas o nome continua disputando o olhar', () => {
   // Um preço gigante sozinho vende desconto, não vende produto — foi o erro que já
-  // corrigimos no card do totem.
-  const nome = Number(/\.tvmb-of-nome \{[^}]*font-size: (\d+)px/.exec(css)?.[1])
-  const preco = Number(/\.tvmb-preco-of \.tvmb-preco-valor \{ font-size: (\d+)px/.exec(css)?.[1])
-  assert.ok(nome >= 80, `o nome do produto precisa ser grande (${nome}px)`)
+  // corrigimos no card do totem. Agora a medida sai dos DEGRAUS da escala, que é de onde os
+  // templates tiram o tamanho: um `font-size` solto passaria despercebido por esta guarda.
+  const nome = degrau('fs-nome-1')
+  const preco = degrau('fs-preco-1')
+  assert.ok(nome >= 72, `o nome do produto precisa ser grande (${nome}px)`)
   assert.ok(preco / nome <= 1.5, `o preço não pode dominar o nome (${preco} vs ${nome})`)
+})
+
+test('🔴 UMA escala tipográfica, e os templates só escolhem degraus', () => {
+  // Antes cada template tinha os próprios `font-size`, e era isso que fazia cinco
+  // composições parecerem cinco sistemas de design quando alternavam na mesma parede.
+  for (const t of ['fs-titulo', 'fs-sub', 'fs-nome-1', 'fs-nome-2', 'fs-nome-3', 'fs-nome-4',
+    'fs-desc-1', 'fs-desc-2', 'fs-desc-3', 'fs-preco-1', 'fs-preco-2', 'fs-preco-3']) {
+    assert.ok(degrau(t) > 0, `falta o degrau --tvmb-${t}`)
+  }
+  // A escala é MONOTÔNICA: se um degrau "menor" ficasse maior que o anterior, a hierarquia
+  // entre protagonista e coadjuvante se inverteria sem ninguém perceber.
+  assert.ok(degrau('fs-nome-1') > degrau('fs-nome-2'))
+  assert.ok(degrau('fs-nome-2') > degrau('fs-nome-3'))
+  assert.ok(degrau('fs-nome-3') > degrau('fs-nome-4'))
+  assert.ok(degrau('fs-preco-1') > degrau('fs-preco-2'))
+  assert.ok(degrau('fs-preco-2') > degrau('fs-preco-3'))
+})
+
+test('🔴 fundo e superfície são cores DIFERENTES na folha', () => {
+  // É o que faz o card existir como unidade. Enquanto foram iguais, o menu board era texto e
+  // foto soltos sobre um fundo.
+  const cor = (nome) => new RegExp(`--tvmb-${nome}:\\s*([^;]+);`).exec(css)?.[1]?.trim()
+  assert.notEqual(cor('fundo'), cor('superficie'))
+  assert.ok(cor('superficie-2'), 'a superfície elevada precisa existir')
+})
+
+test('🔴 o card é uma UNIDADE: raio, superfície e área interna própria', () => {
+  const bloco = css.slice(css.indexOf('.tvmb-card {'), css.indexOf('.tvmb-card-midia'))
+  assert.match(bloco, /background: var\(--tvmb-superficie\)/)
+  assert.match(bloco, /border-radius:/)
+  assert.match(bloco, /overflow: hidden/, 'a mídia sangra até a borda e é o card que recorta')
+  // O texto tem padding próprio; a mídia não (ela vai até a borda).
+  assert.match(css, /\.tvmb-card-txt \{[^}]*padding: \d+px \d+px/)
+  // Sem sombra: numa TV, sombra vira borrão cinza.
+  assert.equal(/box-shadow/.test(css), false, 'nada de sombra no board')
 })
 
 test('produto sem foto não vira imagem quebrada em nenhum template', () => {
@@ -140,10 +182,77 @@ test('🔴 a tela é 1920×1080 e quem encolhe é a escala — um caminho só', 
   assert.match(renderer, /largura \/ 1920/)
 })
 
-test('a margem de segurança existe em todos os templates', () => {
+test('a margem de segurança é UMA, e vale para os cinco', () => {
   // TV de loja com overscan mal configurado é a regra, não a exceção: informação colada na
-  // borda simplesmente some.
+  // borda simplesmente some. E cinco margens diferentes fariam os templates parecerem peças
+  // de sistemas distintos quando alternam na mesma parede a cada vinte segundos.
   const padding = /\.tvmb-tela \{[\s\S]*?padding: (\d+)px (\d+)px/.exec(css)
-  assert.ok(Number(padding[1]) >= 40 && Number(padding[2]) >= 60, `safe area insuficiente: ${padding[0]}`)
-  assert.match(css, /\.tvmb-tela\.tvmb-oferta, \.tvmb-tela\.tvmb-vitrine \{ padding:/)
+  assert.ok(Number(padding[1]) >= 40 && Number(padding[2]) >= 72, `safe area insuficiente: ${padding[0]}`)
+  assert.equal(/\.tvmb-tela\.tvmb-\w+ \{[^}]*padding:/.test(css), false, 'nenhum template pode ter safe area própria')
+})
+
+// ── A escala do artboard ─────────────────────────────────────────────────────
+test('🔴 o palco NÃO aparece antes de existir uma escala medida', () => {
+  /* Era a causa do "conteúdo cortado à direita" na prévia: `--tvmb-escala` tem padrão `1`
+     na folha, então, entre a montagem e a primeira medida, o palco desenhava 1920×1080 reais
+     dentro de uma caixa de ~420px. O padrão existe para o `transform` nunca ser inválido;
+     quem impede o quadro errado é a visibilidade. */
+  assert.match(css, /\.tvmb-palco \{[\s\S]*?visibility: hidden;/)
+  assert.match(css, /\.tvmb-caixa\.medido \.tvmb-palco \{ visibility: visible; \}/)
+  const codigo = semComentarios(renderer)
+  assert.match(codigo, /if \(largura <= 0\) return/, 'largura zero não escreve escala nem libera a pintura')
+  assert.match(codigo, /el\.classList\.add\('medido'\)/)
+})
+
+test('🔴 medir não provoca REFLOW dentro do palco', () => {
+  // O artboard é fixo em 1920×1080 e só a ESCALA muda. Escrever largura/altura aqui faria a
+  // composição se redesenhar quando o contêiner mudasse — que é justamente o que o artboard
+  // fixo existe para impedir.
+  const i = renderer.indexOf('const medir = ()')
+  const fn = renderer.slice(i, renderer.indexOf('medir()', i))
+  assert.equal(/style\.(width|height)|setProperty\('width'|setProperty\('height'/.test(fn), false)
+  assert.match(fn, /setProperty\('--tvmb-escala'/)
+})
+
+test('🔴 o ResizeObserver resolve o contêiner que nasce com largura ZERO', () => {
+  // Ele dispara na observação inicial e de novo quando o elemento ganha dimensão — que é o
+  // que acontece quando o modal do editor abre. Por isso não há polling nem RAF repetitivo.
+  const codigo = semComentarios(renderer)
+  assert.match(codigo, /new ResizeObserver\(medir\)/)
+  assert.match(codigo, /ro\.observe\(el\)/)
+  assert.equal(/requestAnimationFrame|setInterval/.test(codigo), false, 'nada de polling')
+})
+
+test('🔴 a largura de cada template CABE na área útil — por matemática, não por encolhimento', () => {
+  /* Área útil = 1920 − 2 × 80 de safe area = 1760. A Vitrine antiga somava 1760 contra 1744
+     e só cabia porque `flex-shrink` a apertava 16px: apertado por acidente, não por projeto. */
+  const util = 1920 - 2 * 80
+
+  const grade = /\.tvmb-grade \{[\s\S]*?grid-template-columns: repeat\(4, (\d+)px\)[\s\S]*?gap: (\d+)px/.exec(css)
+  assert.ok(4 * Number(grade[1]) + 3 * Number(grade[2]) <= util, 'a grade não cabe')
+
+  const destaque = /\.tvmb-destaque \{[^}]*grid-template-columns: (\d+)px (\d+)px; gap: (\d+)px/.exec(css)
+  assert.equal(Number(destaque[1]) + Number(destaque[2]) + Number(destaque[3]), util, 'o destaque precisa fechar a área útil')
+
+  const oferta = /\.tvmb-of \{[\s\S]*?grid-template-columns: (\d+)px (\d+)px;\n\s*gap: (\d+)px/.exec(css)
+  assert.equal(Number(oferta[1]) + Number(oferta[2]) + Number(oferta[3]), util, 'a oferta precisa fechar a área útil')
+
+  // Vitrine e Lista usam `1fr`: a divisão é exata por construção, e é essa a correção.
+  assert.match(css, /\.tvmb-vitrine \{[\s\S]*?grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/)
+  assert.match(css, /\.tvmb-lista \{[\s\S]*?grid-template-columns: repeat\(2, 1fr\)/)
+})
+
+test('🔴 a LISTA é 5 + 5, na ordem da seleção', () => {
+  // `grid-auto-flow: column` com cinco linhas: os cinco primeiros descem à esquerda e os
+  // cinco seguintes à direita. Preenchendo por linha, o item 2 apareceria ao lado do 1 e a
+  // ordem que o gestor montou deixaria de ser legível.
+  const bloco = css.slice(css.indexOf('.tvmb-lista {'), css.indexOf('.tvmb-linha {'))
+  assert.match(bloco, /grid-template-rows: repeat\(5, auto\)/)
+  assert.match(bloco, /grid-auto-flow: column/)
+})
+
+test('🔴 a linha da LISTA tem altura FIXA — produto sem foto não desalinha a coluna', () => {
+  // É o caso normal do cardápio que este template existe para atender: alguns itens têm
+  // foto, outros não. Sem altura mínima, as duas colunas ficariam desencontradas.
+  assert.match(css, /\.tvmb-linha \{ min-height: \d+px; \}/)
 })

@@ -44,7 +44,9 @@ export const CHAVES = Object.freeze(Object.keys(PROPRIEDADES))
    mentir sobre o que a loja está vendo. */
 export const PADROES = Object.freeze({
   fundo: '#0b0a09',
-  superficie: '#0b0a09',
+  // O card. Dois degraus acima do fundo: o bastante para o olho agrupar mídia, nome e preço
+  // numa unidade, sem virar painel administrativo. Ver `backend/tvIndoorAparencia.js`.
+  superficie: '#17130d',
   texto: '#ffffff',
   textoApoio: '#b8b8b8',
   destaque: '#d79e00',
@@ -62,12 +64,25 @@ export const PADROES = Object.freeze({
 export const PROP_DIVISORIA = '--tvmb-linha'
 export const ALPHA_DIVISORIA = 0.14
 
+/* A SUPERFÍCIE ELEVADA — o chão atrás de uma foto que não veio, e o realce do card
+   protagonista. Derivada pelo mesmo mecanismo da divisória, e pela mesma razão: uma cor
+   fixa funcionaria numa paleta e sumiria na outra. Como é o texto rebaixado a 7%, ela é
+   clara sobre fundo escuro e escura sobre fundo claro, sozinha.
+
+   NÃO é um sétimo campo configurável: a loja escolhe seis cores, e esta sai delas. */
+export const PROP_ELEVADA = '--tvmb-superficie-2'
+export const ALPHA_ELEVADA = 0.07
+
 /* Os extras derivados de um conjunto de tokens. Hoje é um; a lista existe para o próximo
    não virar um `if` solto no meio do componente. */
 export function derivados(tokens) {
   const texto = tokens?.texto ?? PADROES.texto
   const linha = comAlpha(texto, ALPHA_DIVISORIA)
-  return linha ? [[PROP_DIVISORIA, linha]] : []
+  const elevada = comAlpha(texto, ALPHA_ELEVADA)
+  return [
+    ...(linha ? [[PROP_DIVISORIA, linha]] : []),
+    ...(elevada ? [[PROP_ELEVADA, elevada]] : []),
+  ]
 }
 
 /* As cores EFETIVAS a partir do que veio do servidor: padrão com os overrides por cima.

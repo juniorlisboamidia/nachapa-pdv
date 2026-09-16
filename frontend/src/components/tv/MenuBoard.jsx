@@ -294,13 +294,26 @@ export default function MenuBoard({ board, tokens, logo }) {
   useEffect(() => {
     const el = caixaRef.current
     if (!el) return undefined
+    /* Medir é só escrever uma VARIÁVEL e uma classe. Nada de `width`/`height` em pixel:
+       mexer em dimensão aqui provocaria layout dentro do palco, e o ponto do artboard fixo é
+       que a composição não muda quando o contêiner muda — só a escala muda.
+
+       A classe `medido` libera a pintura. Enquanto ela não existe, o palco fica invisível em
+       vez de aparecer em tamanho real dentro de uma caixa pequena. */
     const medir = () => {
       const largura = el.clientWidth
-      if (largura > 0) el.style.setProperty('--tvmb-escala', String(largura / 1920))
+      if (largura <= 0) return
+      el.style.setProperty('--tvmb-escala', String(largura / 1920))
+      el.classList.add('medido')
     }
     medir()
-    // `ResizeObserver` pode não existir numa WebView bem antiga: aí vale a medição inicial
-    // mais o `resize` da janela, que é o caso que realmente acontece numa TV.
+    /* `ResizeObserver` já cobre o caso de nascer com largura ZERO: ele dispara na observação
+       inicial (mesmo em 0×0) e de novo assim que o elemento ganha dimensão — que é o que
+       acontece quando o modal do editor abre. Por isso NÃO há polling nem `requestAnimationFrame`
+       aqui: seria trabalho repetido para um evento que o navegador já entrega.
+
+       A WebView bem antiga pode não ter o observer: aí vale a medição inicial mais o
+       `resize` da janela, que é o caso que realmente acontece numa TV. */
     if (typeof ResizeObserver === 'undefined') {
       window.addEventListener('resize', medir)
       return () => window.removeEventListener('resize', medir)

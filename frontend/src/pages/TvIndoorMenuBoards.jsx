@@ -51,6 +51,13 @@ export default function TvIndoorMenuBoards() {
   const [toast, setToast] = useState(null)
   const [boards, setBoards] = useState([])
   const [layouts, setLayouts] = useState([])
+  /* A IDENTIDADE da TV (cores e logo). A prévia precisa dela para a frase "é o mesmo desenho
+     que vai para a TV" ser literalmente verdadeira: sem os tokens, o editor desenhava com os
+     padrões da folha enquanto a parede usava a paleta da loja.
+
+     `.catch` silencioso: identidade é acabamento. Se a chamada falhar, a prévia desenha com
+     os padrões — o gestor continua montando o board, que é o trabalho dele aqui. */
+  const [identidade, setIdentidade] = useState(null)
   const [limites, setLimites] = useState(null)
   const [ocupado, setOcupado] = useState(false)
   const [editando, setEditando] = useState(null)
@@ -69,6 +76,11 @@ export default function TvIndoorMenuBoards() {
     .finally(() => setCarregando(false)), [])
 
   useEffect(() => { buscar() }, [buscar])
+  useEffect(() => {
+    api.get('/tv-indoor/aparencia')
+      .then((r) => setIdentidade({ tokens: r.data?.efetivas ?? null, logo: r.data?.logo?.url ?? null }))
+      .catch(() => { /* identidade é acabamento: sem ela a prévia usa os padrões da folha */ })
+  }, [])
 
   async function alternar(b) {
     setOcupado(true)
@@ -217,6 +229,7 @@ export default function TvIndoorMenuBoards() {
         <Editor
           valor={editando}
           layouts={layouts}
+          identidade={identidade}
           limites={limites}
           ocupado={ocupado}
           aoFechar={() => setEditando(null)}
@@ -270,7 +283,7 @@ function Miniatura({ id }) {
   return <span className={'tvi-mini-tpl tpl-' + id.toLowerCase()} aria-hidden="true">{blocos[id] ?? blocos.GRADE}</span>
 }
 
-function Editor({ valor, layouts, limites, ocupado, aoFechar, aoSalvar, aoAvisar }) {
+function Editor({ valor, layouts, identidade, limites, ocupado, aoFechar, aoSalvar, aoAvisar }) {
   const [form, setForm] = useState(valor)
   const [catalogo, setCatalogo] = useState(null)      // { categorias, desatualizado }
   const [erroCatalogo, setErroCatalogo] = useState(null)
@@ -452,7 +465,12 @@ function Editor({ valor, layouts, limites, ocupado, aoFechar, aoSalvar, aoAvisar
                 })}
               </div>
               <div className="ttm-dica">
-                A logo vem de <strong>TV Indoor › Aparência</strong> — uma marca, uma fonte.
+                {/* Acesso contextual: a dúvida sobre cor e logo nasce AQUI, montando o board.
+                    O link leva para lá em vez de duplicar a configuração — uma marca, uma
+                    fonte, e uma tela só que a define. */}
+                <a className="tvi-mb-identidade" href="/tv-indoor/aparencia" target="_blank" rel="noreferrer">
+                  Cores, logo e identidade da TV →
+                </a>{' '}
                 {regra.imagem === 'SEMPRE' ? ' Este template sempre mostra as fotos.' : ''}
                 {regra.descricao === 'SEMPRE' ? ' E sempre mostra a descrição.' : ''}
                 {regra.descricao === 'HERO' ? ' A descrição aparece só no produto em destaque.' : ''}
@@ -592,7 +610,10 @@ function Editor({ valor, layouts, limites, ocupado, aoFechar, aoSalvar, aoAvisar
               <h3 className="ttm-secao-t">Prévia</h3>
               <span className="ttm-meta-txt">é o mesmo desenho que vai para a TV</span>
             </div>
-            <MenuBoard board={previa} />
+            {/* Os MESMOS tokens e a MESMA logo que o player usa. É o que torna a frase acima
+                literalmente verdadeira — antes a prévia desenhava com os padrões da folha
+                enquanto a parede usava a paleta da loja. */}
+            <MenuBoard board={previa} tokens={identidade?.tokens} logo={identidade?.logo} />
             {previa.produtos.length === 0 && (
               <div className="ttm-dica">
                 Sem produto disponível, este board <strong>não entra</strong> na programação: a TV pula para o próximo item.
