@@ -240,7 +240,14 @@ export function MenuBoardTela({ board, logo }) {
   const ex = exibicaoDe(board, template)
   const temCabeca = ex.logo || board?.titulo || board?.subtitulo
   return (
-    <div className={'tvmb-tela tvmb-' + template.toLowerCase()}>
+    /* O modificador é `tvmb-tpl-*`, e NÃO `tvmb-<template>`.
+       A versão anterior gerava `tvmb-tela tvmb-grade` — exatamente a classe do CORPO da
+       grade. As duas regras caíam no mesmo elemento e a do corpo vencia: o artboard virava
+       um grid 4 × 2, o cabeçalho caía na célula (1,1) com 419px (o título "à esquerda") e o
+       corpo na célula vizinha, espremido. A colisão existia desde o V1 e era inofensiva
+       porque `.tvmb-tela` era `display: flex`, e flex ignora `grid-template-*`; ela acordou
+       quando o artboard virou grid. */
+    <div className={'tvmb-tela tvmb-tpl-' + template.toLowerCase()}>
       {/* O CABEÇALHO só existe quando tem o que dizer. Um bloco vazio com altura fixa
           empurraria a composição para baixo em todo board sem título — e a diferença
           apareceria na parede, não aqui. */}

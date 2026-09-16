@@ -268,6 +268,24 @@ test('🔴 o artboard é GRID de duas faixas — a posição do cabeçalho é es
   assert.equal(/flex-direction/.test(bloco), false, 'a ordem das faixas não pode depender de flex')
 })
 
+test('🔴 o modificador do artboard NÃO colide com a classe de nenhum corpo', () => {
+  /* O defeito que deixou quatro dos cinco templates quebrados: a tela recebia
+     `tvmb-tela tvmb-grade`, e `.tvmb-grade` é a classe do CORPO da grade. As duas regras
+     caíam no mesmo elemento, a do corpo vencia, e o artboard virava um grid 4 × 2 — com o
+     cabeçalho numa célula de 419px e o conteúdo espremido na célula ao lado.
+
+     Ficou invisível por duas versões porque `.tvmb-tela` era `display: flex`, e flex ignora
+     `grid-template-*`. Só a Oferta escapava, porque o corpo dela se chama `.tvmb-of`.
+
+     Esta guarda é sobre NOMES, não sobre layout: enquanto o modificador tiver prefixo
+     próprio, a colisão é impossível. */
+  assert.match(renderer, /'tvmb-tela tvmb-tpl-' \+ template\.toLowerCase\(\)/)
+  const corpos = ['.tvmb-grade', '.tvmb-destaque', '.tvmb-lista', '.tvmb-vitrine', '.tvmb-of']
+  for (const t of ['grade', 'destaque', 'lista', 'vitrine', 'oferta']) {
+    assert.equal(corpos.includes(`.tvmb-tpl-${t}`), false, `o modificador tvmb-tpl-${t} colide com um corpo`)
+  }
+})
+
 test('🔴 o dourado é do PREÇO — o título não disputa com ele', () => {
   // Com título e oito preços dourados, a tela disputa atenção consigo mesma: a cor deixa de
   // significar "olhe aqui" e passa a significar "isto é um menu board".
