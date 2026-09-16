@@ -24,6 +24,12 @@ import { criarCupomCW, gerarCodigoCupom } from './cardapioCupom.js';
 import { extrairOrigem } from './grupoVipOrigem.js';
 import { buscarOrigensCW } from './cardapioOrigens.js';
 import { ordemDeRecalculo } from './custos/propagacaoCusto.js';
+// A regra ÚNICA de como o custo de um item vendido é apurado. Quem precisa decidir
+// "usa ficha técnica ou custo de compra?" pergunta aqui — nunca olhando o tipo.
+import {
+  TIPOS_PRODUTO, MODOS_SOBREMESA, MODO_SOBREMESA_PADRAO,
+  usaCustoDireto, usaFichaTecnica
+} from './produtos/custeio.js';
 import { AREAS_DISPONIVEIS, AREA_PREFIXOS, areaDoPath } from './acessos/areas.js';
 import {
   TIPOS_APARELHO, PAREAMENTO_VALIDADE_MS, gerarCodigoPareamento, gerarCredencial, hashCredencial,
@@ -4761,6 +4767,7 @@ app.get('/api/produtos-detalhados', async (req, res) => {
         id: p.id,
         nome: p.nome,
         tipoProduto: tipo,
+        sobremesaModo: p.sobremesaModo ?? null,
         precoVenda: p.precoVenda === null || p.precoVenda === undefined ? null : Number(p.precoVenda),
         custoDireto: p.custoDireto === null || p.custoDireto === undefined ? null : Number(p.custoDireto),
         produtoAncora: p.produtoAncora,
@@ -4790,13 +4797,13 @@ app.get('/api/produtos-detalhados', async (req, res) => {
   }
 });
 
-const TIPOS_PRODUTO = ['PRODUTO', 'BEBIDA', 'COMBO'];
+// TIPOS_PRODUTO e MODOS_SOBREMESA vêm de ./produtos/custeio.js (regra única de custeio).
 const TIPOS_BEBIDA_ANALISE = ['COMMODITY', 'AUTORAL'];
 
 // Defaults estratégicos por tipo (V0 da Inteligência do cardápio): bebidas
 // nascem fora do ranking estratégico e classificadas como COMMODITY; produtos
 // e combos entram no ranking por padrão. Campos do body sobrescrevem o default.
-function camposEstrategicosCreate(tipoFinal, body) {
+function camposEstrategicosCreate(tipoFinal, body, sobremesaModo = null) {
   const ancora = body.produtoAncora === true;
   // Produto isca: aplicável a produto/combo (oculto para bebida)
   const isca = body.produtoIsca === true;
@@ -4804,7 +4811,8 @@ function camposEstrategicosCreate(tipoFinal, body) {
   if (typeof body.incluirAnaliseEstrategica === 'boolean') {
     incluir = body.incluirAnaliseEstrategica;
   } else {
-    incluir = tipoFinal === 'BEBIDA' ? false : true;
+    // Revenda (bebida ou sobremesa comprada pronta) nasce fora do ranking estratégico.
+    incluir = usaCustoDireto({ tipoProduto: tipoFinal, sobremesaModo }) ? false : true;
   }
   let tipoBebida = null;
   if (tipoFinal === 'BEBIDA') {
@@ -4822,6 +4830,19 @@ function camposEstrategicosCreate(tipoFinal, body) {
   };
 }
 
+/* Modo de custeio da sobremesa. Só SOBREMESA carrega o campo; os demais ficam null.
+
+   Devolve o símbolo de inválido em vez de lançar porque a rota precisa responder 400
+   com a mensagem certa — e um valor fora do catálogo é erro do cliente MESMO em um
+   tipo que não usa o campo: engolir calado esconderia um bug de integração. */
+const SOBREMESA_MODO_INVALIDO = Symbol('sobremesaModoInvalido');
+function resolverModoSobremesa(tipo, valor) {
+  const informado = valor !== undefined && valor !== null && valor !== '';
+  if (informado && !MODOS_SOBREMESA.includes(valor)) return SOBREMESA_MODO_INVALIDO;
+  if (tipo !== 'SOBREMESA') return null;
+  return informado ? valor : MODO_SOBREMESA_PADRAO;
+}
+
 app.post('/api/produtos', async (req, res) => {
   try {
     const { nome, descricao, precoVenda, tipoProduto, custoDireto } = req.body ?? {};
@@ -4837,7 +4858,11 @@ app.post('/api/produtos', async (req, res) => {
     }
     const tipoFinal = tipoProduto === undefined || tipoProduto === null ? 'PRODUTO' : tipoProduto;
     if (!TIPOS_PRODUTO.includes(tipoFinal)) {
-      return res.status(400).json({ error: 'tipoProduto deve ser PRODUTO, BEBIDA ou COMBO' });
+      return res.status(400).json({ error: `tipoProduto deve ser ${TIPOS_PRODUTO.join(', ')}` });
+    }
+    const modoSobremesaFinal = resolverModoSobremesa(tipoFinal, (req.body ?? {}).sobremesaModo);
+    if (modoSobremesaFinal === SOBREMESA_MODO_INVALIDO) {
+      return res.status(400).json({ error: `sobremesaModo deve ser ${MODOS_SOBREMESA.join(' ou ')}` });
     }
     if (custoDireto !== undefined && custoDireto !== null && custoDireto !== '') {
       if (isNaN(Number(custoDireto)) || Number(custoDireto) < 0) {
@@ -4861,12 +4886,13 @@ app.post('/api/produtos', async (req, res) => {
         descricao: descricao ? String(descricao).trim() : null,
         precoVenda: Number(precoVenda),
         tipoProduto: tipoFinal,
+        sobremesaModo: modoSobremesaFinal,
         custoDireto:
           custoDireto === undefined || custoDireto === null || custoDireto === ''
             ? null
             : Number(custoDireto),
         ativo: true,
-        ...camposEstrategicosCreate(tipoFinal, body)
+        ...camposEstrategicosCreate(tipoFinal, body, modoSobremesaFinal)
       }
     });
 
@@ -4890,7 +4916,7 @@ app.put('/api/produtos/:id', async (req, res) => {
     }
 
     const {
-      nome, descricao, precoVenda, ativo, tipoProduto, custoDireto,
+      nome, descricao, precoVenda, ativo, tipoProduto, custoDireto, sobremesaModo,
       produtoAncora, produtoIsca, incluirAnaliseEstrategica, tipoBebidaAnalise
     } = req.body ?? {};
     const data = {};
@@ -4903,9 +4929,18 @@ app.put('/api/produtos/:id', async (req, res) => {
     }
     if (tipoProduto !== undefined) {
       if (!TIPOS_PRODUTO.includes(tipoProduto)) {
-        return res.status(400).json({ error: 'tipoProduto deve ser PRODUTO, BEBIDA ou COMBO' });
+        return res.status(400).json({ error: `tipoProduto deve ser ${TIPOS_PRODUTO.join(', ')}` });
       }
       data.tipoProduto = tipoProduto;
+    }
+    if (sobremesaModo !== undefined) {
+      if (sobremesaModo === null || sobremesaModo === '') {
+        data.sobremesaModo = null;
+      } else if (!MODOS_SOBREMESA.includes(sobremesaModo)) {
+        return res.status(400).json({ error: `sobremesaModo deve ser ${MODOS_SOBREMESA.join(' ou ')}` });
+      } else {
+        data.sobremesaModo = sobremesaModo;
+      }
     }
     if (custoDireto !== undefined) {
       if (custoDireto === null || custoDireto === '') {
@@ -4961,6 +4996,19 @@ app.put('/api/produtos/:id', async (req, res) => {
       } else {
         data.tipoBebidaAnalise = tipoBebidaAnalise;
       }
+    }
+
+    /* O modo só existe em sobremesa: mudou de tipo, o campo acompanha — senão um
+       produto comum ficaria com "modo de sobremesa" pendurado.
+
+       ⚠️ Mas nunca REBAIXAR para o padrão: um PUT parcial (só o tipo, sem o modo)
+       numa sobremesa de revenda a jogaria em FICHA, o custo de compra pararia de
+       valer e ela passaria a custar R$ 0,00 dentro dos combos, calada. */
+    const tipoEfetivo = data.tipoProduto ?? existing.tipoProduto ?? 'PRODUTO';
+    if (tipoEfetivo !== 'SOBREMESA') {
+      if (data.tipoProduto !== undefined) data.sobremesaModo = null;
+    } else if (data.sobremesaModo === undefined || data.sobremesaModo === null) {
+      data.sobremesaModo = existing.sobremesaModo ?? MODO_SOBREMESA_PADRAO;
     }
 
     const updated = await prisma.produto.update({ where: { id }, data });
@@ -5022,6 +5070,7 @@ app.post('/api/produtos/:id/duplicar', async (req, res) => {
           descricao: original.descricao,
           precoVenda: original.precoVenda,
           tipoProduto: tipo,
+          sobremesaModo: original.sobremesaModo,
           custoDireto: original.custoDireto,
           ativo: true,
           // Preserva a configuração estratégica do original
@@ -5032,7 +5081,7 @@ app.post('/api/produtos/:id/duplicar', async (req, res) => {
         }
       });
 
-      if (tipo === 'PRODUTO' && original.fichaTecnica.length > 0) {
+      if (usaFichaTecnica(original) && original.fichaTecnica.length > 0) {
         await tx.fichaTecnicaItem.createMany({
           data: original.fichaTecnica.map((item) => ({
             produtoId: criado.id,
@@ -5100,11 +5149,12 @@ function custoEmbalagemFicha(fichaTecnica) {
 }
 
 // Custo unitário de um item filho do combo.
-// BEBIDA: custo direto de compra (0 quando não informado) — incluirEmbalagem não se aplica.
-// PRODUTO: custo total real da ficha; por padrão (incluirEmbalagem=false) desconta
-// a embalagem individual (tipoUso=EMBALAGEM), pois o combo usa embalagem própria.
+// Revenda (bebida/sobremesa comprada pronta): custo direto de compra (0 quando não
+// informado) — incluirEmbalagem não se aplica. Ficha (produto/sobremesa da casa):
+// custo total real da ficha; por padrão (incluirEmbalagem=false) desconta a embalagem
+// individual (tipoUso=EMBALAGEM), pois o combo usa embalagem própria.
 function custoRealItemCombo(produto, incluirEmbalagem) {
-  if ((produto.tipoProduto ?? 'PRODUTO') === 'BEBIDA') {
+  if (usaCustoDireto(produto)) {
     return produto.custoDireto === null || produto.custoDireto === undefined
       ? 0
       : Number(produto.custoDireto);
@@ -5118,7 +5168,7 @@ function comboItemOut(item) {
   const round2 = (n) => Number(n.toFixed(2));
   const qtd = Number(item.quantidade);
   const precoUnit = Number(item.produto.precoVenda);
-  const ehProduto = (item.produto.tipoProduto ?? 'PRODUTO') !== 'BEBIDA';
+  const ehProduto = usaFichaTecnica(item.produto);
   const incluirEmbalagem = !!item.incluirEmbalagemIndividual;
   const custoUnit = custoRealItemCombo(item.produto, incluirEmbalagem);
   // Embalagem individual unitária (sempre informativa; só é removida quando produto e !incluir)
@@ -5130,6 +5180,7 @@ function comboItemOut(item) {
     produtoId: item.produtoId,
     nome: item.produto.nome,
     tipoProduto: item.produto.tipoProduto ?? 'PRODUTO',
+    sobremesaModo: item.produto.sobremesaModo ?? null,
     ehProduto,
     quantidade: qtd,
     incluirEmbalagemIndividual: incluirEmbalagem,
@@ -5941,6 +5992,7 @@ app.get('/api/produtos/:id/analise', async (req, res) => {
       nome: produto.nome,
       precoVenda: round2(precoVenda),
       tipoProduto: produto.tipoProduto ?? 'PRODUTO',
+      sobremesaModo: produto.sobremesaModo ?? null,
       custoDireto:
         produto.custoDireto === null || produto.custoDireto === undefined
           ? null
@@ -5949,9 +6001,9 @@ app.get('/api/produtos/:id/analise', async (req, res) => {
 
     const config = await getConfigPrecificacao();
 
-    // ===== BEBIDA: revenda simples — análise por lucro/margem, sem régua de
-    // CMV de produto próprio e sem exigir ficha técnica =====
-    if (produtoOut.tipoProduto === 'BEBIDA') {
+    // ===== REVENDA (bebida ou sobremesa comprada pronta): análise por lucro/margem,
+    // sem régua de CMV de produto próprio e sem exigir ficha técnica =====
+    if (usaCustoDireto(produtoOut)) {
       const custoDireto = produtoOut.custoDireto;
       const precificacaoBebida = computePrecificacao(
         { custoComMargem: 0, custoEmbutido: 0 },

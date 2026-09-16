@@ -6,6 +6,9 @@ import ConfirmDialog from '../components/ConfirmDialog'
 import InsumoAutocomplete from '../components/InsumoAutocomplete'
 import IconeLixeira from '../components/IconeLixeira'
 import { mascaraMoeda, parseMoeda } from '../utils/moeda'
+// Regra unica de custeio (espelho de backend/produtos/custeio.js). A extensao e'
+// explicita para o modulo poder ser lido por um teste puro sem quebrar.
+import { usaCustoDireto, usaFichaTecnica } from '../utils/custeio.js'
 
 const brlFormatter = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
@@ -192,6 +195,7 @@ const STATUS_LABEL = {
 const TIPOS_PRODUTO_TABS = [
   { value: 'PRODUTO', label: 'Produtos' },
   { value: 'BEBIDA', label: 'Bebidas' },
+  { value: 'SOBREMESA', label: 'Sobremesas' },
   { value: 'COMBO', label: 'Combos' }
 ]
 function tipoDoProduto(p) {
@@ -199,9 +203,10 @@ function tipoDoProduto(p) {
 }
 // Textos por tipo para ConfirmDialog/Toast (concordância de gênero)
 const TIPO_TEXTO = {
-  PRODUTO: { nome: 'produto', Nome: 'Produto', excluido: 'excluído', duplicado: 'duplicado' },
-  BEBIDA:  { nome: 'bebida',  Nome: 'Bebida',  excluido: 'excluída', duplicado: 'duplicada' },
-  COMBO:   { nome: 'combo',   Nome: 'Combo',   excluido: 'excluído', duplicado: 'duplicado' }
+  PRODUTO:   { nome: 'produto',   Nome: 'Produto',   excluido: 'excluído', duplicado: 'duplicado' },
+  BEBIDA:    { nome: 'bebida',    Nome: 'Bebida',    excluido: 'excluída', duplicado: 'duplicada' },
+  SOBREMESA: { nome: 'sobremesa', Nome: 'Sobremesa', excluido: 'excluída', duplicado: 'duplicada' },
+  COMBO:     { nome: 'combo',     Nome: 'Combo',     excluido: 'excluído', duplicado: 'duplicado' }
 }
 function textosDoTipo(p) {
   return TIPO_TEXTO[tipoDoProduto(p)] ?? TIPO_TEXTO.PRODUTO
@@ -215,9 +220,18 @@ const CMV_COLOR_CLASS = {
 
 // Defaults estratégicos por tipo (Inteligência do cardápio): bebida nasce fora
 // do ranking e como COMMODITY; produto/combo entram no ranking por padrão
-function estrategiaPadraoPorTipo(tipo) {
+function estrategiaPadraoPorTipo(tipo, sobremesaModo) {
   if (tipo === 'BEBIDA') {
     return { produtoAncora: false, produtoIsca: false, incluirAnaliseEstrategica: false, tipoBebidaAnalise: 'COMMODITY' }
+  }
+  // Sobremesa comprada pronta segue a lógica da revenda (nasce fora do ranking);
+  // feita na casa entra, como um produto qualquer.
+  if (tipo === 'SOBREMESA') {
+    return {
+      produtoAncora: false, produtoIsca: false,
+      incluirAnaliseEstrategica: sobremesaModo !== 'REVENDA',
+      tipoBebidaAnalise: ''
+    }
   }
   return { produtoAncora: false, produtoIsca: false, incluirAnaliseEstrategica: true, tipoBebidaAnalise: '' }
 }
@@ -226,10 +240,11 @@ function estrategiaPadraoPorTipo(tipo) {
 
 const FORM_BLANK = {
   nome: '', descricao: '', precoVenda: '', tipoProduto: 'PRODUTO', custoDireto: '',
+  sobremesaModo: 'FICHA',
   ...estrategiaPadraoPorTipo('PRODUTO')
 }
 
-function validateForm({ nome, precoVenda, tipoProduto, custoDireto }) {
+function validateForm({ nome, precoVenda, tipoProduto, custoDireto, sobremesaModo }) {
   if (!nome || nome.trim() === '') return 'nome é obrigatório'
   if (precoVenda === '' || precoVenda === null || precoVenda === undefined) {
     return 'preço de venda é obrigatório'
@@ -237,7 +252,7 @@ function validateForm({ nome, precoVenda, tipoProduto, custoDireto }) {
   const v = parseMoeda(precoVenda)
   if (!Number.isFinite(v)) return 'preço de venda deve ser numérico'
   if (v < 0) return 'preço de venda deve ser maior ou igual a zero'
-  if (tipoProduto === 'BEBIDA' && custoDireto !== '' && custoDireto !== undefined) {
+  if (usaCustoDireto({ tipoProduto, sobremesaModo }) && custoDireto !== '' && custoDireto !== undefined) {
     const c = parseMoeda(custoDireto)
     if (!Number.isFinite(c) || c < 0) return 'custo de compra deve ser maior ou igual a zero'
   }
@@ -251,7 +266,14 @@ function payloadFromForm(form) {
     descricao: form.descricao.trim() === '' ? null : form.descricao.trim(),
     precoVenda: parseMoeda(form.precoVenda),
     tipoProduto: tipo,
-    custoDireto: tipo === 'BEBIDA' && form.custoDireto !== '' ? parseMoeda(form.custoDireto) : null,
+    // O modo só viaja em sobremesa; nos outros tipos vai null para o campo não ficar
+    // pendurado num produto comum.
+    sobremesaModo: tipo === 'SOBREMESA' ? (form.sobremesaModo || 'FICHA') : null,
+    // Sobremesa comprada pronta informa custo de compra, igual à bebida.
+    custoDireto:
+      usaCustoDireto({ tipoProduto: tipo, sobremesaModo: form.sobremesaModo }) && form.custoDireto !== ''
+        ? parseMoeda(form.custoDireto)
+        : null,
     // Inteligência do cardápio: âncora/isca só fazem sentido em produto/combo;
     // tipoBebidaAnalise só em bebida
     produtoAncora: tipo === 'BEBIDA' ? false : !!form.produtoAncora,
@@ -464,7 +486,10 @@ export default function Produtos() {
     api
       .post('/produtos', payloadFromForm(createForm))
       .then(() => {
-        setToast({ message: 'Produto criado com sucesso.', type: 'success' })
+        // Concordância por tipo: "Sobremesa criada", não "Produto criado".
+        const t = TIPO_TEXTO[createForm.tipoProduto] ?? TIPO_TEXTO.PRODUTO
+        const criada = t.excluido === 'excluída' ? 'criada' : 'criado'
+        setToast({ message: `${t.Nome} ${criada} com sucesso.`, type: 'success' })
         closeCreate()
         load()
       })
@@ -540,9 +565,9 @@ export default function Produtos() {
     )
   }
 
-  // Métricas agregadas: ficha técnica e CMV são conceitos de PRODUTO montado —
-  // bebidas e combos não entram nessas contagens
-  const produtosMontados = produtos.filter((p) => tipoDoProduto(p) === 'PRODUTO')
+  // Métricas agregadas: ficha técnica e CMV são conceitos de item MONTADO — entram
+  // produtos e sobremesas feitas na casa; revenda (bebida/sobremesa pronta) e combo não
+  const produtosMontados = produtos.filter((p) => usaFichaTecnica(p))
   const totalAtivos = produtosMontados.length
   const semFicha = produtosMontados.filter((p) => p.analise?.statusCmv === 'SEM_FICHA').length
   const criticos = produtosMontados.filter((p) => p.analise?.statusCmv === 'CRITICO').length
@@ -611,6 +636,8 @@ export default function Produtos() {
             <div className="modal-title">
               {createForm.tipoProduto === 'BEBIDA'
                 ? 'Nova bebida'
+                : createForm.tipoProduto === 'SOBREMESA'
+                ? 'Nova sobremesa'
                 : createForm.tipoProduto === 'COMBO'
                 ? 'Novo combo'
                 : 'Novo produto'}
@@ -625,12 +652,14 @@ export default function Produtos() {
                     setCreateForm({
                       ...createForm,
                       tipoProduto: e.target.value,
-                      ...estrategiaPadraoPorTipo(e.target.value)
+                      sobremesaModo: e.target.value === 'SOBREMESA' ? 'FICHA' : '',
+                      ...estrategiaPadraoPorTipo(e.target.value, 'FICHA')
                     })
                   }
                 >
                   <option value="PRODUTO">Produto</option>
                   <option value="BEBIDA">Bebida</option>
+                  <option value="SOBREMESA">Sobremesa</option>
                   <option value="COMBO">Combo</option>
                 </select>
               </div>
@@ -644,6 +673,8 @@ export default function Produtos() {
                   placeholder={
                     createForm.tipoProduto === 'BEBIDA'
                       ? 'Coca lata'
+                      : createForm.tipoProduto === 'SOBREMESA'
+                      ? 'Pudim de leite'
                       : createForm.tipoProduto === 'COMBO'
                       ? 'Combo X-Burger + bebida'
                       : 'X-Burger Especial'
@@ -674,7 +705,38 @@ export default function Produtos() {
                   placeholder="0,00"
                 />
               </div>
-              {createForm.tipoProduto === 'BEBIDA' && (
+              {createForm.tipoProduto === 'SOBREMESA' && (
+                <div className="form-group" style={{ marginTop: 12, marginBottom: 0 }}>
+                  <label className="form-label">Como essa sobremesa é feita?</label>
+                  <div className="intel-options intel-options-2">
+                    <IntelOption
+                      active={(createForm.sobremesaModo || 'FICHA') === 'FICHA'}
+                      title="Feita na casa"
+                      desc="Monta com insumos — a ficha técnica calcula o custo."
+                      onClick={() =>
+                        setCreateForm({
+                          ...createForm,
+                          sobremesaModo: 'FICHA',
+                          ...estrategiaPadraoPorTipo('SOBREMESA', 'FICHA')
+                        })
+                      }
+                    />
+                    <IntelOption
+                      active={createForm.sobremesaModo === 'REVENDA'}
+                      title="Comprada pronta"
+                      desc="Revenda: você informa quanto pagou por ela."
+                      onClick={() =>
+                        setCreateForm({
+                          ...createForm,
+                          sobremesaModo: 'REVENDA',
+                          ...estrategiaPadraoPorTipo('SOBREMESA', 'REVENDA')
+                        })
+                      }
+                    />
+                  </div>
+                </div>
+              )}
+              {usaCustoDireto({ tipoProduto: createForm.tipoProduto, sobremesaModo: createForm.sobremesaModo }) && (
                 <div className="form-group" style={{ marginTop: 12, marginBottom: 0 }}>
                   <label className="form-label">Custo de compra (R$)</label>
                   <input
@@ -840,6 +902,8 @@ export default function Produtos() {
             <span className="card-action-title">
               {tipoTab === 'BEBIDA'
                 ? 'Cadastrar bebida'
+                : tipoTab === 'SOBREMESA'
+                ? 'Cadastrar sobremesa'
                 : tipoTab === 'COMBO'
                 ? 'Montar combo'
                 : 'Cadastrar produto'}
@@ -847,6 +911,8 @@ export default function Produtos() {
             <span className="card-action-sub">
               {tipoTab === 'BEBIDA'
                 ? 'Cadastro simples de revenda'
+                : tipoTab === 'SOBREMESA'
+                ? 'Feita na casa ou comprada pronta'
                 : tipoTab === 'COMBO'
                 ? 'Combinar produtos e bebidas'
                 : 'Adicionar novo item com ficha técnica'}
@@ -870,9 +936,11 @@ export default function Produtos() {
               Number(a.diferencaPrecoSugerido) < 0
 
             const diagnosticos = []
-            if (tipoP === 'BEBIDA') {
+            if (usaCustoDireto(p)) {
               diagnosticos.push({
-                texto: a.mensagemDiagnostico ?? 'Bebida de revenda.',
+                texto:
+                  a.mensagemDiagnostico ??
+                  (tipoP === 'SOBREMESA' ? 'Sobremesa de revenda.' : 'Bebida de revenda.'),
                 cls:
                   statusGeralProduto === 'CRITICO'
                     ? 'clr-red'
@@ -964,7 +1032,7 @@ export default function Produtos() {
                         : brl(p.precoVenda)}
                     </div>
                   </div>
-                  {tipoP === 'PRODUTO' && (
+                  {usaFichaTecnica(p) && (
                     <div style={{ flex: 1, minWidth: 86 }}>
                       <div style={priceLabelStyle}>Sugerido</div>
                       <div className="clr-blue" style={{ fontSize: 15, fontWeight: 600 }}>
@@ -979,7 +1047,7 @@ export default function Produtos() {
                       <div style={priceLabelStyle}>iFood</div>
                       <div className="clr-orange" style={{ fontSize: 15, fontWeight: 600 }}>
                         {a.precoIfood === null || a.precoIfood === undefined
-                          ? <span style={pricePendingStyle}>{tipoP === 'PRODUTO' && semFichaProduto ? 'Sem ficha' : 'Pendente'}</span>
+                          ? <span style={pricePendingStyle}>{usaFichaTecnica(p) && semFichaProduto ? 'Sem ficha' : 'Pendente'}</span>
                           : brl(a.precoIfood)}
                       </div>
                     </div>
@@ -988,7 +1056,7 @@ export default function Produtos() {
 
                 {/* Bloco 3 — Indicadores (por tipo de item) */}
                 <div style={{ flex: 1 }}>
-                  {tipoP === 'BEBIDA' ? (
+                  {usaCustoDireto(p) ? (
                     <>
                       <MetricRow label="Custo de compra">
                         {a.produto?.custoDireto === null || a.produto?.custoDireto === undefined
@@ -1511,7 +1579,11 @@ function FichaModal({ produtoId, onClose, onChanged }) {
           incluirAnaliseEstrategica: !!prod.incluirAnaliseEstrategica,
           tipoBebidaAnalise:
             prod.tipoBebidaAnalise ??
-            ((prod.tipoProduto ?? 'PRODUTO') === 'BEBIDA' ? 'COMMODITY' : '')
+            ((prod.tipoProduto ?? 'PRODUTO') === 'BEBIDA' ? 'COMMODITY' : ''),
+          // Sobremesa antiga sem modo gravado abre como "feita na casa", que é o padrão
+          // do backend — assim a tela mostra o mesmo que o servidor vai assumir.
+          sobremesaModo:
+            prod.sobremesaModo ?? ((prod.tipoProduto ?? 'PRODUTO') === 'SOBREMESA' ? 'FICHA' : '')
         })
         setLoading(false)
       })
@@ -1857,8 +1929,48 @@ function FichaModal({ produtoId, onClose, onChanged }) {
   // continua colorido pelo statusCmv
   const statusGeralModal = analise?.statusGeral ?? status
   const semFicha = status === 'SEM_FICHA'
-  // BEBIDA e COMBO usam corpo simplificado (sem ficha técnica/precificação por CMV)
+  /* Revenda (bebida / sobremesa comprada pronta) e combo usam corpo simplificado, sem
+     ficha técnica nem precificação por CMV. */
   const tipoModalProduto = produto?.tipoProduto ?? 'PRODUTO'
+  const ehSobremesaModal = tipoModalProduto === 'SOBREMESA'
+  // Enquanto edita, o FORMULÁRIO manda: o clique no seletor precisa refletir na hora,
+  // antes de salvar.
+  const modoSobremesaModal = dadosForm.sobremesaModo || produto?.sobremesaModo || 'FICHA'
+  const corpoSimplificado = !usaFichaTecnica({
+    tipoProduto: tipoModalProduto, sobremesaModo: modoSobremesaModal
+  })
+  const revendaModal = usaCustoDireto({
+    tipoProduto: tipoModalProduto, sobremesaModo: modoSobremesaModal
+  })
+  /* Trocou o modo e ainda não salvou: a análise carregada é do modo ANTIGO. Mostrá-la
+     sob os rótulos do modo novo faria o lucro da ficha passar por conta de revenda. */
+  const modoSobremesaNaoSalvo =
+    ehSobremesaModal && modoSobremesaModal !== (produto?.sobremesaModo || 'FICHA')
+  /* O seletor aparece nos DOIS corpos — senão quem escolhesse "feita na casa" ficaria
+     sem caminho de volta para "comprada pronta". */
+  const seletorModoSobremesa = ehSobremesaModal ? (
+    <div className="form-group" style={{ marginTop: 12, marginBottom: 0 }}>
+      <label className="form-label">Como essa sobremesa é feita?</label>
+      <div className="intel-options intel-options-2">
+        <IntelOption
+          active={modoSobremesaModal === 'FICHA'}
+          title="Feita na casa"
+          desc="Monta com insumos — a ficha técnica calcula o custo."
+          onClick={() => setDadosForm({
+            ...dadosForm, sobremesaModo: 'FICHA', ...estrategiaPadraoPorTipo('SOBREMESA', 'FICHA')
+          })}
+        />
+        <IntelOption
+          active={modoSobremesaModal === 'REVENDA'}
+          title="Comprada pronta"
+          desc="Revenda: você informa quanto pagou por ela."
+          onClick={() => setDadosForm({
+            ...dadosForm, sobremesaModo: 'REVENDA', ...estrategiaPadraoPorTipo('SOBREMESA', 'REVENDA')
+          })}
+        />
+      </div>
+    </div>
+  ) : null
   // Elegíveis para compor combo: produtos e bebidas ativos (nunca outro combo)
   const elegiveisCombo = produtosLista.filter(
     (p) => (p.tipoProduto ?? 'PRODUTO') !== 'COMBO' && p.id !== produtoId
@@ -1927,11 +2039,13 @@ function FichaModal({ produtoId, onClose, onChanged }) {
               </div>
             </div>
           </div>
-        ) : tipoModalProduto !== 'PRODUTO' ? (
+        ) : corpoSimplificado ? (
           <>
-            {/* Corpo simplificado: bebida (revenda) e combo (composição futura) */}
+            {/* Corpo simplificado: revenda (bebida/sobremesa pronta) e combo */}
             <div className="section-title" style={{ marginTop: 0 }}>
-              {tipoModalProduto === 'BEBIDA' ? 'Dados da Bebida' : 'Dados do Combo'}
+              {tipoModalProduto === 'BEBIDA' ? 'Dados da Bebida'
+                : ehSobremesaModal ? 'Dados da Sobremesa'
+                : 'Dados do Combo'}
             </div>
             <div className="card">
               <form onSubmit={handleSaveDados}>
@@ -1955,7 +2069,7 @@ function FichaModal({ produtoId, onClose, onChanged }) {
                       onChange={(e) => setDadosForm({ ...dadosForm, precoVenda: mascaraMoeda(e.target.value) })}
                     />
                   </div>
-                  {tipoModalProduto === 'BEBIDA' && (
+                  {revendaModal && (
                     <div className="form-group" style={{ marginBottom: 0, flex: 1, minWidth: 130 }}>
                       <label className="form-label">Custo de compra (R$)</label>
                       <input
@@ -1971,6 +2085,7 @@ function FichaModal({ produtoId, onClose, onChanged }) {
                     {dadosSaving ? 'Salvando…' : 'Salvar dados'}
                   </button>
                 </div>
+                {seletorModoSobremesa}
                 <InteligenciaCardapioFields
                   form={dadosForm}
                   onChange={(patch) => setDadosForm({ ...dadosForm, ...patch })}
@@ -1983,11 +2098,25 @@ function FichaModal({ produtoId, onClose, onChanged }) {
               </form>
             </div>
 
-            {tipoModalProduto === 'BEBIDA' ? (
+            {modoSobremesaNaoSalvo && (
+              <div className="alert alert-yellow" style={{ marginTop: 12 }}>
+                <div className="alert-msg">
+                  Você mudou como essa sobremesa é feita. Clique em <b>Salvar dados</b> para
+                  recalcular o custo — os números abaixo ainda são do modo anterior.
+                </div>
+              </div>
+            )}
+
+            {modoSobremesaNaoSalvo ? null : revendaModal ? (
               <>
                 <div className="section-title">Resumo da Revenda</div>
                 <div className="grid-4">
-                  <Card title="Preço de Venda" value={brl(analise?.precoVenda)} hint="Cadastrado na bebida" variant="brand" />
+                  <Card
+                    title="Preço de Venda"
+                    value={brl(analise?.precoVenda)}
+                    hint={ehSobremesaModal ? 'Cadastrado na sobremesa' : 'Cadastrado na bebida'}
+                    variant="brand"
+                  />
                   <Card
                     title="Custo de Compra"
                     value={
@@ -2053,7 +2182,9 @@ function FichaModal({ produtoId, onClose, onChanged }) {
                           placeholder="Digite para buscar produto ou bebida..."
                           getOptionLabel={(p) =>
                             `${p.nome} — ${brl(p.precoVenda)} · ${
-                              (p.tipoProduto ?? 'PRODUTO') === 'BEBIDA' ? 'Bebida' : 'Produto'
+                              (p.tipoProduto ?? 'PRODUTO') === 'BEBIDA' ? 'Bebida'
+                                : (p.tipoProduto ?? 'PRODUTO') === 'SOBREMESA' ? 'Sobremesa'
+                                : 'Produto'
                             }`
                           }
                         />
@@ -2105,8 +2236,10 @@ function FichaModal({ produtoId, onClose, onChanged }) {
                             <tr key={item.id}>
                               <td style={{ fontWeight: 500, color: 'var(--app-text)' }}>{item.nome}</td>
                               <td>
-                                <span className={'badge ' + (item.tipoProduto === 'BEBIDA' ? 'badge-blue' : 'badge-gray')}>
-                                  {item.tipoProduto === 'BEBIDA' ? 'Bebida' : 'Produto'}
+                                <span className={'badge ' + (item.tipoProduto === 'BEBIDA' ? 'badge-blue' : item.tipoProduto === 'SOBREMESA' ? 'badge-purple' : 'badge-gray')}>
+                                  {item.tipoProduto === 'BEBIDA' ? 'Bebida'
+                                    : item.tipoProduto === 'SOBREMESA' ? 'Sobremesa'
+                                    : 'Produto'}
                                 </span>
                               </td>
                               <td>
@@ -2483,7 +2616,9 @@ function FichaModal({ produtoId, onClose, onChanged }) {
             {activeTab === 'PRECIFICACAO' && (
             <>
             {/* Seção 1 — Dados do produto */}
-            <div className="section-title" style={{ marginTop: 0 }}>Dados do Produto</div>
+            <div className="section-title" style={{ marginTop: 0 }}>
+              {ehSobremesaModal ? 'Dados da Sobremesa' : 'Dados do Produto'}
+            </div>
             <div className="card">
               <form onSubmit={handleSaveDados}>
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
@@ -2516,9 +2651,18 @@ function FichaModal({ produtoId, onClose, onChanged }) {
                     />
                   </div>
                   <button type="submit" className="btn btn-primary" disabled={dadosSaving}>
-                    {dadosSaving ? 'Salvando…' : 'Salvar dados do produto'}
+                    {dadosSaving ? 'Salvando…' : 'Salvar dados'}
                   </button>
                 </div>
+                {seletorModoSobremesa}
+                {modoSobremesaNaoSalvo && (
+                  <div className="alert alert-yellow" style={{ marginTop: 12, marginBottom: 0 }}>
+                    <div className="alert-msg">
+                      Você mudou como essa sobremesa é feita. Clique em <b>Salvar dados</b> para
+                      recalcular o custo — os números desta tela ainda são do modo anterior.
+                    </div>
+                  </div>
+                )}
                 <InteligenciaCardapioFields
                   form={dadosForm}
                   onChange={(patch) => setDadosForm({ ...dadosForm, ...patch })}

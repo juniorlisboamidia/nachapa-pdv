@@ -33,16 +33,16 @@ enum TipoInsumo {
 }
 
 model Insumo {
-  id             Int        @id @default(autoincrement())
-  empresaId      Int
-  nome           String
-  tipo           TipoInsumo @default(INGREDIENTE)
-  unidade        String
-  custoUnitario  Decimal    @db.Decimal(12, 4)
-  fornecedor     String?
+  id                Int        @id @default(autoincrement())
+  empresaId         Int
+  nome              String
+  tipo              TipoInsumo @default(INGREDIENTE)
+  unidade           String
+  custoUnitario     Decimal    @db.Decimal(12, 4)
+  fornecedor        String?
   // Origem do custo atual: fornecedor cuja cotação virou o custoUnitario (exibição/rastreio).
   custoFornecedorId Int?
-  ativo          Boolean    @default(true)
+  ativo             Boolean    @default(true)
 
   // ===== Perda/rendimento no preparo (V2) =====
   // Insumos que perdem peso/volume ao fritar/assar/preparar (ex.: bacon cru que
@@ -53,8 +53,8 @@ model Insumo {
   quantidadeBrutaPreparo        Float?
   quantidadeAproveitavelPreparo Float?
 
-  criadoEm       DateTime   @default(now())
-  atualizadoEm   DateTime   @updatedAt
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
 
   fichaTecnicaItens FichaTecnicaItem[]
   // Usos deste insumo como custo adicional de combos (box, sacola, embalagem especial)
@@ -65,9 +65,9 @@ model Insumo {
   // Usos deste insumo como ingrediente em receitas de produção própria
   usosEmReceitas  ReceitaProducaoItem[] @relation("IngredienteDeReceita")
   // Etiquetas: config de conservação/validade padrão deste insumo
-  etiquetaConfig EtiquetaItemConfig?
+  etiquetaConfig  EtiquetaItemConfig?
   // Fornecedores que vendem este insumo (com cotações de preço)
-  fornecedores FornecedorInsumo[]
+  fornecedores    FornecedorInsumo[]
 
   @@index([empresaId])
   @@index([nome])
@@ -187,17 +187,22 @@ model ReceitaProducaoItem {
 // Produtos (itens vendidos)
 // ============================================================
 model Produto {
-  id           Int      @id @default(autoincrement())
-  empresaId    Int
-  nome         String
-  descricao    String?
-  precoVenda   Decimal  @db.Decimal(12, 2)
+  id            Int      @id @default(autoincrement())
+  empresaId     Int
+  nome          String
+  descricao     String?
+  precoVenda    Decimal  @db.Decimal(12, 2)
   // Tipo do item vendido: PRODUTO (montado, com ficha técnica), BEBIDA
-  // (revenda simples, custo direto) ou COMBO (composição em fase futura)
-  tipoProduto  String   @default("PRODUTO")
-  // Custo de compra para BEBIDA (revenda); PRODUTO usa ficha técnica
-  custoDireto  Decimal? @db.Decimal(12, 2)
-  ativo        Boolean  @default(true)
+  // (revenda simples, custo direto), SOBREMESA (feita na casa OU comprada pronta,
+  // ver sobremesaModo) ou COMBO (composição em fase futura)
+  tipoProduto   String   @default("PRODUTO")
+  // Custo de compra para BEBIDA e SOBREMESA de revenda; PRODUTO usa ficha técnica
+  custoDireto   Decimal? @db.Decimal(12, 2)
+  // Só para tipoProduto=SOBREMESA: FICHA (feita na casa, monta com insumos) ou
+  // REVENDA (comprada pronta, custo direto). Null nos demais tipos.
+  // Quem decide custo NÃO lê este campo direto: pergunta a produtos/custeio.js.
+  sobremesaModo String?
+  ativo         Boolean  @default(true)
 
   // ===== Inteligência do cardápio (análises estratégicas futuras) =====
   // Produto assinatura da marca: não é recomendado para remoção automática
@@ -229,17 +234,17 @@ model Produto {
 // produtos/bebidas prontos — nunca por insumos nem por outro combo
 // ============================================================
 model ComboItem {
-  id           Int      @id @default(autoincrement())
-  empresaId    Int
-  comboId      Int
-  produtoId    Int
-  quantidade   Decimal  @db.Decimal(10, 2)
+  id                         Int      @id @default(autoincrement())
+  empresaId                  Int
+  comboId                    Int
+  produtoId                  Int
+  quantidade                 Decimal  @db.Decimal(10, 2)
   // Quando o produto entra no combo, por padrão a embalagem individual da ficha
   // técnica (itens tipoUso=EMBALAGEM) NÃO entra no custo do combo — costuma ser
   // substituída por uma embalagem única do combo. true mantém a embalagem.
-  incluirEmbalagemIndividual Boolean @default(false)
-  criadoEm     DateTime @default(now())
-  atualizadoEm DateTime @updatedAt
+  incluirEmbalagemIndividual Boolean  @default(false)
+  criadoEm                   DateTime @default(now())
+  atualizadoEm               DateTime @updatedAt
 
   combo   Produto @relation("ItensDoCombo", fields: [comboId], references: [id], onDelete: Cascade)
   produto Produto @relation("ProdutoEmCombos", fields: [produtoId], references: [id], onDelete: Restrict)
@@ -326,21 +331,21 @@ model FichaTecnicaItem {
 // Configuração de precificação — agora UMA POR LOJA (empresaId único)
 // ============================================================
 model ConfiguracaoPrecificacao {
-  id                      Int      @id @default(autoincrement())
-  empresaId               Int
-  cmvAlvoPercentual       Decimal  @db.Decimal(10, 2) @default(32.00)
-  lucroDesejadoPercentual Decimal  @db.Decimal(10, 2) @default(20.00)
-  taxaIfoodPercentual     Decimal  @db.Decimal(10, 2) @default(23.00)
-  campanhaInteligente     Decimal  @db.Decimal(10, 2) @default(0.00)
-  maiorTaxaEntrega        Decimal  @db.Decimal(10, 2) @default(0.00)
-  cupomDesconto           Decimal  @db.Decimal(10, 2) @default(0.00)
-  ticketMedioDelivery     Decimal  @db.Decimal(10, 2) @default(40.00)
+  id                              Int      @id @default(autoincrement())
+  empresaId                       Int
+  cmvAlvoPercentual               Decimal  @default(32.00) @db.Decimal(10, 2)
+  lucroDesejadoPercentual         Decimal  @default(20.00) @db.Decimal(10, 2)
+  taxaIfoodPercentual             Decimal  @default(23.00) @db.Decimal(10, 2)
+  campanhaInteligente             Decimal  @default(0.00) @db.Decimal(10, 2)
+  maiorTaxaEntrega                Decimal  @default(0.00) @db.Decimal(10, 2)
+  cupomDesconto                   Decimal  @default(0.00) @db.Decimal(10, 2)
+  ticketMedioDelivery             Decimal  @default(40.00) @db.Decimal(10, 2)
   // Legado (mantidos no banco, fora da fórmula e da interface)
-  taxaPagamentoOnlinePercentual   Decimal @db.Decimal(10, 2) @default(0.00)
-  taxaRepasseAntecipadoPercentual Decimal @db.Decimal(10, 2) @default(0.00)
-  campanhaIfoodPercentual         Decimal @db.Decimal(10, 2) @default(10.00)
-  custoFixoIfood                  Decimal @db.Decimal(10, 2) @default(0.00)
-  produtosPorPedidoIfood          Decimal @db.Decimal(10, 2) @default(2.00)
+  taxaPagamentoOnlinePercentual   Decimal  @default(0.00) @db.Decimal(10, 2)
+  taxaRepasseAntecipadoPercentual Decimal  @default(0.00) @db.Decimal(10, 2)
+  campanhaIfoodPercentual         Decimal  @default(10.00) @db.Decimal(10, 2)
+  custoFixoIfood                  Decimal  @default(0.00) @db.Decimal(10, 2)
+  produtosPorPedidoIfood          Decimal  @default(2.00) @db.Decimal(10, 2)
   ativo                           Boolean  @default(true)
   criadoEm                        DateTime @default(now())
   atualizadoEm                    DateTime @updatedAt
@@ -353,29 +358,29 @@ model ConfiguracaoPrecificacao {
 // Custos fixos (recorrentes mensais — sem mês de referência no MVP)
 // ============================================================
 model CustoFixo {
-  id           Int      @id @default(autoincrement())
-  empresaId    Int
-  nome         String
+  id               Int      @id @default(autoincrement())
+  empresaId        Int
+  nome             String
   // Valor mensal efetivo usado em TODOS os cálculos (dashboard, PE, totais).
   // Para colaborador CLT com encargos automáticos, o backend grava aqui o
   // total calculado (salário + 13º + férias + FGTS) — fonte única, sem duplicar.
-  valorMensal  Decimal  @db.Decimal(12, 2)
-  tipo         String?
-  observacao   String?
+  valorMensal      Decimal  @db.Decimal(12, 2)
+  tipo             String?
+  observacao       String?
   // Campos opcionais de colaborador (estimativa gerencial, não folha oficial):
   // tipoCusto GERAL|COLABORADOR; tipoColaborador CLT|FREELANCER|OUTRO|PJ|DIARISTA.
   // salarioBase fica persistido para reeditar sem perder a base do cálculo.
-  tipoCusto       String?  @default("GERAL")
-  tipoColaborador String?
-  salarioBase     Decimal? @db.Decimal(12, 2)
-  calcularEncargos Boolean @default(false)
+  tipoCusto        String?  @default("GERAL")
+  tipoColaborador  String?
+  salarioBase      Decimal? @db.Decimal(12, 2)
+  calcularEncargos Boolean  @default(false)
   // Motoboy diarista: total mensal = valorDiaria × quantidade × dias
-  valorDiaria     Decimal? @db.Decimal(12, 2)
-  quantidade      Decimal? @db.Decimal(10, 2)
-  dias            Decimal? @db.Decimal(10, 2)
-  ativo        Boolean  @default(true)
-  criadoEm     DateTime @default(now())
-  atualizadoEm DateTime @updatedAt
+  valorDiaria      Decimal? @db.Decimal(12, 2)
+  quantidade       Decimal? @db.Decimal(10, 2)
+  dias             Decimal? @db.Decimal(10, 2)
+  ativo            Boolean  @default(true)
+  criadoEm         DateTime @default(now())
+  atualizadoEm     DateTime @updatedAt
 
   @@index([empresaId])
   @@index([ativo])
@@ -402,15 +407,15 @@ enum TipoCalculoCustoVariavel {
 }
 
 model CustoVariavel {
-  id           Int                       @id @default(autoincrement())
+  id           Int                      @id @default(autoincrement())
   empresaId    Int
   nome         String
   categoria    CategoriaCustoVariavel
   tipoCalculo  TipoCalculoCustoVariavel
-  valor        Decimal                   @db.Decimal(12, 4)
-  ativo        Boolean                   @default(true)
-  criadoEm     DateTime                  @default(now())
-  atualizadoEm DateTime                  @updatedAt
+  valor        Decimal                  @db.Decimal(12, 4)
+  ativo        Boolean                  @default(true)
+  criadoEm     DateTime                 @default(now())
+  atualizadoEm DateTime                 @updatedAt
 
   @@index([empresaId])
   @@index([ativo])
@@ -485,30 +490,30 @@ model AnaliseVenda {
 // varias lojas. clienteNome e cache para exibicao (evita consultar o HUB).
 // ============================================================
 model Empresa {
-  id           Int      @id @default(autoincrement())
-  clienteId    String
-  clienteNome  String?
-  nome         String   @default("Hamburgueria")
-  whatsapp     String?
-  email        String?
-  endereco     String?
+  id                 Int      @id @default(autoincrement())
+  clienteId          String
+  clienteNome        String?
+  nome               String   @default("Hamburgueria")
+  whatsapp           String?
+  email              String?
+  endereco           String?
   // Logo em dataURL base64 (png/jpeg/webp). Sem upload de arquivo no servidor.
-  logoDataUrl  String?
+  logoDataUrl        String?
   // Logo SEM FUNDO (PNG transparente) usada nas páginas públicas de fundo claro
   // (ranking da equipe, Área do Colaborador). Vazio = cai na logoDataUrl.
   logoPublicaDataUrl String?
   // 1ª vez que o dono abre a página de frases, materializamos as 6 padrão no banco.
   // Este flag evita re-semear se ele apagar todas depois.
-  frasesSemeadas Boolean @default(false)
-  criadoEm     DateTime @default(now())
-  atualizadoEm DateTime @updatedAt
+  frasesSemeadas     Boolean  @default(false)
+  criadoEm           DateTime @default(now())
+  atualizadoEm       DateTime @updatedAt
 
   // ── Configuração de Motoboys (Dep. Pessoal › Motoboys › Configuração) ──
-  motoboyContatoWhatsapp      String?               // nº do "Falar no WhatsApp" da escala (prioritário; vazio = cai no contato da empresa)
+  motoboyContatoWhatsapp      String? // nº do "Falar no WhatsApp" da escala (prioritário; vazio = cai no contato da empresa)
   motoboyBloqueadoPodeEscalar Boolean @default(false) // se um entregador BLOQUEADO pode se inscrever na escala
   motoboyPerguntaCnh          Boolean @default(false) // se o cadastro público pergunta "Você possui CNH?"
-  whatsappEmpresa String?                              // número público da empresa (opcional)
-  whatsappContato String?  @default("RESPONSAVEL")     // RESPONSAVEL | EMPRESA — nº usado no contato público
+  whatsappEmpresa             String? // número público da empresa (opcional)
+  whatsappContato             String? @default("RESPONSAVEL") // RESPONSAVEL | EMPRESA — nº usado no contato público
 
   @@index([clienteId])
 }
@@ -522,15 +527,18 @@ enum EscalaStatus {
   ABERTA
   FECHADA
 }
+
 enum EscalaDiaStatus {
   ABERTO
   FECHADO
 }
+
 enum InscricaoStatus {
   INSCRITO
   CONFIRMADO
   CANCELADO
 }
+
 enum InscricaoOrigem {
   PUBLICO
   ADMIN
@@ -574,21 +582,21 @@ model EscalaMotoboyDia {
 }
 
 model EscalaMotoboyInscricao {
-  id           Int             @id @default(autoincrement())
-  empresaId    Int
-  escalaDiaId  Int
+  id                 Int                   @id @default(autoincrement())
+  empresaId          Int
+  escalaDiaId        Int
   // Snapshot histórico (mantido mesmo quando há motoboyId vinculado)
-  nome         String
-  whatsapp     String
-  status       InscricaoStatus @default(INSCRITO)
-  origem       InscricaoOrigem @default(PUBLICO)
+  nome               String
+  whatsapp           String
+  status             InscricaoStatus       @default(INSCRITO)
+  origem             InscricaoOrigem       @default(PUBLICO)
   // V2: vínculo opcional com a base de entregadores (preenchido na inscrição/backfill)
-  motoboyId    Int?
+  motoboyId          Int?
   // V2: presença na escala — independente de InscricaoStatus
   presencaStatus     PresencaMotoboyStatus @default(PENDENTE)
   presencaObservacao String?
-  criadoEm     DateTime        @default(now())
-  atualizadoEm DateTime        @updatedAt
+  criadoEm           DateTime              @default(now())
+  atualizadoEm       DateTime              @updatedAt
 
   dia     EscalaMotoboyDia @relation(fields: [escalaDiaId], references: [id], onDelete: Cascade)
   motoboy Motoboy?         @relation(fields: [motoboyId], references: [id], onDelete: SetNull)
@@ -609,12 +617,14 @@ enum MotoboyStatus {
   BLOQUEADO
   PENDENTE // solicitação de cadastro via link público, aguardando aprovação da equipe
 }
+
 enum PresencaMotoboyStatus {
   PENDENTE
   COMPARECEU
   FALTOU
   JUSTIFICOU
 }
+
 enum MotoboyOcorrenciaTipo {
   NAO_COMPARECEU
   ABANDONO
@@ -626,6 +636,7 @@ enum MotoboyOcorrenciaTipo {
   OBSERVACAO_POSITIVA
   OUTRO
 }
+
 enum MotoboyOcorrenciaGravidade {
   BAIXA
   MEDIA
@@ -640,7 +651,7 @@ model Motoboy {
   whatsapp     String
   status       MotoboyStatus @default(ATIVO)
   observacoes  String?
-  possuiCnh    Boolean?      // resposta "Você possui CNH?" (null = não informado). Informativo, não bloqueia.
+  possuiCnh    Boolean? // resposta "Você possui CNH?" (null = não informado). Informativo, não bloqueia.
   criadoEm     DateTime      @default(now())
   atualizadoEm DateTime      @updatedAt
 
@@ -683,26 +694,26 @@ model MotoboyOcorrencia {
 // Dep. Pessoal › Equipe — cadastro da equipe interna (cozinha/atendimento).
 // Base para o sistema de Bonificação. Multi-tenant por loja (empresaId).
 model Funcionario {
-  id           Int      @id @default(autoincrement())
-  empresaId    Int
-  nome         String
-  apelido      String?  // nome curto de exibição no ranking (fallback = nome completo)
-  funcao       String?
-  cpf          String?
-  whatsapp     String?
-  status       String   @default("ATIVO") // ATIVO | INATIVO
-  tokenPrivado String?  @unique // link privado do funcionário (XP/nível/perfil)
-  pin          String?  // PIN de 4 dígitos p/ entrar na execução pública do Checklist (por link+PIN)
+  id               Int       @id @default(autoincrement())
+  empresaId        Int
+  nome             String
+  apelido          String? // nome curto de exibição no ranking (fallback = nome completo)
+  funcao           String?
+  cpf              String?
+  whatsapp         String?
+  status           String    @default("ATIVO") // ATIVO | INATIVO
+  tokenPrivado     String?   @unique // link privado do funcionário (XP/nível/perfil)
+  pin              String? // PIN de 4 dígitos p/ entrar na execução pública do Checklist (por link+PIN)
   // Ponto Facial
-  jornadaId       Int?     // jornada de trabalho atribuída (horário previsto)
-  pinPonto        String?  // PIN de reserva p/ bater ponto quando o rosto não é reconhecido
-  biometriaStatus String   @default("PENDENTE") // PENDENTE | CADASTRADA | BLOQUEADA
-  biometriaEm     DateTime? // quando o rosto foi cadastrado
+  jornadaId        Int? // jornada de trabalho atribuída (horário previsto)
+  pinPonto         String? // PIN de reserva p/ bater ponto quando o rosto não é reconhecido
+  biometriaStatus  String    @default("PENDENTE") // PENDENTE | CADASTRADA | BLOQUEADA
+  biometriaEm      DateTime? // quando o rosto foi cadastrado
   termoBiometriaEm DateTime? // aceite do termo LGPD de uso da biometria
-  enrollidColetor Int?     // ID do usuário no coletor DIXI (casa as batidas). Auto-aprendido pelo nome.
-  folgaSemana  Int[]    @default([]) // dias de folga fixa (0=dom..6=sáb). Sobrepõe a jornada. Vazio = usa só a jornada.
-  criadoEm     DateTime @default(now())
-  atualizadoEm DateTime @updatedAt
+  enrollidColetor  Int? // ID do usuário no coletor DIXI (casa as batidas). Auto-aprendido pelo nome.
+  folgaSemana      Int[]     @default([]) // dias de folga fixa (0=dom..6=sáb). Sobrepõe a jornada. Vazio = usa só a jornada.
+  criadoEm         DateTime  @default(now())
+  atualizadoEm     DateTime  @updatedAt
 
   @@unique([empresaId, enrollidColetor])
   @@index([empresaId])
@@ -728,12 +739,12 @@ model Funcao {
 // Ponto Facial — vetor(es) faciais do funcionário. SÓ o descritor (128 floats),
 // NUNCA a foto (decisão de privacidade). Usado só pra matching no servidor.
 model FuncionarioFace {
-  id             Int      @id @default(autoincrement())
-  empresaId      Int
-  funcionarioId  Int      @unique
-  descritoresJson Json    // array de descritores (cada um = array de 128 números)
-  criadoEm       DateTime @default(now())
-  atualizadoEm   DateTime @updatedAt
+  id              Int      @id @default(autoincrement())
+  empresaId       Int
+  funcionarioId   Int      @unique
+  descritoresJson Json // array de descritores (cada um = array de 128 números)
+  criadoEm        DateTime @default(now())
+  atualizadoEm    DateTime @updatedAt
 
   @@index([empresaId])
 }
@@ -743,13 +754,13 @@ model PontoRegistro {
   id            Int      @id @default(autoincrement())
   empresaId     Int
   funcionarioId Int
-  tipo          String   // ENTRADA | SAIDA_INTERVALO | RETORNO_INTERVALO | SAIDA
+  tipo          String // ENTRADA | SAIDA_INTERVALO | RETORNO_INTERVALO | SAIDA
   dataHora      DateTime @default(now())
   origem        String   @default("FACIAL") // FACIAL | PIN | MANUAL | COLETOR
   dispositivoId Int?
-  distancia     Float?   // distância do match facial (quanto menor, mais confiante)
+  distancia     Float? // distância do match facial (quanto menor, mais confiante)
   coletorRef    String?  @unique // dedup das batidas do coletor: "sn:enrollid:time"
-  observacao    String?  // nota livre do admin sobre a batida
+  observacao    String? // nota livre do admin sobre a batida
   invalidada    Boolean  @default(false) // desconsiderada: fica no histórico mas não conta no cálculo
   criadoEm      DateTime @default(now())
 
@@ -764,15 +775,15 @@ model PontoRegistro {
 // `token` como credencial (ele continua obrigatório e gerado para todos os tipos);
 // usam pareamento por código temporário + `credencialHash` do cookie do aparelho.
 model Dispositivo {
-  id                   Int      @id @default(autoincrement())
-  empresaId            Int
-  nome                 String
-  token                String   @unique // abre a tela quiosque /ponto/:token ou /etiquetas/:token (sem login)
-  ativo                Boolean  @default(true)
-  tipo                 String   @default("PONTO") // PONTO | ETIQUETA | TOTEM | TV_INDOOR — string simples, não enum
-  serialColetor        String?  @unique // sn do coletor DIXI (push). NULL nos tablets-quiosque.
-  ultimaSync           DateTime?
-  criadoEm             DateTime @default(now())
+  id            Int       @id @default(autoincrement())
+  empresaId     Int
+  nome          String
+  token         String    @unique // abre a tela quiosque /ponto/:token ou /etiquetas/:token (sem login)
+  ativo         Boolean   @default(true)
+  tipo          String    @default("PONTO") // PONTO | ETIQUETA | TOTEM | TV_INDOOR — string simples, não enum
+  serialColetor String?   @unique // sn do coletor DIXI (push). NULL nos tablets-quiosque.
+  ultimaSync    DateTime?
+  criadoEm      DateTime  @default(now())
 
   // Pareamento do totem (§3.1/§3.2): código de 6 dígitos, uso único, com expiração
   // e limite de tentativas; ao parear vira credencialHash (SHA-256 da credencial do
@@ -784,8 +795,8 @@ model Dispositivo {
   pareadoEm            DateTime?
 
   // Heartbeat do totem: online = ultimoHeartbeatEm há menos de 150s (calculado no servidor).
-  ultimoHeartbeatEm    DateTime?
-  heartbeatJson        Json?
+  ultimoHeartbeatEm DateTime?
+  heartbeatJson     Json?
 
   // Aparência POR APARELHO. A régua: se dois totens da mesma loja podem legitimamente
   // divergir, é do aparelho. A posição das categorias pode — um totem encostado numa
@@ -876,7 +887,7 @@ model PedidoTotemEnvio {
 model TotemCategoria {
   id            Int      @id @default(autoincrement())
   empresaId     Int
-  cwCategoriaId Int                          // Category.id do CW
+  cwCategoriaId Int // Category.id do CW
   nomeExibido   String
   criadoEm      DateTime @default(now())
   atualizadoEm  DateTime @updatedAt
@@ -885,31 +896,31 @@ model TotemCategoria {
   @@index([empresaId])
 }
 
-/* A foto de fundo da vitrine — UMA por loja, em bytes, fora da linha de configuração.
-
-   Não é banner: banner é lista, com agenda e rodízio; isto é o padrão da loja, e o padrão
-   tem uma foto só. A chave é o próprio empresaId — não existe "segundo fundo". Remover é
-   apagar a linha e subir `TotemConfiguracao.fundoEsperaVersao`. */
+/**
+ * A foto de fundo da vitrine — UMA por loja, em bytes, fora da linha de configuração.
+ * Não é banner: banner é lista, com agenda e rodízio; isto é o padrão da loja, e o padrão
+ * tem uma foto só. A chave é o próprio empresaId — não existe "segundo fundo". Remover é
+ * apagar a linha e subir `TotemConfiguracao.fundoEsperaVersao`.
+ */
 model TotemEsperaFundo {
   empresaId    Int      @id
-  tipo         String                       // image/png, image/jpeg ou image/webp — o tipo REAL, pelos bytes
+  tipo         String // image/png, image/jpeg ou image/webp — o tipo REAL, pelos bytes
   dados        Bytes
   atualizadoEm DateTime @updatedAt
 }
 
-/* Os produtos que a esteira da tela de espera mostra.
-
-   Uma linha por produto do catálogo PROJETADO, e a chave é a dele: `item:12` para um item
-   base, `opcao:12:5:88` para um complemento expandido (a batata dentro do combo). Era
-   `cwItemId` numérico, e isso deixava metade do cardápio fora do alcance — os complementos
-   não são itens, são opções, e sem eles a loja não chegava aos doze.
-
-   Nome, preço e foto NUNCA são copiados para cá — eles vêm do catálogo vivo a cada
-   bootstrap. Copiar transformaria esta tabela numa segunda fonte de verdade sobre preço,
-   que é exatamente o erro que o resto do totem evita.
-
-   Produto que sai do cardápio vira ÓRFÃO: o bootstrap não o encontra e ele não aparece na
-   esteira; o admin mostra a linha marcada, com um botão de limpar. */
+/**
+ * Os produtos que a esteira da tela de espera mostra.
+ * Uma linha por produto do catálogo PROJETADO, e a chave é a dele: `item:12` para um item
+ * base, `opcao:12:5:88` para um complemento expandido (a batata dentro do combo). Era
+ * `cwItemId` numérico, e isso deixava metade do cardápio fora do alcance — os complementos
+ * não são itens, são opções, e sem eles a loja não chegava aos doze.
+ * Nome, preço e foto NUNCA são copiados para cá — eles vêm do catálogo vivo a cada
+ * bootstrap. Copiar transformaria esta tabela numa segunda fonte de verdade sobre preço,
+ * que é exatamente o erro que o resto do totem evita.
+ * Produto que sai do cardápio vira ÓRFÃO: o bootstrap não o encontra e ele não aparece na
+ * esteira; o admin mostra a linha marcada, com um botão de limpar.
+ */
 // A FITA do produto ("Mais pedido", "Recomendado", "Novidade", "Edição limitada", "Oferta").
 // NEUTRA DE CANAL: o totem desenha como faixa diagonal no card, a TV Indoor como etiqueta no
 // Menu Board, e o dado é UM só — marcar "Mais pedido" é decisão sobre o PRODUTO, não sobre o
@@ -929,14 +940,14 @@ model ProdutoFita {
 }
 
 model TotemDestaque {
-  id           Int      @id @default(autoincrement())
-  empresaId    Int
-  chave        String
+  id        Int      @id @default(autoincrement())
+  empresaId Int
+  chave     String
   // 'SUPERIOR' (anda para a direita) ou 'INFERIOR' (para a esquerda). Duas listas que não
   // se misturam, dez em cada. Régua em totemDestaque.js; valor torto cai na SUPERIOR.
-  esteira      String   @default("SUPERIOR")
-  ordem        Int      @default(0)
-  criadoEm     DateTime @default(now())
+  esteira   String   @default("SUPERIOR")
+  ordem     Int      @default(0)
+  criadoEm  DateTime @default(now())
 
   // Único por (empresa, chave), e não por (empresa, esteira, chave): um produto fica numa
   // esteira só. O PUT já garante isso; o índice é a segunda trava.
@@ -947,9 +958,9 @@ model TotemDestaque {
 model TotemApresentacao {
   id                 Int      @id @default(autoincrement())
   empresaId          Int
-  cwItemId           Int                          // Item.id do CW (item base)
-  modo               String                       // hoje só 'EXPANDIDO' é persistido
-  cwGrupoPrincipalId Int                          // OptionGroupInItem.id do vínculo item↔grupo
+  cwItemId           Int // Item.id do CW (item base)
+  modo               String // hoje só 'EXPANDIDO' é persistido
+  cwGrupoPrincipalId Int // OptionGroupInItem.id do vínculo item↔grupo
   criadoEm           DateTime @default(now())
   atualizadoEm       DateTime @updatedAt
 
@@ -974,9 +985,9 @@ model TotemApresentacao {
 // PUT faz upsert. A régua de validação (piso, teto, arredondamento) vive num lugar só,
 // `backend/totemConfiguracao.js` — nunca no cliente.
 model TotemConfiguracao {
-  id                 Int      @id @default(autoincrement())
-  empresaId          Int      @unique
-  ociosidadeSegundos Int      @default(90)
+  id                 Int @id @default(autoincrement())
+  empresaId          Int @unique
+  ociosidadeSegundos Int @default(90)
 
   // ── Aparência do canal ──
   // A logo PRÓPRIA do totem, como data URL (mesmo formato de Empresa.logoDataUrl e das
@@ -986,14 +997,14 @@ model TotemConfiguracao {
   // Ela nunca viaja no bootstrap — é servida por rota própria, com bytes reais e cache
   // versionado. `logoVersao` sobe a cada troca E a cada remoção; é ela que invalida o
   // cache do tablet sem depender de o navegador reconsultar.
-  logoDataUrl        String?
-  logoVersao         Int      @default(0)
+  logoDataUrl String?
+  logoVersao  Int     @default(0)
 
   // Overrides ESPARSOS das cores, em chaves de DOMÍNIO (fundo, cartao, texto…), nunca
   // `--ds-*`: o banco não pode conhecer nome de custom property, senão renomear um token
   // da folha invalidaria a configuração de todas as lojas. A paleta inteira não é
   // obrigatória — o que não está aqui vale o padrão embarcado. Régua em totemAparencia.js.
-  tokens             Json?
+  tokens Json?
 
   // Padrão da LOJA. O aparelho pode divergir (Dispositivo.posicaoCategoriasOverride).
   posicaoCategoriasPadrao String @default("esquerda")
@@ -1001,29 +1012,29 @@ model TotemConfiguracao {
   // O texto do botão da tela de espera. NULL = sem personalização, vale o padrão
   // ("Toque para começar"). Teto e régua em totemAparencia.js — o padrão NÃO mora aqui,
   // senão a string existiria em dois lugares.
-  chamadaEspera           String?
+  chamadaEspera String?
 
   // Título e subtítulo da tela de espera PADRÃO (a vitrine). NULL = a tela não desenha a
   // linha, e isso é uma escolha de desenho legítima — não têm padrão de fábrica.
-  tituloEspera            String?
-  subtituloEspera         String?
+  tituloEspera    String?
+  subtituloEspera String?
   // A frase da faixa entre as duas metades da vitrine. NULL = "Nossos produtos" (padrão
   // em totemAparencia.js — não mora aqui, senão a string existiria em dois lugares).
-  fraseMeioEspera         String?
+  fraseMeioEspera String?
 
   // Versão da FOTO DE FUNDO da vitrine. Os bytes NÃO estão aqui: estão em TotemEsperaFundo,
   // porque esta linha é lida em todo bootstrap e uma foto de tela cheia dentro dela seria
   // regressão (a logo, de 300KB, já é o limite do aceitável). A versão fica aqui pelo mesmo
   // motivo da logoVersao: é o que invalida o cache do tablet, e sobe também na REMOÇÃO.
-  fundoEsperaVersao       Int      @default(0)
+  fundoEsperaVersao Int @default(0)
 
   // O FUNDO: 'PADRAO' (carvão) ou 'CLARO'. Não é uma sétima cor — é a RELAÇÃO entre as
   // seis, e por isso `tokens` guarda um conjunto de overrides POR fundo. Escolha da LOJA;
   // o aparelho não diverge (ainda). Régua e padrões em totemAparencia.js.
-  layoutFundo             String @default("PADRAO")
+  layoutFundo String @default("PADRAO")
 
-  criadoEm           DateTime @default(now())
-  atualizadoEm       DateTime @updatedAt
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
 }
 
 // Totem › Banners — a arte que a loja mostra na TELA DE ESPERA, enquanto ninguém está
@@ -1330,7 +1341,7 @@ model TvProgramacaoRegra {
   dispositivoId Int
   playlistId    Int
 
-  ativo Boolean @default(true)
+  ativo     Boolean @default(true)
   // ISO-8601: 1 = segunda … 7 = domingo. Numérico e independente de idioma — nunca
   // "Segunda-feira", que muda com a tradução e não ordena.
   dias      Int[]
@@ -1361,32 +1372,36 @@ model TvProgramacaoRegra {
 }
 
 model TvMenuBoard {
-  id              Int      @id @default(autoincrement())
+  id              Int     @id @default(autoincrement())
   empresaId       Int
-  nome            String                       // etiqueta interna; na tela aparece o título
-  ativo           Boolean  @default(true)
+  nome            String // etiqueta interna; na tela aparece o título
+  ativo           Boolean @default(true)
   // GRADE | DESTAQUE | LISTA | VITRINE | OFERTA — régua em tvMenuBoard.js. Na UI a palavra é
   // TEMPLATE; a coluna guarda o nome antigo porque renomear a fundação no meio da obra custa
   // mais do que resolve, e os três ids do V1 continuam valendo exatamente como eram.
-  layout          String   @default("GRADE")
+  layout          String  @default("GRADE")
   // 20 s contra os 10 s de uma arte: um menu precisa ser LIDO, e quem passa na frente tem de
   // achar o produto e o preço.
-  duracaoSegundos Int      @default(20)
-  /* TEXTO da cena. Colunas, e não chaves dentro do JSON: são estruturais e fechados, e
-     campo tipado é validado pelo banco — `configuracao` é `Json` e aceitaria qualquer coisa.
-     O `titulo` morava no JSON no V1; a migration o copiou para cá. */
-  titulo    String?
-  subtitulo String?
+  duracaoSegundos Int     @default(20)
+  /**
+   * TEXTO da cena. Colunas, e não chaves dentro do JSON: são estruturais e fechados, e
+   * campo tipado é validado pelo banco — `configuracao` é `Json` e aceitaria qualquer coisa.
+   * O `titulo` morava no JSON no V1; a migration o copiou para cá.
+   */
+  titulo          String?
+  subtitulo       String?
 
-  /* EXIBIÇÃO. Os defaults reproduzem exatamente o V1: nenhum board existente muda de
-     aparência ao subir esta versão.
-       · logo escondida — o V1 não desenhava logo no board;
-       · descrição desligada — o V1 só a mostrava na Lista e no produto grande do Destaque,
-         e esses dois continuam mostrando por COMPOSIÇÃO, não por esta chave;
-       · imagem desligada — só a Lista lê esta chave (os outros templates mostram foto
-         sempre), e a Lista do V1 não tinha foto;
-       · fita LIGADA — a fita sempre apareceu.
-     Qual template honra qual chave está em `exibicaoDoBoard`, num lugar só. */
+  /**
+   * EXIBIÇÃO. Os defaults reproduzem exatamente o V1: nenhum board existente muda de
+   * aparência ao subir esta versão.
+   * · logo escondida — o V1 não desenhava logo no board;
+   * · descrição desligada — o V1 só a mostrava na Lista e no produto grande do Destaque,
+   * e esses dois continuam mostrando por COMPOSIÇÃO, não por esta chave;
+   * · imagem desligada — só a Lista lê esta chave (os outros templates mostram foto
+   * sempre), e a Lista do V1 não tinha foto;
+   * · fita LIGADA — a fita sempre apareceu.
+   * Qual template honra qual chave está em `exibicaoDoBoard`, num lugar só.
+   */
   mostrarLogo      Boolean @default(false)
   mostrarDescricao Boolean @default(false)
   mostrarImagem    Boolean @default(false)
@@ -1394,9 +1409,9 @@ model TvMenuBoard {
 
   // { cwCategoriaId?, itens: [{ cwItemId, destaque? }] } — validado no domínio.
   // `destaque` é legado do V1 e continua sendo honrado; boards novos usam a ORDEM.
-  configuracao    Json
-  criadoEm        DateTime @default(now())
-  atualizadoEm    DateTime @updatedAt
+  configuracao Json
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
 
   itens TvPlaylistItem[]
 
@@ -1407,16 +1422,16 @@ model TvMenuBoard {
 // ainda não casou com um funcionário. Ficam na fila até o admin vincular
 // (aí viram PontoRegistro). Não perde ponto de quem não foi mapeado ainda.
 model ColetorBatidaPendente {
-  id            Int      @id @default(autoincrement())
+  id            Int       @id @default(autoincrement())
   empresaId     Int
   dispositivoId Int?
   serial        String
   enrollid      Int
-  nome          String?  // nome como veio do coletor (ajuda a identificar)
+  nome          String? // nome como veio do coletor (ajuda a identificar)
   dataHora      DateTime
-  coletorRef    String   @unique // "sn:enrollid:time" — dedup
+  coletorRef    String    @unique // "sn:enrollid:time" — dedup
   resolvidoEm   DateTime? // preenchido quando vira PontoRegistro
-  criadoEm      DateTime @default(now())
+  criadoEm      DateTime  @default(now())
 
   @@index([empresaId, resolvidoEm])
   @@index([empresaId, enrollid])
@@ -1426,16 +1441,16 @@ model ColetorBatidaPendente {
 // (setuserinfo). O coletorServer envia os PENDENTE quando o coletor dá sinal
 // (reg) e marca ENVIADO. A face NÃO vai aqui — é cadastrada no aparelho.
 model ColetorComando {
-  id            Int      @id @default(autoincrement())
+  id            Int       @id @default(autoincrement())
   empresaId     Int
-  serial        String   // coletor destino (Dispositivo.serialColetor)
+  serial        String // coletor destino (Dispositivo.serialColetor)
   funcionarioId Int?
   enrollid      Int
-  cmd           String   @default("setuserinfo")
-  payload       Json     // comando completo enviado pelo WebSocket
-  status        String   @default("PENDENTE") // PENDENTE | ENVIADO
+  cmd           String    @default("setuserinfo")
+  payload       Json // comando completo enviado pelo WebSocket
+  status        String    @default("PENDENTE") // PENDENTE | ENVIADO
   enviadoEm     DateTime?
-  criadoEm      DateTime @default(now())
+  criadoEm      DateTime  @default(now())
 
   @@index([serial, status])
   @@index([empresaId])
@@ -1447,7 +1462,7 @@ model ColetorComando {
 model PontoConfig {
   id           Int      @id @default(autoincrement())
   empresaId    Int      @unique
-  dedupeMin    Int      @default(15)    // janela anti-duplicação em minutos (0 = desliga)
+  dedupeMin    Int      @default(15) // janela anti-duplicação em minutos (0 = desliga)
   usaIntervalo Boolean  @default(false) // false = só Entrada/Saída; true = com intervalo
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
@@ -1473,23 +1488,23 @@ model Jornada {
 // Dep. Pessoal › Bonificação — configuração POR LOJA (1 linha por empresa):
 // tetos em R$ de cada pilar, bônus do Top 3 e % de penalidade da assiduidade.
 model BonificacaoConfig {
-  id               Int      @id @default(autoincrement())
-  empresaId        Int      @unique
-  tokenPublico     String?  @unique // link público p/ a equipe acompanhar o ranking
-  slugPublico      String?  @unique // apelido amigável do link (ex.: "ranking")
-  ativo            Boolean  @default(true)
-  tetoAssiduidade  Decimal  @default(100) @db.Decimal(10, 2)
-  tetoDesempenho   Decimal  @default(100) @db.Decimal(10, 2)
-  tetoColetiva     Decimal  @default(100) @db.Decimal(10, 2)
-  bonusTop1        Decimal  @default(100) @db.Decimal(10, 2)
-  bonusTop2        Decimal  @default(50)  @db.Decimal(10, 2)
-  bonusTop3        Decimal  @default(25)  @db.Decimal(10, 2)
-  xpPorNivel       Int      @default(500) // XP necessário por nível
-  moedasPorReal    Decimal  @default(1) @db.Decimal(6, 2) // moedas creditadas por R$ no fechamento
-  reconhecimentoCoins  Int  @default(10) // Coins ao aprovar um reconhecimento entre colegas (Bloco 4)
-  reconhecimentoMaxMes Int  @default(3)  // limite de reconhecimentos enviados por colaborador/mês
-  criadoEm         DateTime @default(now())
-  atualizadoEm     DateTime @updatedAt
+  id                   Int      @id @default(autoincrement())
+  empresaId            Int      @unique
+  tokenPublico         String?  @unique // link público p/ a equipe acompanhar o ranking
+  slugPublico          String?  @unique // apelido amigável do link (ex.: "ranking")
+  ativo                Boolean  @default(true)
+  tetoAssiduidade      Decimal  @default(100) @db.Decimal(10, 2)
+  tetoDesempenho       Decimal  @default(100) @db.Decimal(10, 2)
+  tetoColetiva         Decimal  @default(100) @db.Decimal(10, 2)
+  bonusTop1            Decimal  @default(100) @db.Decimal(10, 2)
+  bonusTop2            Decimal  @default(50) @db.Decimal(10, 2)
+  bonusTop3            Decimal  @default(25) @db.Decimal(10, 2)
+  xpPorNivel           Int      @default(500) // XP necessário por nível
+  moedasPorReal        Decimal  @default(1) @db.Decimal(6, 2) // moedas creditadas por R$ no fechamento
+  reconhecimentoCoins  Int      @default(10) // Coins ao aprovar um reconhecimento entre colegas (Bloco 4)
+  reconhecimentoMaxMes Int      @default(3) // limite de reconhecimentos enviados por colaborador/mês
+  criadoEm             DateTime @default(now())
+  atualizadoEm         DateTime @updatedAt
 }
 
 // Nomes dos níveis (lista ordenada, editável por loja). Nível N = nome[N-1] ou "Nível N".
@@ -1525,31 +1540,31 @@ model BonificacaoXp {
 // aditivos (default preserva o comportamento atual: impacto = percentual fixo).
 // A lógica de faixas/severidade/progressividade entra em M2–M4.
 model BonificacaoTipoOcorrencia {
-  id           Int      @id @default(autoincrement())
-  empresaId    Int
-  nome         String
-  pilar        String   // ASSIDUIDADE | DESEMPENHO | COLETIVA
-  percentual   Decimal  @db.Decimal(5, 2) // % base descontado por ocorrência (regra simples)
-  ordem        Int      @default(0)
-  ativo        Boolean  @default(true)
+  id                  Int       @id @default(autoincrement())
+  empresaId           Int
+  nome                String
+  pilar               String // ASSIDUIDADE | DESEMPENHO | COLETIVA
+  percentual          Decimal   @db.Decimal(5, 2) // % base descontado por ocorrência (regra simples)
+  ordem               Int       @default(0)
+  ativo               Boolean   @default(true)
   // ── Motor de Regras ──
-  tipoImpacto       String    @default("PERCENTUAL") // PERCENTUAL | FAIXA_MINUTOS | SEVERIDADE
-  evento            String?   // categoria do evento que dispara a regra (ex.: ATRASO, FALTA)
-  severidade        String?   // LEVE | MEDIA | GRAVE | CRITICA (Desempenho) — M3
-  toleranciaMin     Int?      // tolerância antes de aplicar (min) — M2
-  faixaMinMin       Int?      // faixa de minutos: início inclusivo — M2
-  faixaMaxMin       Int?      // faixa de minutos: fim inclusivo — M2
-  faixasJson        Json?     // FAIXA_MINUTOS: [{minMin,maxMin,percentual,rotulo}] — M2
-  severidadeId      Int?      // SEVERIDADE: severidade padrão da regra — M3
-  reincidenciaAPartir Int?    // progressividade a partir da N-ésima ocorrência no ciclo — M4
-  incrementoPct     Decimal?  @db.Decimal(5, 2) // incremento por reincidência — M4
-  tetoOcorrenciaPct Decimal?  @db.Decimal(5, 2) // teto do impacto por ocorrência — M4
-  tetoCicloPct      Decimal?  @db.Decimal(5, 2) // teto acumulado no ciclo — M4
-  prioridade        Int       @default(0)        // ordem de avaliação das regras
-  vigenciaInicio    DateTime?
-  vigenciaFim       DateTime?
-  criadoEm     DateTime @default(now())
-  atualizadoEm DateTime @updatedAt
+  tipoImpacto         String    @default("PERCENTUAL") // PERCENTUAL | FAIXA_MINUTOS | SEVERIDADE
+  evento              String? // categoria do evento que dispara a regra (ex.: ATRASO, FALTA)
+  severidade          String? // LEVE | MEDIA | GRAVE | CRITICA (Desempenho) — M3
+  toleranciaMin       Int? // tolerância antes de aplicar (min) — M2
+  faixaMinMin         Int? // faixa de minutos: início inclusivo — M2
+  faixaMaxMin         Int? // faixa de minutos: fim inclusivo — M2
+  faixasJson          Json? // FAIXA_MINUTOS: [{minMin,maxMin,percentual,rotulo}] — M2
+  severidadeId        Int? // SEVERIDADE: severidade padrão da regra — M3
+  reincidenciaAPartir Int? // progressividade a partir da N-ésima ocorrência no ciclo — M4
+  incrementoPct       Decimal?  @db.Decimal(5, 2) // incremento por reincidência — M4
+  tetoOcorrenciaPct   Decimal?  @db.Decimal(5, 2) // teto do impacto por ocorrência — M4
+  tetoCicloPct        Decimal?  @db.Decimal(5, 2) // teto acumulado no ciclo — M4
+  prioridade          Int       @default(0) // ordem de avaliação das regras
+  vigenciaInicio      DateTime?
+  vigenciaFim         DateTime?
+  criadoEm            DateTime  @default(now())
+  atualizadoEm        DateTime  @updatedAt
 
   @@index([empresaId, pilar, ordem])
 }
@@ -1558,28 +1573,28 @@ model BonificacaoTipoOcorrencia {
 // tipo (nome/pilar/%) p/ o histórico ficar imutável mesmo se o tipo mudar depois.
 // funcionarioId é null quando a ocorrência é COLETIVA (da loja/equipe, sem dono).
 model BonificacaoOcorrencia {
-  id            Int      @id @default(autoincrement())
-  empresaId     Int
-  funcionarioId Int?
-  ano           Int
-  mes           Int
-  tipoId        Int?     // regra que gerou o impacto
-  nomeTipo      String
-  pilar         String   // ASSIDUIDADE | DESEMPENHO | COLETIVA
-  percentual    Decimal  @db.Decimal(5, 2) // impacto final (calculado pelo motor)
-  data          DateTime @db.Date
-  observacao    String?
-  origem        String   @default("MANUAL") // MANUAL | PONTO (lançada pelo Ponto Facial)
+  id             Int      @id @default(autoincrement())
+  empresaId      Int
+  funcionarioId  Int?
+  ano            Int
+  mes            Int
+  tipoId         Int? // regra que gerou o impacto
+  nomeTipo       String
+  pilar          String // ASSIDUIDADE | DESEMPENHO | COLETIVA
+  percentual     Decimal  @db.Decimal(5, 2) // impacto final (calculado pelo motor)
+  data           DateTime @db.Date
+  observacao     String?
+  origem         String   @default("MANUAL") // MANUAL | PONTO (lançada pelo Ponto Facial)
   // ── Motor de Regras (evento + impacto explicável) ──
-  minutosEvento  Int?     // dado do evento (ex.: minutos de atraso)
-  dadosEvento    Json?    // dados adicionais do evento (flexível)
-  explicacao     String?  // por que este impacto foi aplicado (regra/faixa/reincidência)
-  severidade     String?  // severidade aplicada (snapshot)
+  minutosEvento  Int? // dado do evento (ex.: minutos de atraso)
+  dadosEvento    Json? // dados adicionais do evento (flexível)
+  explicacao     String? // por que este impacto foi aplicado (regra/faixa/reincidência)
+  severidade     String? // severidade aplicada (snapshot)
   status         String   @default("VALIDADA") // VALIDADA | PENDENTE | REJEITADA
-  lancadoPor     Int?     // usuário que lançou
-  validadoPor    Int?     // usuário que validou
+  lancadoPor     Int? // usuário que lançou
+  validadoPor    Int? // usuário que validou
   idempotencyKey String?  @unique // evita lançar o mesmo evento duas vezes
-  criadoEm      DateTime @default(now())
+  criadoEm       DateTime @default(now())
 
   @@index([empresaId, ano, mes])
   @@index([funcionarioId, ano, mes])
@@ -1592,7 +1607,7 @@ model BonificacaoSeveridade {
   empresaId    Int
   nome         String
   percentual   Decimal  @db.Decimal(5, 2) // impacto padrão dessa severidade
-  cor          String?  // hex de identificação
+  cor          String? // hex de identificação
   ordem        Int      @default(0)
   ativo        Boolean  @default(true)
   criadoEm     DateTime @default(now())
@@ -1608,7 +1623,7 @@ model BonificacaoIndicador {
   empresaId    Int
   nome         String
   escalaMax    Decimal  @default(5) @db.Decimal(8, 2) // valor máximo da escala (ex.: 5 estrelas, 100 NPS)
-  peso         Decimal  @default(1) @db.Decimal(6, 2)  // peso relativo na média ponderada
+  peso         Decimal  @default(1) @db.Decimal(6, 2) // peso relativo na média ponderada
   ordem        Int      @default(0)
   ativo        Boolean  @default(true)
   criadoEm     DateTime @default(now())
@@ -1639,7 +1654,7 @@ model AcessoOperador {
   id           Int       @id @default(autoincrement())
   empresaId    Int
   nome         String
-  whatsapp     String    // dígitos canônicos (DDD+número, sem DDI)
+  whatsapp     String // dígitos canônicos (DDD+número, sem DDI)
   areas        String[]  @default([])
   ativo        Boolean   @default(true)
   ultimoAcesso DateTime?
@@ -1654,8 +1669,8 @@ model AcessoOperador {
 model ColaboradorOtp {
   id            Int      @id @default(autoincrement())
   empresaId     Int
-  funcionarioId Int?     // null quando é login de operador
-  telefone      String   // dígitos canônicos (DDD+número, sem DDI)
+  funcionarioId Int? // null quando é login de operador
+  telefone      String // dígitos canônicos (DDD+número, sem DDI)
   codigoHash    String
   expiraEm      DateTime
   tentativas    Int      @default(0)
@@ -1670,11 +1685,11 @@ model ColaboradorOtp {
 model BonificacaoOuvidoria {
   id            Int       @id @default(autoincrement())
   empresaId     Int
-  funcionarioId Int?      // null quando anônimo
+  funcionarioId Int? // null quando anônimo
   anonimo       Boolean   @default(false)
   tipo          String    @default("SUGESTAO") // RECLAMACAO | SUGESTAO | ELOGIO | DENUNCIA | OUTRO
   mensagem      String
-  status        String    @default("ABERTA")   // ABERTA | EM_ANALISE | RESPONDIDA | ARQUIVADA
+  status        String    @default("ABERTA") // ABERTA | EM_ANALISE | RESPONDIDA | ARQUIVADA
   resposta      String?
   respondidoPor String?
   respondidoEm  DateTime?
@@ -1692,7 +1707,7 @@ model BonificacaoContribuicao {
   mes           Int
   descricao     String
   pontos        Int      @default(25) // soma no contribPct do mês (teto 100)
-  coins         Int      @default(0)  // bônus opcional creditado na hora
+  coins         Int      @default(0) // bônus opcional creditado na hora
   registradoPor String?
   criadoEm      DateTime @default(now())
 
@@ -1723,8 +1738,8 @@ model BonificacaoAuditoria {
   empresaId     Int
   usuarioId     Int?
   usuarioNome   String?
-  acao          String   // OCORRENCIA_LANCADA | OCORRENCIA_EXCLUIDA | ...
-  entidade      String?  // ex.: BonificacaoOcorrencia
+  acao          String // OCORRENCIA_LANCADA | OCORRENCIA_EXCLUIDA | ...
+  entidade      String? // ex.: BonificacaoOcorrencia
   entidadeId    Int?
   valorAntes    Json?
   valorDepois   Json?
@@ -1749,14 +1764,14 @@ model BonificacaoColetiva {
 
 // Fechamento do mês — snapshot imutável p/ o relatório de pagamento.
 model BonificacaoFechamento {
-  id          Int      @id @default(autoincrement())
-  empresaId   Int
+  id              Int      @id @default(autoincrement())
+  empresaId       Int
   ano             Int
   mes             Int
   coletivaPct     Decimal  @default(0) @db.Decimal(5, 2)
   itensJson       Json
-  indicadoresJson Json?    // snapshot dos indicadores coletivos do mês (Bloco 3)
-  regrasJson      Json?    // snapshot das regras vigentes no fechamento (tetos/bônus/pesos) (Bloco 5)
+  indicadoresJson Json? // snapshot dos indicadores coletivos do mês (Bloco 3)
+  regrasJson      Json? // snapshot das regras vigentes no fechamento (tetos/bônus/pesos) (Bloco 5)
   totalGeral      Decimal  @default(0) @db.Decimal(12, 2)
   fechadoPor      String?
   fechadoEm       DateTime @default(now())
@@ -1772,19 +1787,19 @@ model Conquista {
   nome         String
   descricao    String?
   emoji        String   @default("🏅")
-  raridade     String   @default("COMUM")  // COMUM | RARO | EPICO | LENDARIO
+  raridade     String   @default("COMUM") // COMUM | RARO | EPICO | LENDARIO
   // VITORIAS | PODIOS | MESES_ATIVOS | PRESENCA_100 | SCORE_100 (automáticas)
   // SUGESTOES_IMPLEMENTADAS | RECONHECIMENTOS_RECEBIDOS (por validação)
   // CICLOS_CONSECUTIVOS_95 | COLECAO (automáticas) | MANUAL
   regra        String   @default("MANUAL")
-  meta         Int      @default(1)        // limiar da regra (ignorado p/ MANUAL e PROGRESSIVA)
-  xpBonus      Int      @default(0)        // Coins creditados ao desbloquear
+  meta         Int      @default(1) // limiar da regra (ignorado p/ MANUAL e PROGRESSIVA)
+  xpBonus      Int      @default(0) // Coins creditados ao desbloquear
   // Que comportamento a medalha reconhece (filtros e leitura do catálogo).
   categoria    String   @default("JORNADA") // JORNADA | ASSIDUIDADE | DESEMPENHO | EXCELENCIA | COLABORACAO | INOVACAO | COLECAO
   // UNICA = desbloqueia 1x | PROGRESSIVA = níveis (niveisJson) | REPETIVEL = a cada ciclo
   tipo         String   @default("UNICA")
-  niveisJson   Json?    // PROGRESSIVA: [{ nome, meta, coins }] em ordem crescente
-  acumulavel   Boolean  @default(true)  // Coins somam aos do evento de origem?
+  niveisJson   Json? // PROGRESSIVA: [{ nome, meta, coins }] em ordem crescente
+  acumulavel   Boolean  @default(true) // Coins somam aos do evento de origem?
   arquivada    Boolean  @default(false) // arquivar em vez de excluir (preserva histórico)
   ativo        Boolean  @default(true)
   ordem        Int      @default(0)
@@ -1801,9 +1816,9 @@ model ConquistaDesbloqueada {
   conquistaId    Int
   funcionarioId  Int
   origem         String   @default("AUTO") // AUTO | MANUAL
-  nivel          Int      @default(0)  // 0 = única; 1..N = nível da PROGRESSIVA
-  motivo         String?  // por que foi concedida (obrigatório na concessão manual)
-  concedidoPor   String?  // quem concedeu (manual)
+  nivel          Int      @default(0) // 0 = única; 1..N = nível da PROGRESSIVA
+  motivo         String? // por que foi concedida (obrigatório na concessão manual)
+  concedidoPor   String? // quem concedeu (manual)
   ano            Int?
   mes            Int?
   desbloqueadoEm DateTime @default(now())
@@ -1819,7 +1834,7 @@ model BonificacaoMoeda {
   id            Int      @id @default(autoincrement())
   empresaId     Int
   funcionarioId Int
-  pontos        Int      // + credita, − debita
+  pontos        Int // + credita, − debita
   motivo        String?
   origem        String   @default("MANUAL") // FECHAMENTO | MANUAL | RESGATE | ESTORNO
   resgateId     Int?
@@ -1840,7 +1855,7 @@ model MercadoItem {
   emoji        String   @default("🎁")
   tipo         String   @default("PRODUTO") // PRODUTO | FOLGA (folga/reserva pede data desejada)
   custo        Int      @default(100) // moedas
-  estoque      Int?     // null = ilimitado
+  estoque      Int? // null = ilimitado
   ativo        Boolean  @default(true)
   ordem        Int      @default(0)
   criadoEm     DateTime @default(now())
@@ -1919,7 +1934,7 @@ model AjudaArtigo {
   titulo       String
   slug         String   @unique
   resumo       String?
-  conteudo     String   // markdown
+  conteudo     String // markdown
   ordem        Int      @default(0)
   publicado    Boolean  @default(true)
   criadoEm     DateTime @default(now())
@@ -1978,29 +1993,29 @@ enum CupomStatus {
 // Configuração do programa por loja (1/loja). Guarda os tokens dos links
 // públicos e o snapshot do cupom de boas-vindas do amigo.
 model IndicacaoConfig {
-  id                Int               @id @default(autoincrement())
-  empresaId         Int
-  ativo             Boolean           @default(false)
-  promotorToken     String            @unique // link público "Seja Promotor"
-  atendenteToken    String            @unique // link do balcão (dar baixa)
-  cupomAmigoTitulo  String            @default("Cupom de boas-vindas")
-  cupomEmoji        String            @default("🎁") // emoji exibido junto ao cupom
-  cupomAmigoDestino RecompensaDestino @default(SALAO) // legado (mantido; ver cupomAmigoTipos)
-  cupomAmigoPercentual Int            @default(10) // legado (ver cupomAmigoValor)
-  cupomAmigoTipoDesconto String       @default("percent_discount") // percent_discount | flat_discount | free_shipping
-  cupomAmigoValor      Float?         // valor do desconto (% ou R$); null p/ free_shipping
-  cupomAmigoTipos      String[]       @default([]) // tipos de pedido do CW: delivery|takeout|onsite ([] = todos)
+  id                     Int               @id @default(autoincrement())
+  empresaId              Int
+  ativo                  Boolean           @default(false)
+  promotorToken          String            @unique // link público "Seja Promotor"
+  atendenteToken         String            @unique // link do balcão (dar baixa)
+  cupomAmigoTitulo       String            @default("Cupom de boas-vindas")
+  cupomEmoji             String            @default("🎁") // emoji exibido junto ao cupom
+  cupomAmigoDestino      RecompensaDestino @default(SALAO) // legado (mantido; ver cupomAmigoTipos)
+  cupomAmigoPercentual   Int               @default(10) // legado (ver cupomAmigoValor)
+  cupomAmigoTipoDesconto String            @default("percent_discount") // percent_discount | flat_discount | free_shipping
+  cupomAmigoValor        Float? // valor do desconto (% ou R$); null p/ free_shipping
+  cupomAmigoTipos        String[]          @default([]) // tipos de pedido do CW: delivery|takeout|onsite ([] = todos)
   // Aparência do cupom/página do amigo
-  cupomCorTipo      String            @default("gradiente") // solido | gradiente
-  cupomCor1         String            @default("#ecc558")   // cor sólida / início do degradê
-  cupomCor2         String            @default("#c48a1c")   // fim do degradê
-  botaoCor          String            @default("#7c3aed")   // cor do botão "Resgatar meu cupom"
+  cupomCorTipo           String            @default("gradiente") // solido | gradiente
+  cupomCor1              String            @default("#ecc558") // cor sólida / início do degradê
+  cupomCor2              String            @default("#c48a1c") // fim do degradê
+  botaoCor               String            @default("#7c3aed") // cor do botão "Resgatar meu cupom"
   // Campos do formulário do amigo (nao | opcional | obrigatorio). Nome/WhatsApp são sempre obrigatórios.
-  campoEmail        String            @default("opcional")
-  campoNascimento   String            @default("opcional")
-  bannerDataUrl     String?           @db.Text // arte do topo das páginas públicas (base64)
-  criadoEm          DateTime          @default(now())
-  atualizadoEm      DateTime          @updatedAt
+  campoEmail             String            @default("opcional")
+  campoNascimento        String            @default("opcional")
+  bannerDataUrl          String?           @db.Text // arte do topo das páginas públicas (base64)
+  criadoEm               DateTime          @default(now())
+  atualizadoEm           DateTime          @updatedAt
 
   @@unique([empresaId])
 }
@@ -2009,7 +2024,7 @@ model Promotor {
   id           Int            @id @default(autoincrement())
   empresaId    Int
   nome         String
-  whatsapp     String         // normalizado (só dígitos)
+  whatsapp     String // normalizado (só dígitos)
   codigo       String         @unique // curto/compartilhável (link do amigo)
   painelToken  String         @unique // secreto (painel do promotor)
   origem       PromotorOrigem @default(PUBLICO)
@@ -2027,17 +2042,17 @@ model Promotor {
 }
 
 model Indicacao {
-  id            Int             @id @default(autoincrement())
-  empresaId     Int
-  promotorId    Int
-  amigoNome     String
-  amigoWhatsapp String          // normalizado
-  amigoEmail    String?
-  amigoNascimento DateTime?     @db.Date
-  status        IndicacaoStatus @default(PENDENTE)
-  validadoEm    DateTime?
-  criadoEm      DateTime        @default(now())
-  atualizadoEm  DateTime        @updatedAt
+  id              Int             @id @default(autoincrement())
+  empresaId       Int
+  promotorId      Int
+  amigoNome       String
+  amigoWhatsapp   String // normalizado
+  amigoEmail      String?
+  amigoNascimento DateTime?       @db.Date
+  status          IndicacaoStatus @default(PENDENTE)
+  validadoEm      DateTime?
+  criadoEm        DateTime        @default(now())
+  atualizadoEm    DateTime        @updatedAt
 
   promotor Promotor @relation(fields: [promotorId], references: [id], onDelete: Cascade)
   cupom    Cupom?
@@ -2052,7 +2067,7 @@ model Indicacao {
 model RecompensaTier {
   id           Int               @id @default(autoincrement())
   empresaId    Int
-  meta         Int               // nº de indicações validadas p/ desbloquear
+  meta         Int // nº de indicações validadas p/ desbloquear
   titulo       String
   tipo         String            @default("CONSUMO") // CONSUMO | BRINDE
   emoji        String            @default("🎁")
@@ -2078,7 +2093,7 @@ model Cupom {
   empresaId        Int
   codigo           String            @unique
   tipo             CupomTipo
-  titulo           String            // snapshot do que dá
+  titulo           String // snapshot do que dá
   destino          RecompensaDestino
   status           CupomStatus       @default(DISPONIVEL)
   promotorId       Int?
@@ -2197,11 +2212,11 @@ model Candidato {
   respostasFormulario Json? // respostas do formulário permanente (perguntas personalizadas)
   observacoesInternas String?   @db.Text // notas gerais da pessoa
   // LGPD / consentimento
-  consentimentoLGPD    Boolean   @default(false)
-  consentimentoBanco   Boolean   @default(false)
-  consentimentoEm      DateTime?
-  consentimentoOrigem  String? // MANUAL|PUBLICO
-  termoVersao          String?
+  consentimentoLGPD   Boolean   @default(false)
+  consentimentoBanco  Boolean   @default(false)
+  consentimentoEm     DateTime?
+  consentimentoOrigem String? // MANUAL|PUBLICO
+  termoVersao         String?
   // soft delete / anonimização
   anonimizado         Boolean   @default(false)
   anonimizadoEm       DateTime?
@@ -2242,36 +2257,36 @@ model ExperienciaProfissional {
 // PARTICIPAÇÃO do candidato numa vaga (processo seletivo independente). Guarda o
 // status, o score e todo o histórico específico daquele processo.
 model Candidatura {
-  id               Int             @id @default(autoincrement())
-  empresaId        Int
-  candidatoId      Int
-  vagaId           Int
-  status           CandidatoStatus @default(NOVO)
-  avaliacaoGestor  Int? // 0-100 (parte humana do score, deste processo)
-  proximaAcao      String?
-  dataRetorno      DateTime?       @db.Date
-  motivoReprovacao String?
-  tags             String[]        @default([]) // tags específicas deste processo
+  id                   Int             @id @default(autoincrement())
+  empresaId            Int
+  candidatoId          Int
+  vagaId               Int
+  status               CandidatoStatus @default(NOVO)
+  avaliacaoGestor      Int? // 0-100 (parte humana do score, deste processo)
+  proximaAcao          String?
+  dataRetorno          DateTime?       @db.Date
+  motivoReprovacao     String?
+  tags                 String[]        @default([]) // tags específicas deste processo
   // Respostas do formulário da vaga + classificação por aderência (visual principal)
-  respostas           Json?
-  classificacao       String? // ATENDE | PARCIAL | NAO_ATENDE | INCOMPLETO
-  classificacaoManual String? // override do gestor (ignora o cálculo)
-  aderencia           Int? // % de aderência aos requisitos
+  respostas            Json?
+  classificacao        String? // ATENDE | PARCIAL | NAO_ATENDE | INCOMPLETO
+  classificacaoManual  String? // override do gestor (ignora o cálculo)
+  aderencia            Int? // % de aderência aos requisitos
   classificacaoDetalhe Json? // checklist explicativo [{label, ok:'sim'|'nao'|'parcial'}]
   // Score auditável (valor atual; a trilha fica em ScoreHistorico)
-  score            Int?
-  scoreBreakdown   Json?
-  scorePesos       Json?
-  scoreVersao      String?
-  scoreMotivo      String?
-  scorePreenchimento Int? // % de dados preenchidos (0-100)
-  scoreQualidade   String? // COMPLETO | PARCIAL | ESTIMADO
-  scoreCalculadoEm DateTime?
-  criadoEm         DateTime        @default(now())
-  atualizadoEm     DateTime        @updatedAt
+  score                Int?
+  scoreBreakdown       Json?
+  scorePesos           Json?
+  scoreVersao          String?
+  scoreMotivo          String?
+  scorePreenchimento   Int? // % de dados preenchidos (0-100)
+  scoreQualidade       String? // COMPLETO | PARCIAL | ESTIMADO
+  scoreCalculadoEm     DateTime?
+  criadoEm             DateTime        @default(now())
+  atualizadoEm         DateTime        @updatedAt
 
-  candidato   Candidato   @relation(fields: [candidatoId], references: [id], onDelete: Cascade)
-  vaga        Vaga        @relation(fields: [vagaId], references: [id], onDelete: Cascade)
+  candidato   Candidato             @relation(fields: [candidatoId], references: [id], onDelete: Cascade)
+  vaga        Vaga                  @relation(fields: [vagaId], references: [id], onDelete: Cascade)
   historico   CandidatoHistorico[]
   avaliacoes  AvaliacaoCandidato[]
   contatos    ContatoCandidato[]
@@ -2404,15 +2419,15 @@ model RecrutamentoTag {
 }
 
 model RecrutamentoConfig {
-  id           Int      @id @default(autoincrement())
-  empresaId    Int
-  slug         String   @unique
-  publicoAtivo Boolean  @default(true)
-  retencaoMeses Int     @default(12)
-  termoVersao  String   @default("1.0")
-  formulario   Json? // construtor do formulário PERMANENTE do banco de talentos
-  criadoEm     DateTime @default(now())
-  atualizadoEm DateTime @updatedAt
+  id            Int      @id @default(autoincrement())
+  empresaId     Int
+  slug          String   @unique
+  publicoAtivo  Boolean  @default(true)
+  retencaoMeses Int      @default(12)
+  termoVersao   String   @default("1.0")
+  formulario    Json? // construtor do formulário PERMANENTE do banco de talentos
+  criadoEm      DateTime @default(now())
+  atualizadoEm  DateTime @updatedAt
 
   @@unique([empresaId])
 }
@@ -2444,7 +2459,7 @@ model EtiquetaConfig {
   alturaMm           Int      @default(30)
   modelo             String   @default("CLASSICO")
   fonte              String   @default("NORMAL")
-  campos             Json?    // { alergenos: false, instrucoes: false, ... }
+  campos             Json? // { alergenos: false, instrucoes: false, ... }
   criadoEm           DateTime @default(now())
   atualizadoEm       DateTime @updatedAt
 
@@ -2488,21 +2503,21 @@ model EtiquetaItemConfig {
 // nomeItem/responsavelNome são SNAPSHOT: a etiqueta é um documento sanitário do
 // momento da manipulação e não pode mudar quando o cadastro muda.
 model EtiquetaImpressa {
-  id             Int             @id @default(autoincrement())
-  empresaId      Int
-  lote           String          @unique
-  insumoId       Int?
-  nomeItem       String
-  conservacao    ConservacaoTipo
-  tempLabel      String
-  manipuladoEm   DateTime
-  validoAte      DateTime
-  validadeDias   Int
-  responsavelId  Int?
+  id              Int             @id @default(autoincrement())
+  empresaId       Int
+  lote            String          @unique
+  insumoId        Int?
+  nomeItem        String
+  conservacao     ConservacaoTipo
+  tempLabel       String
+  manipuladoEm    DateTime
+  validoAte       DateTime
+  validadeDias    Int
+  responsavelId   Int?
   responsavelNome String
-  dispositivoId  Int?
-  quantidade     Int             @default(1)
-  criadoEm       DateTime        @default(now())
+  dispositivoId   Int?
+  quantidade      Int             @default(1)
+  criadoEm        DateTime        @default(now())
 
   @@index([empresaId, validoAte])
   @@index([empresaId, criadoEm])
@@ -2540,93 +2555,98 @@ enum StatusExecucao {
 }
 
 model ChecklistTemplate {
-  id               Int      @id @default(autoincrement())
+  id               Int                     @id @default(autoincrement())
   empresaId        Int
   nome             String
   categoria        String
   descricao        String?
   tempoEstimadoMin Int?
-  ativo            Boolean  @default(true)
-  arquivado        Boolean  @default(false)
-  criadoEm         DateTime @default(now())
-  atualizadoEm     DateTime @updatedAt
+  ativo            Boolean                 @default(true)
+  arquivado        Boolean                 @default(false)
+  criadoEm         DateTime                @default(now())
+  atualizadoEm     DateTime                @updatedAt
   itens            ChecklistTemplateItem[]
+
   @@index([empresaId])
 }
 
 model ChecklistTemplateItem {
-  id         Int      @id @default(autoincrement())
+  id         Int               @id @default(autoincrement())
   empresaId  Int
   templateId Int
-  ordem      Int      @default(0)
+  ordem      Int               @default(0)
   tipo       TipoItemChecklist
   titulo     String
   descricao  String?
-  critico    Boolean  @default(false)
+  critico    Boolean           @default(false)
   config     Json?
   template   ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
   @@index([empresaId])
   @@index([templateId])
 }
 
 model Checklist {
-  id                Int      @id @default(autoincrement())
+  id                Int                 @id @default(autoincrement())
   empresaId         Int
   templateOrigemId  Int?
   nome              String
   categoria         String
   descricao         String?
   prioridade        PrioridadeChecklist @default(MEDIA)
-  atribuicaoTipo    String   @default("FUNCAO") // FUNCAO | COLABORADOR — qual dos dois campos abaixo vale
-  funcoes           String[] @default([]) // modo FUNCAO: nomes das Funções que executam (reusa a Funcao existente)
-  funcionarioIds    Int[]    @default([]) // modo COLABORADOR: ids dos Funcionários responsáveis
-  recorrenciaTipo   RecorrenciaTipo @default(AVULSO)
+  atribuicaoTipo    String              @default("FUNCAO") // FUNCAO | COLABORADOR — qual dos dois campos abaixo vale
+  funcoes           String[]            @default([]) // modo FUNCAO: nomes das Funções que executam (reusa a Funcao existente)
+  funcionarioIds    Int[]               @default([]) // modo COLABORADOR: ids dos Funcionários responsáveis
+  recorrenciaTipo   RecorrenciaTipo     @default(AVULSO)
   recorrenciaConfig Json?
-  tempoEstimadoMin  Int?     // tempo estimado de execução (min), exibido pro colaborador
-  publicoToken      String?  @unique // token do link público (execução por PIN, sem OTP) — gerado sob demanda
-  ativo             Boolean  @default(true)
-  criadoEm          DateTime @default(now())
-  atualizadoEm      DateTime @updatedAt
+  tempoEstimadoMin  Int? // tempo estimado de execução (min), exibido pro colaborador
+  publicoToken      String?             @unique // token do link público (execução por PIN, sem OTP) — gerado sob demanda
+  ativo             Boolean             @default(true)
+  criadoEm          DateTime            @default(now())
+  atualizadoEm      DateTime            @updatedAt
   itens             ChecklistItem[]
   execucoes         ChecklistExecucao[]
+
   @@index([empresaId])
 }
 
 model ChecklistItem {
-  id          Int      @id @default(autoincrement())
+  id          Int               @id @default(autoincrement())
   empresaId   Int
   checklistId Int
-  ordem       Int      @default(0)
+  ordem       Int               @default(0)
   tipo        TipoItemChecklist
   titulo      String
   descricao   String?
-  critico     Boolean  @default(false)
+  critico     Boolean           @default(false)
   config      Json?
-  checklist   Checklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  checklist   Checklist         @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+
   @@index([empresaId])
   @@index([checklistId])
 }
 
 model ChecklistExecucao {
-  id                Int      @id @default(autoincrement())
+  id                Int                 @id @default(autoincrement())
   empresaId         Int
   checklistId       Int
   dataRef           DateTime
   funcionarioId     Int
-  iniciadaEm        DateTime @default(now())
+  iniciadaEm        DateTime            @default(now())
   concluidaEm       DateTime?
-  status            StatusExecucao @default(EM_ANDAMENTO)
-  emAlerta          Boolean  @default(false)
+  status            StatusExecucao      @default(EM_ANDAMENTO)
+  emAlerta          Boolean             @default(false)
   itensSnapshotJson Json
-  checklist         Checklist @relation(fields: [checklistId], references: [id], onDelete: Cascade)
+  checklist         Checklist           @relation(fields: [checklistId], references: [id], onDelete: Cascade)
   respostas         ChecklistResposta[]
   fotos             ChecklistFoto[]
+
   @@unique([checklistId, dataRef])
   @@index([empresaId, dataRef])
 }
 
 model ChecklistResposta {
-  id           Int      @id @default(autoincrement())
+  id           Int               @id @default(autoincrement())
   empresaId    Int
   execucaoId   Int
   itemChave    String
@@ -2634,23 +2654,25 @@ model ChecklistResposta {
   valorJson    Json?
   conforme     Boolean?
   observacao   String?
-  atualizadoEm DateTime @updatedAt
+  atualizadoEm DateTime          @updatedAt
   execucao     ChecklistExecucao @relation(fields: [execucaoId], references: [id], onDelete: Cascade)
+
   @@unique([execucaoId, itemChave])
   @@index([empresaId])
 }
 
 model ChecklistFoto {
-  id           Int      @id @default(autoincrement())
+  id           Int               @id @default(autoincrement())
   empresaId    Int
   execucaoId   Int
   itemChave    String
-  dataUrl      String   @db.Text
+  dataUrl      String            @db.Text
   largura      Int?
   altura       Int?
   tamanhoBytes Int?
-  criadoEm     DateTime @default(now())
+  criadoEm     DateTime          @default(now())
   execucao     ChecklistExecucao @relation(fields: [execucaoId], references: [id], onDelete: Cascade)
+
   @@unique([execucaoId, itemChave])
   @@index([empresaId])
 }
@@ -2664,6 +2686,7 @@ model ChecklistNotificacaoConfig {
   lembreteMinutosAntes Int      @default(30)
   criadoEm             DateTime @default(now())
   atualizadoEm         DateTime @updatedAt
+
   @@unique([empresaId])
   @@index([empresaId])
 }
@@ -2677,6 +2700,7 @@ model ChecklistDestinatario {
   ativo        Boolean  @default(true)
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
+
   @@index([empresaId])
 }
 
@@ -2692,6 +2716,7 @@ model ChecklistNotificacaoLog {
   status           String
   erro             String?
   criadoEm         DateTime @default(now())
+
   @@index([empresaId, criadoEm])
 }
 
@@ -2701,6 +2726,7 @@ model ChecklistLembreteEnviado {
   checklistId Int
   dataRef     DateTime
   criadoEm    DateTime @default(now())
+
   @@unique([empresaId, checklistId, dataRef])
   @@index([empresaId])
 }
@@ -2724,7 +2750,7 @@ model PontoAusencia {
   dataInicio    DateTime
   dataFim       DateTime
   observacao    String?
-  trocaGrupo    String?      // marca as 2 pontas de uma troca de folga
+  trocaGrupo    String? // marca as 2 pontas de uma troca de folga
   criadoEm      DateTime     @default(now())
   atualizadoEm  DateTime     @updatedAt
 
@@ -2766,11 +2792,11 @@ model GrupoVipMensagem {
   empresaId            Int
   rotulo               String
   texto                String
-  imagem               String?           // foto opcional (data URL base64) enviada como legenda no disparo
+  imagem               String? // foto opcional (data URL base64) enviada como legenda no disparo
   diasSemana           Int[]             @default([])
   horario              String
   ativa                Boolean           @default(true)
-  cupomModo            GrupoVipCupomModo  @default(NENHUM)
+  cupomModo            GrupoVipCupomModo @default(NENHUM)
   cupomTipo            CupomTipoCW?
   cupomValor           Decimal?          @db.Decimal(10, 2)
   cupomNome            String?
