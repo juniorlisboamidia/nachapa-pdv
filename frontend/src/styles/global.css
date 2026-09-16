@@ -590,10 +590,21 @@ body.theme-dark .badge-slate { background: rgba(255, 255, 255, 0.1); color: #d4d
 .intel-switch-row:hover { border-color: #d4d4d4; }
 .intel-switch-label { display: block; font-size: 12.5px; font-weight: 600; color: #333; }
 .intel-switch-desc { display: block; font-size: 11px; color: #999; margin-top: 2px; }
+/* O interruptor. É um `<button>`, e o `border: 0` NÃO é decoração: o reset global
+   (`*`) zera margem e padding, mas não a BORDA que o navegador dá a botões. Com
+   `box-sizing: border-box`, essa borda de 2px encolhe a caixa interna, e a bolinha
+   (`::after`, posicionada a partir dela) era empurrada 2px para a direita —
+   estourando a pílula quando ligada. */
 .intel-switch {
   width: 38px; height: 22px; border-radius: 100px; background: #d8d8d8;
   position: relative; flex-shrink: 0; transition: background .15s;
+  border: 0; padding: 0; appearance: none; -webkit-appearance: none;
+  cursor: pointer;
 }
+.intel-switch:disabled { cursor: default; opacity: 0.5; }
+/* Foco visível: é um controle de teclado como qualquer outro, e a pílula não tem
+   contorno próprio para denunciar onde o cursor está. */
+.intel-switch:focus-visible { outline: 2px solid #ea580c; outline-offset: 2px; }
 .intel-switch::after {
   content: ''; position: absolute; width: 18px; height: 18px; border-radius: 50%;
   background: #fff; top: 2px; left: 2px; transition: left .15s;
@@ -601,6 +612,14 @@ body.theme-dark .badge-slate { background: rgba(255, 255, 255, 0.1); color: #d4d
 }
 .intel-switch.on { background: #ea580c; }
 .intel-switch.on::after { left: 18px; }
+
+/* NO ESCURO, o cinza claro do desligado lia como aceso: numa superfície escura ele
+   era a coisa mais clara da linha, e o olho lê claro como ativo. Desligado passa a
+   ser um cinza de superfície, e a bolinha é quem carrega o contraste. */
+body.theme-dark .intel-switch { background: var(--d-border); }
+body.theme-dark .intel-switch::after { background: #c9cddb; }
+body.theme-dark .intel-switch.on { background: #ea580c; }
+body.theme-dark .intel-switch.on::after { background: #fff; }
 
 @media (max-width: 640px) {
   .intel-options, .intel-options-2 { grid-template-columns: 1fr; }
