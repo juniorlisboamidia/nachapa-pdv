@@ -94,6 +94,7 @@ import {
   LAYOUTS as MB_LAYOUTS, LAYOUT_PADRAO as MB_LAYOUT_PADRAO, DURACAO_PADRAO as MB_DUR_PADRAO,
   DURACAO_MIN as MB_DUR_MIN, DURACAO_MAX as MB_DUR_MAX,
   validarEntrada as validarMenuBoard, resolverMenuBoard, menuBoardPublico, menuBoardParaAdmin,
+  opcoesDoTemplate,
   validarItensPlaylist, itensParaGravar as itensPlaylistParaGravar,
 } from './tvMenuBoard.js';
 // TV Indoor › TELEMETRIA: o que a parede está REALMENTE fazendo. Observação pura — nada
@@ -10581,7 +10582,11 @@ const TV_VIDEO_CAMPOS = {
 const videoAdmin = (v, agora) => videoParaAdmin({ ...v, arquivoBytes: v.arquivoBytes === null || v.arquivoBytes === undefined ? null : Number(v.arquivoBytes) }, agora);
 
 const MB_CABECALHO = { id: true, nome: true, ativo: true, layout: true, duracaoSegundos: true };
-const MB_CAMPOS = { ...MB_CABECALHO, configuracao: true };
+// O CABEÇALHO é o que basta para listar playlists; os CAMPOS incluem o que a cena precisa
+// para ser desenhada. A separação existe porque a programação de uma playlist carrega o
+// cabeçalho de cada board, e arrastar texto e flags ali seria pagar por dado que ninguém lê.
+const MB_TEXTO = { titulo: true, subtitulo: true, mostrarLogo: true, mostrarDescricao: true, mostrarImagem: true, mostrarFita: true };
+const MB_CAMPOS = { ...MB_CABECALHO, ...MB_TEXTO, configuracao: true };
 
 // Minutos → "HH:MM" para descrever uma regra no monitoramento. Reexportado do domínio da
 // grade de propósito: um segundo formatador aqui divergiria do primeiro no dia em que
@@ -10754,7 +10759,10 @@ app.get('/api/tv-indoor/menu-boards', async (req, res) => {
       // A LISTAGEM não resolve catálogo nenhum, de propósito: ela precisa abrir mesmo com o
       // HUB fora do ar. Quem consulta o cardápio é a tela de edição e a programação da TV.
       menuBoards: linhas.map(menuBoardParaAdmin),
-      layouts: Object.values(MB_LAYOUTS),
+      // Cada template leva as OPÇÕES que oferece. O editor lê daqui em vez de ter a própria
+      // tabela — é o que garante que nenhum interruptor apareça sem ter efeito, e nenhum
+      // efeito exista sem interruptor.
+      layouts: Object.values(MB_LAYOUTS).map((t) => ({ ...t, opcoes: opcoesDoTemplate(t.id) })),
       limites: { duracaoMin: MB_DUR_MIN, duracaoMax: MB_DUR_MAX, duracaoPadrao: MB_DUR_PADRAO },
     });
   } catch (err) { console.error('[tv-indoor/menu-boards]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }

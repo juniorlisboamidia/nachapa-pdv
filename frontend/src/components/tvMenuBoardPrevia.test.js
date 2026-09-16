@@ -70,7 +70,9 @@ test('previaDoBoard: destaque escolhido manda; sem escolha, o primeiro disponív
 })
 
 test('previaDoBoard aguenta entrada torta', () => {
-  assert.deepEqual(previaDoBoard({ layout: 'GRADE' }), { layout: 'GRADE', titulo: null, produtos: [] })
+  assert.deepEqual(previaDoBoard({ layout: 'GRADE' }), { layout: 'GRADE', titulo: null, subtitulo: null, produtos: [] })
+  // Sem `exibicao`, a chave simplesmente não existe — e o renderer cai nos defaults do V1.
+  assert.equal('exibicao' in previaDoBoard({ layout: 'GRADE' }), false)
   assert.deepEqual(previaDoBoard({ layout: 'LISTA', escolhidos: null, porId: null }).produtos, [])
 })
 

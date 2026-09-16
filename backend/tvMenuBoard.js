@@ -31,13 +31,78 @@ import { fitaDoSelo } from './produtoFita.js';
 
    O `maximo` é teto de ESCOLHA no admin; o que chega à tela pode ser menos (indisponíveis
    saem). */
-export const LAYOUTS = Object.freeze({
-  GRADE: Object.freeze({ id: 'GRADE', rotulo: 'Grade', maximo: 8, destaque: false, foto: true }),
-  LISTA: Object.freeze({ id: 'LISTA', rotulo: 'Lista', maximo: 10, destaque: false, foto: false }),
-  DESTAQUE: Object.freeze({ id: 'DESTAQUE', rotulo: 'Destaque + grade', maximo: 5, destaque: true, foto: true }),
+/* ── OS CINCO TEMPLATES ────────────────────────────────────────────────────────────────
+   Esta é A definição central. Capacidade, o que cada composição mostra sempre e o que ela
+   deixa o gestor escolher moram aqui — e só aqui. Espalhar `if (template === 'LISTA')` pelo
+   editor, pelo renderer e pela rota seria garantir que os três discordem no primeiro ajuste.
+
+   `imagem` e `descricao` têm TRÊS valores, e a distinção é o que evita oferecer opção sem
+   efeito:
+     · SEMPRE   — intrínseco à composição; não há interruptor (a Vitrine sem foto não é
+                  vitrine, e a Oferta sem foto não é campanha);
+     · OPCIONAL — o gestor decide, e o interruptor aparece;
+     · NUNCA    — a composição não tem lugar para isso.
+   `HERO` existe só para a descrição do DESTAQUE: o produto grande tem espaço para ela, os
+   quatro secundários não — e essa assimetria é a composição, não uma opção.
+
+   Os três primeiros são os layouts do V1 com o MESMO id e a MESMA capacidade: board antigo
+   continua resolvendo sem migração de dado nenhuma. */
+export const TEMPLATES = Object.freeze({
+  GRADE: Object.freeze({
+    id: 'GRADE', rotulo: 'Grade de produtos', maximo: 8, destaque: false,
+    imagem: 'SEMPRE', descricao: 'OPCIONAL',
+    resumo: 'Até 8 produtos em duas fileiras. O cardápio geral.',
+  }),
+  DESTAQUE: Object.freeze({
+    id: 'DESTAQUE', rotulo: 'Destaque + produtos', maximo: 5, destaque: true,
+    imagem: 'SEMPRE', descricao: 'HERO',
+    resumo: 'Um produto grande e mais quatro. O primeiro da lista é o destaque.',
+  }),
+  LISTA: Object.freeze({
+    id: 'LISTA', rotulo: 'Lista de cardápio', maximo: 10, destaque: false,
+    imagem: 'OPCIONAL', descricao: 'SEMPRE',
+    resumo: 'Até 10 itens com nome, descrição e preço. Funciona sem fotos.',
+  }),
+  VITRINE: Object.freeze({
+    id: 'VITRINE', rotulo: 'Vitrine', maximo: 3, destaque: false,
+    imagem: 'SEMPRE', descricao: 'OPCIONAL',
+    resumo: 'Três produtos lado a lado, bem grandes. Lançamentos e combos.',
+  }),
+  OFERTA: Object.freeze({
+    id: 'OFERTA', rotulo: 'Oferta em destaque', maximo: 1, destaque: false,
+    imagem: 'SEMPRE', descricao: 'OPCIONAL',
+    resumo: 'Um produto só, em formato de campanha. Valoriza a promoção.',
+  }),
 });
-export const LAYOUT_IDS = Object.freeze(Object.keys(LAYOUTS));
+// `LAYOUTS` continua exportado com o nome antigo: internamente a coluna se chama `layout`, e
+// renomear tudo de uma vez seria trocar a fundação no meio da obra. Na UI, a palavra é
+// TEMPLATE — o gestor não fala "layout".
+export const LAYOUTS = TEMPLATES;
+export const LAYOUT_IDS = Object.freeze(Object.keys(TEMPLATES));
 export const LAYOUT_PADRAO = 'GRADE';
+
+/* O teto ABSOLUTO da seleção guardada, acima do maior template.
+
+   Ele existe porque a seleção NÃO é truncada ao trocar de template: quem montou uma grade de
+   oito e experimenta a Vitrine não pode perder cinco produtos em silêncio — o board público
+   recebe os três primeiros elegíveis, e voltar para a grade recupera a seleção inteira.
+   O teto só impede que o JSON cresça sem limite. */
+export const TETO_SELECAO = 12;
+
+export const TITULO_BOARD_MAX = 60;
+export const SUBTITULO_MAX = 100;
+
+/* Quais interruptores esta composição oferece. O editor lê daqui — é o que garante que
+   nenhum controle apareça sem ter efeito, e que nenhum efeito exista sem controle. */
+export function opcoesDoTemplate(id) {
+  const t = TEMPLATES[id] ?? TEMPLATES[LAYOUT_PADRAO];
+  return Object.freeze([
+    'logo',
+    'fita',
+    ...(t.descricao === 'OPCIONAL' ? ['descricao'] : []),
+    ...(t.imagem === 'OPCIONAL' ? ['imagem'] : []),
+  ]);
+}
 
 /* Duração: 20 s de padrão, contra os 10 s de uma arte. Um menu precisa ser LIDO — quem passa
    na frente tem de achar o produto e o preço —, e 10 s numa lista de oito itens é pouco. */
@@ -46,6 +111,8 @@ export const DURACAO_MIN = 5;
 export const DURACAO_MAX = 120;
 
 export const NOME_MAX = 60;
+// Mantido pelo contrato antigo: o título vivia dentro de `configuracao.titulo` com 40. No V2
+// ele é coluna própria com 60 — o limite velho só serve para ler o que já está gravado.
 export const TITULO_MAX = 40;
 
 export const MOTIVO_NOME = 'NOME_OBRIGATORIO';
@@ -54,6 +121,7 @@ export const MOTIVO_DURACAO = 'DURACAO_INVALIDA';
 export const MOTIVO_ITENS = 'ITENS_INVALIDOS';
 export const MOTIVO_LIMITE = 'LIMITE_DE_ITENS';
 export const MOTIVO_DESTAQUE = 'DESTAQUE_INVALIDO';
+export const MOTIVO_TEXTO = 'TEXTO_INVALIDO';
 
 const arranjo = (v) => (Array.isArray(v) ? v : []);
 const objeto = (v) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
@@ -89,7 +157,11 @@ export function validarConfiguracao(bruto, layout) {
   const regra = LAYOUTS[layout] ?? LAYOUTS[LAYOUT_PADRAO];
   const itens = arranjo(cfg.itens);
   if (!Array.isArray(cfg.itens)) return { ok: false, motivo: MOTIVO_ITENS };
-  if (itens.length > regra.maximo) return { ok: false, motivo: MOTIVO_LIMITE };
+  /* O teto aqui é o ABSOLUTO, e não o do template. Trocar de Grade (8) para Vitrine (3) não
+     pode apagar cinco produtos: a seleção fica guardada inteira, o board público recebe os
+     três primeiros elegíveis, e voltar para a Grade recupera tudo. Destruir escolha em
+     silêncio é como o gestor descobre pela TV que perdeu trabalho. */
+  if (itens.length > TETO_SELECAO) return { ok: false, motivo: MOTIVO_LIMITE };
 
   const vistos = new Set();
   const saida = [];
@@ -118,7 +190,6 @@ export function validarConfiguracao(bruto, layout) {
       // mostra os itens escolhidos, e não "tudo o que estiver na categoria". Se a loja
       // acrescentar um produto lá amanhã, a parede não muda sozinha.
       ...(refValida(cwCategoriaId) ? { cwCategoriaId } : {}),
-      titulo: texto(cfg.titulo).trim().slice(0, TITULO_MAX),
       itens: saida,
     },
   };
@@ -148,6 +219,24 @@ export function validarEntrada(bruto, { exigirNome = false, layoutAtual = LAYOUT
     if (!Number.isFinite(n) || Math.round(n) < DURACAO_MIN || Math.round(n) > DURACAO_MAX) {
       erros.push({ campo: 'duracaoSegundos', motivo: MOTIVO_DURACAO });
     } else dados.duracaoSegundos = Math.round(n);
+  }
+  /* TÍTULO e SUBTÍTULO são colunas no V2 — texto estrutural e fechado merece campo tipado,
+     não uma chave solta dentro de um JSON sem validação.
+
+     String vazia vira NULL, e isso importa na tela: `''` renderizaria um bloco de altura
+     zero empurrando a composição para baixo, e o gestor veria um vão sem entender de onde
+     veio. Ausente e vazio significam a mesma coisa, então guardam a mesma coisa. */
+  for (const [campo, limite] of [['titulo', TITULO_BOARD_MAX], ['subtitulo', SUBTITULO_MAX]]) {
+    if (corpo[campo] === undefined) continue;
+    if (corpo[campo] === null) { dados[campo] = null; continue; }
+    if (typeof corpo[campo] !== 'string') { erros.push({ campo, motivo: MOTIVO_TEXTO }); continue; }
+    const v = corpo[campo].trim().slice(0, limite);
+    dados[campo] = v || null;
+  }
+  // As quatro chaves de EXIBIÇÃO. Booleanos estritos: `'false'` vindo de um formulário mal
+  // montado não pode virar `true` por ser string não vazia.
+  for (const campo of ['mostrarLogo', 'mostrarDescricao', 'mostrarImagem', 'mostrarFita']) {
+    if (corpo[campo] !== undefined) dados[campo] = corpo[campo] === true;
   }
   if (corpo.configuracao !== undefined) {
     const layout = dados.layout ?? layoutAtual;
@@ -228,6 +317,7 @@ export function resolverMenuBoard(board, catalogo, fitas) {
   const indice = indexarCatalogo(catalogo);
   const porItem = fitas instanceof Map ? fitas : new Map();
 
+  const regra = TEMPLATES[layout];
   const produtos = [];
   const ausentes = [];
   let destaqueId = null;
@@ -237,24 +327,67 @@ export function resolverMenuBoard(board, catalogo, fitas) {
     const item = indice.get(chave);
     if (!item) { ausentes.push(chave); continue; }
     if (!disponivel(item)) continue;
+    /* O TETO é aplicado DEPOIS da disponibilidade, e essa ordem é a regra: um produto
+       esgotado não pode gastar uma das três vagas da Vitrine. Cortar antes deixaria a tela
+       com dois cards porque o primeiro da lista acabou na cozinha. */
+    if (produtos.length >= regra.maximo) break;
     const p = produtoParaTv(item, porItem.get(chave));
-    if (escolha.destaque === true && LAYOUTS[layout].destaque) destaqueId = p.id;
+    if (escolha.destaque === true && regra.destaque) destaqueId = p.id;
     produtos.push(p);
   }
-  // Sem escolha explícita, o destaque é o PRIMEIRO disponível — é o que o gestor vê no
-  // topo da lista, e deixar o layout sem destaque nenhum abriria um buraco na tela.
-  if (LAYOUTS[layout].destaque && !destaqueId && produtos.length) destaqueId = produtos[0].id;
+  /* Sem escolha explícita, o destaque é o PRIMEIRO disponível — a ORDEM resolve, e é por
+     isso que o V2 não tem seletor paralelo de "produto destaque": duas maneiras de dizer a
+     mesma coisa é uma a mais.
+
+     A marca explícita continua sendo honrada quando existe, e isso é compatibilidade, não
+     indecisão: um board V1 que marcou o terceiro item como destaque tem de continuar
+     mostrando o terceiro item no lugar grande depois do deploy. */
+  if (regra.destaque && !destaqueId && produtos.length) destaqueId = produtos[0].id;
 
   return {
     id: b.id,
     nome: b.nome ?? null,
     layout,
-    titulo: texto(cfg.titulo).trim() || null,
+    // Coluna primeiro; a chave dentro do JSON é o contrato ANTIGO, lida só enquanto houver
+    // board gravado antes da migration que ainda não passou por aqui.
+    titulo: texto(b.titulo ?? cfg.titulo).trim() || null,
+    subtitulo: texto(b.subtitulo).trim() || null,
+    exibicao: exibicaoDoBoard(b, layout),
     duracaoSegundos: b.duracaoSegundos ?? DURACAO_PADRAO,
     produtos,
     ...(destaqueId ? { destaqueId } : {}),
     ausentes,
     elegivel: b.ativo !== false && produtos.length > 0,
+  };
+}
+
+/* O que a TELA mostra, já RESOLVIDO contra o template.
+
+   O renderer não decide nada sobre isto: ele recebe quatro booleanos prontos e desenha. É o
+   que impede a pergunta "a Lista mostra descrição?" de ter uma resposta no editor, outra no
+   player e uma terceira aqui.
+
+   `SEMPRE`/`NUNCA` ignoram a preferência do board de propósito: a Vitrine sem foto não é
+   vitrine, e a Lista sem descrição não é lista. O interruptor só existe onde há escolha. */
+export function exibicaoDoBoard(board, layout) {
+  const b = objeto(board);
+  const regra = TEMPLATES[layout] ?? TEMPLATES[LAYOUT_PADRAO];
+  const pedido = (chave, padrao) => (b[chave] === undefined || b[chave] === null ? padrao : b[chave] === true);
+  const resolver = (modo, chave) => {
+    if (modo === 'SEMPRE') return true;
+    if (modo === 'NUNCA') return false;
+    if (modo === 'HERO') return true;   // só o produto grande usa; o renderer sabe onde
+    return pedido(chave, false);
+  };
+  return {
+    logo: pedido('mostrarLogo', false),
+    // A fita é metadado editorial e sempre apareceu no V1: o padrão precisa manter isso.
+    fita: pedido('mostrarFita', true),
+    imagem: resolver(regra.imagem, 'mostrarImagem'),
+    descricao: resolver(regra.descricao, 'mostrarDescricao'),
+    // Só o DESTAQUE distingue: o produto grande tem espaço para a descrição, os quatro
+    // secundários não. A assimetria é a composição, não uma opção.
+    descricaoSoNoDestaque: regra.descricao === 'HERO',
   };
 }
 
@@ -269,6 +402,10 @@ export function menuBoardPublico(resolvido) {
     duracaoSegundos: r.duracaoSegundos,
     layout: r.layout,
     titulo: r.titulo ?? null,
+    subtitulo: r.subtitulo ?? null,
+    // Quatro booleanos, não as preferências cruas: a TV recebe o que DESENHAR, e não a
+    // pergunta que ela teria de responder de novo.
+    exibicao: r.exibicao ?? exibicaoDoBoard({}, r.layout),
     ...(r.destaqueId ? { destaqueId: r.destaqueId } : {}),
     produtos: arranjo(r.produtos),
   };
@@ -285,11 +422,19 @@ export function menuBoardParaAdmin(b) {
     ativo: board.ativo,
     layout: layoutValido(board.layout) ? board.layout : LAYOUT_PADRAO,
     duracaoSegundos: board.duracaoSegundos ?? DURACAO_PADRAO,
-    titulo: texto(cfg.titulo).trim() || null,
+    titulo: texto(board.titulo ?? cfg.titulo).trim() || null,
+    subtitulo: texto(board.subtitulo).trim() || null,
+    mostrarLogo: board.mostrarLogo === true,
+    mostrarDescricao: board.mostrarDescricao === true,
+    mostrarImagem: board.mostrarImagem === true,
+    mostrarFita: board.mostrarFita !== false,
     cwCategoriaId: cfg.cwCategoriaId ?? null,
     itens: arranjo(cfg.itens),
     qtdItens: arranjo(cfg.itens).length,
     maximo: tetoDoLayout(board.layout),
+    // Quantos dos selecionados este template REALMENTE mostra. É o que permite o editor
+    // avisar "3 de 8" em vez de deixar o gestor descobrir pela parede.
+    exibidos: Math.min(arranjo(cfg.itens).length, tetoDoLayout(board.layout)),
   };
 }
 

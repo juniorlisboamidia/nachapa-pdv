@@ -38,10 +38,20 @@ function Foto({ src, alt }) {
   return <img className="tvmb-foto" src={src} alt={alt ?? ''} onError={() => setQuebrou(true)} />
 }
 
-// O SELO do produto, com a cor que vem resolvida do servidor — a mesma paleta do HUB. A
-// apresentação é própria da TV (etiqueta reta no canto da foto); o domínio é compartilhado.
-const Selo = ({ selo }) => (selo?.texto
+/* O SELO do produto, com a cor que vem resolvida do servidor — a mesma paleta do HUB.
+
+   A cor da fita NÃO é sobrescrita pelo tema da TV, e isso é deliberado: "Mais pedido" tem a
+   mesma cor em todo lugar do sistema porque a fita é metadado editorial compartilhado, não
+   decoração da parede. O que é próprio da TV é a apresentação — etiqueta reta no canto. */
+const Selo = ({ selo, mostrar = true }) => (mostrar && selo?.texto
   ? <span className="tvmb-selo" style={{ background: selo.cor }}>{selo.texto}</span>
+  : null)
+
+/* A descrição, cortada. Um item com três linhas de texto desalinha a fileira inteira, e o
+   corte por CSS (`-webkit-line-clamp`) mantém a altura previsível sem truncar no meio de uma
+   palavra como um `slice` faria. */
+const Descricao = ({ texto, className = '' }) => (texto
+  ? <p className={'tvmb-desc ' + className}>{texto}</p>
   : null)
 
 /* O PREÇO, e a razão de ele ser um componente: a regra "nome e preço têm importância
@@ -72,16 +82,17 @@ function Preco({ produto, className = '' }) {
 /* GRADE — 4 × 2. Para cardápio visual: a foto é o que vende, o nome confirma e o preço
    fecha. Com menos de 8 produtos a grade NÃO estica os cards para preencher: ela centraliza
    o que há, porque um card de 900 px ao lado de um de 440 lê como defeito. */
-const Grade = ({ produtos }) => (
+const Grade = ({ produtos, ex }) => (
   <div className="tvmb-grade">
     {produtos.map((p) => (
       <article className="tvmb-card" key={p.id}>
         <div className="tvmb-card-midia">
           <Foto src={p.imagemUrl} alt="" />
-          <Selo selo={p.selo} />
+          <Selo selo={p.selo} mostrar={ex.fita} />
         </div>
         <div className="tvmb-card-txt">
           <h3 className="tvmb-card-nome">{p.nome}</h3>
+          {ex.descricao ? <Descricao texto={p.descricao} className="tvmb-desc-card" /> : null}
           <Preco produto={p} />
         </div>
       </article>
@@ -89,21 +100,71 @@ const Grade = ({ produtos }) => (
   </div>
 )
 
+/* VITRINE — três produtos, e cada um recebe um terço da tela. É a Grade levada ao extremo
+   oposto: menos itens, muito mais área por item. Serve a lançamento e combo, onde o que
+   vende é a foto grande e não a quantidade de opções. */
+const Vitrine = ({ produtos, ex }) => (
+  <div className="tvmb-vitrine">
+    {produtos.slice(0, 3).map((p) => (
+      <article className="tvmb-vt" key={p.id}>
+        <div className="tvmb-vt-midia">
+          <Foto src={p.imagemUrl} alt="" />
+          <Selo selo={p.selo} mostrar={ex.fita} />
+        </div>
+        <div className="tvmb-vt-txt">
+          <h3 className="tvmb-vt-nome">{p.nome}</h3>
+          {ex.descricao ? <Descricao texto={p.descricao} className="tvmb-desc-vt" /> : null}
+          <Preco produto={p} className="tvmb-preco-vt" />
+        </div>
+      </article>
+    ))}
+  </div>
+)
+
+/* OFERTA — um produto só, em composição de campanha.
+
+   A foto ocupa a metade esquerda e o texto respira na direita. É o único template em que o
+   preço pode crescer, porque ele É a mensagem — mas mesmo aqui o nome do produto continua
+   grande o bastante para disputar o olhar: um preço gigante sozinho vende desconto, não
+   produto. */
+function Oferta({ produtos, ex }) {
+  const p = produtos[0]
+  if (!p) return null
+  return (
+    <article className="tvmb-of">
+      <div className="tvmb-of-midia">
+        <Foto src={p.imagemUrl} alt="" />
+        <Selo selo={p.selo} mostrar={ex.fita} />
+      </div>
+      <div className="tvmb-of-txt">
+        <h3 className="tvmb-of-nome">{p.nome}</h3>
+        {ex.descricao ? <Descricao texto={p.descricao} className="tvmb-desc-of" /> : null}
+        <Preco produto={p} className="tvmb-preco-of" />
+      </div>
+    </article>
+  )
+}
+
 /* LISTA — o menu tradicional, com a linha pontilhada ligando nome e preço. Sem foto: este
    layout existe justamente para o cardápio que não tem fotografia de todos os itens, e uma
    coluna de marcadores "sem imagem" seria pior do que nenhuma imagem. */
-const Lista = ({ produtos }) => (
-  <ul className="tvmb-lista">
+const Lista = ({ produtos, ex }) => (
+  <ul className={'tvmb-lista' + (ex.imagem ? ' com-foto' : '')}>
     {produtos.map((p) => (
       <li className="tvmb-linha" key={p.id}>
+        {/* A miniatura é OPCIONAL neste template: ele existe para o cardápio que não tem
+            fotografia de todos os itens, e uma coluna de marcadores "sem imagem" seria pior
+            do que nenhuma imagem. Quando ligada, o produto sem foto recebe o mesmo bloco
+            neutro dos outros templates — a linha não desalinha. */}
+        {ex.imagem ? <span className="tvmb-linha-midia"><Foto src={p.imagemUrl} alt="" /></span> : null}
         <span className="tvmb-linha-txt">
           <span className="tvmb-linha-nome">
             {p.nome}
-            <Selo selo={p.selo} />
+            <Selo selo={p.selo} mostrar={ex.fita} />
           </span>
           {/* A descrição só entra quando existe: linha vazia embaixo do nome desalinha a
               lista inteira. */}
-          {p.descricao ? <span className="tvmb-linha-desc">{p.descricao}</span> : null}
+          {ex.descricao && p.descricao ? <span className="tvmb-linha-desc">{p.descricao}</span> : null}
         </span>
         <span className="tvmb-pontilhado" aria-hidden="true" />
         <Preco produto={p} className="tvmb-preco-linha" />
@@ -115,7 +176,7 @@ const Lista = ({ produtos }) => (
 /* DESTAQUE + GRADE — um produto grande à esquerda e até quatro à direita. O destaque é o
    que o gestor escolheu; se ele ficou indisponível, o primeiro que sobrou assume (quem
    decide isso é o servidor, em `resolverMenuBoard`). */
-function Destaque({ produtos, destaqueId }) {
+function Destaque({ produtos, destaqueId, ex }) {
   const principal = produtos.find((p) => p.id === destaqueId) ?? produtos[0]
   const resto = produtos.filter((p) => p !== principal).slice(0, 4)
   if (!principal) return null
@@ -124,11 +185,13 @@ function Destaque({ produtos, destaqueId }) {
       <article className="tvmb-hero">
         <div className="tvmb-hero-midia">
           <Foto src={principal.imagemUrl} alt="" />
-          <Selo selo={principal.selo} />
+          <Selo selo={principal.selo} mostrar={ex.fita} />
         </div>
         <div className="tvmb-hero-txt">
           <h3 className="tvmb-hero-nome">{principal.nome}</h3>
-          {principal.descricao ? <p className="tvmb-hero-desc">{principal.descricao}</p> : null}
+          {/* Só o produto GRANDE tem espaço para a descrição. Os quatro secundários não — e
+              essa assimetria é a composição do template, não uma opção que alguém desligou. */}
+          {ex.descricao && principal.descricao ? <p className="tvmb-hero-desc">{principal.descricao}</p> : null}
           <Preco produto={principal} className="tvmb-preco-hero" />
         </div>
       </article>
@@ -137,7 +200,7 @@ function Destaque({ produtos, destaqueId }) {
           <article className="tvmb-card" key={p.id}>
             <div className="tvmb-card-midia">
               <Foto src={p.imagemUrl} alt="" />
-              <Selo selo={p.selo} />
+              <Selo selo={p.selo} mostrar={ex.fita} />
             </div>
             <div className="tvmb-card-txt">
               <h3 className="tvmb-card-nome">{p.nome}</h3>
@@ -150,17 +213,56 @@ function Destaque({ produtos, destaqueId }) {
   )
 }
 
+const TEMPLATES = ['GRADE', 'DESTAQUE', 'LISTA', 'VITRINE', 'OFERTA']
+
+/* O que a tela mostra. Vem RESOLVIDO do servidor (`exibicaoDoBoard`) — o renderer não
+   responde "a Lista mostra descrição?", ele desenha o que lhe disseram. Sem isto, a pergunta
+   teria uma resposta no editor, outra no player e uma terceira no domínio.
+
+   O fallback existe para o board que chega de um servidor anterior ao V2: ele reproduz os
+   defaults do V1, e a parede continua igual em vez de ficar sem nada. */
+function exibicaoDe(board, template) {
+  const ex = board?.exibicao
+  if (ex && typeof ex === 'object') return ex
+  return {
+    logo: false,
+    fita: true,
+    imagem: template !== 'LISTA',
+    descricao: template === 'LISTA' || template === 'DESTAQUE',
+    descricaoSoNoDestaque: template === 'DESTAQUE',
+  }
+}
+
 /* A TELA do board, em 1920 × 1080 absolutos. Quem encolhe é quem monta (a prévia). */
-export function MenuBoardTela({ board }) {
+export function MenuBoardTela({ board, logo }) {
   const produtos = Array.isArray(board?.produtos) ? board.produtos : []
-  const layout = board?.layout === 'LISTA' || board?.layout === 'DESTAQUE' ? board.layout : 'GRADE'
+  const template = TEMPLATES.includes(board?.layout) ? board.layout : 'GRADE'
+  const ex = exibicaoDe(board, template)
+  const temCabeca = ex.logo || board?.titulo || board?.subtitulo
   return (
-    <div className={'tvmb-tela tvmb-' + layout.toLowerCase()}>
-      {board?.titulo ? <h2 className="tvmb-titulo">{board.titulo}</h2> : null}
+    <div className={'tvmb-tela tvmb-' + template.toLowerCase()}>
+      {/* O CABEÇALHO só existe quando tem o que dizer. Um bloco vazio com altura fixa
+          empurraria a composição para baixo em todo board sem título — e a diferença
+          apareceria na parede, não aqui. */}
+      {temCabeca ? (
+        <header className="tvmb-cabeca">
+          {/* A logo vem da APARÊNCIA do canal (própria do TV Indoor, com fallback na marca
+              da empresa). Não há upload de logo dentro do board: uma marca, uma fonte. */}
+          {ex.logo && logo ? <img className="tvmb-logo" src={logo} alt="" /> : null}
+          {board?.titulo || board?.subtitulo ? (
+            <div className="tvmb-cabeca-txt">
+              {board?.titulo ? <h2 className="tvmb-titulo">{board.titulo}</h2> : null}
+              {board?.subtitulo ? <p className="tvmb-subtitulo">{board.subtitulo}</p> : null}
+            </div>
+          ) : null}
+        </header>
+      ) : null}
       <div className="tvmb-corpo">
-        {layout === 'LISTA' ? <Lista produtos={produtos} /> : null}
-        {layout === 'GRADE' ? <Grade produtos={produtos} /> : null}
-        {layout === 'DESTAQUE' ? <Destaque produtos={produtos} destaqueId={board?.destaqueId} /> : null}
+        {template === 'LISTA' ? <Lista produtos={produtos} ex={ex} /> : null}
+        {template === 'GRADE' ? <Grade produtos={produtos} ex={ex} /> : null}
+        {template === 'VITRINE' ? <Vitrine produtos={produtos} ex={ex} /> : null}
+        {template === 'OFERTA' ? <Oferta produtos={produtos} ex={ex} /> : null}
+        {template === 'DESTAQUE' ? <Destaque produtos={produtos} destaqueId={board?.destaqueId} ex={ex} /> : null}
       </div>
     </div>
   )
@@ -181,7 +283,7 @@ export function MenuBoardTela({ board }) {
    O observer escreve DIRETO no nó (`style.setProperty`), sem passar por estado do React: a
    TV redimensiona uma vez na vida, e um `setState` a cada quadro de resize remontaria o
    board inteiro à toa. */
-export default function MenuBoard({ board, tokens }) {
+export default function MenuBoard({ board, tokens, logo }) {
   const caixaRef = useRef(null)
 
   // A paleta entra por `style.setProperty`, uma propriedade conhecida de cada vez — nunca
@@ -211,7 +313,7 @@ export default function MenuBoard({ board, tokens }) {
   return (
     <div className="tvmb-caixa" ref={caixaRef}>
       <div className="tvmb-palco">
-        <MenuBoardTela board={board} />
+        <MenuBoardTela board={board} logo={logo} />
       </div>
     </div>
   )

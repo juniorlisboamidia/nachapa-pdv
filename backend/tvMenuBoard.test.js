@@ -13,6 +13,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  TETO_SELECAO, opcoesDoTemplate, exibicaoDoBoard,
   LAYOUTS, LAYOUT_IDS, LAYOUT_PADRAO, DURACAO_PADRAO, DURACAO_MIN, DURACAO_MAX,
   MOTIVO_NOME, MOTIVO_LAYOUT, MOTIVO_DURACAO, MOTIVO_ITENS, MOTIVO_LIMITE, MOTIVO_DESTAQUE,
   MOTIVO_TIPO, MOTIVO_REFERENCIA, TIPOS_ITEM,
@@ -38,14 +39,37 @@ const CATALOGO = {
 };
 
 // ── Layouts ──────────────────────────────────────────────────────────────────
-test('são TRÊS layouts fechados, com tetos pensados para 1920×1080', () => {
-  assert.deepEqual(LAYOUT_IDS, ['GRADE', 'LISTA', 'DESTAQUE']);
+test('são CINCO templates fechados, com tetos pensados para 1920×1080', () => {
+  assert.deepEqual(LAYOUT_IDS, ['GRADE', 'DESTAQUE', 'LISTA', 'VITRINE', 'OFERTA']);
   assert.equal(LAYOUTS.GRADE.maximo, 8, '4 × 2');
   assert.equal(LAYOUTS.LISTA.maximo, 10);
   assert.equal(LAYOUTS.DESTAQUE.maximo, 5, '1 grande + 2 × 2');
+  assert.equal(LAYOUTS.VITRINE.maximo, 3);
+  assert.equal(LAYOUTS.OFERTA.maximo, 1);
   assert.equal(LAYOUTS.DESTAQUE.destaque, true);
-  assert.equal(LAYOUTS.GRADE.destaque, false, 'só o layout de destaque tem destaque');
+  assert.equal(LAYOUTS.GRADE.destaque, false, 'só o template de destaque tem destaque');
   assert.equal(LAYOUT_PADRAO, 'GRADE');
+});
+
+test('🔴 os três templates do V1 mantêm id, capacidade e semântica', () => {
+  // COMPATIBILIDADE: um board gravado antes do V2 resolve igual. Se estes ids ou tetos
+  // mudassem, boards existentes passariam a mostrar outra coisa depois do deploy.
+  for (const [id, maximo, destaque] of [['GRADE', 8, false], ['LISTA', 10, false], ['DESTAQUE', 5, true]]) {
+    assert.equal(LAYOUTS[id].maximo, maximo);
+    assert.equal(LAYOUTS[id].destaque, destaque);
+  }
+});
+
+test('cada template oferece SÓ os interruptores que têm efeito', () => {
+  // "Não oferecer opção sem efeito": a Vitrine sem foto não é vitrine, e a Lista sem
+  // descrição não é lista — nesses lugares não há o que escolher.
+  assert.deepEqual(opcoesDoTemplate('GRADE'), ['logo', 'fita', 'descricao']);
+  assert.deepEqual(opcoesDoTemplate('LISTA'), ['logo', 'fita', 'imagem']);
+  assert.deepEqual(opcoesDoTemplate('VITRINE'), ['logo', 'fita', 'descricao']);
+  assert.deepEqual(opcoesDoTemplate('OFERTA'), ['logo', 'fita', 'descricao']);
+  // O DESTAQUE mostra descrição só no produto grande: é composição, não opção.
+  assert.deepEqual(opcoesDoTemplate('DESTAQUE'), ['logo', 'fita']);
+  assert.deepEqual(opcoesDoTemplate('INVENTADO'), ['logo', 'fita', 'descricao'], 'cai no padrão');
 });
 
 test('layout inventado é recusado', () => {
@@ -65,16 +89,19 @@ test('🔴 a referência do CW não tem tipo presumido: number e string valem', 
 });
 
 // ── Configuração ─────────────────────────────────────────────────────────────
-test('validarConfiguracao guarda só referência, título e ordem', () => {
+test('validarConfiguracao guarda só referência e ordem', () => {
+  // O TÍTULO saiu do JSON e virou coluna no V2: texto estrutural e fechado merece campo
+  // tipado, não uma chave solta num JSON sem validação de schema.
   const v = validarConfiguracao({
     cwCategoriaId: 10, titulo: '  Hambúrgueres  ',
     itens: [{ cwItemId: 3527346, nome: 'X BACON', preco: 31.9 }, { cwItemId: '3529326' }],
   }, 'GRADE');
   assert.equal(v.ok, true);
   assert.deepEqual(v.configuracao, {
-    cwCategoriaId: 10, titulo: 'Hambúrgueres',
+    cwCategoriaId: 10,
     itens: [{ cwItemId: 3527346 }, { cwItemId: '3529326' }],
   });
+  assert.equal('titulo' in v.configuracao, false, 'o título agora é coluna');
   const json = JSON.stringify(v.configuracao);
   for (const proibido of ['nome', 'preco', 'imagem', 'status', 'X BACON', '31.9']) {
     assert.equal(json.includes(proibido), false, `a configuração não pode guardar ${proibido}`);
@@ -86,11 +113,18 @@ test('a ORDEM escolhida é preservada', () => {
   assert.deepEqual(v.configuracao.itens.map((i) => i.cwItemId), [3, 1, 2]);
 });
 
-test('teto por layout, item repetido e referência torta são recusados', () => {
-  const nove = Array.from({ length: 9 }, (_, i) => ({ cwItemId: i + 1 }));
-  assert.equal(validarConfiguracao({ itens: nove }, 'GRADE').motivo, MOTIVO_LIMITE);
-  assert.equal(validarConfiguracao({ itens: nove.slice(0, 8) }, 'GRADE').ok, true);
-  assert.equal(validarConfiguracao({ itens: nove.slice(0, 6) }, 'DESTAQUE').motivo, MOTIVO_LIMITE);
+test('🔴 trocar de template NÃO apaga a seleção — o teto da escrita é o absoluto', () => {
+  // Quem montou uma grade de oito e experimenta a Vitrine (3) não pode perder cinco
+  // produtos em silêncio: a seleção fica guardada e voltar para a Grade recupera tudo.
+  const oito = Array.from({ length: 8 }, (_, i) => ({ cwItemId: i + 1 }));
+  assert.equal(validarConfiguracao({ itens: oito }, 'VITRINE').ok, true, 'oito escolhas sobrevivem à Vitrine');
+  assert.equal(validarConfiguracao({ itens: oito }, 'OFERTA').ok, true);
+  // O teto absoluto existe só para o JSON não crescer sem limite.
+  const treze = Array.from({ length: TETO_SELECAO + 1 }, (_, i) => ({ cwItemId: i + 1 }));
+  assert.equal(validarConfiguracao({ itens: treze }, 'GRADE').motivo, MOTIVO_LIMITE);
+});
+
+test('item repetido e referência torta são recusados', () => {
   assert.equal(validarConfiguracao({ itens: [{ cwItemId: 1 }, { cwItemId: '1' }] }, 'GRADE').motivo, MOTIVO_ITENS,
     'o mesmo produto duas vezes na mesma tela é engano — e 1 e "1" são o mesmo produto');
   assert.equal(validarConfiguracao({ itens: [{ cwItemId: 0 }] }, 'GRADE').motivo, MOTIVO_ITENS);
@@ -258,7 +292,7 @@ test('GRADE nunca ganha destaqueId', () => {
 test('🔴 o board público declara o tipo e não leva nada de admin nem byte nenhum', () => {
   const p = menuBoardPublico(resolverMenuBoard(board(), CATALOGO, new Map()));
   assert.equal(p.tipo, 'menu_board');
-  assert.deepEqual(Object.keys(p).sort(), ['duracaoSegundos', 'id', 'layout', 'produtos', 'tipo', 'titulo']);
+  assert.deepEqual(Object.keys(p).sort(), ['duracaoSegundos', 'exibicao', 'id', 'layout', 'produtos', 'subtitulo', 'tipo', 'titulo']);
   assert.equal('ausentes' in p, false, 'referência quebrada é assunto do admin');
   assert.equal('nome' in p, false, 'o nome é etiqueta interna; na tela aparece o título');
   assert.equal('elegivel' in p, false);
@@ -365,4 +399,106 @@ test('itensParaGravar numera pela POSIÇÃO e deixa as OUTRAS referências NULAS
     { playlistId: 3, tipo: 'VIDEO', conteudoId: null, menuBoardId: null, videoId: 4, ordem: 2 },
   ]);
   assert.deepEqual(itensParaGravar(3, null), []);
+});
+
+// ── V2: capacidade, exibição e compatibilidade ───────────────────────────────
+const boardV2 = (extra) => ({
+  id: 9, nome: 'Board', ativo: true, layout: 'GRADE', duracaoSegundos: 20,
+  configuracao: { itens: [{ cwItemId: 1 }, { cwItemId: 2 }] }, ...extra,
+});
+
+test('🔴 o teto do template corta DEPOIS da disponibilidade', () => {
+  // Um produto esgotado não pode gastar uma das três vagas da Vitrine: cortar antes deixaria
+  // a tela com dois cards porque o primeiro da lista acabou na cozinha.
+  const catalogo = { categorias: [{ itens: [
+    { id: 1, nome: 'A', preco: 10, status: 'INACTIVE' },
+    { id: 2, nome: 'B', preco: 20 },
+    { id: 3, nome: 'C', preco: 30 },
+    { id: 4, nome: 'D', preco: 40 },
+  ] }] };
+  const r = resolverMenuBoard(
+    boardV2({ layout: 'VITRINE', configuracao: { itens: [1, 2, 3, 4].map((n) => ({ cwItemId: n })) } }),
+    catalogo, new Map(),
+  );
+  assert.deepEqual(r.produtos.map((p) => p.nome), ['B', 'C', 'D'], 'três vagas, três disponíveis');
+});
+
+test('a OFERTA resolve um produto só, e a seleção maior não a quebra', () => {
+  const catalogo = { categorias: [{ itens: [{ id: 1, nome: 'A', preco: 10 }, { id: 2, nome: 'B', preco: 20 }] }] };
+  const r = resolverMenuBoard(boardV2({ layout: 'OFERTA', configuracao: { itens: [{ cwItemId: 1 }, { cwItemId: 2 }] } }), catalogo, new Map());
+  assert.equal(r.produtos.length, 1);
+  assert.equal(r.produtos[0].nome, 'A', 'o primeiro da ordem é o da campanha');
+  assert.equal(r.elegivel, true);
+});
+
+test('🔴 os defaults de exibição reproduzem exatamente o V1', () => {
+  // Board antigo, sem nenhuma das colunas novas: logo escondida, descrição só onde o V1 a
+  // mostrava, e a fita continua aparecendo.
+  assert.deepEqual(exibicaoDoBoard({}, 'GRADE'), { logo: false, fita: true, imagem: true, descricao: false, descricaoSoNoDestaque: false });
+  assert.deepEqual(exibicaoDoBoard({}, 'LISTA'), { logo: false, fita: true, imagem: false, descricao: true, descricaoSoNoDestaque: false });
+  assert.deepEqual(exibicaoDoBoard({}, 'DESTAQUE'), { logo: false, fita: true, imagem: true, descricao: true, descricaoSoNoDestaque: true });
+});
+
+test('o interruptor só vale onde o template deixa escolher', () => {
+  // A Vitrine ignora `mostrarImagem`: sem foto ela não é vitrine.
+  assert.equal(exibicaoDoBoard({ mostrarImagem: false }, 'VITRINE').imagem, true);
+  // A Lista honra: é exatamente para o cardápio sem fotografia de todos os itens.
+  assert.equal(exibicaoDoBoard({ mostrarImagem: true }, 'LISTA').imagem, true);
+  assert.equal(exibicaoDoBoard({ mostrarImagem: false }, 'LISTA').imagem, false);
+  // A Grade honra a descrição; a Lista a mostra sempre.
+  assert.equal(exibicaoDoBoard({ mostrarDescricao: true }, 'GRADE').descricao, true);
+  assert.equal(exibicaoDoBoard({ mostrarDescricao: false }, 'LISTA').descricao, true);
+  // Logo e fita valem em todos.
+  assert.equal(exibicaoDoBoard({ mostrarLogo: true }, 'OFERTA').logo, true);
+  assert.equal(exibicaoDoBoard({ mostrarFita: false }, 'GRADE').fita, false);
+});
+
+test('título e subtítulo: vazio vira NULL, e o limite corta', () => {
+  // `''` renderizaria um bloco de altura zero empurrando a composição — e o gestor veria um
+  // vão sem entender de onde veio.
+  assert.equal(validarEntrada({ titulo: '   ' }).dados.titulo, null);
+  assert.equal(validarEntrada({ subtitulo: '' }).dados.subtitulo, null);
+  assert.equal(validarEntrada({ titulo: null }).dados.titulo, null);
+  assert.equal(validarEntrada({ titulo: '  Os mais pedidos  ' }).dados.titulo, 'Os mais pedidos');
+  assert.equal(validarEntrada({ titulo: 'x'.repeat(200) }).dados.titulo.length, 60);
+  assert.equal(validarEntrada({ subtitulo: 'y'.repeat(300) }).dados.subtitulo.length, 100);
+  assert.equal(validarEntrada({ titulo: 42 }).erros[0].campo, 'titulo');
+  // PUT parcial não apaga o que não mencionou.
+  assert.equal('titulo' in validarEntrada({ nome: 'X' }).dados, false);
+});
+
+test('as chaves de exibição são booleanos ESTRITOS', () => {
+  // `'false'` vindo de um formulário mal montado não pode virar `true` por ser string.
+  assert.equal(validarEntrada({ mostrarLogo: 'false' }).dados.mostrarLogo, false);
+  assert.equal(validarEntrada({ mostrarLogo: 1 }).dados.mostrarLogo, false);
+  assert.equal(validarEntrada({ mostrarLogo: true }).dados.mostrarLogo, true);
+  assert.equal('mostrarFita' in validarEntrada({}).dados, false);
+});
+
+test('🔴 board V1 com título no JSON continua exibindo o título', () => {
+  // A migration copia o valor para a coluna; esta leitura é o cinto de segurança para o
+  // board que ainda não passou por lá.
+  const catalogo = { categorias: [{ itens: [{ id: 1, nome: 'A', preco: 10 }] }] };
+  const antigo = boardV2({ configuracao: { titulo: 'Hambúrgueres', itens: [{ cwItemId: 1 }] } });
+  assert.equal(resolverMenuBoard(antigo, catalogo, new Map()).titulo, 'Hambúrgueres');
+  // E a coluna vence quando existe.
+  const novo = boardV2({ titulo: 'Os mais pedidos', configuracao: { titulo: 'Velho', itens: [{ cwItemId: 1 }] } });
+  assert.equal(resolverMenuBoard(novo, catalogo, new Map()).titulo, 'Os mais pedidos');
+});
+
+test('🔴 board V1 com destaque MARCADO continua com aquele produto no lugar grande', () => {
+  // Compatibilidade visual: o V2 usa a ORDEM, mas não pode reposicionar o que já estava.
+  const catalogo = { categorias: [{ itens: [{ id: 1, nome: 'A', preco: 10 }, { id: 2, nome: 'B', preco: 20 }] }] };
+  const antigo = boardV2({ layout: 'DESTAQUE', configuracao: { itens: [{ cwItemId: 1 }, { cwItemId: 2, destaque: true }] } });
+  assert.equal(resolverMenuBoard(antigo, catalogo, new Map()).destaqueId, '2');
+  // Sem marca, a ordem resolve — que é como o V2 monta boards novos.
+  const novo = boardV2({ layout: 'DESTAQUE', configuracao: { itens: [{ cwItemId: 1 }, { cwItemId: 2 }] } });
+  assert.equal(resolverMenuBoard(novo, catalogo, new Map()).destaqueId, '1');
+});
+
+test('o admin sabe quantos dos selecionados o template mostra', () => {
+  const a = menuBoardParaAdmin(boardV2({ layout: 'VITRINE', configuracao: { itens: [1, 2, 3, 4, 5].map((n) => ({ cwItemId: n })) } }));
+  assert.equal(a.qtdItens, 5, 'a seleção inteira continua guardada');
+  assert.equal(a.exibidos, 3, 'mas a Vitrine mostra três');
+  assert.equal(a.maximo, 3);
 });

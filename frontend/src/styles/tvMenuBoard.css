@@ -91,8 +91,41 @@
 /* O TÍTULO da faixa: é ele que diz do que é esta tela ("Hambúrgueres"). Em caixa
    alta e dourado — a única coisa dourada além do preço, e os dois dizem a mesma
    coisa: "olhe aqui". */
+/* ── CABEÇALHO ────────────────────────────────────────────────────────────
+   Logo à esquerda, texto à direita. Só existe quando há o que dizer: um bloco
+   vazio de altura fixa empurraria a composição para baixo em todo board sem
+   título, e a diferença apareceria na parede.
+
+   O `margin-bottom` mora aqui e não no título — com o título ausente e só o
+   subtítulo presente, o espaçamento tem de continuar o mesmo. */
+.tvmb-cabeca {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  margin-bottom: 40px;
+  min-height: 0;
+}
+.tvmb-cabeca-txt { min-width: 0; }
+/* A logo tem TETO de altura e `contain`: a marca da loja pode vir em qualquer
+   proporção, e esticá-la seria deformar a identidade de quem paga por ela. */
+.tvmb-logo {
+  flex: 0 0 auto;
+  height: 88px;
+  max-width: 320px;
+  object-fit: contain;
+  object-position: left center;
+}
+.tvmb-subtitulo {
+  margin: 8px 0 0;
+  font-size: 32px;
+  font-weight: 500;
+  line-height: 1.15;
+  color: var(--tvmb-texto-2);
+}
+
 .tvmb-titulo {
-  margin: 0 0 40px;
+  margin: 0;
   font-size: 68px;
   font-weight: 900;
   line-height: 1;
@@ -101,6 +134,21 @@
   color: var(--tvmb-destaque);
   flex: 0 0 auto;
 }
+
+/* A DESCRIÇÃO curta dos produtos. Corte por linhas e não por caracteres: o
+   `slice` cortaria no meio de uma palavra, e a altura previsível é o que
+   impede um item de três linhas de desalinhar a fileira inteira. */
+.tvmb-desc {
+  margin: 0;
+  color: var(--tvmb-texto-2);
+  line-height: 1.22;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tvmb-desc-card { font-size: 22px; -webkit-line-clamp: 2; }
+.tvmb-desc-vt { font-size: 30px; -webkit-line-clamp: 3; }
+.tvmb-desc-of { font-size: 34px; -webkit-line-clamp: 3; max-width: 760px; }
 
 .tvmb-corpo { flex: 1 1 auto; min-height: 0; display: flex; }
 
@@ -206,6 +254,21 @@
   border-bottom: 1px solid var(--tvmb-linha);
 }
 .tvmb-linha:last-child { border-bottom: none; }
+/* A miniatura opcional da LISTA. Quadrada e pequena: aqui a foto ilustra, não
+   vende — quem vende neste template é o nome e o preço. */
+.tvmb-linha-midia {
+  flex: 0 0 auto;
+  width: 96px;
+  height: 96px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--tvmb-superficie);
+  align-self: center;
+}
+.tvmb-linha-midia .tvmb-foto { width: 100%; height: 100%; }
+/* Com foto a linha respira menos entre itens: a altura do retrato já separa. */
+.tvmb-lista.com-foto .tvmb-linha { align-items: center; padding: 10px 0; }
+
 .tvmb-linha-txt { flex: 0 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .tvmb-linha-nome { font-size: 40px; font-weight: 700; line-height: 1.05; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tvmb-linha-desc {
@@ -253,3 +316,67 @@
 .tvmb-secundarios .tvmb-card-midia { height: 180px; }
 .tvmb-secundarios .tvmb-card-nome { font-size: 30px; }
 .tvmb-secundarios .tvmb-preco-valor { font-size: 38px; }
+
+/* ── VITRINE ──────────────────────────────────────────────────────────────
+   Três produtos, um terço da tela cada. É a Grade levada ao extremo oposto:
+   menos itens, muito mais área. Com dois ou um produto os cards NÃO esticam
+   para preencher — eles centralizam, porque um card de 1200px ao lado de um
+   de 560 lê como defeito, e um card sozinho esticado lê como erro de layout. */
+.tvmb-vitrine {
+  flex: 1 1 auto;
+  display: flex;
+  justify-content: center;
+  gap: 40px;
+  min-height: 0;
+}
+.tvmb-vt {
+  flex: 0 1 560px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--tvmb-superficie);
+  border-radius: 24px;
+  overflow: hidden;
+}
+.tvmb-vt-midia { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
+.tvmb-vt-midia .tvmb-selo { font-size: 24px; padding: 9px 18px; }
+.tvmb-vt-txt { flex: 0 0 auto; padding: 28px 30px 32px; display: flex; flex-direction: column; gap: 12px; }
+.tvmb-vt-nome { margin: 0; font-size: 44px; font-weight: 800; line-height: 1.05; }
+.tvmb-preco-vt .tvmb-preco-valor { font-size: 52px; }
+
+/* ── OFERTA EM DESTAQUE ───────────────────────────────────────────────────
+   Um produto, composição de campanha: foto na metade esquerda, texto
+   respirando na direita.
+
+   É o único template em que o preço cresce, porque aqui ele É a mensagem. Mas
+   o nome continua grande o bastante para disputar o olhar: um preço gigante
+   sozinho vende desconto, não vende produto — e foi esse o erro que já
+   corrigimos no card do totem. */
+.tvmb-of {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 940px 1fr;
+  gap: 64px;
+  min-height: 0;
+  align-items: center;
+}
+.tvmb-of-midia {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  border-radius: 28px;
+  overflow: hidden;
+  background: var(--tvmb-superficie);
+}
+.tvmb-of-midia .tvmb-selo { font-size: 30px; padding: 12px 24px; }
+.tvmb-of-txt { min-width: 0; display: flex; flex-direction: column; gap: 20px; }
+.tvmb-of-nome { margin: 0; font-size: 86px; font-weight: 900; line-height: 1; }
+.tvmb-preco-of { gap: 10px; }
+.tvmb-preco-of .tvmb-preco-valor { font-size: 104px; }
+.tvmb-preco-of .tvmb-preco-de { font-size: 42px; }
+.tvmb-preco-of .tvmb-desconto { font-size: 34px; padding: 8px 18px; }
+
+/* Na OFERTA e na VITRINE o board tem menos elementos, e por isso a margem de
+   segurança pode ser maior: informação colada na borda some em TV com overscan
+   mal configurado, que é a regra e não a exceção em loja. */
+.tvmb-tela.tvmb-oferta, .tvmb-tela.tvmb-vitrine { padding: 64px 88px 72px; }

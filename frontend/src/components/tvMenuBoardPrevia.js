@@ -51,13 +51,17 @@ export const disponivelNaPrevia = (item) => {
    `escolhidos` é a seleção do editor (`[{ cwItemId, destaque? }]`), `porId` é o catálogo
    indexado por `String(id)`. Produto que sumiu do catálogo, ou que está indisponível, não
    entra: é exatamente o que a parede faria. */
-export function previaDoBoard({ layout, titulo, escolhidos, porId, selos }) {
+export function previaDoBoard({ layout, titulo, subtitulo, escolhidos, porId, selos, exibicao, maximo }) {
   const lista = Array.isArray(escolhidos) ? escolhidos : []
+  const teto = Number.isFinite(maximo) && maximo > 0 ? maximo : lista.length
   const produtos = []
   let destaqueId = null
   for (const escolha of lista) {
     const item = porId?.get?.(String(escolha?.cwItemId))
     if (!item || !disponivelNaPrevia(item)) continue
+    // O teto corta DEPOIS da disponibilidade, como no servidor: um produto esgotado não
+    // gasta uma das três vagas da Vitrine.
+    if (produtos.length >= teto) break
     const p = produtoDaPrevia(item, selos)
     if (escolha?.destaque === true && layout === 'DESTAQUE') destaqueId = p.id
     produtos.push(p)
@@ -65,5 +69,14 @@ export function previaDoBoard({ layout, titulo, escolhidos, porId, selos }) {
   // Sem escolha explícita, o destaque é o primeiro disponível — a mesma regra do servidor,
   // e a razão é a mesma: um layout de destaque sem destaque abriria um buraco na tela.
   if (layout === 'DESTAQUE' && !destaqueId && produtos.length) destaqueId = produtos[0].id
-  return { layout, titulo: titulo || null, produtos, ...(destaqueId ? { destaqueId } : {}) }
+  return {
+    layout,
+    titulo: titulo || null,
+    subtitulo: subtitulo || null,
+    // A exibição chega RESOLVIDA de quem chamou (o editor a pede ao domínio compartilhado),
+    // e não é recalculada aqui: duas respostas para "a Lista mostra descrição?" é uma a mais.
+    ...(exibicao ? { exibicao } : {}),
+    produtos,
+    ...(destaqueId ? { destaqueId } : {}),
+  }
 }

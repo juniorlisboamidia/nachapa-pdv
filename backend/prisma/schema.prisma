@@ -1365,11 +1365,35 @@ model TvMenuBoard {
   empresaId       Int
   nome            String                       // etiqueta interna; na tela aparece o título
   ativo           Boolean  @default(true)
-  layout          String   @default("GRADE")   // GRADE | LISTA | DESTAQUE — régua em tvMenuBoard.js
+  // GRADE | DESTAQUE | LISTA | VITRINE | OFERTA — régua em tvMenuBoard.js. Na UI a palavra é
+  // TEMPLATE; a coluna guarda o nome antigo porque renomear a fundação no meio da obra custa
+  // mais do que resolve, e os três ids do V1 continuam valendo exatamente como eram.
+  layout          String   @default("GRADE")
   // 20 s contra os 10 s de uma arte: um menu precisa ser LIDO, e quem passa na frente tem de
   // achar o produto e o preço.
   duracaoSegundos Int      @default(20)
-  // { cwCategoriaId?, titulo, itens: [{ cwItemId, destaque? }] } — validado no domínio.
+  /* TEXTO da cena. Colunas, e não chaves dentro do JSON: são estruturais e fechados, e
+     campo tipado é validado pelo banco — `configuracao` é `Json` e aceitaria qualquer coisa.
+     O `titulo` morava no JSON no V1; a migration o copiou para cá. */
+  titulo    String?
+  subtitulo String?
+
+  /* EXIBIÇÃO. Os defaults reproduzem exatamente o V1: nenhum board existente muda de
+     aparência ao subir esta versão.
+       · logo escondida — o V1 não desenhava logo no board;
+       · descrição desligada — o V1 só a mostrava na Lista e no produto grande do Destaque,
+         e esses dois continuam mostrando por COMPOSIÇÃO, não por esta chave;
+       · imagem desligada — só a Lista lê esta chave (os outros templates mostram foto
+         sempre), e a Lista do V1 não tinha foto;
+       · fita LIGADA — a fita sempre apareceu.
+     Qual template honra qual chave está em `exibicaoDoBoard`, num lugar só. */
+  mostrarLogo      Boolean @default(false)
+  mostrarDescricao Boolean @default(false)
+  mostrarImagem    Boolean @default(false)
+  mostrarFita      Boolean @default(true)
+
+  // { cwCategoriaId?, itens: [{ cwItemId, destaque? }] } — validado no domínio.
+  // `destaque` é legado do V1 e continua sendo honrado; boards novos usam a ORDEM.
   configuracao    Json
   criadoEm        DateTime @default(now())
   atualizadoEm    DateTime @updatedAt

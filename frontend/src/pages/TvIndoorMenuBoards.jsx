@@ -18,6 +18,8 @@ import api from '../services/api'
 import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
 import MenuBoard from '../components/tv/MenuBoard'
+// O teto ABSOLUTO da seleção guardada — o mesmo do domínio, que é quem recusa na escrita.
+const TETO_SELECAO = 12
 import { previaDoBoard } from '../components/tvMenuBoardPrevia'
 
 const MOTIVOS = {
@@ -94,7 +96,13 @@ export default function TvIndoorMenuBoards() {
         nome: form.nome,
         layout: form.layout,
         duracaoSegundos: Number(form.duracaoSegundos),
-        configuracao: { cwCategoriaId: form.cwCategoriaId || undefined, titulo: form.titulo, itens: form.itens },
+        titulo: form.titulo,
+        subtitulo: form.subtitulo,
+        mostrarLogo: form.mostrarLogo === true,
+        mostrarDescricao: form.mostrarDescricao === true,
+        mostrarImagem: form.mostrarImagem === true,
+        mostrarFita: form.mostrarFita !== false,
+        configuracao: { cwCategoriaId: form.cwCategoriaId || undefined, itens: form.itens },
       }
       if (form.id) await api.put(`/tv-indoor/menu-boards/${form.id}`, corpo)
       else await api.post('/tv-indoor/menu-boards', corpo)
@@ -141,7 +149,12 @@ export default function TvIndoorMenuBoards() {
               type="button"
               className="btn btn-primary btn-sm"
               disabled={ocupado}
-              onClick={() => setEditando({ id: null, nome: '', layout: 'GRADE', duracaoSegundos: limites?.duracaoPadrao ?? 20, titulo: '', cwCategoriaId: '', itens: [] })}
+              onClick={() => setEditando({
+                id: null, nome: '', layout: 'GRADE', duracaoSegundos: limites?.duracaoPadrao ?? 20,
+                titulo: '', subtitulo: '', cwCategoriaId: '', itens: [],
+                // Os defaults do board NOVO são os mesmos do banco: o que o V1 desenhava.
+                mostrarLogo: false, mostrarDescricao: false, mostrarImagem: false, mostrarFita: true,
+              })}
             >
               Novo menu board
             </button>
@@ -168,7 +181,7 @@ export default function TvIndoorMenuBoards() {
               {boards.map((b) => (
                 <tr key={b.id} className={b.ativo ? undefined : 'tvi-linha-off'}>
                   <td>
-                    <button type="button" className="tvi-nome" disabled={ocupado} onClick={() => setEditando({ ...b, cwCategoriaId: b.cwCategoriaId ?? '', titulo: b.titulo ?? '' })}>
+                    <button type="button" className="tvi-nome" disabled={ocupado} onClick={() => setEditando({ ...b, cwCategoriaId: b.cwCategoriaId ?? '', titulo: b.titulo ?? '', subtitulo: b.subtitulo ?? '' })}>
                       {b.nome}
                     </button>
                     {b.titulo ? <div className="ttm-meta-txt">título na tela: {b.titulo}</div> : null}
@@ -228,6 +241,35 @@ export default function TvIndoorMenuBoards() {
 }
 
 // ── Editor ─────────────────────────────────────────────────────────────────
+/* A exibição resolvida para a PRÉVIA. Espelha `exibicaoDoBoard` do servidor, e o formato
+   das opções vem de lá (`opcoes`), então não há uma segunda tabela aqui dizendo qual
+   template honra qual chave — o que existe é a aplicação da mesma resposta. */
+function exibicaoDoForm(form, regra) {
+  const oferece = (chave) => (regra.opcoes ?? []).includes(chave)
+  return {
+    logo: form.mostrarLogo === true,
+    fita: form.mostrarFita !== false,
+    // Quando o template não oferece a escolha, é porque a composição decide: a Vitrine
+    // mostra foto sempre, a Lista mostra descrição sempre.
+    imagem: oferece('imagem') ? form.mostrarImagem === true : regra.imagem !== 'NUNCA',
+    descricao: oferece('descricao') ? form.mostrarDescricao === true : regra.descricao !== 'NUNCA',
+    descricaoSoNoDestaque: regra.descricao === 'HERO',
+  }
+}
+
+/* Uma MINIATURA do template, desenhada em CSS. Não é imagem: são quatro divs, e um
+   wireframe de verdade diz mais do que a palavra "Vitrine" para quem nunca viu a tela. */
+function Miniatura({ id }) {
+  const blocos = {
+    GRADE: <><i /><i /><i /><i /><i /><i /><i /><i /></>,
+    DESTAQUE: <><i className="g" /><i /><i /><i /><i /></>,
+    LISTA: <><i className="l" /><i className="l" /><i className="l" /><i className="l" /></>,
+    VITRINE: <><i className="v" /><i className="v" /><i className="v" /></>,
+    OFERTA: <><i className="o" /></>,
+  }
+  return <span className={'tvi-mini-tpl tpl-' + id.toLowerCase()} aria-hidden="true">{blocos[id] ?? blocos.GRADE}</span>
+}
+
 function Editor({ valor, layouts, limites, ocupado, aoFechar, aoSalvar, aoAvisar }) {
   const [form, setForm] = useState(valor)
   const [catalogo, setCatalogo] = useState(null)      // { categorias, desatualizado }
@@ -258,7 +300,13 @@ function Editor({ valor, layouts, limites, ocupado, aoFechar, aoSalvar, aoAvisar
     const k = chave(id)
     const jaTem = escolhidos.some((i) => chave(i.cwItemId) === k)
     if (jaTem) { mudar('itens', escolhidos.filter((i) => chave(i.cwItemId) !== k)); return }
-    if (escolhidos.length >= regra.maximo) { aoAvisar(`Este layout comporta até ${regra.maximo} produtos.`); return }
+    /* O teto de ESCOLHA é o absoluto (12), não o do template: dá para preparar uma seleção
+       maior e experimentar templates diferentes sem perder nada. O que o template limita é
+       quantos APARECEM, e o contador acima diz isso. */
+    if (escolhidos.length >= TETO_SELECAO) { aoAvisar(`São no máximo ${TETO_SELECAO} produtos guardados por board.`); return }
+    if (escolhidos.length >= regra.maximo) {
+      aoAvisar(`${regra.rotulo} mostra ${regra.maximo}. Este produto fica guardado e aparece se você trocar de template.`, 'info')
+    }
     mudar('itens', [...escolhidos, { cwItemId: id }])
   }
 
@@ -283,13 +331,17 @@ function Editor({ valor, layouts, limites, ocupado, aoFechar, aoSalvar, aoAvisar
      uma escolha invisível. */
   function trocarLayout(novo) {
     const regraNova = layouts.find((l) => l.id === novo) ?? { maximo: 8, destaque: false }
-    let itens = escolhidos
-    if (itens.length > regraNova.maximo) {
-      itens = itens.slice(0, regraNova.maximo)
-      aoAvisar(`O layout ${regraNova.rotulo ?? novo} comporta até ${regraNova.maximo} produtos — a seleção foi cortada.`, 'info')
+    /* A seleção NÃO é cortada. Antes ela era, e isso destruía trabalho em silêncio: quem
+       montou uma grade de oito e clicou na Vitrine para "dar uma olhada" perdia cinco
+       produtos sem chance de voltar atrás.
+
+       Agora tudo fica guardado, o board público recebe os N primeiros elegíveis, e voltar
+       para a Grade recupera a seleção inteira. O aviso diz quantos aparecem — a informação
+       que antes só chegava pela parede. */
+    if (escolhidos.length > regraNova.maximo) {
+      aoAvisar(`${regraNova.rotulo ?? novo} mostra ${regraNova.maximo} de ${escolhidos.length} produtos. Nada foi perdido: os demais voltam se você trocar de template.`, 'info')
     }
-    if (!regraNova.destaque) itens = itens.map((i) => ({ cwItemId: i.cwItemId }))
-    setForm((f) => ({ ...f, layout: novo, itens }))
+    setForm((f) => ({ ...f, layout: novo }))
   }
 
   /* A PRÉVIA, montada por `tvMenuBoardPrevia` — e não à mão aqui.
@@ -303,9 +355,14 @@ function Editor({ valor, layouts, limites, ocupado, aoFechar, aoSalvar, aoAvisar
   const previa = previaDoBoard({
     layout: form.layout,
     titulo: form.titulo,
+    subtitulo: form.subtitulo,
     escolhidos,
     porId,
     selos: catalogo?.selos,
+    // O teto do template: a prévia mostra exatamente o que a parede mostraria, e não a
+    // seleção inteira. É a diferença entre "o que eu escolhi" e "o que vai aparecer".
+    maximo: regra.maximo,
+    exibicao: exibicaoDoForm(form, regra),
   })
 
   const categorias = catalogo?.categorias ?? []
@@ -334,12 +391,17 @@ function Editor({ valor, layouts, limites, ocupado, aoFechar, aoSalvar, aoAvisar
 
             <div className="form-group">
               <label className="form-label" htmlFor="mb-titulo">Título na tela</label>
-              <input id="mb-titulo" className="form-input" maxLength={40} value={form.titulo} onChange={(e) => mudar('titulo', e.target.value)} placeholder="Ex.: HAMBÚRGUERES" />
-              <div className="ttm-dica">Em branco, o board aparece sem faixa de título.</div>
+              <input id="mb-titulo" className="form-input" maxLength={60} value={form.titulo} onChange={(e) => mudar('titulo', e.target.value)} placeholder="Ex.: OS MAIS PEDIDOS" />
             </div>
 
             <div className="form-group">
-              <label className="form-label">Layout</label>
+              <label className="form-label" htmlFor="mb-sub">Subtítulo</label>
+              <input id="mb-sub" className="form-input" maxLength={100} value={form.subtitulo} onChange={(e) => mudar('subtitulo', e.target.value)} placeholder="Ex.: Escolha o seu favorito" />
+              <div className="ttm-dica">Título e subtítulo em branco: o board aparece sem cabeçalho nenhum.</div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Template</label>
               <div className="tvi-mb-layouts">
                 {layouts.map((l) => (
                   <button
@@ -349,12 +411,51 @@ function Editor({ valor, layouts, limites, ocupado, aoFechar, aoSalvar, aoAvisar
                     aria-pressed={form.layout === l.id}
                     onClick={() => trocarLayout(l.id)}
                   >
-                    {/* Miniatura desenhada: o gestor escolhe olhando a FORMA, não lendo o nome. */}
-                    <span className={'tvi-mb-mini ' + l.id.toLowerCase()} aria-hidden="true" />
+                    {/* Wireframe desenhado em CSS: o gestor escolhe olhando a FORMA. "Vitrine"
+                        não diz nada para quem nunca viu a tela; três retângulos grandes dizem. */}
+                    <Miniatura id={l.id} />
                     <span className="tvi-mb-layout-nome">{l.rotulo}</span>
                     <span className="tvi-mb-layout-max">até {l.maximo}</span>
                   </button>
                 ))}
+              </div>
+            </div>
+
+            {/* EXIBIÇÃO — só os interruptores que ESTE template honra. A lista vem do
+                servidor junto com o template: oferecer um controle sem efeito é ensinar o
+                gestor a desconfiar da tela inteira. */}
+            <div className="form-group">
+              <label className="form-label">Exibição</label>
+              <div className="tvi-mb-switches">
+                {(regra.opcoes ?? []).map((op) => {
+                  const campo = { logo: 'mostrarLogo', fita: 'mostrarFita', descricao: 'mostrarDescricao', imagem: 'mostrarImagem' }[op]
+                  const rotulo = {
+                    logo: 'Mostrar a logo da loja',
+                    fita: 'Mostrar as fitas dos produtos',
+                    descricao: 'Mostrar a descrição dos produtos',
+                    imagem: 'Mostrar as fotos',
+                  }[op]
+                  const ligado = campo === 'mostrarFita' ? form.mostrarFita !== false : form[campo] === true
+                  return (
+                    <label key={op} className="tvi-mb-switch">
+                      <button
+                        type="button"
+                        className={'intel-switch' + (ligado ? ' on' : '')}
+                        role="switch"
+                        aria-checked={ligado}
+                        aria-label={rotulo}
+                        onClick={() => mudar(campo, !ligado)}
+                      />
+                      <span>{rotulo}</span>
+                    </label>
+                  )
+                })}
+              </div>
+              <div className="ttm-dica">
+                A logo vem de <strong>TV Indoor › Aparência</strong> — uma marca, uma fonte.
+                {regra.imagem === 'SEMPRE' ? ' Este template sempre mostra as fotos.' : ''}
+                {regra.descricao === 'SEMPRE' ? ' E sempre mostra a descrição.' : ''}
+                {regra.descricao === 'HERO' ? ' A descrição aparece só no produto em destaque.' : ''}
               </div>
             </div>
 
@@ -373,7 +474,14 @@ function Editor({ valor, layouts, limites, ocupado, aoFechar, aoSalvar, aoAvisar
             {/* ── Os escolhidos, na ordem ──────────────────────────────── */}
             <div className="form-group" style={{ marginBottom: 0 }}>
               <label className="form-label">
-                Produtos <span className="ttm-contador">{escolhidos.length}/{regra.maximo}</span>
+                Produtos{' '}
+                {/* Quando a seleção passa do que o template mostra, o contador diz os DOIS
+                    números: nada foi perdido, e o gestor precisa saber quantos aparecem. */}
+                <span className="ttm-contador">
+                  {escolhidos.length > regra.maximo
+                    ? `${regra.maximo} de ${escolhidos.length} na tela`
+                    : `${escolhidos.length}/${regra.maximo}`}
+                </span>
               </label>
               {escolhidos.length === 0 ? (
                 <div className="ttm-dica">Escolha os produtos na lista ao lado.</div>
