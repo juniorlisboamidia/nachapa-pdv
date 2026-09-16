@@ -240,6 +240,13 @@ test('🔴 NENHUM template usa largura fixa — é impossível estourar o artboa
     assert.equal(/\d+px/.test(colunas[1]), false, `${seletor} não pode ter coluna em px: ${colunas[1].trim()}`)
     assert.match(colunas[1], /minmax\(0,/, `${seletor} precisa de minmax(0,…) para poder encolher`)
   }
+  /* E os CARDS precisam de `min-width: 0`: sem ele, a largura mínima do card é o max-content
+     do que há dentro, e nenhuma faixa `1fr` consegue ficar menor que isso. A coluna do
+     artboard prende a largura; isto permite que o conteúdo realmente caiba nela. */
+  for (const seletor of ['.tvmb-card {', '.tvmb-hero {', '.tvmb-vt {']) {
+    const bloco = css.slice(css.indexOf(seletor), css.indexOf('}', css.indexOf(seletor)))
+    assert.match(bloco, /min-width: 0/, `${seletor} precisa de min-width: 0`)
+  }
 })
 
 test('🔴 o artboard é GRID de duas faixas — a posição do cabeçalho é estrutural', () => {
@@ -252,6 +259,11 @@ test('🔴 o artboard é GRID de duas faixas — a posição do cabeçalho é es
   const bloco = css.slice(css.indexOf('.tvmb-tela {'), css.indexOf('}', css.indexOf('.tvmb-tela {')))
   assert.match(bloco, /display: grid/)
   assert.match(bloco, /grid-template-rows: auto minmax\(0, 1fr\)/)
+  /* A COLUNA precisa ser DECLARADA. Sem ela, a coluna implícita é `auto` — dimensionada pelo
+     MAX-CONTENT dos filhos — e quatro cards lado a lado estouram o artboard: o cabeçalho fica
+     alinhado à esquerda de uma coluna larguíssima e o corpo vaza para a direita. Foi
+     exatamente esse o defeito que apareceu na prévia, e esta linha é a guarda dele. */
+  assert.match(bloco, /grid-template-columns: minmax\(0, 1fr\)/, 'a coluna do artboard precisa ser declarada')
   assert.match(bloco, /overflow: hidden/, 'nada escapa do artboard')
   assert.equal(/flex-direction/.test(bloco), false, 'a ordem das faixas não pode depender de flex')
 })

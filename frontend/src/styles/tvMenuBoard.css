@@ -152,6 +152,20 @@
   width: 1920px;
   height: 1080px;
   display: grid;
+  /* ⚠️ A COLUNA precisa ser declarada, e esta linha é a correção do defeito que
+     deixava o título ao lado do conteúdo e o corpo cortado à direita.
+
+     Declarando só as LINHAS, a coluna implícita é `auto` — ou seja, dimensionada
+     pelo MAX-CONTENT dos filhos. Quatro cards lado a lado, com nomes longos e
+     linhas de preço, dão um max-content muito maior que 1760: a coluna estourava
+     o artboard, o cabeçalho (item dessa coluna larguíssima) ficava alinhado à
+     esquerda dela, e o corpo vazava para a direita até o `overflow` cortar.
+
+     `minmax(0, 1fr)` prende a coluna à largura do artboard e permite que ela
+     encolha abaixo do conteúdo — que é o que faz os templates caberem. O mesmo
+     defeito existia na versão com flex, por outro caminho: um item de flex também
+     não encolhe abaixo do próprio min-content sem `min-width: 0`. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr);
   padding: 64px 80px 72px;
   box-sizing: border-box;
@@ -343,6 +357,11 @@
    A mídia SANGRA até as bordas de cima (o `overflow:hidden` do card recorta pelo
    raio), e o texto tem área interna própria. Sem sombra: numa TV, sombra vira
    borrão cinza; quem separa o card do fundo é a cor da superfície e o filete. */
+/* `min-width: 0` em todo card: sem ele, a largura mínima do card é o max-content
+   do que há dentro (o nome do produto numa linha só, a linha de preço inteira), e
+   uma faixa `1fr` não consegue ficar menor do que isso. É a outra metade da
+   correção — a coluna do artboard prende a largura, e isto permite que os cards
+   realmente caibam nela. */
 .tvmb-card {
   display: flex;
   flex-direction: column;
@@ -351,6 +370,7 @@
   border-radius: 20px;
   overflow: hidden;
   min-height: 0;
+  min-width: 0;
 }
 /* O chão atrás da foto é a SUPERFÍCIE ELEVADA: com a paleta clara, um buraco
    preto embaixo de cada card seria a única coisa escura da tela. */
@@ -361,6 +381,9 @@
 .tvmb-card-txt { flex: 0 0 auto; display: flex; flex-direction: column; gap: 8px; padding: 16px 20px 18px; }
 .tvmb-card-nome {
   margin: 0;
+  /* `overflow-wrap` para um nome de uma palavra só e muito longa não empurrar a
+     largura mínima do card: `-webkit-line-clamp` corta linhas, não palavras. */
+  overflow-wrap: anywhere;
   font-size: var(--tvmb-fs-nome-3);
   font-weight: 700;
   line-height: 1.1;
@@ -477,6 +500,7 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
   background: var(--tvmb-superficie);
   border: 1px solid var(--tvmb-linha);
   border-radius: 24px;
@@ -500,7 +524,7 @@
 .tvmb-preco-hero .tvmb-preco-de { font-size: var(--tvmb-fs-de); }
 /* Os quatro secundários herdam o card da Grade; o que muda é o tamanho do nome,
    um degrau abaixo — é a hierarquia que faz o protagonista ser protagonista. */
-.tvmb-secundarios { display: grid; grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(2, 1fr); gap: 28px; min-height: 0; }
+.tvmb-secundarios { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 28px; min-height: 0; min-width: 0; }
 .tvmb-secundarios .tvmb-card-nome { font-size: var(--tvmb-fs-nome-4); }
 .tvmb-secundarios .tvmb-card-midia { height: 180px; }
 .tvmb-secundarios .tvmb-card-nome { font-size: 30px; }
@@ -530,6 +554,7 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
   background: var(--tvmb-superficie);
   border: 1px solid var(--tvmb-linha);
   border-radius: 26px;
@@ -580,6 +605,7 @@
   position: relative;
   height: 100%;
   min-height: 0;
+  min-width: 0;
   border-radius: 28px;
   overflow: hidden;
   background: var(--tvmb-superficie-2);
