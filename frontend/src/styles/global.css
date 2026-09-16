@@ -3350,7 +3350,12 @@ body.theme-dark .apr-contagem, body.theme-dark .apr-qr-legenda, body.theme-dark 
 .ttm-erro { font-size: 11.5px; color: #b91c1c; margin-top: 3px; max-width: 260px; }
 .ttm-decisao { font-size: 11.5px; color: var(--app-text-3); margin-top: 3px; max-width: 260px; }
 .ttm-meta-txt { font-size: 11.5px; color: var(--app-text-3); }
-.ttm-acoes { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+/* `align-items: center` é o que alinha o interruptor com os botões ao lado.
+
+   Sem ele vale `stretch`, que não tem efeito sobre o interruptor — ele tem altura
+   FIXA de 22px —, e o item acaba no topo da linha enquanto os botões de 34px
+   ocupam toda a altura. Resultado: a pílula flutuando acima do "Excluir". */
+.ttm-acoes { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .ttm-acoes .btn { min-height: 34px; }
 .ttm-dica { font-size: 11.5px; color: var(--app-text-3); margin-top: 6px; }
 /* Explicação que MUDA a escolha de quem está no formulário (o que o número significa,
@@ -3995,7 +4000,9 @@ body.theme-dark .tvi-mon-cartao.off { background: rgba(239, 68, 68, 0.12); }
 .tvi-item-info { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .tvi-item-nome { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tvi-item-meta { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--app-text-3); }
-.tvi-item-acoes { flex: 0 0 auto; display: flex; gap: 6px; }
+/* Mesmo motivo de `.ttm-acoes`: o interruptor tem altura fixa e, sem
+   `align-items: center`, sobe para o topo da linha ao lado de botões mais altos. */
+.tvi-item-acoes { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; }
 .tvi-item-acoes .btn { min-height: 32px; }
 
 .tvi-sel-playlist { width: 180px; min-width: 180px; }
