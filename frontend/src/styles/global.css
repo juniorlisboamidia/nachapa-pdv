@@ -3707,8 +3707,11 @@ body.theme-dark .apr-contagem, body.theme-dark .apr-qr-legenda, body.theme-dark 
 /* Excluir é destrutivo e fica vermelho — mas só no hover: em repouso, três ícones
    vermelhos numa lista de cinco linhas viram ruído e param de significar perigo. */
 .ttm-bn-ico.perigo:hover:not(:disabled) { color: #b91c1c; border-color: #fca5a5; background: #fef2f2; }
-.ttm-bn .intel-switch { cursor: pointer; border: 0; padding: 0; }
-.ttm-bn .intel-switch:disabled { opacity: 0.45; cursor: default; }
+/* O conserto do interruptor (borda de botão, cursor, desabilitado) morava AQUI,
+   no escopo dos banners. Subiu para o componente base: um remendo local faz a
+   tela que o tem funcionar e ensina que o componente está bom — a próxima tela
+   copia a classe, não copia o remendo, e quebra. Foi assim que a TV Indoor
+   nasceu com o interruptor estourando a pílula. */
 
 /* Visualizar: a arte grande, sem nenhuma ação junto. */
 .ttm-bn-ver { max-width: 620px; }
