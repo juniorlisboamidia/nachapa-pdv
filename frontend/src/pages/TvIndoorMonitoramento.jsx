@@ -20,12 +20,22 @@
 // fotografia — banda, privacidade e armazenamento sem necessidade nenhuma.
 import { useCallback, useEffect, useState } from 'react'
 import api from '../services/api'
+import { duracao, haQuanto } from '../lib/duracaoRelativa'
+/* A composição de cada linha mora num módulo puro e TESTADO: "o que a linha diz em cada
+   estado" é regra de produto, e regra de produto dentro de JSX não tem teste. São cinco
+   saúdes × três tipos de item × item removido × fallback — combinações demais para conferir
+   no olho a cada mudança. */
+import { ORIGENS, composicao, textoDoItem } from '../components/tvMonitoramentoLinha'
 
 // Atualiza sozinho: quem abre esta tela está olhando uma TV agora, e apertar F5 para saber
 // se ela voltou é o tipo de trabalho que o sistema deveria fazer. 30 s é o mesmo ritmo da
 // gestão de telas — o heartbeat é de 60 s, então nada se perde.
 const MS_ATUALIZAR = 30_000
 
+/* UMA linguagem, do cartão ao filtro ao selo. O nome técnico interno continua `SAUDAVEL`;
+   o que o gestor lê é "Tudo certo" em todo lugar. Antes o cartão dizia "TUDO CERTO" e o
+   filtro dizia "Saudáveis", e duas palavras para a mesma coisa obrigam a pessoa a traduzir
+   mentalmente a cada leitura. */
 const SAUDE = {
   SAUDAVEL: { texto: 'Tudo certo', cor: 'badge-green', ponto: 'ok' },
   ATENCAO: { texto: 'Atenção', cor: 'badge-orange', ponto: 'alerta' },
@@ -42,46 +52,18 @@ const ESTADO_PLAYER = {
   FALHA_TOTAL: 'Nenhum conteúdo pôde ser exibido',
 }
 
-const TIPO_ITEM = { IMAGEM: 'Arte', MENU_BOARD: 'Menu board', VIDEO: 'Vídeo' }
-const ORIGEM = { REGRA: 'Regra semanal', PADRAO: 'Playlist padrão' }
+/* A ordem dos filtros é a mesma da lista: problema primeiro. "Tudo certo" fecha a fila
+   porque é o filtro que ninguém usa com pressa.
 
+   Não há filtro para "Sem programação" e "Sem telemetria" de propósito: são poucos e
+   passageiros, e um filtro por estado raro é um botão que ocupa espaço para nunca ser
+   clicado. Eles continuam aparecendo em "Todas" e nos cartões do topo. */
 const FILTROS = [
   { id: 'TODOS', rotulo: 'Todas' },
   { id: 'ATENCAO', rotulo: 'Atenção' },
   { id: 'OFFLINE', rotulo: 'Offline' },
-  { id: 'SAUDAVEL', rotulo: 'Saudáveis' },
+  { id: 'SAUDAVEL', rotulo: 'Tudo certo' },
 ]
-
-/* "há 18 segundos". Relativo porque é o que a pessoa quer saber — um horário absoluto
-   obrigaria a fazer a conta de cabeça, justamente no momento em que ela está com pressa.
-
-   A âncora é o `agoraServidor` da resposta, e não o relógio de quem está olhando: um
-   navegador com a hora adiantada mostraria "há 2 horas" numa TV que bateu agora. */
-function haQuanto(iso, agoraIso) {
-  if (!iso) return null
-  const t = Date.parse(iso)
-  const base = Date.parse(agoraIso ?? '')
-  if (!Number.isFinite(t)) return null
-  const s = Math.max(0, Math.round(((Number.isFinite(base) ? base : Date.now()) - t) / 1000))
-  if (s < 60) return `há ${s} s`
-  const m = Math.round(s / 60)
-  if (m < 60) return `há ${m} min`
-  const h = Math.floor(m / 60)
-  return `há ${h} h ${m % 60} min`
-}
-
-function duracao(segundos) {
-  if (!Number.isFinite(segundos) || segundos < 0) return null
-  const h = Math.floor(segundos / 3600)
-  const m = Math.floor((segundos % 3600) / 60)
-  if (h > 0) return `${h} h ${m} min`
-  if (m > 0) return `${m} min`
-  return `${segundos} s`
-}
-
-// "Item removido" em vez de um id cru: se a mídia foi apagada entre o heartbeat e agora, o
-// gestor precisa entender o que houve, não decifrar `VIDEO 44`.
-const nomeDoItem = (item) => item?.nome ?? 'Item removido'
 
 export default function TvIndoorMonitoramento() {
   const [carregando, setCarregando] = useState(true)
@@ -145,6 +127,11 @@ export default function TvIndoorMonitoramento() {
         </div>
       ) : (
         <>
+          {/* A REGRA DOS CONTADORES: cada TV está em exatamente UMA saúde, e toda saúde tem
+              cartão. Os três primeiros são fixos e mostram zero — um "Atenção 0" é uma
+              informação, não um espaço desperdiçado. Os dois especiais só aparecem quando
+              existem, e é por isso que a soma SEMPRE fecha com o total: nenhuma TV fica
+              escondida para a conta bater. */}
           <div className="tvi-mon-resumo">
             <Cartao rotulo="TVs" valor={resumo.total} />
             <Cartao rotulo="Tudo certo" valor={resumo.SAUDAVEL ?? 0} tom="ok" />
@@ -179,32 +166,33 @@ export default function TvIndoorMonitoramento() {
               <div className="empty-state">Nenhuma TV neste filtro.</div>
             ) : (
               <ul className="tvi-lista">
-                {visiveis.map((t) => (
-                  <li key={t.id} className="tvi-mon-linha">
-                    <span className={'tvi-ponto ' + SAUDE[t.saude].ponto} aria-hidden="true" />
-                    <span className="tvi-item-info">
-                      <span className="tvi-item-nome">
-                        {t.nome}
-                        <span className={'badge ' + SAUDE[t.saude].cor} style={{ marginLeft: 8 }}>{SAUDE[t.saude].texto}</span>
+                {visiveis.map((t) => {
+                  /* A hierarquia da linha, de cima para baixo: nome + saúde, o que está no
+                     ar (ou o problema), a programação, e o apoio em muted.
+
+                     A COR forte fica no ponto e no selo. A mensagem vem em texto normal: com
+                     três elementos vermelhos gritando a mesma coisa, nenhum deles informa —
+                     e o olho passa a ignorar todos. */
+                  const c = composicao(t, agoraIso)
+                  return (
+                    <li key={t.id} className="tvi-mon-linha">
+                      <span className={'tvi-ponto ' + SAUDE[t.saude].ponto} aria-hidden="true" />
+                      <span className="tvi-item-info">
+                        <span className="tvi-mon-cabeca">
+                          <span className="tvi-mon-nome">{t.nome}</span>
+                          <span className={'badge ' + SAUDE[t.saude].cor}>{SAUDE[t.saude].texto}</span>
+                        </span>
+                        {c.aviso ? <span className="tvi-mon-aviso">{c.aviso}</span> : null}
+                        {c.item ? <span className="tvi-mon-item">{c.item}</span> : null}
+                        {c.programacao ? <span className="tvi-mon-prog">{c.programacao}</span> : null}
+                        {c.apoio.length ? <span className="tvi-mon-apoio">{c.apoio.join(' · ')}</span> : null}
                       </span>
-                      {/* A frase do problema vem na FRENTE do resto: é o que a pessoa veio
-                          ler. Quando está tudo certo, o que interessa é o que está no ar. */}
-                      {t.mensagem && t.saude !== 'SAUDAVEL' ? (
-                        <span className="tvi-mon-aviso">{t.mensagem}</span>
-                      ) : null}
-                      <span className="tvi-item-meta">
-                        {t.itemAtual ? <span>{TIPO_ITEM[t.itemAtual.tipo]} · <strong>{nomeDoItem(t.itemAtual)}</strong></span> : null}
-                        {t.programacao?.playlistNome ? <span>Playlist {t.programacao.playlistNome}</span> : null}
-                        {t.programacao?.origem ? <span>{ORIGEM[t.programacao.origem]}</span> : null}
-                        <span>Sinal {haQuanto(t.ultimoSinalEm, agoraIso) ?? 'nunca'}</span>
-                        {t.tela ? <span>{t.tela.w} × {t.tela.h}</span> : null}
+                      <span className="tvi-item-acoes">
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setAberta(t.id)}>Diagnóstico</button>
                       </span>
-                    </span>
-                    <span className="tvi-item-acoes">
-                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => setAberta(t.id)}>Diagnóstico</button>
-                    </span>
-                  </li>
-                ))}
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </div>
@@ -236,9 +224,17 @@ function Linha({ rotulo, children }) {
 }
 
 // ── Detalhe ────────────────────────────────────────────────────────────────
+// Quatro blocos, nesta ordem: o aparelho, a programação, o que está no ar e o diagnóstico.
+// Linha sem valor NÃO aparece — "Regra: —" ocupa espaço para dizer que não tem nada a dizer,
+// e uma tela cheia de travessões treina o olho a pular tudo.
 function Detalhe({ tela, agoraIso, aoFechar }) {
   const p = tela.programacao
   const u = tela.falhas?.ultima
+  /* OFFLINE não pode fingir que o snapshot é de agora. Os dados continuam úteis — são a
+     última coisa que a TV disse antes de sumir —, mas rotulados como PASSADO. Apresentá-los
+     como presente faria alguém procurar um vídeo que parou de tocar há quatro horas. */
+  const off = tela.saude === 'OFFLINE'
+  const rotuloSecao = (agora, conhecido) => (off ? conhecido : agora)
   return (
     // Modal fecha só por botão — regra do projeto.
     <div className="modal-overlay">
@@ -253,47 +249,57 @@ function Detalhe({ tela, agoraIso, aoFechar }) {
               <span className={'badge ' + SAUDE[tela.saude].cor}>{SAUDE[tela.saude].texto}</span>
               {tela.online ? ' · Online' : ' · Offline'}
             </Linha>
-            <Linha rotulo="Última comunicação">{haQuanto(tela.ultimoSinalEm, agoraIso) ?? 'Nunca se comunicou'}</Linha>
-            <Linha rotulo="Resolução">{tela.tela ? `${tela.tela.w} × ${tela.tela.h}` : null}</Linha>
-            <Linha rotulo="Player ativo há">{duracao(tela.uptimeSegundos)}</Linha>
+            <Linha rotulo="Último sinal">{haQuanto(tela.ultimoSinalEm, agoraIso) ?? 'Nunca se comunicou'}</Linha>
+            <Linha rotulo="Resolução">{tela.tela?.w && tela.tela?.h ? `${tela.tela.w} × ${tela.tela.h}` : null}</Linha>
+            <Linha rotulo="Player ativo há">{off ? null : duracao(tela.uptimeSegundos)}</Linha>
           </section>
 
           {tela.temTelemetria ? (
             <>
               <section>
-                <h3 className="tvi-mon-secao">Programação</h3>
+                <h3 className="tvi-mon-secao">{rotuloSecao('Programação', 'Programação — último estado conhecido')}</h3>
                 <Linha rotulo="Playlist">{p?.playlistNome ?? (p?.playlistId ? 'Playlist removida' : 'Nenhuma')}</Linha>
-                <Linha rotulo="Origem">{p?.origem ? ORIGEM[p.origem] : null}</Linha>
-                <Linha rotulo="Regra">{p?.regraDescricao ?? (p?.regraId ? 'Regra removida' : null)}</Linha>
+                <Linha rotulo="Origem">{p?.origem ? ORIGENS[p.origem] : null}</Linha>
+                {/* A regra só existe quando a origem é a grade. Mostrá-la vazia numa TV que
+                    está na playlist padrão seria inventar um campo que não se aplica. */}
+                <Linha rotulo="Regra semanal">{p?.regraDescricao ?? (p?.regraId ? 'Regra removida' : null)}</Linha>
                 {p?.caiuNoPadrao ? (
                   <Linha rotulo="Observação">A playlist programada estava sem conteúdo; a TV caiu para a padrão.</Linha>
                 ) : null}
-                <Linha rotulo="Última sincronização">{haQuanto(p?.sincronizadoEm, agoraIso) ?? 'Nunca'}</Linha>
-                <Linha rotulo="Próxima troca">{p?.proximaTrocaEm ? new Date(p.proximaTrocaEm).toLocaleString('pt-BR', { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : 'Sem troca prevista'}</Linha>
+                <Linha rotulo={rotuloSecao('Última sincronização', 'Última sincronização conhecida')}>
+                  {haQuanto(p?.sincronizadoEm, agoraIso) ?? 'Nunca sincronizou'}
+                </Linha>
+                <Linha rotulo="Próxima troca">
+                  {off ? null : (p?.proximaTrocaEm ? new Date(p.proximaTrocaEm).toLocaleString('pt-BR', { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : 'Sem troca prevista')}
+                </Linha>
               </section>
 
               <section>
-                <h3 className="tvi-mon-secao">No ar agora</h3>
-                <Linha rotulo="Estado">{ESTADO_PLAYER[tela.estado] ?? tela.estado}</Linha>
-                <Linha rotulo="Item">{tela.itemAtual ? `${TIPO_ITEM[tela.itemAtual.tipo]} · ${nomeDoItem(tela.itemAtual)}` : null}</Linha>
+                <h3 className="tvi-mon-secao">{rotuloSecao('No ar agora', 'Último item conhecido')}</h3>
+                <Linha rotulo="Estado">{off ? null : (ESTADO_PLAYER[tela.estado] ?? tela.estado)}</Linha>
+                <Linha rotulo="Item">{textoDoItem(tela.itemAtual)}</Linha>
+                {/* A versão importa no vídeo e na arte — é ela que diz se a TV já pegou o
+                    arquivo novo depois de uma substituição. No menu board não existe. */}
                 <Linha rotulo="Versão da mídia">{tela.itemAtual?.versao ?? null}</Linha>
-                <Linha rotulo="Vídeo">{tela.video?.estado === 'BUFFERING' ? 'Carregando' : tela.video?.estado === 'PLAYING' ? 'Reproduzindo' : null}</Linha>
+                <Linha rotulo="Vídeo">{off ? null : (tela.video?.estado === 'BUFFERING' ? 'Carregando' : tela.video?.estado === 'PLAYING' ? 'Reproduzindo' : null)}</Linha>
               </section>
 
               <section>
                 <h3 className="tvi-mon-secao">Diagnóstico</h3>
+                <Linha rotulo="Situação">{SAUDE[tela.saude].texto}{tela.mensagem ? ` — ${tela.mensagem}` : ''}</Linha>
                 <Linha rotulo="Falhas nesta sessão">{tela.falhas?.totalSessao ?? 0}</Linha>
                 {u ? (
-                  <>
-                    <Linha rotulo="Última ocorrência">
-                      {u.frase}
-                      {u.nome ? <> <span className="ttm-meta-txt">({u.nome})</span></> : null}
-                    </Linha>
-                    <Linha rotulo="Quando">{haQuanto(u.em, agoraIso)}</Linha>
-                    {/* O código técnico existe para o suporte, e vive aqui — pequeno, no
-                        detalhe, nunca como a mensagem principal. */}
-                    <Linha rotulo="Código"><code className="tvi-mon-codigo">{u.codigo}</code></Linha>
-                  </>
+                  <Linha rotulo="Última ocorrência">
+                    {/* TEXTO HUMANO PRIMEIRO, código depois e pequeno. Ninguém deveria
+                        precisar saber o que é `VIDEO_STALL` para entender o que houve. */}
+                    <span className="tvi-mon-frase">{u.frase}</span>
+                    <span className="tvi-mon-rodape-falha">
+                      {u.nome ? <>{u.nome} · </> : null}
+                      {haQuanto(u.em, agoraIso) ?? 'momento desconhecido'}
+                      {' · '}
+                      <code className="tvi-mon-codigo">{u.codigo}</code>
+                    </span>
+                  </Linha>
                 ) : (
                   <Linha rotulo="Última ocorrência">Nenhuma falha nesta sessão.</Linha>
                 )}

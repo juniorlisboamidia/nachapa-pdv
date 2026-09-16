@@ -3878,16 +3878,37 @@ body.theme-dark .tvi-mon-cartao.off { background: rgba(239, 68, 68, 0.12); }
 /* A bolinha é redundante com o selo, de propósito: cor sozinha não pode ser a
    única portadora de informação, e forma + texto sobrevivem a quem não
    distingue as cores. */
-.tvi-mon-linha { display: flex; align-items: flex-start; gap: 12px; padding: 12px; border: 1px solid var(--app-border); border-radius: 10px; }
+.tvi-mon-linha { display: flex; align-items: flex-start; gap: 12px; padding: 12px; border: 1px solid var(--app-border); border-radius: 10px; flex-wrap: wrap; }
+/* O botão Diagnóstico nunca some: com pouca largura ele desce para a própria
+   linha em vez de ser espremido para fora da tela. */
+.tvi-mon-linha .tvi-item-info { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.tvi-mon-linha .tvi-item-acoes { flex: 0 0 auto; margin-left: auto; }
 .tvi-ponto { width: 10px; height: 10px; border-radius: 50%; margin-top: 6px; flex: 0 0 auto; background: var(--app-text-3); }
 .tvi-ponto.ok { background: #16a34a; }
 .tvi-ponto.alerta { background: #f59e0b; }
 .tvi-ponto.off { background: #ef4444; }
 .tvi-ponto.neutro { background: var(--app-text-3); }
 
-/* O aviso vem ANTES dos metadados e com peso: é o que a pessoa veio ler. */
-.tvi-mon-aviso { font-size: 13px; font-weight: 600; color: #b45309; margin: 2px 0; }
-body.theme-dark .tvi-mon-aviso { color: #fbbf24; }
+/* HIERARQUIA DE COR. A cor semântica forte fica no PONTO e no SELO — dois
+   elementos, e chega. A mensagem é texto normal: com três coisas gritando o
+   mesmo alarme, nenhuma informa, e o olho aprende a pular todas. O peso da
+   fonte já a separa do apoio sem precisar de cor. */
+.tvi-mon-aviso { font-size: 13.5px; font-weight: 600; color: var(--app-text); margin: 2px 0; }
+
+.tvi-mon-cabeca { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* O nome trunca em vez de empurrar o selo para fora da linha. */
+.tvi-mon-nome { font-weight: 600; font-size: 14.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+
+/* O que está no ar é a segunda coisa mais importante da linha saudável — e a
+   primeira que interessa quando está tudo certo. */
+.tvi-mon-item { font-size: 13.5px; color: var(--app-text); }
+.tvi-mon-prog { font-size: 12.5px; color: var(--app-text-2); }
+/* Apoio em muted: sincronização e resolução são conferência, não leitura. */
+.tvi-mon-apoio { font-size: 12px; color: var(--app-text-3, var(--app-text-2)); }
+.tvi-mon-item, .tvi-mon-prog, .tvi-mon-apoio, .tvi-mon-aviso { display: block; overflow-wrap: anywhere; }
+
+.tvi-mon-frase { display: block; }
+.tvi-mon-rodape-falha { display: block; margin-top: 3px; font-size: 11.5px; color: var(--app-text-2); }
 
 .tvi-mon-secao { font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--app-text-2); margin: 0 0 8px; }
 .tvi-mon-par { display: grid; grid-template-columns: minmax(120px, 34%) 1fr; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--app-border); }

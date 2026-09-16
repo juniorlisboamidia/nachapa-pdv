@@ -98,7 +98,7 @@ const FRASES_MOTIVO = Object.freeze({
   SEM_CONTEUDO_REPRODUZIVEL: 'A playlist está configurada, mas nenhum conteúdo pode ser exibido agora.',
   FALHA_TOTAL: 'Todos os conteúdos falharam e a TV está mostrando a marca da loja.',
   FALHA_RECENTE: 'Houve uma falha de reprodução há poucos minutos.',
-  SEM_SINAL: 'A TV não se comunica com o sistema.',
+  SEM_SINAL: 'Sem comunicação com o sistema.',
   SEM_SNAPSHOT: 'A TV está online, mas o player ainda não informa o que está reproduzindo.',
   SEM_PLAYLIST: 'Nenhuma playlist configurada para esta tela.',
 });
