@@ -97,6 +97,11 @@ import {
   opcoesDoTemplate,
   validarItensPlaylist, itensParaGravar as itensPlaylistParaGravar,
 } from './tvMenuBoard.js';
+// A VERSÃO do aplicativo que está no ar. A página da TV fica aberta por semanas e relê a
+// programação a cada 60 s, mas o JS e o CSS continuam os do dia do pareamento — depois de um
+// deploy, cada parede segue com o aplicativo velho até alguém ir lá recarregar.
+import { readFileSync as lerArquivoSync } from 'node:fs';
+import { versaoDe as versaoDoApp } from './versaoApp.js';
 // TV Indoor › TELEMETRIA: o que a parede está REALMENTE fazendo. Observação pura — nada
 // que a TV reporte muda playlist, agenda, isolamento ou o que é servido.
 import {
@@ -9274,6 +9279,7 @@ app.get('/api/public/aparelho/tv/programacao', async (req, res) => {
       tela: { id: ap.id, nome: ap.nome },
       playlist: null,
       aparencia,
+      versaoApp: VERSAO_APP,
       ...daGrade(),
       ...tvProgramacaoPublica([], agora),
       ...extra,
@@ -9340,6 +9346,11 @@ app.get('/api/public/aparelho/tv/programacao', async (req, res) => {
       loja: loja ? lojaPublica(loja) : null,
       playlist: { id: playlist.id, nome: playlist.nome },
       aparencia,
+      /* A TV compara com a versão que ela viu ao abrir. Diferente = o aplicativo dela está
+         velho, e ela se recarrega sozinha — esperando o vídeo terminar, como faz com a troca
+         de grade. É OBSERVAÇÃO, não comando: o servidor não manda recarregar, ele só diz em
+         que versão está. */
+      versaoApp: VERSAO_APP,
       ...daGrade({
         playlistEfetivaId: playlist.id,
         // Quando a regra venceu mas a playlist dela estava vazia, a origem HONESTA é o
@@ -11534,6 +11545,27 @@ app.put('/api/tv-indoor/telas/:id/playlist', async (req, res) => {
     res.json({ ok: true, tela: aparelhoAdmin(d, new Date()) });
   } catch (err) { console.error('[tv-indoor/telas playlist PUT]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
 });
+
+/* A versão do APLICATIVO, lida uma vez no boot.
+
+   Uma vez basta porque o deploy reinicia o processo: se o `index.html` mudou, este servidor
+   é novo e já lê o valor novo. Ler a cada requisição seria um acesso a disco por TV por
+   minuto para responder a mesma coisa.
+
+   `null` quando não dá para ler (servidor de desenvolvimento sem build, permissão, caminho
+   diferente). E `null` é seguro: sem versão, a TV nunca é mandada recarregar — ela fica
+   exatamente como está hoje. */
+let VERSAO_APP = null;
+try {
+  // Caminho relativo ao MÓDULO, não ao `cwd`: o PM2 sobe o processo a partir de `backend/`
+  // para o dotenv achar o `.env`, e amarrar a leitura ao diretório de trabalho seria
+  // depender de um detalhe do script de deploy.
+  const indice = new URL('../frontend/dist/index.html', import.meta.url);
+  VERSAO_APP = versaoDoApp(lerArquivoSync(indice, 'utf8'));
+  console.log(VERSAO_APP ? `[app] versão ${VERSAO_APP}` : '[app] sem build — as TVs não serão recarregadas');
+} catch {
+  console.log('[app] index.html do build não encontrado — as TVs não serão recarregadas');
+}
 
 // O armazenamento de mídia, no boot. O caminho feliz não depende de alguém lembrar de criar
 // o diretório no VPS — mas, se não der para escrever, é melhor saber agora e alto do que

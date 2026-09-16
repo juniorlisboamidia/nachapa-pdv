@@ -11,6 +11,7 @@
 //   6. a duração é a do canal da TV (10 s padrão, até 120 s), não a do totem.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
 import {
   FAIXA, desvioDoRelogio, noAr, paraExibir, duracaoMs, assinatura, proximaParaPrecarregar,
   proximoIndice, ehMenuBoard, ehVideo, chaveDoItem,
@@ -443,7 +444,9 @@ test('🔴 troca de grade NÃO corta um vídeo no meio', async () => {
   assert.match(codigo, /if \(videoNoArRef\.current && idAtual !== null && idNovo !== idAtual\)/);
   assert.match(codigo, /setPendente\(nova\)/);
   // E a pendente entra pelos DOIS caminhos de fim de vídeo: terminou, ou falhou.
-  assert.match(codigo, /aoTerminar=\{\(\) => \{ if \(!aplicarPendente\(\)\) avancar\(\) \}\}/);
+  // A recarga do aplicativo entrou ANTES da pendente no mesmo handler: aplicar a programação
+  // nova com o código velho resolveria metade do problema. A guarda mede os dois.
+  assert.match(codigo, /aoTerminar=\{\(\) => \{ if \(aplicarRecarga\(\)\) return; if \(!aplicarPendente\(\)\) avancar\(\) \}\}/);
   // A guarda mede o INVARIANTE (a pendente entra quando o vídeo falha), e não a forma exata
   // do handler: ele ganhou o registro de telemetria no meio, e uma guarda presa ao texto
   // teria quebrado por uma mudança que não mexeu no comportamento nenhum.
@@ -454,7 +457,7 @@ test('🔴 troca de grade NÃO corta um vídeo no meio', async () => {
   assert.match(handlerFalha, /aplicarPendente\(\)/)
   // Com troca pendente, o vídeo único deixa de repetir — senão o `ended` nunca dispararia e
   // a grade nova ficaria presa até o fim do expediente.
-  assert.match(codigo, /unico=\{total < 2 && !pendente\}/);
+  assert.match(codigo, /unico=\{total < 2 && !pendente && !recarregar\}/);
 });
 
 test('🔴 quem decide a grade é o SERVIDOR — a TV não recalcula nada', async () => {
@@ -468,3 +471,40 @@ test('🔴 quem decide a grade é o SERVIDOR — a TV não recalcula nada', asyn
       `o ${nome} não pode resolver a grade`)
   }
 });
+
+// ── A parede se atualiza sozinha depois do deploy ────────────────────────────
+const fontePlayer = () => {
+  const bruto = fs.readFileSync(new URL('../pages/TvIndoorPlayer.jsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+  return bruto.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').map((l) => l.split('//')[0]).join('\n')
+}
+
+test('🔴 a TV recarrega quando o APLICATIVO muda — e nunca por causa de um null', () => {
+  /* A página da TV fica aberta por semanas: ela relê a programação a cada 60 s, mas o JS e o
+     CSS continuam os do dia do pareamento. Sem isto, cada deploy exige alguém indo até cada
+     loja recarregar o navegador — e foi assim que um menu board corrigido continuou quebrado
+     na parede por um dia inteiro.
+
+     A comparação é com a PRIMEIRA versão que este navegador viu, e não com uma versão
+     injetada no build: assim não há número para alguém esquecer de incrementar. Servidor sem
+     build informa `null`, e ficar desatualizado é melhor do que recarregar a parede por um
+     arquivo que ninguém conseguiu ler. */
+  const codigo = fontePlayer()
+  assert.match(codigo, /const versao = nova\?\.versaoApp \?\? null/)
+  assert.match(codigo, /if \(versao\) \{/, 'null não pode entrar na comparação')
+  assert.match(codigo, /if \(!versaoAppRef\.current\) versaoAppRef\.current = versao/)
+  assert.match(codigo, /else if \(versaoAppRef\.current !== versao\) setRecarregar\(true\)/)
+})
+
+test('🔴 a recarga NÃO corta um vídeo no meio', () => {
+  // Mesma regra da troca de grade, e pela mesma razão: cortar um filme pela metade lê como
+  // defeito na parede.
+  const codigo = fontePlayer()
+  // Fora do vídeo, recarrega assim que a versão muda.
+  assert.match(codigo, /if \(!recarregar \|\| ehVideo\(atual\)\) return/)
+  // Com vídeo no ar, a recarga entra pelos dois caminhos de fim: terminou ou falhou.
+  assert.match(codigo, /aoTerminar=\{\(\) => \{ if \(aplicarRecarga\(\)\) return;/)
+  assert.match(codigo, /aoFalhar=\{\(motivo\) => \{\n\s*if \(aplicarRecarga\(\)\) return/)
+  // E o vídeo único deixa de repetir — senão o `ended` nunca dispararia e a parede ficaria
+  // presa na versão velha até o fim do expediente.
+  assert.match(codigo, /unico=\{total < 2 && !pendente && !recarregar\}/)
+})

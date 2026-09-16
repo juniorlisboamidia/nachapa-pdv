@@ -94,6 +94,17 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
      Uma ref não provocaria esse render, e o bug seria invisível até alguém reclamar que a
      TV "não mudou às 18h". */
   const [pendente, setPendente] = useState(null)
+  /* A VERSÃO do aplicativo que esta página está rodando.
+
+     Ela não vem do build: é a primeira que o servidor informou, guardada. É o suficiente —
+     se o servidor passar a dizer outra, os arquivos desta aba são velhos. Assim não é
+     preciso injetar versão no bundle nem manter um número que alguém precisa lembrar de
+     incrementar.
+
+     ESTADO, e não ref, porque muda o que se desenha: uma recarga pendente faz o vídeo único
+     deixar de repetir, exatamente como a troca de grade. */
+  const versaoAppRef = useRef(null)
+  const [recarregar, setRecarregar] = useState(false)
   // Guarda o desvio entre refreshes: a agenda continua correta mesmo se um refresh falhar.
   const desvioRef = useRef(0)
   const raizRef = useRef(null)
@@ -130,6 +141,23 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
         // deliberadamente NÃO a atualiza — é essa ausência que o servidor lê como "não
         // sincroniza há X minutos", sem precisar de uma mensagem dizendo isso.
         telemetria.programacaoRecebida(nova)
+
+        /* DEPOIS DO DEPLOY, a parede se atualiza sozinha.
+
+           A página da TV fica aberta por semanas: ela relê a programação a cada 60 s, mas o
+           JS e o CSS continuam os do dia do pareamento. Sem isto, cada deploy exige alguém
+           indo até cada loja recarregar o navegador — e foi assim que um menu board corrigido
+           continuou quebrado na parede por um dia inteiro.
+
+           A comparação é com a PRIMEIRA versão que este navegador viu. Se ela ainda não foi
+           anotada, anota; se mudou, marca a recarga. Nunca recarrega por causa de um `null`:
+           servidor sem build informa `null`, e ficar desatualizado é melhor do que recarregar
+           a parede por um arquivo que ninguém conseguiu ler. */
+        const versao = nova?.versaoApp ?? null
+        if (versao) {
+          if (!versaoAppRef.current) versaoAppRef.current = versao
+          else if (versaoAppRef.current !== versao) setRecarregar(true)
+        }
         if (videoNoArRef.current && idAtual !== null && idNovo !== idAtual) {
           setPendente(nova)
           return
@@ -328,12 +356,34 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
 
      Devolve se aplicou, porque quem chama precisa saber: no `ended`, aplicar a pendente
      substitui o avanço (a playlist nova começa do primeiro item, não do segundo da velha). */
+  /* A recarga acontece no INTERVALO entre itens, nunca no meio de um vídeo — a mesma regra
+     da troca de grade, e pela mesma razão: cortar um filme pela metade lê como defeito.
+
+     Com arte ou menu board na tela, recarrega na hora: uma imagem estática reaparece depois
+     de um segundo de preto, e ninguém na fila percebe.
+
+     Devolve se recarregou, para quem chama saber que não há mais nada a fazer — a página
+     inteira está indo embora. */
+  const aplicarRecarga = () => {
+    if (!recarregar) return false
+    window.location.reload()
+    return true
+  }
+
   const aplicarPendente = () => {
     if (!pendente) return false
     setPendente(null)
     setProgramacao(pendente)
     return true
   }
+
+  /* Fora do vídeo, a recarga não espera nada. O efeito roda quando `recarregar` vira
+     verdadeiro e quando o item muda — então uma TV que estava num vídeo recarrega assim que
+     ele dá lugar ao próximo item, mesmo sem passar pelos avisos do `<video>`. */
+  useEffect(() => {
+    if (!recarregar || ehVideo(atual)) return
+    window.location.reload()
+  }, [recarregar, atual])
 
   const tudoFalhou = total === 0 && (itens?.length ?? 0) > 0
   useEffect(() => {
@@ -378,16 +428,21 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
           // Com um item só, quem repete é o `loop` do elemento: um `ended` que avançasse
           // para o mesmo índice remontaria o elemento e daria um piscar preto a cada volta.
           // Mas se há programação PENDENTE, ele deixa de ser único — tem para onde ir.
-          unico={total < 2 && !pendente}
+          // Com recarga ou programação pendente, o vídeo único deixa de repetir: senão o
+          // `loop` nunca dispararia `ended` e a parede ficaria presa na versão velha.
+          unico={total < 2 && !pendente && !recarregar}
           // O filme acabou: se a grade mudou enquanto ele tocava, a playlist nova entra
           // aqui — e não o próximo item da playlist velha, que já não é a programação.
-          aoTerminar={() => { if (!aplicarPendente()) avancar() }}
+          // A recarga vem ANTES da pendente: se o aplicativo está velho, aplicar a
+          // programação nova com o código antigo é resolver metade do problema.
+          aoTerminar={() => { if (aplicarRecarga()) return; if (!aplicarPendente()) avancar() }}
           // Falhou (erro ou travamento): a programação pendente também entra. Um vídeo
           // quebrado não pode segurar a grade nova até o fim do expediente.
           //
           // O motivo vira CÓDIGO no diagnóstico — "travou" e "o navegador recusou tocar"
           // pedem providências diferentes, e no admin isso vira uma frase em português.
           aoFalhar={(motivo) => {
+            if (aplicarRecarga()) return
             telemetria.falhou(
               motivo === 'travado' ? telemetria.FALHAS.VIDEO_TRAVOU
                 : motivo === 'autoplay' ? telemetria.FALHAS.VIDEO_AUTOPLAY
