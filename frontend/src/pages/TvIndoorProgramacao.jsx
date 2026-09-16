@@ -22,6 +22,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import api from '../services/api'
 import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
+// O padrão de ação compacta do sistema (o mesmo dos Banners do Totem).
+import BotaoIcone from '../components/BotaoIcone'
 
 // ISO-8601: 1 = segunda … 7 = domingo. A sigla é só rótulo; o que viaja é o número.
 const NOMES = { 1: 'Seg', 2: 'Ter', 3: 'Qua', 4: 'Qui', 5: 'Sex', 6: 'Sáb', 7: 'Dom' }
@@ -338,8 +340,10 @@ export default function TvIndoorProgramacao() {
                         ) : null}
                       </span>
                       <span className="tvi-item-acoes">
-                        <button type="button" className="btn btn-secondary btn-sm" disabled={ocupado || i === 0} aria-label="Subir regra" onClick={() => mover(i, -1)}>↑</button>
-                        <button type="button" className="btn btn-secondary btn-sm" disabled={ocupado || i === regras.length - 1} aria-label="Descer regra" onClick={() => mover(i, 1)}>↓</button>
+                        {/* A ordem É a prioridade nesta tela, então o rótulo diz isso: subir
+                            uma regra é fazê-la ganhar de quem estava acima. */}
+                        <BotaoIcone icone="subir" titulo={`Subir a regra ${i + 1} (ganha prioridade)`} disabled={ocupado || i === 0} onClick={() => mover(i, -1)} />
+                        <BotaoIcone icone="descer" titulo={`Descer a regra ${i + 1} (perde prioridade)`} disabled={ocupado || i === regras.length - 1} onClick={() => mover(i, 1)} />
                         <button
                           type="button"
                           className={'intel-switch' + (r.ativo ? ' on' : '')}
@@ -349,8 +353,9 @@ export default function TvIndoorProgramacao() {
                           disabled={ocupado}
                           onClick={() => alternar(r)}
                         />
-                        <button type="button" className="btn btn-secondary btn-sm" disabled={ocupado} onClick={() => setEditando(daRegra(r))}>Editar</button>
-                        <button type="button" className="btn btn-secondary btn-sm" disabled={ocupado} onClick={() => setExcluindo(r)}>Excluir</button>
+                        <BotaoIcone icone="lapis" titulo={`Editar a regra ${i + 1}`} disabled={ocupado} onClick={() => setEditando(daRegra(r))} />
+                        {/* Excluir APAGA a regra — lixeira e `perigo`, ao contrário do "tirar". */}
+                        <BotaoIcone icone="lixeira" perigo titulo={`Excluir a regra ${i + 1}`} disabled={ocupado} onClick={() => setExcluindo(r)} />
                       </span>
                     </li>
                   )

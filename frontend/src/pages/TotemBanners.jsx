@@ -3,6 +3,9 @@ import { useParams } from 'react-router-dom'
 import api from '../services/api'
 import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
+// O botão de ícone virou componente do SISTEMA: o desenho nasceu aqui e ficar preso a uma
+// tela é como o projeto ganha dois padrões parecidos que divergem depois.
+import BotaoIcone, { Icone } from '../components/BotaoIcone'
 import PreviaBannerTotem from '../components/PreviaBannerTotem'
 import { reduzirImagem } from '../lib/reduzirImagem'
 import { useAuth } from '../contexts/AuthContext'
@@ -52,15 +55,6 @@ const tipoDaRota = (r) => TIPOS.find((t) => t.rota === String(r ?? '').toLowerCa
 
 /* SVG inline, sem biblioteca — mesma técnica de `components/totem/icones.jsx`. São três
    desenhos usados só nesta tela; um pacote inteiro para isso seria peso sem uso. */
-function IconeBn({ nome }) {
-  const d = {
-    alca: <><circle cx="9" cy="6" r="1.4" /><circle cx="15" cy="6" r="1.4" /><circle cx="9" cy="12" r="1.4" /><circle cx="15" cy="12" r="1.4" /><circle cx="9" cy="18" r="1.4" /><circle cx="15" cy="18" r="1.4" /></>,
-    olho: <><path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z" fill="none" stroke="currentColor" strokeWidth="1.7" /><circle cx="12" cy="12" r="2.8" fill="none" stroke="currentColor" strokeWidth="1.7" /></>,
-    lixeira: <g fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round"><path d="M4 7h16" /><path d="M9.5 7V5h5v2" /><path d="M6.5 7l1 12.5h9L17.5 7" /><path d="M10 11v5.5M14 11v5.5" /></g>,
-  }[nome]
-  return <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">{d}</svg>
-}
-
 const erroDe = (e, fallback) => {
   const erros = e?.response?.data?.erros
   if (erros?.length) {
@@ -295,7 +289,7 @@ export default function TotemBanners() {
                     if (e.key === 'ArrowDown') { e.preventDefault(); mover(i, 1) }
                   }}
                 >
-                  <IconeBn nome="alca" />
+                  <Icone nome="alca" />
                 </button>
                 <span className="ttm-bn-num">{i + 1}</span>
 
@@ -324,9 +318,7 @@ export default function TotemBanners() {
                 </div>
 
                 <div className="ttm-bn-acoes">
-                  <button type="button" className="ttm-bn-ico" disabled={ocupado} title="Visualizar" aria-label={`Visualizar ${b.nome}`} onClick={() => setVendo(b)}>
-                    <IconeBn nome="olho" />
-                  </button>
+                  <BotaoIcone icone="olho" titulo={`Visualizar ${b.nome}`} disabled={ocupado} onClick={() => setVendo(b)} />
                   {/* Toggle de verdade, com semântica de interruptor — o rótulo diz o que ele
                       faz, e não só o estado em que está. */}
                   <button
@@ -338,9 +330,7 @@ export default function TotemBanners() {
                     disabled={ocupado}
                     onClick={() => alternar(b)}
                   />
-                  <button type="button" className="ttm-bn-ico perigo" disabled={ocupado} title="Excluir" aria-label={`Excluir ${b.nome}`} onClick={() => setExcluindo(b)}>
-                    <IconeBn nome="lixeira" />
-                  </button>
+                  <BotaoIcone icone="lixeira" perigo titulo={`Excluir ${b.nome}`} disabled={ocupado} onClick={() => setExcluindo(b)} />
                 </div>
               </li>
             ))}

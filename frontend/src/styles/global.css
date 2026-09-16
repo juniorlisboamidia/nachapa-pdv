@@ -3700,18 +3700,27 @@ body.theme-dark .apr-contagem, body.theme-dark .apr-qr-legenda, body.theme-dark 
 .ttm-bn-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 11.5px; color: var(--app-text-3); }
 
 .ttm-bn-acoes { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; }
-/* Ícone sozinho, com 40px de alvo: o desenho é 20px, o resto é área de toque — a régua de
-   44px vale para o tablet do balcão tanto quanto para o totem. */
-.ttm-bn-ico {
+/* ── BOTÃO DE ÍCONE (padrão do sistema) ───────────────────────────────────
+   Nasceu como `.ttm-bn-ico`, no escopo dos banners. Virou `.app-ico`, global:
+   o desenho estava certo e ficar preso a uma tela é como o sistema ganha dois
+   padrões parecidos que divergem no primeiro ajuste. Componente em
+   `components/BotaoIcone.jsx`.
+
+   40px de alvo: o desenho é 20px, o resto é área de toque — a régua de 44px
+   vale para o tablet do balcão tanto quanto para o totem. */
+.app-ico {
   width: 40px; height: 40px; display: grid; place-items: center;
   border: 1px solid var(--app-border); border-radius: 9px;
   background: var(--app-surface); color: var(--app-text-2); cursor: pointer;
+  flex-shrink: 0; padding: 0;
 }
-.ttm-bn-ico:hover:not(:disabled) { background: var(--app-surface-2); color: var(--app-text); }
-.ttm-bn-ico:disabled { opacity: 0.45; cursor: default; }
-/* Excluir é destrutivo e fica vermelho — mas só no hover: em repouso, três ícones
-   vermelhos numa lista de cinco linhas viram ruído e param de significar perigo. */
-.ttm-bn-ico.perigo:hover:not(:disabled) { color: #b91c1c; border-color: #fca5a5; background: #fef2f2; }
+.app-ico:hover:not(:disabled) { background: var(--app-surface-2); color: var(--app-text); }
+.app-ico:disabled { opacity: 0.45; cursor: default; }
+.app-ico:focus-visible { outline: 2px solid #ea580c; outline-offset: 2px; }
+/* Destrutivo fica vermelho — mas só no hover: em repouso, oito lixeiras vermelhas
+   numa lista viram ruído e param de significar perigo. */
+.app-ico.perigo:hover:not(:disabled) { color: #b91c1c; border-color: #fca5a5; background: #fef2f2; }
+body.theme-dark .app-ico.perigo:hover:not(:disabled) { background: rgba(185, 28, 28, 0.14); border-color: #7f1d1d; color: #fca5a5; }
 /* O conserto do interruptor (borda de botão, cursor, desabilitado) morava AQUI,
    no escopo dos banners. Subiu para o componente base: um remendo local faz a
    tela que o tem funcionar e ensina que o componente está bom — a próxima tela

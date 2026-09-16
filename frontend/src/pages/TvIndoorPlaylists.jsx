@@ -16,6 +16,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import api from '../services/api'
 import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
+// O padrão de ação compacta do sistema (o mesmo dos Banners do Totem).
+import BotaoIcone from '../components/BotaoIcone'
 
 const STATUS = {
   ATIVO: { texto: 'No ar', cor: 'badge-green' },
@@ -298,9 +300,10 @@ export default function TvIndoorPlaylists() {
                       <span className="tvi-item-acoes">
                         {/* Subir/descer em vez de arrastar: funciona no teclado e no toque
                             sem nenhum tratamento especial, que é onde o arrasto não existe. */}
-                        <button type="button" className="btn btn-secondary btn-sm" disabled={ocupado || i === 0} aria-label={`Subir ${c.nome}`} onClick={() => mover(i, -1)}>↑</button>
-                        <button type="button" className="btn btn-secondary btn-sm" disabled={ocupado || i === atual.itens.length - 1} aria-label={`Descer ${c.nome}`} onClick={() => mover(i, 1)}>↓</button>
-                        <button type="button" className="btn btn-secondary btn-sm" disabled={ocupado} onClick={() => remover(i)}>Tirar</button>
+                        <BotaoIcone icone="subir" titulo={`Subir ${c.nome}`} disabled={ocupado || i === 0} onClick={() => mover(i, -1)} />
+                        <BotaoIcone icone="descer" titulo={`Descer ${c.nome}`} disabled={ocupado || i === atual.itens.length - 1} onClick={() => mover(i, 1)} />
+                        {/* Tirar da programação: o conteúdo continua no acervo. */}
+                        <BotaoIcone icone="tirar" titulo={`Tirar ${c.nome} da playlist`} disabled={ocupado} onClick={() => remover(i)} />
                       </span>
                     </li>
                   )

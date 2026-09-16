@@ -18,6 +18,8 @@ import api from '../services/api'
 import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
 import MenuBoard from '../components/tv/MenuBoard'
+// O padrão de ação compacta do sistema (o mesmo dos Banners do Totem).
+import BotaoIcone from '../components/BotaoIcone'
 // O teto ABSOLUTO da seleção guardada — o mesmo do domínio, que é quem recusa na escrita.
 const TETO_SELECAO = 12
 import { previaDoBoard } from '../components/tvMenuBoardPrevia'
@@ -532,9 +534,13 @@ function Editor({ valor, layouts, identidade, limites, ocupado, aoFechar, aoSalv
                               ★
                             </button>
                           )}
-                          <button type="button" className="btn btn-secondary btn-sm" disabled={i === 0} aria-label="Subir" onClick={() => mover(i, -1)}>↑</button>
-                          <button type="button" className="btn btn-secondary btn-sm" disabled={i === escolhidos.length - 1} aria-label="Descer" onClick={() => mover(i, 1)}>↓</button>
-                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => alternarProduto(e.cwItemId)}>Tirar</button>
+                          {/* O rótulo nomeia o PRODUTO, não a posição: "Subir" sozinho, repetido
+                              oito vezes, não diz nada a quem usa leitor de tela. */}
+                          <BotaoIcone icone="subir" titulo={`Subir ${p?.nome ?? 'produto'}`} disabled={i === 0} onClick={() => mover(i, -1)} />
+                          <BotaoIcone icone="descer" titulo={`Descer ${p?.nome ?? 'produto'}`} disabled={i === escolhidos.length - 1} onClick={() => mover(i, 1)} />
+                          {/* TIRAR não é excluir: o produto continua no cardápio, só sai deste
+                              board. Por isso um traço, e não a lixeira — e sem `perigo`. */}
+                          <BotaoIcone icone="tirar" titulo={`Tirar ${p?.nome ?? 'produto'} do board`} onClick={() => alternarProduto(e.cwItemId)} />
                         </span>
                       </li>
                     )
