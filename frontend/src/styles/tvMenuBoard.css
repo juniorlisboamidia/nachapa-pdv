@@ -134,13 +134,30 @@
    configurado é a regra, não a exceção, e informação colada na borda simplesmente
    desaparece. 80px na horizontal são ~4% da largura, que é a margem que os fabricantes
    costumam comer. */
+/* O ARTBOARD — DUAS FAIXAS: cabeçalho e corpo.
+
+   É `grid`, e não `flex-direction: column`, de propósito. Com flex, "o cabeçalho
+   fica em cima" depende de uma direção que qualquer regra posterior pode
+   inverter, e o sintoma disso — título ao lado do conteúdo em vez de acima —
+   apareceu na prévia. Com `grid-template-rows` a posição é ESTRUTURAL: não há
+   direção para dar errado.
+
+   `minmax(0, 1fr)` na segunda faixa é o que permite o corpo ENCOLHER. Sem o
+   `minmax`, uma faixa `1fr` nunca fica menor que o conteúdo dela, e um card a
+   mais empurraria a composição para fora do artboard — o "cortado embaixo".
+
+   Safe area generosa e igual nos cinco: TV de loja com overscan mal configurado
+   é a regra, e informação colada na borda simplesmente desaparece. */
 .tvmb-tela {
   width: 1920px;
   height: 1080px;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   padding: 64px 80px 72px;
   box-sizing: border-box;
+  /* Nada escapa do artboard: se uma composição futura crescer demais, ela é
+     recortada AQUI, no limite da peça, e não invade a tela ao lado. */
+  overflow: hidden;
 }
 
 /* O TÍTULO da faixa: é ele que diz do que é esta tela ("Hambúrgueres"). Em caixa
@@ -161,14 +178,15 @@
    O filete entre a logo e o texto só aparece quando existem os dois: ele separa duas
    informações, e sem uma delas separaria nada de coisa nenhuma. */
 .tvmb-cabeca {
-  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 36px;
-  margin-bottom: 44px;
-  min-height: 0;
+  margin-bottom: 40px;
+  min-width: 0;
 }
-.tvmb-cabeca-txt { min-width: 0; display: flex; flex-direction: column; }
+/* O texto OCUPA a faixa: sem `flex: 1`, o bloco encolhe para caber ao lado do
+   que vier depois e o título quebra em três linhas num espaço estreito. */
+.tvmb-cabeca-txt { flex: 1 1 auto; min-width: 0; }
 .tvmb-logo + .tvmb-cabeca-txt {
   padding-left: 36px;
   border-left: 2px solid var(--tvmb-linha);
@@ -190,15 +208,24 @@
   color: var(--tvmb-texto-2);
 }
 
+/* O TÍTULO em TEXTO, não no dourado.
+
+   O dourado agora é do PREÇO, e só. Quando os dois eram dourados, uma tela com
+   oito preços e um título disputava atenção consigo mesma — e a cor deixava de
+   significar "olhe aqui" para significar "isto é um menu board".
+
+   Uma linha só: título que quebra em três linhas num board é título comprido
+   demais, e cortar é mais honesto do que empurrar os produtos para baixo. */
 .tvmb-titulo {
   margin: 0;
   font-size: var(--tvmb-fs-titulo);
-  font-weight: 900;
-  line-height: 1.02;
-  letter-spacing: 0.01em;
-  text-transform: uppercase;
-  color: var(--tvmb-destaque);
-  flex: 0 0 auto;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  color: var(--tvmb-texto);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* A DESCRIÇÃO curta dos produtos. Corte por linhas e não por caracteres: o
@@ -216,7 +243,10 @@
 .tvmb-desc-vt { font-size: var(--tvmb-fs-desc-2); -webkit-line-clamp: 2; }
 .tvmb-desc-of { font-size: var(--tvmb-fs-desc-1); -webkit-line-clamp: 3; }
 
-.tvmb-corpo { flex: 1 1 auto; min-height: 0; display: flex; }
+/* O CORPO é uma CÉLULA: o template ocupa exatamente ela, inteira, sem depender
+   de `flex: 1 1 auto` no filho. Cada template só precisa saber desenhar dentro
+   de um retângulo conhecido. */
+.tvmb-corpo { display: grid; grid-template-columns: minmax(0, 1fr); min-height: 0; min-width: 0; }
 
 /* ── Preço ────────────────────────────────────────────────────────────────
    Nome e preço com peso equivalente: o que os distingue é a COR (o preço é
@@ -288,15 +318,24 @@
 
    Com menos de 8 produtos a grade NÃO estica os cards: ela centraliza o que há.
    Um card de 900px ao lado de um de 418 lê como defeito. */
+/* GRADE 4 × 2 — o catálogo visual.
+
+   As colunas são `minmax(0, 1fr)`, não pixels. A versão com `repeat(4, 418px)`
+   dependia de a conta 4×418 + 3×28 caber em 1760 — e uma conta que precisa
+   fechar é uma conta que um dia não fecha (foi assim que a Vitrine antiga
+   passou a depender de `flex-shrink`). Com `fr`, a divisão é exata por
+   construção, em qualquer largura de artboard.
+
+   Duas fileiras SEMPRE: com quatro produtos, os cards ocupam a fileira de cima
+   e a de baixo fica vazia — melhor do que quatro cards com o dobro da altura,
+   que leria como outro template. */
 .tvmb-grade {
-  flex: 1 1 auto;
   display: grid;
-  grid-template-columns: repeat(4, 418px);
-  grid-auto-rows: 372px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(0, 1fr));
   gap: 28px;
-  justify-content: center;
-  align-content: center;
   min-height: 0;
+  min-width: 0;
 }
 /* O CARD como UNIDADE — a mudança que separa "peça gráfica" de "dados sobre um
    fundo".
@@ -316,7 +355,10 @@
 /* O chão atrás da foto é a SUPERFÍCIE ELEVADA: com a paleta clara, um buraco
    preto embaixo de cada card seria a única coisa escura da tela. */
 .tvmb-card-midia { position: relative; width: 100%; flex: 1 1 auto; min-height: 0; overflow: hidden; background: var(--tvmb-superficie-2); }
-.tvmb-card-txt { flex: 0 0 auto; display: flex; flex-direction: column; gap: 10px; padding: 18px 20px 20px; }
+/* O texto do card: altura pelo CONTEÚDO, para a foto ficar com todo o resto.
+   Numa peça para TV, é a fotografia que faz alguém parar — o nome confirma e o
+   preço fecha. */
+.tvmb-card-txt { flex: 0 0 auto; display: flex; flex-direction: column; gap: 8px; padding: 16px 20px 18px; }
 .tvmb-card-nome {
   margin: 0;
   font-size: var(--tvmb-fs-nome-3);
@@ -349,12 +391,12 @@
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  grid-template-rows: repeat(5, auto);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(5, minmax(0, 1fr));
   grid-auto-flow: column;
-  align-content: center;
-  gap: 10px 56px;
+  gap: 12px 56px;
   min-height: 0;
+  min-width: 0;
 }
 /* Cada item é uma LINHA-CARD: superfície própria, raio e área interna. É o que
    o separa de "texto solto sobre o fundo" sem virar uma caixa pesada. */
@@ -382,11 +424,10 @@
   align-self: center;
 }
 .tvmb-linha-midia .tvmb-foto { width: 100%; height: 100%; }
-/* A ALTURA da linha é FIXA, com ou sem foto: é isso que mantém as duas colunas
-   alinhadas quando só alguns produtos têm imagem — o caso normal do cardápio que
-   este template existe para atender. Um item sem foto não pode encolher e
-   desalinhar a coluna vizinha. */
-.tvmb-linha { min-height: 104px; }
+/* A ALTURA vem da FILEIRA do grid (`minmax(0, 1fr)`), e não de um mínimo no
+   item: assim as dez linhas têm exatamente a mesma altura, com ou sem foto, e
+   as duas colunas ficam alinhadas mesmo quando só alguns produtos têm imagem —
+   o caso normal do cardápio que este template existe para atender. */
 .tvmb-lista.com-foto .tvmb-linha { padding: 10px 16px; }
 
 .tvmb-linha-txt { flex: 0 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
@@ -423,7 +464,15 @@
    claramente superior — nome num degrau acima, preço num degrau acima, foto
    ocupando quase toda a altura. Se os cinco parecessem do mesmo tamanho, este
    template não teria razão de existir ao lado da Grade. */
-.tvmb-destaque { flex: 1 1 auto; display: grid; grid-template-columns: 812px 912px; gap: 36px; min-height: 0; }
+/* A proporção 812:912 do protagonista contra os quatro coadjuvantes, escrita
+   como RAZÃO e não como pixels: o mesmo desenho, sem a conta que precisa fechar. */
+.tvmb-destaque {
+  display: grid;
+  grid-template-columns: minmax(0, 812fr) minmax(0, 912fr);
+  gap: 36px;
+  min-height: 0;
+  min-width: 0;
+}
 .tvmb-hero {
   display: flex;
   flex-direction: column;
@@ -471,11 +520,11 @@
    A mídia fica com ~62% da altura do card: é o que dá presença de fotografia sem
    espremer nome e preço, que são o motivo de alguém parar na frente da tela. */
 .tvmb-vitrine {
-  flex: 1 1 auto;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 36px;
   min-height: 0;
+  min-width: 0;
 }
 .tvmb-vt {
   display: flex;
@@ -520,11 +569,11 @@
    gigante sozinho vende desconto, não vende produto (há teste travando a razão
    entre os dois em 1,5×). */
 .tvmb-of {
-  flex: 1 1 auto;
   display: grid;
-  grid-template-columns: 900px 788px;
+  grid-template-columns: minmax(0, 900fr) minmax(0, 788fr);
   gap: 72px;
   min-height: 0;
+  min-width: 0;
   align-items: center;
 }
 .tvmb-of-midia {

@@ -223,23 +223,46 @@ test('🔴 o ResizeObserver resolve o contêiner que nasce com largura ZERO', ()
   assert.equal(/requestAnimationFrame|setInterval/.test(codigo), false, 'nada de polling')
 })
 
-test('🔴 a largura de cada template CABE na área útil — por matemática, não por encolhimento', () => {
-  /* Área útil = 1920 − 2 × 80 de safe area = 1760. A Vitrine antiga somava 1760 contra 1744
-     e só cabia porque `flex-shrink` a apertava 16px: apertado por acidente, não por projeto. */
-  const util = 1920 - 2 * 80
+test('🔴 NENHUM template usa largura fixa — é impossível estourar o artboard', () => {
+  /* A versão anterior somava pixels e conferia se cabiam em 1760. Uma conta que precisa
+     fechar é uma conta que um dia não fecha: foi assim que a Vitrine passou a depender de
+     `flex-shrink` para caber, apertada por acidente.
 
-  const grade = /\.tvmb-grade \{[\s\S]*?grid-template-columns: repeat\(4, (\d+)px\)[\s\S]*?gap: (\d+)px/.exec(css)
-  assert.ok(4 * Number(grade[1]) + 3 * Number(grade[2]) <= util, 'a grade não cabe')
+     Agora toda coluna é `fr`/`minmax(0, fr)`, e a divisão é exata por construção. Esta
+     guarda não confere aritmética: ela proíbe a aritmética. */
+  const corpos = ['.tvmb-grade {', '.tvmb-destaque {', '.tvmb-lista {', '.tvmb-vitrine {', '.tvmb-of {']
+  for (const seletor of corpos) {
+    const i = css.indexOf(seletor)
+    assert.ok(i > 0, `falta ${seletor}`)
+    const bloco = css.slice(i, css.indexOf('}', i))
+    const colunas = /grid-template-columns:([^;]+);/.exec(bloco)
+    assert.ok(colunas, `${seletor} precisa declarar as colunas`)
+    assert.equal(/\d+px/.test(colunas[1]), false, `${seletor} não pode ter coluna em px: ${colunas[1].trim()}`)
+    assert.match(colunas[1], /minmax\(0,/, `${seletor} precisa de minmax(0,…) para poder encolher`)
+  }
+})
 
-  const destaque = /\.tvmb-destaque \{[^}]*grid-template-columns: (\d+)px (\d+)px; gap: (\d+)px/.exec(css)
-  assert.equal(Number(destaque[1]) + Number(destaque[2]) + Number(destaque[3]), util, 'o destaque precisa fechar a área útil')
+test('🔴 o artboard é GRID de duas faixas — a posição do cabeçalho é estrutural', () => {
+  /* Com `flex-direction: column`, "o cabeçalho fica em cima" depende de uma direção que
+     qualquer regra posterior pode inverter — e o sintoma disso (título AO LADO do conteúdo)
+     apareceu na prévia. Com faixas de grid não há direção para dar errado.
 
-  const oferta = /\.tvmb-of \{[\s\S]*?grid-template-columns: (\d+)px (\d+)px;\n\s*gap: (\d+)px/.exec(css)
-  assert.equal(Number(oferta[1]) + Number(oferta[2]) + Number(oferta[3]), util, 'a oferta precisa fechar a área útil')
+     `minmax(0, 1fr)` na segunda faixa é o que deixa o corpo ENCOLHER: uma faixa `1fr` nunca
+     fica menor que o conteúdo, e um card a mais empurraria a composição para fora. */
+  const bloco = css.slice(css.indexOf('.tvmb-tela {'), css.indexOf('}', css.indexOf('.tvmb-tela {')))
+  assert.match(bloco, /display: grid/)
+  assert.match(bloco, /grid-template-rows: auto minmax\(0, 1fr\)/)
+  assert.match(bloco, /overflow: hidden/, 'nada escapa do artboard')
+  assert.equal(/flex-direction/.test(bloco), false, 'a ordem das faixas não pode depender de flex')
+})
 
-  // Vitrine e Lista usam `1fr`: a divisão é exata por construção, e é essa a correção.
-  assert.match(css, /\.tvmb-vitrine \{[\s\S]*?grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/)
-  assert.match(css, /\.tvmb-lista \{[\s\S]*?grid-template-columns: repeat\(2, 1fr\)/)
+test('🔴 o dourado é do PREÇO — o título não disputa com ele', () => {
+  // Com título e oito preços dourados, a tela disputa atenção consigo mesma: a cor deixa de
+  // significar "olhe aqui" e passa a significar "isto é um menu board".
+  const titulo = css.slice(css.indexOf('.tvmb-titulo {'), css.indexOf('}', css.indexOf('.tvmb-titulo {')))
+  assert.match(titulo, /color: var\(--tvmb-texto\)/)
+  assert.equal(/--tvmb-destaque/.test(titulo), false, 'o título não pode ser dourado')
+  assert.match(css, /\.tvmb-preco-valor \{[\s\S]*?color: var\(--tvmb-destaque\)/)
 })
 
 test('🔴 a LISTA é 5 + 5, na ordem da seleção', () => {
@@ -247,12 +270,15 @@ test('🔴 a LISTA é 5 + 5, na ordem da seleção', () => {
   // cinco seguintes à direita. Preenchendo por linha, o item 2 apareceria ao lado do 1 e a
   // ordem que o gestor montou deixaria de ser legível.
   const bloco = css.slice(css.indexOf('.tvmb-lista {'), css.indexOf('.tvmb-linha {'))
-  assert.match(bloco, /grid-template-rows: repeat\(5, auto\)/)
+  assert.match(bloco, /grid-template-rows: repeat\(5, minmax\(0, 1fr\)\)/)
   assert.match(bloco, /grid-auto-flow: column/)
 })
 
-test('🔴 a linha da LISTA tem altura FIXA — produto sem foto não desalinha a coluna', () => {
-  // É o caso normal do cardápio que este template existe para atender: alguns itens têm
-  // foto, outros não. Sem altura mínima, as duas colunas ficariam desencontradas.
-  assert.match(css, /\.tvmb-linha \{ min-height: \d+px; \}/)
+test('🔴 as dez linhas da LISTA têm a MESMA altura, com ou sem foto', () => {
+  /* É o caso normal do cardápio que este template atende: alguns itens têm foto, outros não.
+     A altura vem da FILEIRA do grid, e não de um `min-height` no item — com o mínimo no
+     item, um texto de duas linhas cresceria além dele e desencontraria a coluna vizinha. */
+  const bloco = css.slice(css.indexOf('.tvmb-lista {'), css.indexOf('.tvmb-linha {'))
+  assert.match(bloco, /grid-template-rows: repeat\(5, minmax\(0, 1fr\)\)/)
+  assert.equal(/\.tvmb-linha \{ min-height/.test(css), false, 'a altura é da fileira, não do item')
 })
