@@ -16,6 +16,7 @@ import {
   DIAS, FUSO_PADRAO, ORIGEM_PADRAO, ORIGEM_REGRA,
   conferirJanela, cruzaCom, cruzaMeiaNoite, fusoValido, horaDeMinutos, instanteDeLocal,
   minutosDeHora, partesLocais, proximaTroca, regraVale, resolverGrade, validarEntradaRegra,
+  MOTIVO_PERIODO, conferirPeriodo, periodoVale, regraParaAdmin,
 } from './tvGradeSemanal.js';
 
 const SP = 'America/Sao_Paulo';
@@ -294,4 +295,109 @@ test('o cruzamento é detectado — inclusive quando uma delas vira a noite', ()
   assert.equal(cruzaCom(sexta, madrugadaSabado), true);
   // E não cruza com uma de sábado à tarde.
   assert.equal(cruzaCom(sexta, regra({ dias: [6], inicioMin: 14 * 60, fimMin: 16 * 60 })), false);
+});
+
+// ── O período: a regra que vale só entre duas datas ──────────────────────────
+// "Dia dos Pais" é 16 a 17 de julho, e só. Antes isso morava na arte (começa/termina no
+// conteúdo); agora é a grade — a programação — que responde QUANDO.
+const DIA_DOS_PAIS = { validoDe: '2026-07-16T03:00:00.000Z', validoAte: '2026-07-18T03:00:00.000Z' }; // 16 e 17/07, hora de SP
+
+test('🔴 fora do período a regra NÃO vale, mesmo no dia e na hora certos', () => {
+  const r = regra({ dias: [1, 2, 3, 4, 5, 6, 7], inicioMin: 0, fimMin: 23 * 60 + 59, ...DIA_DOS_PAIS });
+  const dentro = emSP('2026-07-17T12:00');
+  const antes = emSP('2026-07-15T12:00');
+  const depois = emSP('2026-07-18T12:00');
+  assert.equal(regraVale(r, partesLocais(dentro, SP), dentro), true);
+  assert.equal(regraVale(r, partesLocais(antes, SP), antes), false, 'um dia antes');
+  assert.equal(regraVale(r, partesLocais(depois, SP), depois), false, 'um dia depois');
+  // O limite de fim é EXCLUSIVO, como o de hora: no instante exato, já acabou.
+  assert.equal(periodoVale(r, Date.parse(DIA_DOS_PAIS.validoAte)), false);
+  assert.equal(periodoVale(r, Date.parse(DIA_DOS_PAIS.validoAte) - 1), true);
+});
+
+test('regra SEM período vale sempre — é toda regra que já existe', () => {
+  const r = regra();
+  const seg = emSP('2026-09-14T12:00');
+  assert.equal(regraVale(r, partesLocais(seg, SP), seg), true);
+  assert.equal(periodoVale({ validoDe: null, validoAte: null }, seg), true);
+  assert.equal(periodoVale({}, seg), true);
+  // Só um dos lados também funciona: "a partir de" e "até".
+  assert.equal(periodoVale({ validoDe: DIA_DOS_PAIS.validoDe }, emSP('2026-12-25T12:00')), true);
+  assert.equal(periodoVale({ validoAte: DIA_DOS_PAIS.validoAte }, emSP('2026-12-25T12:00')), false);
+});
+
+test('🔴 data inválida no banco NÃO some com a regra do ar', () => {
+  // `new Date('x').getTime()` é NaN, e NaN em comparação é sempre falso: sem a proteção,
+  // uma linha corrompida faria a regra deixar de valer sem erro nenhum. Inválido = sem limite.
+  const seg = emSP('2026-09-14T12:00');
+  assert.equal(periodoVale({ validoDe: 'ontem' }, seg), true);
+  assert.equal(periodoVale({ validoAte: 'amanhã' }, seg), true);
+});
+
+test('🔴 a ENTRADA e a SAÍDA do período são trocas — mesmo numa hora que nenhuma janela marca', () => {
+  /* É no instante em que "Dia dos Pais" começa a valer que a parede tem de mudar. Se a
+     próxima troca só olhasse as janelas semanais, uma regra de dia inteiro que começa às
+     03:00 UTC de uma quinta nunca seria "trocada": a TV só descobriria no refresh de rotina. */
+  const r = regra({ dias: [1, 2, 3, 4, 5, 6, 7], inicioMin: 0, fimMin: 23 * 60 + 59, ...DIA_DOS_PAIS });
+  const antes = emSP('2026-07-15T12:00');
+  assert.equal(proximaTroca({ agoraMs: antes, fuso: SP, regras: [r] }), Date.parse(DIA_DOS_PAIS.validoDe));
+  const dentro = emSP('2026-07-17T12:00');
+  // Dentro do período, a próxima troca é o próximo limite semanal (23:59 de hoje), que
+  // vem antes do fim do período.
+  assert.equal(proximaTroca({ agoraMs: dentro, fuso: SP, regras: [r] }), emSP('2026-07-17T23:59'));
+});
+
+test('limites semanais FORA do período não viram troca', () => {
+  // Uma regra que só vale em julho não faz a TV pedir programação nas terças de setembro.
+  const r = regra({ dias: [2], inicioMin: 18 * 60, fimMin: 23 * 60, ...DIA_DOS_PAIS });
+  const setembro = emSP('2026-09-15T17:00');   // terça, 17h — a janela semanal começaria às 18h
+  assert.equal(proximaTroca({ agoraMs: setembro, fuso: SP, regras: [r] }), null);
+});
+
+test('a resolução escolhe pelo período: a regra de cima só ganha quando vale', () => {
+  const pais = regra({ id: 1, playlistId: 50, dias: [1, 2, 3, 4, 5, 6, 7], inicioMin: 0, fimMin: 23 * 60 + 59, ...DIA_DOS_PAIS });
+  const sempre = regra({ id: 2, playlistId: 10, dias: [1, 2, 3, 4, 5, 6, 7], inicioMin: 0, fimMin: 23 * 60 + 59 });
+  assert.equal(resolverGrade({ agoraMs: emSP('2026-07-17T12:00'), fuso: SP, regras: [pais, sempre] }).playlistId, 50);
+  assert.equal(resolverGrade({ agoraMs: emSP('2026-07-20T12:00'), fuso: SP, regras: [pais, sempre] }).playlistId, 10);
+});
+
+test('entrada: o período entra como instante, limpa com null e recusa data torta', () => {
+  const ok = validarEntradaRegra({ validoDe: DIA_DOS_PAIS.validoDe, validoAte: DIA_DOS_PAIS.validoAte });
+  assert.equal(ok.ok, true);
+  assert.ok(ok.dados.validoDe instanceof Date);
+  assert.equal(ok.dados.validoDe.toISOString(), DIA_DOS_PAIS.validoDe);
+
+  const limpa = validarEntradaRegra({ validoDe: null, validoAte: '' });
+  assert.deepEqual(limpa.dados, { validoDe: null, validoAte: null });
+
+  const parcial = validarEntradaRegra({ ativo: true });
+  assert.equal('validoDe' in parcial.dados, false, 'ausente não mexe');
+
+  const torta = validarEntradaRegra({ validoDe: 'dia dos pais' });
+  assert.equal(torta.ok, false);
+  assert.deepEqual(torta.erros, [{ campo: 'validoDe', motivo: MOTIVO_PERIODO }]);
+});
+
+test('🔴 período invertido é recusado — inclusive num PUT parcial contra o que está salvo', () => {
+  assert.equal(conferirPeriodo({ validoDe: new Date(DIA_DOS_PAIS.validoAte), validoAte: new Date(DIA_DOS_PAIS.validoDe) }, null)?.motivo, MOTIVO_PERIODO);
+  // Só o fim chega, e ele é ANTERIOR ao início já salvo.
+  assert.equal(conferirPeriodo({ validoAte: new Date('2026-07-10T00:00:00Z') }, { validoDe: new Date(DIA_DOS_PAIS.validoDe) })?.motivo, MOTIVO_PERIODO);
+  assert.equal(conferirPeriodo({ validoAte: new Date(DIA_DOS_PAIS.validoAte) }, { validoDe: new Date(DIA_DOS_PAIS.validoDe) }), null);
+  assert.equal(conferirPeriodo({}, { validoDe: null, validoAte: null }), null);
+  // Limpar um lado nunca inverte nada.
+  assert.equal(conferirPeriodo({ validoDe: null }, { validoDe: new Date(DIA_DOS_PAIS.validoDe), validoAte: new Date(DIA_DOS_PAIS.validoAte) }), null);
+});
+
+test('períodos que não se tocam não se cruzam, mesmo com a mesma janela semanal', () => {
+  const pais = regra({ id: 1, ...DIA_DOS_PAIS });
+  const natal = regra({ id: 2, validoDe: '2026-12-24T03:00:00.000Z', validoAte: '2026-12-26T03:00:00.000Z' });
+  assert.equal(cruzaCom(pais, natal), false);
+  // Mas uma regra sem período cruza com qualquer uma na mesma janela.
+  assert.equal(cruzaCom(pais, regra({ id: 3 })), true);
+});
+
+test('o admin recebe o período em ISO, ou null', () => {
+  const a = regraParaAdmin({ ...regra(), validoDe: new Date(DIA_DOS_PAIS.validoDe), validoAte: null, playlist: { nome: 'x' } });
+  assert.equal(a.validoDe, DIA_DOS_PAIS.validoDe);
+  assert.equal(a.validoAte, null);
 });

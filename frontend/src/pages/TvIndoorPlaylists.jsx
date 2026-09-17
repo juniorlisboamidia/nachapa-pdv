@@ -245,7 +245,14 @@ export default function TvIndoorPlaylists() {
   // (a régua pública o descarta), e uma linha que "some" na parede é o pior tipo de defeito
   // — o gestor jura que configurou. Ele volta para cá assim que o upload terminar.
   const foraVideos = videos.filter((v) => v.temArquivo && !dentro.has(`v${v.id}`))
-  const fora = acervo === 'MENU_BOARDS' ? foraBoards : acervo === 'VIDEOS' ? foraVideos : foraConteudos
+  /* A aba Conteúdos mistura imagens e vídeos, por nome: são o MESMO acervo para quem monta
+     uma playlist. Cada linha carrega o `tipo` porque o "Adicionar" precisa saber qual
+     referência mandar — é a única coisa que ainda distingue os dois aqui. */
+  const foraAcervo = [
+    ...foraConteudos.map((c) => ({ tipo: 'IMAGEM', chave: `i${c.id}`, peca: c })),
+    ...foraVideos.map((v) => ({ tipo: 'VIDEO', chave: `v${v.id}`, peca: v })),
+  ].sort((a, b) => a.peca.nome.localeCompare(b.peca.nome, 'pt-BR'))
+  const fora = acervo === 'MENU_BOARDS' ? foraBoards : foraAcervo
 
   if (carregando) return <div className="loading-state">Carregando…</div>
   if (erro) {
@@ -396,51 +403,20 @@ export default function TvIndoorPlaylists() {
             <div className="ttm-cab-secao">
               <h2 className="ttm-secao-t">Adicionar</h2>
               <span className="ttm-meta-txt">{fora.length} {fora.length === 1 ? 'disponível' : 'disponíveis'}</span>
-              {/* TRÊS acervos, um seletor: artes, menu boards e vídeos são naturezas
-                  diferentes, mas entram na MESMA programação. Listas empilhadas fariam a
-                  última sumir embaixo das outras num cardápio grande. */}
+              {/* DOIS acervos, um seletor: o de conteúdos (imagens e vídeos juntos — para quem
+                  monta uma playlist são a mesma matéria-prima) e o de menu boards, que não
+                  é upload, é composição. Listas empilhadas fariam a última sumir embaixo da
+                  outra num cardápio grande. */}
               <div className="ttm-cab-acao tvi-abas">
                 <button type="button" className={'tvi-aba' + (acervo === 'CONTEUDOS' ? ' on' : '')} onClick={() => setAcervo('CONTEUDOS')}>
-                  Conteúdos<span className="tvi-aba-n">{foraConteudos.length}</span>
+                  Conteúdos<span className="tvi-aba-n">{foraAcervo.length}</span>
                 </button>
                 <button type="button" className={'tvi-aba' + (acervo === 'MENU_BOARDS' ? ' on' : '')} onClick={() => setAcervo('MENU_BOARDS')}>
                   Menu boards<span className="tvi-aba-n">{foraBoards.length}</span>
                 </button>
-                <button type="button" className={'tvi-aba' + (acervo === 'VIDEOS' ? ' on' : '')} onClick={() => setAcervo('VIDEOS')}>
-                  Vídeos<span className="tvi-aba-n">{foraVideos.length}</span>
-                </button>
               </div>
             </div>
-            {acervo === 'VIDEOS' ? (
-              videos.length === 0 ? (
-                <div className="empty-state">Nenhum vídeo ainda. Suba os arquivos em <strong>Vídeos</strong>.</div>
-              ) : fora.length === 0 ? (
-                <div className="empty-state">
-                  {videos.some((v) => !v.temArquivo)
-                    ? 'Os vídeos que faltam aqui ou já estão nesta playlist, ou ainda não têm arquivo enviado.'
-                    : 'Todos os vídeos já estão nesta playlist.'}
-                </div>
-              ) : (
-                <ul className="tvi-lista">
-                  {fora.map((v) => (
-                    <li key={v.id} className={'tvi-item' + (v.status === 'ATIVO' ? '' : ' off')}>
-                      <span className="tvi-mini estatica tvi-mini-video" aria-hidden="true">VÍDEO</span>
-                      <span className="tvi-item-info">
-                        <span className="tvi-item-nome">{v.nome}</span>
-                        <span className="tvi-item-meta">
-                          <span className={'badge ' + STATUS[v.status].cor}>{STATUS[v.status].texto}</span>
-                          <span>{duracaoDoVideo(v)}</span>
-                          {v.largura && v.altura ? <span>{v.largura} × {v.altura}</span> : null}
-                        </span>
-                      </span>
-                      <span className="tvi-item-acoes">
-                        <button type="button" className="btn btn-primary btn-sm" disabled={ocupado} onClick={() => adicionar('VIDEO', v.id)}>Adicionar</button>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )
-            ) : acervo === 'MENU_BOARDS' ? (
+            {acervo === 'MENU_BOARDS' ? (
               boards.length === 0 ? (
                 <div className="empty-state">Nenhum menu board ainda. Crie um em <strong>Menu Boards</strong>.</div>
               ) : fora.length === 0 ? (
@@ -465,24 +441,33 @@ export default function TvIndoorPlaylists() {
                   ))}
                 </ul>
               )
-            ) : conteudos.length === 0 ? (
-              <div className="empty-state">Nenhum conteúdo no acervo. Suba as imagens em <strong>Conteúdos</strong>.</div>
+            ) : conteudos.length === 0 && videos.length === 0 ? (
+              <div className="empty-state">Nenhum conteúdo no acervo. Suba imagens e vídeos em <strong>Conteúdos</strong>.</div>
             ) : fora.length === 0 ? (
-              <div className="empty-state">Todos os conteúdos do acervo já estão nesta playlist.</div>
+              <div className="empty-state">
+                {videos.some((v) => !v.temArquivo)
+                  ? 'O que falta aqui ou já está nesta playlist, ou é um vídeo que ainda não tem arquivo enviado.'
+                  : 'Todos os conteúdos do acervo já estão nesta playlist.'}
+              </div>
             ) : (
               <ul className="tvi-lista">
-                {fora.map((c) => (
-                  <li key={c.id} className={'tvi-item' + (c.status === 'ATIVO' ? '' : ' off')}>
-                    <span className="tvi-mini estatica"><img src={c.imagemUrl} alt="" draggable={false} /></span>
+                {fora.map(({ tipo, chave, peca }) => (
+                  <li key={chave} className={'tvi-item' + (peca.status === 'ATIVO' ? '' : ' off')}>
+                    {tipo === 'VIDEO'
+                      ? <span className="tvi-mini estatica tvi-mini-video" aria-hidden="true">VÍDEO</span>
+                      : <span className="tvi-mini estatica"><img src={peca.imagemUrl} alt="" draggable={false} /></span>}
                     <span className="tvi-item-info">
-                      <span className="tvi-item-nome">{c.nome}</span>
+                      <span className="tvi-item-nome">{peca.nome}</span>
                       <span className="tvi-item-meta">
-                        <span className={'badge ' + STATUS[c.status].cor}>{STATUS[c.status].texto}</span>
-                        <span>{c.duracaoSegundos}s</span>
+                        <span className="badge badge-slate">{tipo === 'VIDEO' ? 'Vídeo' : 'Imagem'}</span>
+                        <span className={'badge ' + STATUS[peca.status].cor}>{STATUS[peca.status].texto}</span>
+                        {tipo === 'VIDEO'
+                          ? <><span>{duracaoDoVideo(peca)}</span>{peca.largura && peca.altura ? <span>{peca.largura} × {peca.altura}</span> : null}</>
+                          : <span>{peca.duracaoSegundos}s padrão</span>}
                       </span>
                     </span>
                     <span className="tvi-item-acoes">
-                      <button type="button" className="btn btn-primary btn-sm" disabled={ocupado} onClick={() => adicionar('IMAGEM', c.id)}>Adicionar</button>
+                      <button type="button" className="btn btn-primary btn-sm" disabled={ocupado} onClick={() => adicionar(tipo, peca.id)}>Adicionar</button>
                     </span>
                   </li>
                 ))}

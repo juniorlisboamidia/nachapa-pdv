@@ -1359,6 +1359,12 @@ model TvProgramacaoRegra {
   dias      Int[]
   inicioMin Int
   fimMin    Int
+  // O PERÍODO em que a regra vale, além dos dias da semana: "Dia dos Pais" é 16 a 17 de
+  // julho, e só. Instantes UTC como o navegador do gestor os manda; nulos = vale sempre.
+  // Antes isso morava na arte (começa/termina no conteúdo) — quando algo vai ao ar é
+  // pergunta da PROGRAMAÇÃO, e a grade é a programação. Régua em tvGradeSemanal.js.
+  validoDe  DateTime?
+  validoAte DateTime?
 
   // PRIORIDADE é POSIÇÃO, não número digitado: a primeira regra elegível vence, e o gestor
   // move com ↑/↓. A lista sobe inteira em transação — trocar vizinhos deixa buracos e

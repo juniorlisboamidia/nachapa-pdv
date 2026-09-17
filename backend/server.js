@@ -125,7 +125,7 @@ import {
 import {
   DIAS as GRADE_DIAS, FUSO_PADRAO as GRADE_FUSO_PADRAO, MOTIVO_FUSO as GRADE_MOTIVO_FUSO,
   resolverGrade, regraParaAdmin, validarEntradaRegra, conferirJanela as conferirJanelaRegra,
-  fusoValido, fusoOuPadrao, cruzaCom as regrasSeCruzam,
+  conferirPeriodo as conferirPeriodoRegra, fusoValido, fusoOuPadrao, cruzaCom as regrasSeCruzam,
 } from './tvGradeSemanal.js';
 // O catálogo da loja com ÚLTIMO-ESTADO-BOM. Serviço NEUTRO: o caminho
 // empresaId → clienteId → HUB → CW é o mesmo do totem, e nenhum navegador fala com o CW.
@@ -10676,7 +10676,7 @@ const horaDeMinutosTv = (min) => {
 // admin escrever "Jantar" em vez de "playlist 12" — os itens dela não entram aqui.
 const TV_REGRA_CAMPOS = {
   id: true, dispositivoId: true, playlistId: true, ativo: true,
-  dias: true, inicioMin: true, fimMin: true, ordem: true,
+  dias: true, inicioMin: true, fimMin: true, ordem: true, validoDe: true, validoAte: true,
   playlist: { select: { id: true, nome: true } },
 };
 
@@ -11354,7 +11354,8 @@ app.post('/api/tv-indoor/programacao/regras', async (req, res) => {
     const minhas = await prisma.tvPlaylist.findMany({ where: { empresaId }, select: { id: true } });
     const v = validarEntradaRegra(req.body, { exigirTudo: true, playlists: new Set(minhas.map((x) => x.id)) });
     const janela = conferirJanelaRegra(v.dados, null);
-    const erros = [...v.erros, ...(janela ? [janela] : [])];
+    const periodo = conferirPeriodoRegra(v.dados, null);
+    const erros = [...v.erros, ...(janela ? [janela] : []), ...(periodo ? [periodo] : [])];
     if (erros.length) return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros });
     const ultima = await prisma.tvProgramacaoRegra.findFirst({
       where: { empresaId, dispositivoId: tela.id }, orderBy: { ordem: 'desc' }, select: { ordem: true },
@@ -11377,7 +11378,8 @@ app.put('/api/tv-indoor/programacao/regras/:id', async (req, res) => {
     const minhas = await prisma.tvPlaylist.findMany({ where: { empresaId }, select: { id: true } });
     const v = validarEntradaRegra(req.body, { playlists: new Set(minhas.map((x) => x.id)) });
     const janela = conferirJanelaRegra(v.dados, atual);
-    const erros = [...v.erros, ...(janela ? [janela] : [])];
+    const periodo = conferirPeriodoRegra(v.dados, atual);
+    const erros = [...v.erros, ...(janela ? [janela] : []), ...(periodo ? [periodo] : [])];
     if (erros.length) return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros });
     await prisma.tvProgramacaoRegra.update({ where: { id }, data: v.dados });
     const tela = await telaDeTv(empresaId, atual.dispositivoId);

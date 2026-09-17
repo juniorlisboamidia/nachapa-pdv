@@ -57,7 +57,6 @@ import DispositivoPareamento from './pages/DispositivoPareamento'
 import TvIndoorTelas from './pages/TvIndoorTelas'
 import TvIndoorMonitoramento from './pages/TvIndoorMonitoramento'
 import TvIndoorConteudos from './pages/TvIndoorConteudos'
-import TvIndoorVideos from './pages/TvIndoorVideos'
 import TvIndoorPlaylists from './pages/TvIndoorPlaylists'
 import TvIndoorProgramacao from './pages/TvIndoorProgramacao'
 import TvIndoorMenuBoards from './pages/TvIndoorMenuBoards'
@@ -182,7 +181,10 @@ export default function App() {
             <Route path="tv-indoor/telas" element={<TvIndoorTelas />} />
             <Route path="tv-indoor/monitoramento" element={<TvIndoorMonitoramento />} />
             <Route path="tv-indoor/conteudos" element={<TvIndoorConteudos />} />
-            <Route path="tv-indoor/videos" element={<TvIndoorVideos />} />
+            {/* Vídeos virou parte de Conteúdos. O endereço antigo continua valendo: pode
+                estar num favorito ou num histórico, e um 404 aqui leria como "sumiu com meus
+                vídeos". */}
+            <Route path="tv-indoor/videos" element={<Navigate to="/tv-indoor/conteudos" replace />} />
             <Route path="tv-indoor/playlists" element={<TvIndoorPlaylists />} />
             <Route path="tv-indoor/menu-boards" element={<TvIndoorMenuBoards />} />
             <Route path="tv-indoor/programacao" element={<TvIndoorProgramacao />} />

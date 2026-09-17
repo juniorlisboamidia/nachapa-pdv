@@ -40,6 +40,7 @@ export const MOTIVO_HORA = 'HORA_INVALIDA';
 export const MOTIVO_JANELA_NULA = 'JANELA_NULA';
 export const MOTIVO_PLAYLIST = 'PLAYLIST_INVALIDA';
 export const MOTIVO_FUSO = 'FUSO_INVALIDO';
+export const MOTIVO_PERIODO = 'PERIODO_INVALIDO';
 
 /* ── Fuso ───────────────────────────────────────────────────────────────────────────── */
 
@@ -162,8 +163,36 @@ export const cruzaMeiaNoite = (regra) => regra?.inicioMin > regra?.fimMin;
    As bordas são início INCLUSIVO e fim EXCLUSIVO, a mesma régua da agenda de conteúdo. Às
    02:00 em ponto a regra já não vale: senão duas regras vizinhas (uma terminando, outra
    começando no mesmo minuto) valeriam juntas por um minuto inteiro. */
-export function regraVale(regra, { diaSemana, minutos }) {
+/* ── O PERÍODO: a regra que só vale entre duas DATAS ────────────────────────────────
+   "Terça em dobro" vale toda terça; "Dia dos Pais" vale de 16 a 17 de julho, e só. A
+   segunda precisa de um período além dos dias da semana — e é aqui, na grade, que ele mora.
+   Antes ele morava na ARTE (começa/termina no conteúdo), o que fazia o acervo decidir
+   quando algo vai ao ar. Quando é pergunta da programação, e a grade é a programação.
+
+   São INSTANTES (UTC), não datas de calendário: é como o navegador do gestor os manda, e é
+   contra o relógio do servidor que se compara. `null` dos dois lados = vale sempre, que é
+   como toda regra existente continua se comportando. */
+export function periodoVale(regra, agoraMs) {
+  const de = instanteOuNulo(regra?.validoDe);
+  const ate = instanteOuNulo(regra?.validoAte);
+  if (de !== null && agoraMs < de) return false;
+  if (ate !== null && agoraMs >= ate) return false;
+  return true;
+}
+
+// Data em qualquer forma (Date, ISO, ms) → ms, ou `null` para vazio/inválido.
+// ⚠️ Inválido vira `null` ("sem limite"), e não 0: `new Date('x').getTime()` é NaN, e um
+// NaN numa comparação é sempre falso — a regra sumiria do ar sem erro nenhum.
+function instanteOuNulo(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const ms = v instanceof Date ? v.getTime() : new Date(v).getTime();
+  return Number.isFinite(ms) ? ms : null;
+}
+
+export function regraVale(regra, { diaSemana, minutos }, agoraMs = null) {
   if (!regra || regra.ativo === false) return false;
+  // O período é conferido primeiro: fora dele, o dia da semana nem é olhado.
+  if (agoraMs !== null && !periodoVale(regra, agoraMs)) return false;
   const dias = diasDe(regra);
   const ini = regra.inicioMin;
   const fim = regra.fimMin;
@@ -217,8 +246,19 @@ export function proximaTroca({ agoraMs, fuso, regras }) {
       ];
       for (const c of candidatos) {
         const ts = instanteDeLocal(c, tz);
-        if (ts > agoraMs && (melhor === null || ts < melhor)) melhor = ts;
+        // Um limite semanal FORA do período da regra não muda nada: a regra não vale ali.
+        // Contá-lo faria a TV pedir a programação numa hora em que nada troca.
+        if (ts > agoraMs && periodoVale(r, ts) && (melhor === null || ts < melhor)) melhor = ts;
       }
+    }
+  }
+  /* Os limites do PERÍODO são trocas também — e são as que mais importam: é no instante em
+     que "Dia dos Pais" começa a valer que a parede tem de mudar, mesmo que isso caia numa
+     terça às 14:37, hora que nenhuma janela semanal marcaria. */
+  for (const r of ativas) {
+    for (const v of [r.validoDe, r.validoAte]) {
+      const ts = instanteOuNulo(v);
+      if (ts !== null && ts > agoraMs && (melhor === null || ts < melhor)) melhor = ts;
     }
   }
   return melhor;
@@ -239,7 +279,7 @@ export function resolverGrade({ agoraMs, fuso, regras, playlistPadraoId = null }
   const tz = fusoOuPadrao(fuso);
   const agora = partesLocais(agoraMs, tz);
   const lista = Array.isArray(regras) ? regras : [];
-  const vencedora = lista.find((r) => regraVale(r, agora)) ?? null;
+  const vencedora = lista.find((r) => regraVale(r, agora, agoraMs)) ?? null;
   return {
     fuso: tz,
     playlistId: vencedora ? vencedora.playlistId : (playlistPadraoId ?? null),
@@ -290,7 +330,28 @@ export function validarEntradaRegra(bruto, { exigirTudo = false, playlists = nul
 
   if (corpo.ativo !== undefined) dados.ativo = corpo.ativo === true;
 
+  /* O período: `null`/`''` LIMPA (o gestor apagou o campo); ausente NÃO MEXE (PUT parcial).
+     Uma data que não parseia é erro, e não "sem limite": aceitar calado faria a regra
+     valer para sempre quando o gestor quis um fim. */
+  for (const campo of ['validoDe', 'validoAte']) {
+    if (corpo[campo] === undefined) continue;
+    if (corpo[campo] === null || corpo[campo] === '') { dados[campo] = null; continue; }
+    const ms = instanteOuNulo(corpo[campo]);
+    if (ms === null) erros.push({ campo, motivo: MOTIVO_PERIODO });
+    else dados[campo] = new Date(ms);
+  }
+
   return { ok: erros.length === 0, dados, erros };
+}
+
+/* O período conferido contra o que JÁ ESTÁ salvo: mandar só `validoAte` numa regra que já
+   tem `validoDe` pode inverter o período sem que o corpo, sozinho, denuncie. Um período
+   invertido não é "nunca vale" — é erro, e é recusado. */
+export function conferirPeriodo(dados, atual) {
+  const de = instanteOuNulo('validoDe' in dados ? dados.validoDe : atual?.validoDe);
+  const ate = instanteOuNulo('validoAte' in dados ? dados.validoAte : atual?.validoAte);
+  if (de !== null && ate !== null && ate <= de) return { campo: 'validoAte', motivo: MOTIVO_PERIODO };
+  return null;
 }
 
 /* A janela conferida contra o que JÁ ESTÁ salvo: mandar só `horaFim` numa regra que já tem
@@ -308,6 +369,11 @@ export function conferirJanela(dados, atual) {
    avisar "a de cima ganha" no momento em que o gestor cria a segunda. */
 export function cruzaCom(a, b) {
   if (!a || !b) return false;
+  // Períodos que não se tocam nunca disputam um instante — "Dia dos Pais" e "Natal" podem
+  // ter a mesma janela semanal sem que uma ganhe da outra.
+  const [de1, ate1, de2, ate2] = [a.validoDe, a.validoAte, b.validoDe, b.validoAte].map(instanteOuNulo);
+  if (de1 !== null && ate2 !== null && de1 >= ate2) return false;
+  if (de2 !== null && ate1 !== null && de2 >= ate1) return false;
   const faixas = (r) => (cruzaMeiaNoite(r)
     ? diasDe(r).flatMap((d) => [[d, r.inicioMin, MINUTOS_NO_DIA], [d === 7 ? 1 : d + 1, 0, r.fimMin]])
     : diasDe(r).map((d) => [d, r.inicioMin, r.fimMin]));
@@ -333,5 +399,7 @@ export function regraParaAdmin(r) {
     horaFim: horaDeMinutos(r.fimMin),
     cruzaMeiaNoite: cruzaMeiaNoite(r),
     ordem: r.ordem ?? 0,
+    validoDe: r.validoDe ? new Date(r.validoDe).toISOString() : null,
+    validoAte: r.validoAte ? new Date(r.validoAte).toISOString() : null,
   };
 }

@@ -95,12 +95,40 @@ function horaCurta(iso) {
   return d.toLocaleString('pt-BR', { weekday: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
+/* O PERÍODO viaja como instante (ISO) e é digitado como hora local do navegador — a mesma
+   convenção que a agenda tinha quando morava no conteúdo. `datetime-local` não tem fuso;
+   quem converte é o navegador de quem digita, que está na loja. */
+function paraIso(local) {
+  if (!local) return null
+  const d = new Date(local)
+  return Number.isFinite(d.getTime()) ? d.toISOString() : null
+}
+function paraCampo(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (!Number.isFinite(d.getTime())) return ''
+  const p = (n) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+}
+const dataCurta = (iso) => (iso ? new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : null)
+
+/* Em que ponto do período a regra está, para a lista dizer sem o gestor ter que ler datas.
+   `null` quando não há período: a regra vale sempre. */
+function situacaoDoPeriodo(r, agoraMs) {
+  if (!r.validoDe && !r.validoAte) return null
+  if (r.validoDe && agoraMs < Date.parse(r.validoDe)) return 'FUTURO'
+  if (r.validoAte && agoraMs >= Date.parse(r.validoAte)) return 'ENCERRADO'
+  return 'VIGENTE'
+}
+
 const vazia = (dispositivoId) => ({
   id: null, dispositivoId, ativo: true, dias: [1, 2, 3, 4, 5], horaInicio: '18:00', horaFim: '23:00', playlistId: '',
+  validoDe: '', validoAte: '',
 })
 const daRegra = (r) => ({
   id: r.id, dispositivoId: r.dispositivoId, ativo: r.ativo,
   dias: [...r.dias], horaInicio: r.horaInicio, horaFim: r.horaFim, playlistId: String(r.playlistId),
+  validoDe: paraCampo(r.validoDe), validoAte: paraCampo(r.validoAte),
 })
 
 export default function TvIndoorProgramacao() {
@@ -139,6 +167,10 @@ export default function TvIndoorProgramacao() {
         horaInicio: form.horaInicio,
         horaFim: form.horaFim,
         playlistId: Number(form.playlistId),
+        // Vazio LIMPA (null), e não "não mexe": o gestor que apagou a data quer a regra
+        // valendo sempre de novo.
+        validoDe: paraIso(form.validoDe),
+        validoAte: paraIso(form.validoAte),
       }
       const r = form.id
         ? await api.put(`/tv-indoor/programacao/regras/${form.id}`, corpo)
@@ -332,6 +364,15 @@ export default function TvIndoorProgramacao() {
                           <span className={'badge ' + (r.ativo ? 'badge-green' : 'badge-gray')}>{r.ativo ? 'Ativa' : 'Desligada'}</span>
                           <span>{nomeDaPlaylist(r.playlistId) ?? r.playlistNome ?? `Playlist ${r.playlistId}`}</span>
                           {agora?.regraId === r.id ? <span className="badge badge-orange">No ar agora</span> : null}
+                          {(() => {
+                            const sit = situacaoDoPeriodo(r, Date.now())
+                            if (!sit) return null
+                            const texto = r.validoDe && r.validoAte
+                              ? `${dataCurta(r.validoDe)} a ${dataCurta(r.validoAte)}`
+                              : r.validoDe ? `a partir de ${dataCurta(r.validoDe)}` : `até ${dataCurta(r.validoAte)}`
+                            const cor = sit === 'VIGENTE' ? 'badge-blue' : sit === 'FUTURO' ? 'badge-yellow' : 'badge-gray'
+                            return <span className={'badge ' + cor} title={sit === 'ENCERRADO' ? 'Este período já passou: a regra não vale mais.' : undefined}>{texto}{sit === 'ENCERRADO' ? ' · encerrada' : ''}</span>
+                          })()}
                         </span>
                         {perdePara ? (
                           <span className="ttm-meta-txt tvi-aviso-overlap">
@@ -447,6 +488,9 @@ function Editor({ valor, playlists, regras, ocupado, aoFechar, aoSalvar }) {
     if (!form.dias.length) erros.dias = 'Escolha pelo menos um dia.'
     if (minutos(form.horaInicio) === null) erros.horaInicio = 'Use HH:MM, por exemplo 18:00.'
     if (minutos(form.horaFim) === null) erros.horaFim = 'Use HH:MM, por exemplo 23:00.'
+    if (form.validoDe && form.validoAte && paraIso(form.validoDe) >= paraIso(form.validoAte)) {
+      erros.validoAte = 'O fim do período tem de vir depois do início.'
+    }
     if (!erros.horaInicio && !erros.horaFim && form.horaInicio === form.horaFim) {
       erros.horaFim = 'O início e o fim não podem ser iguais. Para o dia inteiro, use a playlist padrão.'
     }
@@ -508,6 +552,32 @@ function Editor({ valor, playlists, regras, ocupado, aoFechar, aoSalvar }) {
               />
               {faltando.horaFim ? <div className="ttm-erro-campo" role="alert">{faltando.horaFim}</div> : null}
             </div>
+          </div>
+          {/* O PERÍODO: "Dia dos Pais" é 16 a 17 de julho, e só. Opcional — sem ele a regra
+              vale toda semana, para sempre. Era a agenda que morava na arte; aqui é onde a
+              pergunta "quando" pertence. */}
+          <div className="ttm-banner-datas">
+            <div className="form-group">
+              <label className="form-label" htmlFor="tvg-de">Vale a partir de</label>
+              <input
+                id="tvg-de" type="datetime-local" className="form-input"
+                value={form.validoDe}
+                onChange={(e) => { setForm((f) => ({ ...f, validoDe: e.target.value })); setFaltando((x) => ({ ...x, validoAte: null })) }}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label" htmlFor="tvg-ate">Vale até</label>
+              <input
+                id="tvg-ate" type="datetime-local" className={'form-input' + (faltando.validoAte ? ' invalido' : '')}
+                value={form.validoAte}
+                onChange={(e) => { setForm((f) => ({ ...f, validoAte: e.target.value })); setFaltando((x) => ({ ...x, validoAte: null })) }}
+              />
+              {faltando.validoAte ? <div className="ttm-erro-campo" role="alert">{faltando.validoAte}</div> : null}
+            </div>
+          </div>
+          <div className="ttm-dica">
+            Em branco, a regra vale toda semana, sem fim. Com datas, ela só entra na grade dentro do período —
+            é assim que se programa uma campanha de um dia, ou de um fim de semana, sem tocar nas outras regras.
           </div>
           {viraNoite ? (
             <div className="ttm-dica">

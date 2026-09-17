@@ -184,12 +184,12 @@ export const grupos = [
           // entupir a gestão com diagnóstico faria as duas piores. Fica em cima porque é a
           // pergunta com pressa — as outras folhas são trabalho planejado.
           { to: '/tv-indoor/monitoramento', label: 'Monitoramento', icon: 'analise' },
+          // Conteúdos é O acervo: imagens e vídeos juntos. Já foram duas folhas (a de vídeo
+          // tem cota de disco, envio com progresso e o estado "falta o arquivo"), mas para
+          // quem monta uma playlist os dois são a mesma matéria-prima — separar era obrigar
+          // o gestor a saber de antemão em qual tela procurar. A tela única mostra a cota e
+          // o "falta o arquivo" do mesmo jeito; o que mudou foi o número de portas.
           { to: '/tv-indoor/conteudos', label: 'Conteúdos', icon: 'marketing' },
-          // Vídeos é folha PRÓPRIA, e não uma aba dentro de Conteúdos: os dois são acervos,
-          // mas o de vídeo tem consumo de disco, envio com progresso e um estado que a
-          // imagem não tem ("falta o arquivo"). Espremer isso numa aba esconderia a metade
-          // que precisa de atenção. Fica logo depois porque acervo vem antes de programação.
-          { to: '/tv-indoor/videos', label: 'Vídeos', icon: 'video' },
           { to: '/tv-indoor/playlists', label: 'Playlists', icon: 'relatorios' },
           // Menu Boards fica DEPOIS das playlists e não entre Conteúdos e Playlists: a
           // ordem da sidebar é a ordem em que a loja monta as coisas, e o board é o passo
