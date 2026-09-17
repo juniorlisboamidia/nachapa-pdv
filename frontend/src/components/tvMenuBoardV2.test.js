@@ -390,3 +390,21 @@ test('🔴 nenhum grid do board declara LINHAS sem declarar COLUNAS', () => {
   }
   assert.deepEqual(faltando, [], 'estes grids precisam declarar a coluna também');
 });
+
+test('🔴 o Carrossel não depende de haver cabeçalho para ter altura', () => {
+  /* O artboard é `auto minmax(0, 1fr)` e o cabeçalho só é renderizado quando há logo,
+     título ou subtítulo. Sem ele, o corpo vira o PRIMEIRO filho e cai na linha 1 — que é
+     `auto`, a altura do próprio conteúdo.
+
+     Os outros cinco templates nunca notaram porque cards, linhas e fotos têm altura
+     própria. O Carrossel é o primeiro cujo conteúdo mede ZERO (todos os slides são
+     `position: absolute`): o board sem título mostrava os pontinhos e mais nada, e o
+     corpo inteiro media 16px — a altura dos pontinhos.
+
+     A regra é escopada no template porque mudar `.tvmb-corpo` para todos mexeria na
+     composição dos cinco já validados em boards sem título. */
+  assert.match(css, /\.tvmb-tpl-carrossel \.tvmb-corpo \{[^}]*grid-row: 2/);
+  // E a faixa 2 do artboard continua sendo a que tem altura.
+  const tela = css.slice(css.indexOf('.tvmb-tela {'), css.indexOf('.tvmb-cabeca'));
+  assert.match(tela, /grid-template-rows: auto minmax\(0, 1fr\)/);
+});

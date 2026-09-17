@@ -642,6 +642,22 @@
    conta que as esteiras do totem já cobraram. Se ainda assim engasgar na parede, o
    plano B é trocar a máscara por `transform` + `opacity`, que é mais barato e mantém
    a ideia: só estas duas regras mudam. */
+/* A FAIXA DE CONTEUDO, fixada.
+
+   O artboard e' `grid-template-rows: auto minmax(0, 1fr)`, e o cabecalho so' existe quando
+   ha' logo, titulo ou subtitulo. Sem ele, o corpo vira o PRIMEIRO filho e cai na linha 1 —
+   que e' `auto`, ou seja, a altura do proprio conteudo.
+
+   Os outros cinco templates nunca notaram: cards, linhas e fotos tem altura propria, entao
+   o `auto` resolve para algo. O Carrossel e' o primeiro cujo conteudo mede ZERO, porque
+   todos os slides sao `position: absolute` — o corpo inteiro ficava com 16px, a altura dos
+   pontinhos, e o palco com nada.
+
+   Fixando a linha 2, a altura passa a vir da faixa `1fr` com ou sem cabecalho. A regra e'
+   escopada no template de proposito: mudar `.tvmb-corpo` para todo mundo mexeria na
+   composicao dos cinco templates ja' validados em boards sem titulo. */
+.tvmb-tpl-carrossel .tvmb-corpo { grid-row: 2; }
+
 .tvmb-cr {
   display: grid;
   /* ⚠️ A COLUNA precisa ser declarada — mesma armadilha do artboard, algumas centenas de
