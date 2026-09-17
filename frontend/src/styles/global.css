@@ -1415,6 +1415,22 @@ body.theme-dark .ficha-add-trigger:hover {
   border-color: rgba(249, 115, 22, 0.5);
   color: #fb923c;
 }
+/* "Definir lucro": as duas seções do modal (Venda Direta e iFood) nasceram brancas e
+   rosa-claro, e no escuro viravam duas placas acesas com os campos escuros dentro.
+   Elas voltam a ser superfície — e a do iFood mantém o tom da marca como um véu
+   avermelhado sobre o escuro, que é o que distinguia as duas no claro. */
+body.theme-dark .precif-secao {
+  background: var(--d-surface-2) !important;
+  border-color: var(--d-border) !important;
+}
+body.theme-dark .precif-secao-ifood {
+  background: rgba(220, 38, 38, 0.10) !important;
+  border-color: rgba(220, 38, 38, 0.28) !important;
+}
+body.theme-dark .precif-secao-titulo { color: var(--d-text); }
+body.theme-dark .precif-secao-sub,
+body.theme-dark .precif-hint { color: var(--d-text-3); }
+body.theme-dark .precif-resumo { border-top-color: var(--d-border); color: var(--d-text-2); }
 
 /* Abas / acordeões / pílulas */
 body.theme-dark .av-tabs,
