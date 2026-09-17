@@ -329,7 +329,10 @@ test('🔴 o tempo do slide sai da DURAÇÃO DO BOARD, nunca de um número fixo'
      Dividindo, cada produto aparece uma vez e o ciclo fecha quando o board sai. */
   const codigo = semComentarios(renderer)
   assert.match(codigo, /function Carrossel\(\{[^}]*duracaoSegundos[^}]*\}\)/, 'o Carrossel precisa receber a duração')
-  assert.match(codigo, /\(Number\(duracaoSegundos\) \|\| 20\) \* 1000 \/ n/)
+  assert.match(codigo, /msPorPasso\(duracaoSegundos, n, MS_MINIMO_SLIDE\)/)
+  // A conta em si tem teste de verdade em carrosselFila.test.js; aqui só se garante que
+  // o componente CHAMA a conta, em vez de refazer uma cópia dela.
+  assert.match(codigo, /from '\.\/carrosselFila\.js'/)
   assert.match(codigo, /duracaoSegundos=\{board\?\.duracaoSegundos\}/, 'e a tela precisa passá-la')
 })
 
@@ -381,7 +384,12 @@ test('🔴 a volta da fila é INVISÍVEL — recuo sem transição, na posição
      WebView da TV atrasasse um quadro. */
   const codigo = semComentarios(renderer)
   assert.match(codigo, /onTransitionEnd=\{aoFimDoDeslize\}/)
-  assert.match(codigo, /if \(passo < n\) return/, 'só recua no fim da volta')
+  /* ⚠️ `transitionend` BORBULHA, e os trinta cards da trilha também transicionam. Sem o
+     filtro, o recuo rodava dezenas de vezes por passo, cada uma subtraindo o tamanho da
+     lista — o passo despencava para negativo e a TV ficava branca e travada. Este é o
+     bug que aconteceu de verdade na parede; a guarda existe para ele não voltar. */
+  assert.match(codigo, /e\.target !== e\.currentTarget \|\| e\.propertyName !== 'transform'/)
+  assert.match(codigo, /if \(!precisaRecuar\(passo, n\)\) return/, 'só recua no fim da volta')
   assert.match(codigo, /setDeslizando\(false\)[\s\S]{0,40}setPasso\(\(v\) => v - n\)/)
   assert.match(codigo, /\(deslizando \? '' : ' parada'\)/)
   assert.match(css, /\.tvmb-cr-pista\.parada \{ transition: none; \}/)

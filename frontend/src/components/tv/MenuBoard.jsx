@@ -25,6 +25,9 @@
 // start, com a rede caindo ou com a aparência corrompida.
 import { useEffect, useRef, useState } from 'react'
 import { aplicar as aplicarTemaTv } from '../tvIndoorTema'
+// A aritmética da fila do Carrossel vive fora daqui, num módulo puro, porque é a parte
+// que dá para testar de verdade — e é a parte que já derrubou a parede uma vez.
+import { indiceEmCena, msPorPasso, precisaRecuar } from './carrosselFila.js'
 import '../../styles/tvMenuBoard.css'
 
 const moeda = (v) => (typeof v === 'number' ? v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : null)
@@ -254,13 +257,12 @@ function Carrossel({ produtos, ex, duracaoSegundos }) {
      produto: é a posição na pista. */
   const [passo, setPasso] = useState(0)
   const [deslizando, setDeslizando] = useState(true)
-  const ativo = n ? passo % n : 0
+  const ativo = indiceEmCena(passo, n)
   const emCena = itens[ativo]
 
   useEffect(() => {
     if (n < 2) return undefined
-    const bruto = (Number(duracaoSegundos) || 20) * 1000 / n
-    const ms = Math.max(MS_MINIMO_SLIDE, Math.round(bruto))
+    const ms = msPorPasso(duracaoSegundos, n, MS_MINIMO_SLIDE)
     const t = setInterval(() => { setDeslizando(true); setPasso((v) => v + 1) }, ms)
     return () => clearInterval(t)
   }, [n, duracaoSegundos])
@@ -280,8 +282,16 @@ function Carrossel({ produtos, ex, duracaoSegundos }) {
 
      O gatilho é `onTransitionEnd`, e não um timer: assim o recuo acontece quando a
      animação realmente acabou, inclusive se o navegador da TV atrasar um quadro. */
-  const aoFimDoDeslize = () => {
-    if (passo < n) return
+  const aoFimDoDeslize = (e) => {
+    /* ⚠️ `transitionend` BORBULHA. Os trinta cards da trilha também transicionam
+       (`transform` e `opacity`), então sem este filtro o recuo rodava dezenas de vezes a
+       cada passo — e cada chamada subtraía `n` outra vez. O passo despencava para
+       negativo, o produto em cena virava `undefined` e a TV ficava branca.
+
+       Duas condições, e as duas importam: `target === currentTarget` descarta os cards, e
+       a propriedade descarta o `opacity` da própria pista caso alguém a anime um dia. */
+    if (e.target !== e.currentTarget || e.propertyName !== 'transform') return
+    if (!precisaRecuar(passo, n)) return
     setDeslizando(false)
     setPasso((v) => v - n)
   }
