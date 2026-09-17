@@ -165,6 +165,11 @@ export function conteudoParaAdmin(c, agoraMs) {
    conteúdo inteiro (com status e agenda), o board traz o cabeçalho dele (nome, layout,
    quantos itens) — a listagem do admin NÃO resolve catálogo, porque ela precisa abrir mesmo
    com o HUB fora do ar. Quem resolve é a tela de edição do board e a programação da TV. */
+/* A duração que o ITEM definiu para si, ou `null` quando ele usa o padrão do conteúdo.
+   ⚠️ `typeof === 'number'`, e não `Number(x)`: nulo viraria 0, e 0 é "tem duração, e ela é
+   zero" — a TV trocaria de tela sem parar. */
+const duracaoPropria = (i) => (typeof i?.duracaoSegundos === 'number' && i.duracaoSegundos > 0 ? i.duracaoSegundos : null);
+
 export function playlistParaAdmin(p, agoraMs, boardParaAdmin, videoParaAdmin) {
   const itens = arranjo(p?.itens)
     .slice()
@@ -176,7 +181,7 @@ export function playlistParaAdmin(p, agoraMs, boardParaAdmin, videoParaAdmin) {
       if (tipo === 'MENU_BOARD') {
         if (!i?.menuBoard) return null;
         const board = typeof boardParaAdmin === 'function' ? boardParaAdmin(i.menuBoard) : i.menuBoard;
-        return { tipo, itemId: i.id, board };
+        return { tipo, itemId: i.id, duracaoSegundos: duracaoPropria(i), board };
       }
       if (tipo === 'VIDEO') {
         if (!i?.video) return null;
@@ -184,7 +189,7 @@ export function playlistParaAdmin(p, agoraMs, boardParaAdmin, videoParaAdmin) {
         return { tipo, itemId: i.id, video };
       }
       if (!i?.conteudo) return null;
-      return { tipo, itemId: i.id, conteudo: conteudoParaAdmin(i.conteudo, agoraMs) };
+      return { tipo, itemId: i.id, duracaoSegundos: duracaoPropria(i), conteudo: conteudoParaAdmin(i.conteudo, agoraMs) };
     })
     .filter(Boolean);
   return {
@@ -234,7 +239,14 @@ export function programacaoPublica(itens, agoraMs, opcoes) {
       const tipo = i?.tipo === 'MENU_BOARD' || i?.tipo === 'VIDEO' ? i.tipo : 'IMAGEM';
       if (tipo === 'MENU_BOARD') {
         const id = i?.menuBoardId ?? i?.menuBoard?.id;
-        return id == null ? null : (boards.get(String(id)) ?? null);
+        const board = id == null ? null : (boards.get(String(id)) ?? null);
+        if (!board) return null;
+        /* A duração do ITEM manda, e ela entra no PRÓPRIO board que viaja — não ao lado
+           dele. O Carrossel divide o tempo do board entre os produtos; se a TV recebesse a
+           duração antiga dentro do board e a nova fora, a playlist trocaria de tela num
+           ritmo e a fila andaria noutro, e os últimos produtos nunca chegariam ao centro. */
+        const propria = duracaoPropria(i);
+        return propria === null ? board : { ...board, duracaoSegundos: propria };
       }
       if (tipo === 'VIDEO') {
         const v = i?.video;
@@ -254,7 +266,9 @@ export function programacaoPublica(itens, agoraMs, opcoes) {
         id: c.id,
         nome: c.nome,
         ativo: true,
-        duracaoSegundos: normalizarDuracao(c.duracaoSegundos),
+        // A do item manda; sem ela, a do conteúdo — que é como toda playlist existente
+        // continua tocando.
+        duracaoSegundos: normalizarDuracao(duracaoPropria(i) ?? c.duracaoSegundos),
         inicioEm: c.inicioEm ? new Date(c.inicioEm).toISOString() : null,
         fimEm: c.fimEm ? new Date(c.fimEm).toISOString() : null,
         imagemVersao: c.imagemVersao ?? 0,

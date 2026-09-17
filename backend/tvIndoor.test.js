@@ -281,3 +281,46 @@ test('playlist SÓ de board também funciona', () => {
   const p = programacaoPublica([{ id: 10, ordem: 0, tipo: 'MENU_BOARD', menuBoardId: 3 }], AGORA, { boards });
   assert.deepEqual(p.itens.map((i) => i.tipo), ['menu_board']);
 });
+
+// ── A duração é do ITEM ──────────────────────────────────────────────────────
+test('🔴 a duração do item manda sobre a do conteúdo; sem ela, vale a do conteúdo', () => {
+  /* A mesma arte em duas playlists pode merecer tempos diferentes — é decisão da
+     programação. E toda playlist que já existe tem a coluna nula: ela precisa continuar
+     tocando exatamente no ritmo de antes. */
+  const arte = { ...CONTEUDO, duracaoSegundos: 10 };
+  const p = programacaoPublica([
+    { id: 1, ordem: 0, tipo: 'IMAGEM', duracaoSegundos: 25, conteudo: arte },
+    { id: 2, ordem: 1, tipo: 'IMAGEM', duracaoSegundos: null, conteudo: { ...arte, id: 99 } },
+    { id: 3, ordem: 2, tipo: 'IMAGEM', conteudo: { ...arte, id: 98 } },
+  ], AGORA);
+  assert.deepEqual(p.itens.map((i) => i.duracaoSegundos), [25, 10, 10]);
+});
+
+test('🔴 duração ZERO no item não vira duração: a TV não pode trocar de tela sem parar', () => {
+  // `Number(null)` é 0. Um zero tratado como "tem duração" faria a parede piscar.
+  const p = programacaoPublica([{ id: 1, ordem: 0, duracaoSegundos: 0, conteudo: { ...CONTEUDO, duracaoSegundos: 12 } }], AGORA);
+  assert.equal(p.itens[0].duracaoSegundos, 12);
+});
+
+test('🔴 no MENU BOARD a duração do item entra DENTRO do board que viaja', () => {
+  /* O Carrossel divide o tempo do board entre os produtos. Se a duração nova viajasse ao
+     lado e a antiga continuasse dentro, a playlist trocaria de tela num ritmo e a fila
+     andaria noutro — os últimos produtos nunca chegariam ao centro. */
+  const board = { tipo: 'menu_board', id: 7, duracaoSegundos: 20, layout: 'CARROSSEL', produtos: [] };
+  const boards = new Map([['7', board]]);
+  const comItem = programacaoPublica([{ id: 1, ordem: 0, tipo: 'MENU_BOARD', menuBoardId: 7, duracaoSegundos: 35 }], AGORA, { boards });
+  assert.equal(comItem.itens[0].duracaoSegundos, 35);
+  // O board do mapa é compartilhado entre as telas da mesma requisição: não pode ser mutado.
+  assert.equal(board.duracaoSegundos, 20, 'o override não pode mexer no objeto original');
+
+  const semItem = programacaoPublica([{ id: 1, ordem: 0, tipo: 'MENU_BOARD', menuBoardId: 7 }], AGORA, { boards });
+  assert.equal(semItem.itens[0].duracaoSegundos, 20);
+});
+
+test('o admin recebe a duração PRÓPRIA do item, e null quando ele usa o padrão', () => {
+  const pl = playlistParaAdmin({ id: 1, nome: 'x', itens: [
+    { id: 10, ordem: 0, tipo: 'IMAGEM', duracaoSegundos: 25, conteudo: CONTEUDO },
+    { id: 11, ordem: 1, tipo: 'IMAGEM', duracaoSegundos: null, conteudo: { ...CONTEUDO, id: 50 } },
+  ] }, AGORA);
+  assert.deepEqual(pl.itens.map((i) => i.duracaoSegundos), [25, null]);
+});

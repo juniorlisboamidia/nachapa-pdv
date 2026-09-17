@@ -465,6 +465,36 @@ const REFERENCIA_DE = Object.freeze({ IMAGEM: 'conteudoId', MENU_BOARD: 'menuBoa
 export const MOTIVO_TIPO = 'TIPO_INVALIDO';
 export const MOTIVO_REFERENCIA = 'REFERENCIA_INVALIDA';
 
+/* ── A DURAÇÃO É DO ITEM ──────────────────────────────────────────────────────────────
+   Quanto tempo uma arte fica no ar é decisão editorial da PROGRAMAÇÃO, não atributo da
+   arte: a mesma imagem pode merecer 8 s na playlist do almoço e 20 s na da madrugada.
+   Enquanto a duração morava só no conteúdo, as duas playlists eram obrigadas a concordar.
+
+   `null` = "use o padrão do próprio conteúdo/board", que é como toda playlist existente
+   continua se comportando — a coluna nasce nula e nada muda até alguém preencher.
+
+   A faixa depende do tipo porque os pisos são diferentes por um motivo real: um menu board
+   tem nome e preço para ler (5 s), uma arte pode ser um cartaz de uma palavra (3 s).
+   VÍDEO não tem faixa: ele dura o que dura, e uma duração ali é um número que ninguém lê —
+   por isso é RECUSADA, e não ignorada (o banco tem o mesmo CHECK). */
+const FAIXA_DURACAO_ITEM = Object.freeze({
+  IMAGEM: Object.freeze([3, 120]),
+  MENU_BOARD: Object.freeze([DURACAO_MIN, DURACAO_MAX]),
+});
+export const MOTIVO_DURACAO_ITEM = 'DURACAO_DO_ITEM_INVALIDA';
+
+/* `undefined`, `null` e `''` são AUSÊNCIA (a tela manda vazio quando o gestor apaga o
+   campo). ⚠️ A checagem vem antes do `Number()`: `Number(null)` e `Number('')` são 0, e um
+   zero aqui viraria "duração inválida" para quem só quis voltar ao padrão. */
+function duracaoDoItem(tipo, bruto) {
+  if (bruto === undefined || bruto === null || bruto === '') return { ok: true, valor: null };
+  const faixa = FAIXA_DURACAO_ITEM[tipo];
+  if (!faixa) return { ok: false };
+  const n = Number(bruto);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n < faixa[0] || n > faixa[1]) return { ok: false };
+  return { ok: true, valor: n };
+}
+
 /* Valida a lista INTEIRA de itens de uma playlist — imagens e boards misturados, na ordem
    em que vão ao ar.
 
@@ -501,7 +531,9 @@ export function validarItensPlaylist(bruto, disponiveis) {
     if (vistos.has(chave)) return { ok: false, motivo: MOTIVO_ITENS };
     vistos.add(chave);
     if (!permitidos[tipo].has(id)) return { ok: false, motivo: MOTIVO_REFERENCIA };
-    saida.push({ tipo, [campo]: id });
+    const dur = duracaoDoItem(tipo, item.duracaoSegundos);
+    if (!dur.ok) return { ok: false, motivo: MOTIVO_DURACAO_ITEM };
+    saida.push({ tipo, [campo]: id, duracaoSegundos: dur.valor });
   }
   return { ok: true, itens: saida };
 }
@@ -516,6 +548,8 @@ export function itensParaGravar(playlistId, itens) {
     conteudoId: item.tipo === 'IMAGEM' ? item.conteudoId : null,
     menuBoardId: item.tipo === 'MENU_BOARD' ? item.menuBoardId : null,
     videoId: item.tipo === 'VIDEO' ? item.videoId : null,
+    // Nulo explícito, pelo mesmo motivo das referências: `undefined` some do insert.
+    duracaoSegundos: item.tipo === 'VIDEO' ? null : (item.duracaoSegundos ?? null),
     ordem: i,
   }));
 }

@@ -24,6 +24,12 @@ import { criarCupomCW, gerarCodigoCupom } from './cardapioCupom.js';
 import { extrairOrigem } from './grupoVipOrigem.js';
 import { buscarOrigensCW } from './cardapioOrigens.js';
 import { ordemDeRecalculo } from './custos/propagacaoCusto.js';
+// TV Indoor › a POSIÇÃO FÍSICA da tela: orientação declarada + rotação conferida pelo gestor.
+import {
+  validarOrientacao as tvValidarOrientacao, orientacaoDe as tvOrientacaoDe, rotacaoDe as tvRotacaoDe,
+  rotacaoInicial as tvRotacaoInicial, proximaRotacao as tvProximaRotacao, emAjuste as tvEmAjuste,
+  posicaoPublica as tvPosicaoPublica, MS_JANELA_AJUSTE as TV_MS_JANELA_AJUSTE,
+} from './tvOrientacao.js';
 // A regra ÚNICA de como o custo de um item vendido é apurado. Quem precisa decidir
 // "usa ficha técnica ou custo de compra?" pergunta aqui — nunca olhando o tipo.
 import {
@@ -8769,7 +8775,10 @@ app.get('/api/public/aparelho/eu', async (req, res) => {
   try {
     const ap = await exigirAparelho(req, res); if (!ap) return;
     const loja = await lojaDoAparelho(ap, req.body);
-    res.json({ aparelho: aparelhoPublico(ap), loja: lojaPublica(loja) });
+    // A TV aprende a própria posição JÁ AQUI: a programação só chega depois, e sem isto
+    // uma tela em pé nasceria deitada e giraria sozinha no primeiro minuto.
+    const posicao = ap.tipo === 'TV_INDOOR' ? tvPosicaoPublica(ap, Date.now()) : {};
+    res.json({ aparelho: { ...aparelhoPublico(ap), ...posicao }, loja: lojaPublica(loja) });
   } catch (err) { console.error('[public/aparelho eu]', err?.code ?? err?.name ?? 'erro'); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
 });
 
@@ -9328,7 +9337,9 @@ app.get('/api/public/aparelho/tv/programacao', async (req, res) => {
       },
     });
     const vazia = (extra) => res.json({
-      tela: { id: ap.id, nome: ap.nome },
+      // A posição viaja em TODA resposta, inclusive na vazia: é justamente com a tela
+      // sem playlist ("Configure uma playlist") que o gestor confere se ela saiu em pé.
+      tela: { id: ap.id, nome: ap.nome, ...tvPosicaoPublica(ap, agora) },
       playlist: null,
       aparencia,
       versaoApp: VERSAO_APP,
@@ -9347,7 +9358,7 @@ app.get('/api/public/aparelho/tv/programacao', async (req, res) => {
         id: true, nome: true,
         itens: {
           select: {
-            id: true, ordem: true, tipo: true,
+            id: true, ordem: true, tipo: true, duracaoSegundos: true,
             conteudo: { select: TV_CAMPOS },
             menuBoard: { select: MB_CAMPOS },
             video: { select: TV_VIDEO_CAMPOS },
@@ -9394,7 +9405,9 @@ app.get('/api/public/aparelho/tv/programacao', async (req, res) => {
 
     const loja = await lojaDoAparelho(ap, {}).catch(() => null);
     res.json({
-      tela: { id: ap.id, nome: ap.nome },
+      // A posição viaja em TODA resposta, inclusive na vazia: é justamente com a tela
+      // sem playlist ("Configure uma playlist") que o gestor confere se ela saiu em pé.
+      tela: { id: ap.id, nome: ap.nome, ...tvPosicaoPublica(ap, agora) },
       loja: loja ? lojaPublica(loja) : null,
       playlist: { id: playlist.id, nome: playlist.nome },
       aparencia,
@@ -10691,7 +10704,7 @@ const TV_PLAYLIST_INCLUDE = {
     // POLIMÓRFICO: cada item traz a referência que lhe cabe, e só ela. O `tipo` é o que
     // permite à mesma programação alternar arte promocional e menu board.
     select: {
-      id: true, ordem: true, tipo: true,
+      id: true, ordem: true, tipo: true, duracaoSegundos: true,
       conteudo: { select: TV_CAMPOS }, menuBoard: { select: MB_CABECALHO }, video: { select: TV_VIDEO_CAMPOS },
     },
     orderBy: [{ ordem: 'asc' }, { id: 'asc' }],
@@ -11553,6 +11566,17 @@ app.get('/api/tv-indoor/aparencia/logo', async (req, res) => {
 //
 // O filtro `tipo: 'TV_INDOOR'` é do SERVIDOR, não uma peneira na tela: pedir a lista
 // inteira e esconder metade é como um totem reaparece num contador ou numa ação em lote.
+// A tela no admin: o aparelho de sempre + a posição física. `function`, e não `const`,
+// de propósito: é içada, então não importa onde as rotas que a usam aparecem no arquivo.
+function tvTelaAdmin(d, agora) {
+  return {
+    ...aparelhoAdmin(d, agora),
+    orientacao: tvOrientacaoDe(d),
+    rotacao: tvRotacaoDe(d),
+    emAjuste: tvEmAjuste(d, new Date(agora).getTime()),
+  };
+}
+
 app.get('/api/tv-indoor/telas', async (req, res) => {
   if (!exigirAdmin(req, res)) return;
   const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return;
@@ -11564,8 +11588,77 @@ app.get('/api/tv-indoor/telas', async (req, res) => {
       where: { empresaId }, select: { id: true, nome: true }, orderBy: [{ nome: 'asc' }, { id: 'asc' }],
     });
     const agora = new Date();
-    res.json({ telas: ds.map((d) => aparelhoAdmin(d, agora)), playlists });
+    res.json({ telas: ds.map((d) => tvTelaAdmin(d, agora)), playlists });
   } catch (err) { console.error('[tv-indoor/telas]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+/* ── A POSIÇÃO FÍSICA DA TELA ─────────────────────────────────────────────────────────
+   Três rotas, e todas escopadas pelo mesmo trio `{ id, empresaId, tipo: 'TV_INDOOR' }`
+   num `updateMany`: o id vem do navegador, e sem o escopo na própria escrita um id de
+   outra loja giraria a parede de outra empresa.
+
+   Todas ABREM a janela de ajuste. Enquanto ela está aberta a TV consulta o servidor a
+   cada poucos segundos; fora dela, uma vez por minuto. Sem isso, conferir a posição seria
+   girar, esperar um minuto, olhar, girar de novo — três minutos para uma decisão de dez
+   segundos. */
+const tvAbrirAjuste = () => new Date(Date.now() + TV_MS_JANELA_AJUSTE);
+
+async function tvTelaDoAdmin(req, res) {
+  const empresaId = empresaDoAdmin(req, res); if (empresaId == null) return null;
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id <= 0) { res.status(400).json({ erro: 'ID_INVALIDO' }); return null; }
+  const d = await prisma.dispositivo.findFirst({ where: { id, empresaId, tipo: 'TV_INDOOR' } });
+  if (!d) { res.status(404).json({ erro: 'NAO_ENCONTRADO' }); return null; }
+  return { id, empresaId, d };
+}
+
+async function tvGravarPosicao(res, alvo, data) {
+  const { count } = await prisma.dispositivo.updateMany({
+    where: { id: alvo.id, empresaId: alvo.empresaId, tipo: 'TV_INDOOR' }, data,
+  });
+  if (!count) return res.status(404).json({ erro: 'NAO_ENCONTRADO' });
+  const d = await prisma.dispositivo.findFirst({ where: { id: alvo.id, empresaId: alvo.empresaId } });
+  return res.json({ ok: true, tela: tvTelaAdmin(d, new Date()) });
+}
+
+// Declarar a orientação. Trocar de orientação REINICIA a rotação no palpite mais provável
+// daquela posição; regravar a mesma não mexe em nada — senão reabrir o modal e salvar
+// desfaria a conferência que o gestor já fez.
+app.put('/api/tv-indoor/telas/:id/posicao', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const alvo = await tvTelaDoAdmin(req, res); if (!alvo) return;
+    const orientacao = tvValidarOrientacao(req.body?.orientacao);
+    if (!orientacao) return res.status(400).json({ erro: 'ENTRADA_INVALIDA', erros: [{ campo: 'orientacao', motivo: 'ORIENTACAO_INVALIDA' }] });
+    const mudou = orientacao !== tvOrientacaoDe(alvo.d);
+    await tvGravarPosicao(res, alvo, {
+      tvOrientacao: orientacao,
+      ...(mudou ? { tvRotacao: tvRotacaoInicial(orientacao) } : {}),
+      tvAjusteAte: tvAbrirAjuste(),
+    });
+  } catch (err) { console.error('[tv-indoor/telas posicao PUT]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// "Está errado, girar": avança para a próxima posição provável. O navegador NÃO manda os
+// graus — ele só diz "a que está aí não serve", e a ordem é do domínio.
+app.post('/api/tv-indoor/telas/:id/girar', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const alvo = await tvTelaDoAdmin(req, res); if (!alvo) return;
+    await tvGravarPosicao(res, alvo, {
+      tvRotacao: tvProximaRotacao(tvOrientacaoDe(alvo.d), tvRotacaoDe(alvo.d)),
+      tvAjusteAte: tvAbrirAjuste(),
+    });
+  } catch (err) { console.error('[tv-indoor/telas girar POST]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
+});
+
+// Abrir (ou encerrar) a janela de ajuste — chamada quando o modal de posição abre e fecha.
+app.post('/api/tv-indoor/telas/:id/ajuste', async (req, res) => {
+  if (!exigirAdmin(req, res)) return;
+  try {
+    const alvo = await tvTelaDoAdmin(req, res); if (!alvo) return;
+    await tvGravarPosicao(res, alvo, { tvAjusteAte: req.body?.encerrar === true ? null : tvAbrirAjuste() });
+  } catch (err) { console.error('[tv-indoor/telas ajuste POST]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
 });
 
 // Associar (ou desassociar, com `null`) a programação de uma tela.
@@ -11594,7 +11687,7 @@ app.put('/api/tv-indoor/telas/:id/playlist', async (req, res) => {
     });
     if (!count) return res.status(404).json({ erro: 'NAO_ENCONTRADO' });
     const d = await prisma.dispositivo.findFirst({ where: { id, empresaId } });
-    res.json({ ok: true, tela: aparelhoAdmin(d, new Date()) });
+    res.json({ ok: true, tela: tvTelaAdmin(d, new Date()) });
   } catch (err) { console.error('[tv-indoor/telas playlist PUT]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
 });
 

@@ -16,7 +16,7 @@ import {
   TETO_SELECAO, opcoesDoTemplate, exibicaoDoBoard,
   LAYOUTS, LAYOUT_IDS, LAYOUT_PADRAO, DURACAO_PADRAO, DURACAO_MIN, DURACAO_MAX,
   MOTIVO_NOME, MOTIVO_LAYOUT, MOTIVO_DURACAO, MOTIVO_ITENS, MOTIVO_LIMITE, MOTIVO_DESTAQUE,
-  MOTIVO_TIPO, MOTIVO_REFERENCIA, TIPOS_ITEM,
+  MOTIVO_TIPO, MOTIVO_REFERENCIA, MOTIVO_DURACAO_ITEM, TIPOS_ITEM,
   refValida, layoutValido, tetoDoLayout, validarConfiguracao, validarEntrada,
   indexarCatalogo, produtoParaTv, disponivel, resolverMenuBoard, menuBoardPublico,
   menuBoardParaAdmin, validarItensPlaylist, itensParaGravar,
@@ -327,9 +327,9 @@ test('a playlist aceita imagem e board misturados, na ordem', () => {
   ], MEUS);
   assert.equal(v.ok, true);
   assert.deepEqual(v.itens, [
-    { tipo: 'IMAGEM', conteudoId: 2 },
-    { tipo: 'MENU_BOARD', menuBoardId: 7 },
-    { tipo: 'IMAGEM', conteudoId: 1 },
+    { tipo: 'IMAGEM', conteudoId: 2, duracaoSegundos: null },
+    { tipo: 'MENU_BOARD', menuBoardId: 7, duracaoSegundos: null },
+    { tipo: 'IMAGEM', conteudoId: 1, duracaoSegundos: null },
   ]);
 });
 
@@ -341,7 +341,7 @@ test('playlist só de imagem e playlist só de board continuam valendo', () => {
 
 test('🔴 item sem tipo é IMAGEM — é o que faz a playlist antiga continuar valendo', () => {
   const v = validarItensPlaylist([{ conteudoId: 1 }], MEUS);
-  assert.deepEqual(v.itens, [{ tipo: 'IMAGEM', conteudoId: 1 }]);
+  assert.deepEqual(v.itens, [{ tipo: 'IMAGEM', conteudoId: 1, duracaoSegundos: null }]);
 });
 
 test('🔴 item polimórfico inválido é recusado: nunca dois, nunca nenhum', () => {
@@ -369,7 +369,7 @@ test('🔴 a playlist aceita os TRÊS tipos misturados, na ordem', () => {
   ], MEUS);
   assert.equal(v.ok, true);
   assert.deepEqual(v.itens.map((i) => i.tipo), ['IMAGEM', 'MENU_BOARD', 'VIDEO', 'IMAGEM', 'VIDEO']);
-  assert.deepEqual(v.itens[2], { tipo: 'VIDEO', videoId: 4 });
+  assert.deepEqual(v.itens[2], { tipo: 'VIDEO', videoId: 4, duracaoSegundos: null });
 });
 
 test('playlist só de VÍDEO também funciona', () => {
@@ -401,11 +401,64 @@ test('itensParaGravar numera pela POSIÇÃO e deixa as OUTRAS referências NULAS
     { tipo: 'IMAGEM', conteudoId: 1 },
     { tipo: 'VIDEO', videoId: 4 },
   ]), [
-    { playlistId: 3, tipo: 'MENU_BOARD', conteudoId: null, menuBoardId: 7, videoId: null, ordem: 0 },
-    { playlistId: 3, tipo: 'IMAGEM', conteudoId: 1, menuBoardId: null, videoId: null, ordem: 1 },
-    { playlistId: 3, tipo: 'VIDEO', conteudoId: null, menuBoardId: null, videoId: 4, ordem: 2 },
+    { playlistId: 3, tipo: 'MENU_BOARD', conteudoId: null, menuBoardId: 7, videoId: null, duracaoSegundos: null, ordem: 0 },
+    { playlistId: 3, tipo: 'IMAGEM', conteudoId: 1, menuBoardId: null, videoId: null, duracaoSegundos: null, ordem: 1 },
+    { playlistId: 3, tipo: 'VIDEO', conteudoId: null, menuBoardId: null, videoId: 4, duracaoSegundos: null, ordem: 2 },
   ]);
   assert.deepEqual(itensParaGravar(3, null), []);
+});
+
+// ── A duração é do ITEM ──────────────────────────────────────────────────────
+test('a duração do item é opcional, e a ausência tem três grafias', () => {
+  // A tela manda vazio quando o gestor apaga o campo; a API antiga não manda nada.
+  for (const vazio of [undefined, null, '']) {
+    const v = validarItensPlaylist([{ tipo: 'IMAGEM', conteudoId: 1, duracaoSegundos: vazio }], MEUS);
+    assert.equal(v.ok, true, `${JSON.stringify(vazio)} é ausência, não erro`);
+    assert.equal(v.itens[0].duracaoSegundos, null);
+  }
+});
+
+test('🔴 a faixa da duração depende do TIPO — e vídeo não tem nenhuma', () => {
+  /* Os pisos são diferentes por um motivo real: um menu board tem nome e preço para ler,
+     uma arte pode ser um cartaz de uma palavra. E vídeo dura o que dura — uma duração ali
+     é RECUSADA, não ignorada: ignorar deixaria a tela dizendo "salvo" com um número que
+     nunca vai valer, e o banco tem o mesmo CHECK. */
+  const img = (d) => validarItensPlaylist([{ tipo: 'IMAGEM', conteudoId: 1, duracaoSegundos: d }], MEUS);
+  const brd = (d) => validarItensPlaylist([{ tipo: 'MENU_BOARD', menuBoardId: 7, duracaoSegundos: d }], MEUS);
+  const vid = (d) => validarItensPlaylist([{ tipo: 'VIDEO', videoId: 4, duracaoSegundos: d }], MEUS);
+
+  assert.equal(img(3).itens[0].duracaoSegundos, 3);
+  assert.equal(img(120).ok, true);
+  assert.equal(img(2).motivo, MOTIVO_DURACAO_ITEM);
+  assert.equal(img(121).motivo, MOTIVO_DURACAO_ITEM);
+
+  assert.equal(brd(5).ok, true);
+  assert.equal(brd(4).motivo, MOTIVO_DURACAO_ITEM, 'o piso do board é 5, não 3');
+  assert.equal(brd(3).motivo, MOTIVO_DURACAO_ITEM);
+
+  assert.equal(vid(10).motivo, MOTIVO_DURACAO_ITEM);
+  assert.equal(vid(null).ok, true);
+});
+
+test('🔴 duração torta é recusada — inclusive o zero que `Number(null)` fabricaria', () => {
+  for (const ruim of [0, -5, 7.5, 'dez', NaN, Infinity, {}, []]) {
+    const v = validarItensPlaylist([{ tipo: 'IMAGEM', conteudoId: 1, duracaoSegundos: ruim }], MEUS);
+    assert.equal(v.motivo, MOTIVO_DURACAO_ITEM, `${JSON.stringify(ruim)} devia ser recusado`);
+  }
+  // String numérica inteira passa: é o que um <input type="number"> manda.
+  assert.equal(validarItensPlaylist([{ tipo: 'IMAGEM', conteudoId: 1, duracaoSegundos: '15' }], MEUS).itens[0].duracaoSegundos, 15);
+});
+
+test('itensParaGravar leva a duração do item — e NUNCA a de um vídeo', () => {
+  const linhas = itensParaGravar(3, [
+    { tipo: 'IMAGEM', conteudoId: 1, duracaoSegundos: 25 },
+    { tipo: 'VIDEO', videoId: 4, duracaoSegundos: 25 },
+    { tipo: 'MENU_BOARD', menuBoardId: 7 },
+  ]);
+  assert.equal(linhas[0].duracaoSegundos, 25);
+  // Defesa em profundidade: mesmo que algo torto chegue aqui, o insert não viola o CHECK.
+  assert.equal(linhas[1].duracaoSegundos, null);
+  assert.equal(linhas[2].duracaoSegundos, null, '`undefined` sumiria do insert; tem de ser nulo');
 });
 
 // ── V2: capacidade, exibição e compatibilidade ───────────────────────────────

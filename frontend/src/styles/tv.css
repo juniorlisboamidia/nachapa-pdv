@@ -26,6 +26,15 @@
   --tvmb-destaque: #d79e00;
   --tvmb-texto-destaque: #000000;
 
+  /* A LARGURA e a ALTURA da tela, como a folha inteira as enxerga.
+     `vw` e `vh` medem o painel FÍSICO, e numa TV em pé ele não girou — quem girou foi o
+     conteúdo. Uma fonte em `vw` continuaria proporcional aos 1920 de largura física
+     enquanto a largura lógica é 1080, e o título estouraria a tela. Por isso NENHUMA
+     regra abaixo usa a unidade crua: todas medem por estas duas, que trocam de papel
+     quando a raiz é girada (ver `.giro-90`). */
+  --tv-vw: 1vw;
+  --tv-vh: 1vh;
+
   position: fixed;
   inset: 0;
   overflow: hidden;
@@ -48,6 +57,33 @@
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   color: var(--tvmb-texto);
 }
+
+/* ── A TELA GIRADA ────────────────────────────────────────────────────────────────
+   Uma TV pendurada em pé continua recebendo 1920 × 1080 deitados: a box não sabe que o
+   painel foi virado, e o navegador também não. Quem gira é esta folha.
+
+   Em 90 e 270 a raiz troca largura por altura e é centrada antes de girar — girar em
+   torno do canto a jogaria para fora do painel. As duas variáveis de medida trocam junto,
+   e é isso que faz título, logo e respiros saírem proporcionais à tela EM PÉ.
+
+   Em 180 nada troca: é a TV deitada de ponta-cabeça, comum em suporte de teto.
+
+   Sem classe (rotação 0) nenhuma destas regras existe para a TV — que é o caso de toda
+   parede instalada antes desta frente. */
+.tv-raiz.giro-90,
+.tv-raiz.giro-270 {
+  --tv-vw: 1vh;
+  --tv-vh: 1vw;
+  inset: auto;
+  top: 50%;
+  left: 50%;
+  width: 100vh;
+  width: 100dvh;
+  height: 100vw;
+}
+.tv-raiz.giro-90 { transform: translate(-50%, -50%) rotate(90deg); }
+.tv-raiz.giro-270 { transform: translate(-50%, -50%) rotate(270deg); }
+.tv-raiz.giro-180 { transform: rotate(180deg); }
 
 /* A ARTE. `cover` porque o formato recomendado é 16:9 numa TV 16:9 — nesse caso
    ele não corta nada. Quando a arte vem noutra proporção, a escolha é entre
@@ -107,45 +143,45 @@
   grid-auto-flow: row;
   align-content: center;
   justify-items: center;
-  gap: clamp(14px, 2.2vh, 30px);
-  padding: clamp(24px, 4vh, 64px);
+  gap: clamp(14px, calc(2.2 * var(--tv-vh)), 30px);
+  padding: clamp(24px, calc(4 * var(--tv-vh)), 64px);
   text-align: center;
 }
-.tv-cfg-marca { display: flex; align-items: center; gap: clamp(10px, 1.2vw, 18px); }
-.tv-cfg-icone { width: clamp(34px, 3.4vw, 58px); height: clamp(34px, 3.4vw, 58px); border-radius: 10px; display: block; }
+.tv-cfg-marca { display: flex; align-items: center; gap: clamp(10px, calc(1.2 * var(--tv-vw)), 18px); }
+.tv-cfg-icone { width: clamp(34px, calc(3.4 * var(--tv-vw)), 58px); height: clamp(34px, calc(3.4 * var(--tv-vw)), 58px); border-radius: 10px; display: block; }
 .tv-cfg-produto {
   font-family: var(--tvmb-fonte-display, inherit);
   font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
-  font-size: clamp(20px, 2.1vw, 36px);
+  font-size: clamp(20px, calc(2.1 * var(--tv-vw)), 36px);
 }
 /* O simbolo e' desenhado com traco, nao preenchido: numa TV, uma silhueta cheia deste
    tamanho pesa mais que o titulo e rouba a leitura. Só o play e' solido. */
 .tv-cfg-simbolo {
-  width: clamp(72px, 7vw, 120px); height: clamp(72px, 7vw, 120px);
+  width: clamp(72px, calc(7 * var(--tv-vw)), 120px); height: clamp(72px, calc(7 * var(--tv-vw)), 120px);
   fill: none; stroke: #71717a; stroke-width: 3.4;
   stroke-linecap: round; stroke-linejoin: round;
-  margin-top: clamp(6px, 1.4vh, 18px);
+  margin-top: clamp(6px, calc(1.4 * var(--tv-vh)), 18px);
 }
 .tv-cfg-simbolo .cheio { fill: #71717a; stroke-width: 2; }
 .tv-cfg-tit {
   margin: 0;
   font-family: var(--tvmb-fonte-display, inherit);
   font-weight: 900; line-height: 1.1;
-  font-size: clamp(34px, 4.4vw, 76px);
+  font-size: clamp(34px, calc(4.4 * var(--tv-vw)), 76px);
 }
 .tv-cfg-sub {
   margin: 0; max-width: 34ch; line-height: 1.45;
-  color: #52525b; font-size: clamp(16px, 1.7vw, 30px);
+  color: #52525b; font-size: clamp(16px, calc(1.7 * var(--tv-vw)), 30px);
 }
 /* Com quatro TVs na loja, esta linha e' o que diz ao gestor QUAL delas ele esta' vendo. */
 .tv-cfg-eu {
-  margin-top: clamp(8px, 1.6vh, 22px);
-  color: #71717a; font-size: clamp(14px, 1.4vw, 24px);
+  margin-top: clamp(8px, calc(1.6 * var(--tv-vh)), 22px);
+  color: #71717a; font-size: clamp(14px, calc(1.4 * var(--tv-vw)), 24px);
 }
 
 .tv-institucional {
   background: var(--tvmb-fundo);
-  gap: clamp(20px, 3vh, 48px);
+  gap: clamp(20px, calc(3 * var(--tv-vh)), 48px);
   grid-auto-flow: row;
   align-content: center;
 }
@@ -158,13 +194,13 @@
 .tv-logo-placa {
   background: #fff;
   border-radius: 18px;
-  padding: clamp(14px, 2.2vh, 28px);
+  padding: clamp(14px, calc(2.2 * var(--tv-vh)), 28px);
   display: block;
 }
 
 .tv-logo {
-  max-width: min(46vw, 620px);
-  max-height: 40vh;
+  max-width: min(calc(46 * var(--tv-vw)), 620px);
+  max-height: calc(40 * var(--tv-vh));
   object-fit: contain;
   display: block;
 }
@@ -172,24 +208,24 @@
 /* Sem logo, a inicial da loja num disco — o mesmo recurso do totem quando a
    loja não subiu arte nenhuma. */
 .tv-inicial {
-  width: clamp(120px, 18vh, 260px);
-  height: clamp(120px, 18vh, 260px);
+  width: clamp(120px, calc(18 * var(--tv-vh)), 260px);
+  height: clamp(120px, calc(18 * var(--tv-vh)), 260px);
   border-radius: 50%;
   display: grid;
   place-items: center;
   background: var(--tvmb-destaque);
   color: var(--tvmb-texto-destaque);
   font-weight: 800;
-  font-size: clamp(56px, 9vh, 132px);
+  font-size: clamp(56px, calc(9 * var(--tv-vh)), 132px);
   line-height: 1;
 }
 
 .tv-nome {
-  font-size: clamp(22px, 3.4vh, 48px);
+  font-size: clamp(22px, calc(3.4 * var(--tv-vh)), 48px);
   font-weight: 700;
   letter-spacing: 0.02em;
   text-align: center;
-  max-width: 80vw;
+  max-width: calc(80 * var(--tv-vw));
   /* O texto de APOIO, e não o principal: numa parede, o texto grande na cor cheia
      brilha demais à noite — e é o token de apoio que existe para isso. */
   color: var(--tvmb-texto-2);
@@ -200,4 +236,11 @@
    que a parede e a tela de aprovação mostrem a mesma coisa. */
 .tv-board { width: 100%; height: 100%; display: block; }
 .tv-board .tvmb-caixa { width: 100%; height: 100%; aspect-ratio: auto; }
+/* O board é um artboard DEITADO (1920 × 1080) encolhido pela largura. Numa tela em pé ele
+   ocupa uma faixa — e sem isto ficaria colado no topo, com dois terços de tela vazia
+   embaixo. Centrado, lê como uma escolha, não como um defeito, até as composições em
+   retrato existirem.
+   Em 16:9 deitado a conta dá ZERO (metade da altura menos metade do board são iguais),
+   então nenhuma TV instalada muda de lugar. */
+.tv-board .tvmb-palco { top: calc(50% - 540px * var(--tvmb-escala)); }
 .tv-board.entrando { animation: tv-entrar 0.45s ease-out; }

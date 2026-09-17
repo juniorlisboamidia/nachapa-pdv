@@ -807,6 +807,18 @@ model Dispositivo {
   tvPlaylistId Int?
   tvPlaylist   TvPlaylist? @relation(fields: [tvPlaylistId], references: [id], onDelete: SetNull)
 
+  // A POSIÇÃO FÍSICA da TV (só TV_INDOOR). Uma tela pendurada em pé continua recebendo
+  // 1920 × 1080 deitados — a box não sabe que o painel girou — então a orientação é
+  // DECLARADA pelo gestor e a rotação é a correção que o player aplica por CSS.
+  // São duas colunas porque não dá para derivar uma da outra: em pé pode pedir 90 ou 270
+  // (o lado para o qual a TV foi virada), e deitada pode pedir 180 (suporte de teto).
+  // Nulo = PAISAGEM, como toda tela se comportava antes. Régua em tvOrientacao.js.
+  tvOrientacao String?
+  tvRotacao    Int       @default(0)
+  // Janela de AJUSTE: enquanto aberta, a TV consulta o servidor a cada poucos segundos em
+  // vez de uma vez por minuto — é o que faz o "girar" do gestor aparecer na parede na hora.
+  tvAjusteAte  DateTime?
+
   envios PedidoTotemEnvio[]
 
   // A GRADE SEMANAL desta tela. `tvPlaylistId` acima continua sendo o que era, e passa a se
@@ -1178,6 +1190,12 @@ model TvPlaylistItem {
   menuBoardId Int?
   videoId     Int?
   ordem       Int    @default(0)
+  // Quanto tempo ESTE item fica no ar NESTA playlist. A duração é decisão editorial da
+  // programação, não atributo da arte: a mesma imagem pode merecer 8 s na playlist do
+  // almoço e 20 s na da madrugada. Nulo = o padrão do próprio conteúdo/board (que é como
+  // toda playlist existente continua se comportando). Não se aplica a VÍDEO, que dura o
+  // que dura.
+  duracaoSegundos Int?
 
   playlist  TvPlaylist   @relation(fields: [playlistId], references: [id], onDelete: Cascade)
   conteudo  TvConteudo?  @relation(fields: [conteudoId], references: [id], onDelete: Cascade)

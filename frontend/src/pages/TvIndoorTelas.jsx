@@ -17,6 +17,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import api from '../services/api'
 import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
+import PosicaoDaTela from '../components/tv/PosicaoDaTela'
 import BotaoCopiar from '../components/BotaoCopiar'
 import { matrizQr } from '../lib/qr'
 
@@ -81,6 +82,9 @@ export default function TvIndoorTelas() {
   const [nome, setNome] = useState('')
   const [criando, setCriando] = useState(false)
   const [pareamento, setPareamento] = useState(null)
+  // O modal de POSIÇÃO guarda o id, e não a tela: cada giro devolve a tela atualizada, e o
+  // modal tem de desenhar sempre a versão que está na lista — nunca uma cópia velha.
+  const [posicionando, setPosicionando] = useState(null)
   const [pareando, setPareando] = useState(null)
   const [confirmacao, setConfirmacao] = useState(null) // { acao, tela }
   const [agindo, setAgindo] = useState(false)
@@ -294,6 +298,7 @@ export default function TvIndoorTelas() {
                       <div className="apr-nome">{t.nome}</div>
                       <div className="apr-meta">
                         {!t.ativo && <span className="badge badge-gray">Desativada</span>}
+                        <span className="badge badge-slate">{t.orientacao === 'RETRATO' ? 'Em pé' : 'Deitada'}</span>
                         <span className="apr-meta-txt">criada em {dataHora(t.criadoEm)}</span>
                       </div>
                     </td>
@@ -336,6 +341,9 @@ export default function TvIndoorTelas() {
                     </td>
                     <td>
                       <div className="apr-acoes">
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setPosicionando(t.id)}>
+                          Posição
+                        </button>
                         <button type="button" className="btn btn-secondary btn-sm" disabled={pareando === t.id} onClick={() => parear(t)}>
                           {pareando === t.id ? 'Gerando…' : (t.pareado ? 'Parear de novo' : 'Parear')}
                         </button>
@@ -357,6 +365,17 @@ export default function TvIndoorTelas() {
           </table>
         </div>
       )}
+
+      {(() => {
+        const alvo = posicionando === null ? null : telas.find((t) => t.id === posicionando)
+        return alvo ? (
+          <PosicaoDaTela
+            tela={alvo}
+            aoAtualizar={(nova) => setTelas((ts) => ts.map((t) => (t.id === nova.id ? nova : t)))}
+            aoFechar={() => setPosicionando(null)}
+          />
+        ) : null
+      })()}
 
       <ConfirmDialog
         open={!!confirmacao}

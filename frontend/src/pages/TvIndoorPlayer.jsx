@@ -44,6 +44,7 @@ import { aplicar as aplicarTemaTv } from '../components/tvIndoorTema'
    venha daqui decide o que tocar, e se este módulo inteiro parasse, o player seguiria
    igual. Ele não tem timer: quem leva o snapshot é o heartbeat que já existia. */
 import * as telemetria from '../components/tvTelemetria'
+import { MS_AJUSTE, classeDoGiro, msRestantesDeAjuste, rotacaoValida } from '../components/tvPosicao.js'
 import '../styles/tv.css'
 
 // A programação se refaz a cada minuto: é o que faz uma troca no PDV aparecer na parede
@@ -105,6 +106,15 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
      deixar de repetir, exatamente como a troca de grade. */
   const versaoAppRef = useRef(null)
   const [recarregar, setRecarregar] = useState(false)
+  /* A POSIÇÃO FÍSICA da tela. Uma TV pendurada em pé continua recebendo a imagem deitada —
+     a box não sabe que o painel girou — então quem gira o conteúdo é o player, com os
+     graus que o gestor conferiu olhando para a parede.
+
+     Nasce do `/eu` (que chega antes da programação) para o primeiro quadro não sair
+     deitado e girar sozinho um minuto depois. Primitivos, e não um objeto: o refresh de
+     cada minuto traz o mesmo valor, e `setState` com o mesmo primitivo não redesenha. */
+  const [rotacao, setRotacao] = useState(() => rotacaoValida(aparelho?.rotacao) ?? 0)
+  const [ajusteAte, setAjusteAte] = useState(() => (typeof aparelho?.ajusteAte === 'string' ? aparelho.ajusteAte : null))
   // Guarda o desvio entre refreshes: a agenda continua correta mesmo se um refresh falhar.
   const desvioRef = useRef(0)
   const raizRef = useRef(null)
@@ -123,6 +133,17 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
         // anterior (ou uma resposta degradada) apagaria a identidade da loja da parede.
         if (nova?.aparencia?.tokens) setAparencia(nova.aparencia)
         desvioRef.current = desvioDoRelogio(nova?.agoraServidor, Date.now())
+
+        /* A posição é aplicada AQUI, antes de qualquer saída antecipada. Com um vídeo no
+           ar e a playlist mudando, a programação nova fica guardada em `pendente` — e se a
+           rotação esperasse junto, o gestor apertaria "girar" e a parede só responderia
+           quando o filme acabasse, o que lê como "o botão não funciona".
+
+           Só quando o servidor DISSE uma rotação: ausência (servidor antigo, resposta
+           degradada) mantém o que a parede já tem, em vez de desvirar uma tela em pé. */
+        const giro = rotacaoValida(nova?.tela?.rotacao)
+        if (giro !== null) setRotacao(giro)
+        setAjusteAte(typeof nova?.tela?.ajusteAte === 'string' ? nova.tela.ajusteAte : null)
 
         /* TROCA DE GRADE COM VÍDEO NO AR. A playlist efetiva mudou enquanto um filme toca:
            a programação nova espera o `ended` em vez de cortar no meio. É a mesma regra do
@@ -170,6 +191,21 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
       // A falha é REGISTRADA para o diagnóstico, e só isso: a parede não muda por causa dela.
       .catch(() => { telemetria.falhou(telemetria.FALHAS.PROGRAMACAO) })
   }, [])
+
+  /* JANELA DE AJUSTE: enquanto o gestor confere a posição da tela, a TV consulta a cada
+     poucos segundos em vez de uma vez por minuto — senão cada "girar" levaria um minuto
+     para aparecer e a conferência viraria três minutos de espera.
+
+     O `setTimeout` que encerra é o cinto de segurança: se a rede cair no meio da janela,
+     nenhuma resposta chega para limpar o `ajusteAte`, e sem ele a TV ficaria batendo no
+     servidor a cada 5 s para sempre. */
+  useEffect(() => {
+    const resta = msRestantesDeAjuste(ajusteAte, Date.now() + desvioRef.current)
+    if (resta <= 0) return undefined
+    const t = setInterval(buscar, MS_AJUSTE)
+    const fim = setTimeout(() => clearInterval(t), resta)
+    return () => { clearInterval(t); clearTimeout(fim) }
+  }, [ajusteAte, buscar])
 
   useEffect(() => {
     buscar()
@@ -399,6 +435,10 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
   // decoração — é o conteúdo — e continua acontecendo.
   const reduzido = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
 
+  // A classe do giro vai em TODAS as raízes — inclusive na tela sem playlist, que é
+  // justamente a que o gestor olha para conferir se a TV saiu em pé.
+  const giroCls = classeDoGiro(rotacao)
+
   /* SEM CONTEÚDO — e são dois estados diferentes, não um.
 
      A tela NUNCA CONFIGURADA (`playlist: null`) é a que o gestor está olhando agora, com
@@ -409,9 +449,9 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
      passa na frente é o cliente da loja. Ali a orientação seria um recado interno exposto
      ao público — por isso continua sendo o repouso institucional, calado. */
   if (!atual && programacao && !programacao.playlist) {
-    return <Configurar aparelho={aparelho} raizRef={raizRef} />
+    return <Configurar aparelho={aparelho} raizRef={raizRef} giro={giroCls} />
   }
-  if (!atual) return <Institucional loja={loja} aparelho={aparelho} aparencia={aparencia} raizRef={raizRef} />
+  if (!atual) return <Institucional loja={loja} aparelho={aparelho} aparencia={aparencia} raizRef={raizRef} giro={giroCls} />
 
   // MENU BOARD: a mesma casca, o mesmo temporizador, outro desenho. O board chega RESOLVIDO
   // do servidor (preço, promoção e selo prontos) — a TV não conhece regra do Cardápio Web.
@@ -421,7 +461,7 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
   // piscaria a tela a cada refresh de preço — exatamente o que não se quer numa parede.
   if (ehMenuBoard(atual)) {
     return (
-      <div className="tv-raiz" ref={raizRef}>
+      <div className={'tv-raiz' + giroCls} ref={raizRef}>
         <div key={`b${atual.id}`} className={'tv-board' + (reduzido ? '' : ' entrando')}>
           <MenuBoard board={atual} tokens={aparencia?.tokens} />
         </div>
@@ -434,7 +474,7 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
   // e o item seguinte ocupa este mesmo índice. Não há um "avançar" separado a chamar aqui.
   if (ehVideo(atual)) {
     return (
-      <div className="tv-raiz" ref={raizRef}>
+      <div className={'tv-raiz' + giroCls} ref={raizRef}>
         <VideoItem
           item={atual}
           // Com um item só, quem repete é o `loop` do elemento: um `ended` que avançasse
@@ -475,7 +515,7 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
     // A ARTE do gestor NÃO é tocada pela aparência: uma imagem 1920 × 1080 é exibida como
     // foi criada. O que a paleta pinta é o chão atrás dela — e `object-fit: cover` faz a
     // arte cobrir a tela inteira, então nem isso aparece. Nenhum véu, nenhum overlay.
-    <div className="tv-raiz" ref={raizRef}>
+    <div className={'tv-raiz' + giroCls} ref={raizRef}>
       {/* `key` por conteúdo: trocar o `src` do MESMO elemento deixaria a imagem anterior
           visível até a nova decodificar — um flash de arte velha a cada troca. Com key,
           cada peça é um elemento próprio. */}
@@ -514,10 +554,10 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
    Fundo CLARO de propósito, ao contrário do repouso institucional: é uma tela de trabalho,
    vista de perto na bancada, e não a parede em repouso vista de longe pelo cliente. A
    diferença visual também evita a confusão de achar que a TV "voltou" para cá sozinha. */
-function Configurar({ aparelho, raizRef }) {
+function Configurar({ aparelho, raizRef, giro = '' }) {
   const nome = (aparelho?.nome ?? '').trim()
   return (
-    <div className="tv-raiz tv-configurar" ref={raizRef}>
+    <div className={'tv-raiz tv-configurar' + giro} ref={raizRef}>
       <div className="tv-cfg-marca">
         <img className="tv-cfg-icone" src="/favicon.png" alt="" />
         <span className="tv-cfg-produto">TV Indoor</span>
@@ -542,13 +582,13 @@ function Configurar({ aparelho, raizRef }) {
   )
 }
 
-function Institucional({ loja, aparelho, aparencia, raizRef }) {
+function Institucional({ loja, aparelho, aparencia, raizRef, giro = '' }) {
   const nome = (loja?.nome ?? '').trim()
   const inicial = (nome || aparelho?.nome || '?').trim().charAt(0).toUpperCase()
   const propria = aparencia?.temLogoPersonalizada && aparencia?.logoUrl
   const daEmpresa = !propria && loja?.logoDataUrl
   return (
-    <div className="tv-raiz tv-institucional" ref={raizRef}>
+    <div className={'tv-raiz tv-institucional' + giro} ref={raizRef}>
       {propria ? <img className="tv-logo" src={aparencia.logoUrl} alt="" /> : null}
       {daEmpresa ? <img className="tv-logo tv-logo-placa" src={loja.logoDataUrl} alt="" /> : null}
       {!propria && !daEmpresa ? <div className="tv-inicial" aria-hidden="true">{inicial}</div> : null}

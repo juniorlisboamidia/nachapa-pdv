@@ -62,12 +62,16 @@ function textoAgenda(c) {
   return `Até ${f(c.fimEm)}`
 }
 
-const vazio = (limites) => ({
-  id: null, nome: '', duracaoSegundos: limites?.duracaoPadrao ?? 10,
+/* O TEMPO NA TELA não mora mais aqui. Quanto tempo uma arte fica no ar é decisão da
+   PROGRAMAÇÃO — a mesma imagem pode merecer 8 s numa playlist e 20 s noutra — então o
+   campo foi para a linha do item, em Playlists. O conteúdo continua tendo um valor padrão
+   no banco (é ele que vale quando o item não define o seu), só não é mais editado aqui. */
+const vazio = () => ({
+  id: null, nome: '',
   inicioEm: '', fimEm: '', imagem: null, previa: null,
 })
 const deConteudo = (c) => ({
-  id: c.id, nome: c.nome, duracaoSegundos: c.duracaoSegundos,
+  id: c.id, nome: c.nome,
   inicioEm: paraCampo(c.inicioEm), fimEm: paraCampo(c.fimEm),
   imagem: null, previa: c.imagemUrl,
 })
@@ -117,7 +121,6 @@ export default function TvIndoorConteudos() {
     try {
       const corpo = {
         nome: form.nome,
-        duracaoSegundos: Number(form.duracaoSegundos),
         inicioEm: paraIso(form.inicioEm),
         fimEm: paraIso(form.fimEm),
       }
@@ -170,7 +173,7 @@ export default function TvIndoorConteudos() {
             {medida.largura} × {medida.altura} px (16:9), até {limites?.imagemKb ?? 700} KB
           </span>
           <div className="ttm-cab-acao">
-            <button type="button" className="btn btn-primary btn-sm" disabled={ocupado} onClick={() => setEditando(vazio(limites))}>
+            <button type="button" className="btn btn-primary btn-sm" disabled={ocupado} onClick={() => setEditando(vazio())}>
               Novo conteúdo
             </button>
           </div>
@@ -188,7 +191,6 @@ export default function TvIndoorConteudos() {
                 <th style={{ width: 110 }}>Imagem</th>
                 <th>Nome</th>
                 <th>Situação</th>
-                <th className="ttm-nowrap">Duração</th>
                 <th>Agenda</th>
                 <th style={{ textAlign: 'right' }}>Ações</th>
               </tr>
@@ -209,7 +211,6 @@ export default function TvIndoorConteudos() {
                     </button>
                   </td>
                   <td><span className={'badge ' + STATUS[c.status].cor}>{STATUS[c.status].texto}</span></td>
-                  <td className="ttm-nowrap">{c.duracaoSegundos}s</td>
                   <td className="ttm-meta-txt">{textoAgenda(c)}</td>
                   <td style={{ textAlign: 'right' }}>
                     <div className="ttm-acoes">
@@ -353,21 +354,10 @@ function Editor({ valor, limites, ocupado, aoFechar, aoSalvar, aoAvisar }) {
               />
               {faltando.imagem ? <div className="ttm-erro-campo" role="alert">{faltando.imagem}</div> : null}
               <div className="ttm-dica">
-                <strong>{medida.largura} × {medida.altura} px</strong> (16:9 deitado, o formato da TV).
-                PNG, JPG ou WEBP, até {limites?.imagemKb ?? 700} KB — a imagem é reduzida antes de subir.
-                Arte noutra proporção é cortada nas bordas para preencher a tela.
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label" htmlFor="tvi-dur">Tempo na tela</label>
-              <input
-                id="tvi-dur" type="number" className="form-input" style={{ maxWidth: 140 }}
-                min={limites?.duracaoMin ?? 3} max={limites?.duracaoMax ?? 120}
-                value={form.duracaoSegundos} onChange={campo('duracaoSegundos')}
-              />
-              <div className="ttm-dica">
-                Segundos, de {limites?.duracaoMin ?? 3} a {limites?.duracaoMax ?? 120}. Só faz diferença quando a playlist tem mais de um conteúdo no ar.
+<strong>{medida.largura} × {medida.altura} px</strong> para TV deitada, ou{' '}
+                <strong>{medida.altura} × {medida.largura} px</strong> para TV em pé.
+                PNG, JPG ou WEBP, até {limites?.imagemKb ?? 700} KB — a imagem é reduzida antes de subir, sem mudar a proporção.
+                Arte no formato errado para a tela é cortada nas bordas para preenchê-la: uma arte deitada numa TV em pé perde os dois lados.
               </div>
             </div>
 

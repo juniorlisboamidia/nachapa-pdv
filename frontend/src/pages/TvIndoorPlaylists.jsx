@@ -43,6 +43,56 @@ const erroDe = (e, fallback) => {
 /* A duração do vídeo como rótulo. Ela é INFORMATIVA — veio do navegador de quem enviou, o
    servidor não mede vídeo — e quando não veio, a frase diz o que vai acontecer em vez de
    um travessão mudo: o vídeo toca inteiro de qualquer jeito. */
+/* O TEMPO NA TELA de um item, NESTA playlist.
+
+   A duração é decisão da programação, não atributo da arte: a mesma imagem pode merecer
+   8 s na playlist do almoço e 20 s na da madrugada. Por isso o campo mora aqui, na linha
+   do item, e não no cadastro do conteúdo.
+
+   Vazio = "use o padrão" (o valor do próprio conteúdo ou board), e o padrão aparece como
+   placeholder para o gestor saber o que está valendo sem precisar abrir outra tela.
+
+   Grava ao SAIR do campo ou no Enter — nunca a cada tecla: cada gravação regrava a
+   playlist inteira, e digitar "25" não pode virar duas idas ao servidor ("2", "25"), a
+   primeira delas com um valor que a régua recusa. */
+function TempoDoItem({ nome, proprio, padrao, min, disabled, aoMudar, aoRecusar }) {
+  const [rascunho, setRascunho] = useState(proprio === null ? '' : String(proprio))
+  const MAX = 120
+
+  function confirmar() {
+    const texto = rascunho.trim()
+    // ⚠️ Vazio é "voltar ao padrão" — e é conferido ANTES do Number(): Number('') é 0.
+    if (texto === '') { if (proprio !== null) aoMudar(null); return }
+    const n = Number(texto)
+    if (!Number.isInteger(n) || n < min || n > MAX) {
+      aoRecusar(`O tempo na tela vai de ${min} a ${MAX} segundos.`)
+      setRascunho(proprio === null ? '' : String(proprio))
+      return
+    }
+    if (n !== proprio) aoMudar(n)
+  }
+
+  return (
+    <label className="tvi-tempo" title="Quanto tempo este item fica no ar nesta playlist. Vazio usa o padrão.">
+      <input
+        type="number"
+        className="tvi-tempo-campo"
+        inputMode="numeric"
+        min={min}
+        max={MAX}
+        value={rascunho}
+        placeholder={String(padrao ?? '')}
+        disabled={disabled}
+        aria-label={`Tempo na tela de ${nome}, em segundos`}
+        onChange={(e) => setRascunho(e.target.value)}
+        onBlur={confirmar}
+        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur() } }}
+      />
+      <span className="tvi-tempo-un">s{proprio === null ? ' · padrão' : ''}</span>
+    </label>
+  )
+}
+
 function duracaoDoVideo(v) {
   const ms = Number(v?.duracaoMs)
   if (!Number.isFinite(ms) || ms <= 0) return 'toca até o fim'
@@ -155,8 +205,16 @@ export default function TvIndoorPlaylists() {
   // servidor tem em `tvMenuBoard.js`.
   const CAMPO_DE = { IMAGEM: 'conteudoId', MENU_BOARD: 'menuBoardId', VIDEO: 'videoId' }
   const pecaDoItem = (i) => (i.tipo === 'MENU_BOARD' ? i.board : i.tipo === 'VIDEO' ? i.video : i.conteudo)
+  /* ⚠️ A duração do item VIAJA em toda regravação. O servidor apaga e recria as linhas a
+     cada PUT (é o que torna a troca atômica), então o que não for mandado aqui deixa de
+     existir: sem este campo, subir, descer ou adicionar QUALQUER coisa zeraria os tempos
+     que o gestor definiu — calado, e só perceptível na parede dias depois. */
   const itensAtuais = () => (atual?.itens ?? [])
-    .map((i) => ({ tipo: i.tipo, [CAMPO_DE[i.tipo] ?? 'conteudoId']: pecaDoItem(i)?.id }))
+    .map((i) => ({
+      tipo: i.tipo,
+      [CAMPO_DE[i.tipo] ?? 'conteudoId']: pecaDoItem(i)?.id,
+      ...(i.tipo !== 'VIDEO' && typeof i.duracaoSegundos === 'number' ? { duracaoSegundos: i.duracaoSegundos } : {}),
+    }))
   const PREFIXO = { IMAGEM: 'i', MENU_BOARD: 'b', VIDEO: 'v' }
   const idDoItem = (i) => `${PREFIXO[i.tipo] ?? 'i'}${pecaDoItem(i)?.id}`
 
@@ -165,6 +223,13 @@ export default function TvIndoorPlaylists() {
     { tipo, [CAMPO_DE[tipo]]: id },
   ])
   const remover = (indice) => gravarItens(itensAtuais().filter((_, i) => i !== indice))
+  // `null` devolve o item ao padrão do próprio conteúdo: a chave some do corpo.
+  const mudarTempo = (indice, segundos) => gravarItens(itensAtuais().map((it, i) => {
+    if (i !== indice) return it
+    const semTempo = { ...it }
+    delete semTempo.duracaoSegundos
+    return segundos === null ? semTempo : { ...semTempo, duracaoSegundos: segundos }
+  }))
   const mover = (indice, passo) => {
     const itens = itensAtuais()
     const destino = indice + passo
@@ -294,7 +359,21 @@ export default function TvIndoorPlaylists() {
                               arquivo. Mostrar "10s" aqui seria mentira. */}
                           {video
                             ? <><span className="badge badge-slate">Vídeo</span><span>{duracaoDoVideo(c)}</span></>
-                            : <span>{c.duracaoSegundos}s</span>}
+                            : (
+                              <TempoDoItem
+                                // A `key` leva o valor salvo: quando o servidor devolve a
+                                // playlist regravada, o campo renasce com ele em vez de
+                                // ficar mostrando o rascunho que o gestor digitou.
+                                key={`${idDoItem(item)}:${item.duracaoSegundos ?? 'p'}`}
+                                nome={c.nome}
+                                proprio={item.duracaoSegundos ?? null}
+                                padrao={c.duracaoSegundos}
+                                min={board ? 5 : 3}
+                                disabled={ocupado}
+                                aoMudar={(seg) => mudarTempo(i, seg)}
+                                aoRecusar={(msg) => setToast({ message: msg, type: 'error' })}
+                              />
+                            )}
                         </span>
                       </span>
                       <span className="tvi-item-acoes">
