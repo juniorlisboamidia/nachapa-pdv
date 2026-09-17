@@ -356,6 +356,18 @@
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
 }
+/* NENHUMA barra de rolagem aparece no quiosque — nem aqui, nem em sheet, nem em lista
+   nova que alguém acrescente depois. Num totem a barra não é controle: ninguém tem mouse
+   para arrastá-la, ela rouba uma tira da tela e denuncia que ali dentro existe uma página
+   web. A sidebar de categorias já escondia a dela uma a uma; a regra passa a valer para a
+   árvore inteira para o próximo elemento rolável não nascer com o problema de volta.
+
+   `scrollbar-width` NÃO é herdada, por isso o seletor universal em vez de só na raiz.
+
+   ⚠️ Esconder a barra tira a única pista de que a lista continua. Onde isso importa, a
+   pista tem de ser desenhada — é o que `.tq-lado-fade` faz na coluna de categorias. */
+.tq-raiz, .tq-raiz * { scrollbar-width: none; }
+.tq-raiz::-webkit-scrollbar, .tq-raiz *::-webkit-scrollbar { width: 0; height: 0; display: none; }
 .tq-centrado {
   flex: 1 1 auto;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -591,7 +603,7 @@
 }
 .tq-lado-rolagem {
   flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain;
-  scrollbar-width: none;
+  /* A barra some pela regra da raiz (ver .tq-conteudo), que vale para o quiosque todo. */
   /* Sem respiro em cima: a primeira categoria começa EXATAMENTE abaixo da linha que
      separa a logo da capa, e as duas colunas passam a partir do mesmo ponto. Um respiro
      ali fazia a lista flutuar em relação ao catálogo, que começa colado. */
@@ -612,7 +624,6 @@
   .tq-lado-rolagem { display: flex; flex-direction: column; justify-content: flex-start; }
   .tq-cat { flex: 1 0 auto; max-height: clamp(92px, 8.2vh, 136px); }
 }
-.tq-lado-rolagem::-webkit-scrollbar { display: none; }
 /* Aviso de que a lista continua — sem depender de barra de rolagem, que o
    tablet não mostra. */
 .tq-lado-fade {
