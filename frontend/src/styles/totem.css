@@ -1747,10 +1747,62 @@
   font-size: clamp(26px, 3.52vw, 38px);
 }
 .tq-tecla:active:not(:disabled) { background: var(--tq-superficie-3); transform: scale(0.97); }
+/* O FOCO precisa ser visível A TRÊS METROS. No tablet ninguém vê isto — o dedo vai
+   direto na tecla. Na TV, este anel é a única forma de saber onde o controle está, e um
+   contorno fino de 2px some na parede. */
+.tq-tecla:focus-visible,
+.tq-pareamento .tq-link:focus-visible {
+  outline: none;
+  border-color: var(--tq-amarelo);
+  background: var(--tq-superficie-3);
+  box-shadow: 0 0 0 5px rgba(215, 158, 0, 0.55);
+}
 .tq-tecla:disabled { opacity: 0.35; cursor: not-allowed; }
 .tq-tecla.apagar { font-family: var(--tq-fonte-display); font-weight: 900; font-size: clamp(15px, 2.04vw, 22px); }
 .tq-tecla.vazia { visibility: hidden; }
 .tq-pareamento .tq-link { color: var(--tq-amarelo); }
+
+/* ── PAREAMENTO NUMA TELA DEITADA (a TV) ──────────────────────────────────────────
+   A tela nasceu para o tablet do totem, em pé: cabeçalho, caixas e teclado empilhados
+   numa coluna só. Deitada, essa pilha não cabe — na TV o teclado aparecia cortado no 6,
+   e os dígitos 7, 8, 9 e 0 ficavam fora da tela. Sem eles não há como digitar código
+   nenhum.
+
+   Aqui a mesma pilha vira duas colunas: o texto e as caixas à esquerda, o teclado
+   inteiro à direita. As áreas são atribuídas por filho, e não por um wrapper novo, para
+   o layout em pé continuar exatamente como está — ele é o que está validado nas lojas.
+
+   ⚠️ Quem acrescentar um filho a `.tq-pareamento` precisa dar linha a ele aqui também,
+   senão ele cai numa linha implícita e desarruma a coluna. */
+@media (orientation: landscape) {
+  .tq-pareamento {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto auto auto auto;
+    align-content: center;
+    justify-items: start;
+    column-gap: clamp(28px, 5vw, 80px);
+    row-gap: clamp(10px, 1.6vh, 20px);
+    padding: clamp(18px, 3vh, 44px) clamp(24px, 4vw, 72px);
+    text-align: left;
+  }
+  .tq-pareamento-cabeca { grid-column: 1; grid-row: 1; max-width: 46ch; }
+  .tq-caixas { grid-column: 1; grid-row: 2; }
+  /* Os três avisos dividem a MESMA área: só um deles existe por vez. */
+  .tq-pareamento-status,
+  .tq-pareamento-erro { grid-column: 1; grid-row: 3; }
+  .tq-pareamento .tq-link { grid-column: 1; grid-row: 4; }
+  /* O teclado ocupa a coluna da direita inteira, e é o que decide a altura do bloco. */
+  .tq-teclado {
+    grid-column: 2;
+    grid-row: 1 / -1;
+    align-self: center;
+    grid-template-columns: repeat(3, clamp(84px, 8vw, 116px));
+    gap: clamp(8px, 1.2vh, 14px);
+  }
+  .tq-tecla { min-height: clamp(56px, 9vh, 86px); }
+  .tq-caixa { height: clamp(56px, 9vh, 80px); }
+}
 
 /* Menu possivelmente desatualizado (snapshot servido porque o HUB não respondeu).
    Faixa fina, nunca um bloqueio: o valor final é confirmado na revisão. */

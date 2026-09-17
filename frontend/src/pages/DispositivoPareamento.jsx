@@ -36,6 +36,9 @@ export default function DispositivoPareamento() {
   // Espelho do código digitado. O estado é a verdade da TELA; esta ref é a verdade do
   // AUTO-ENVIO, que não pode depender de um `codigo` lido antes do último dígito entrar.
   const codigoRef = useRef('')
+  const primeiraTeclaRef = useRef(null)
+  const focouRef = useRef(false)
+
   // Um envio por código digitado: o 6º dígito e o Enter do teclado físico não podem virar
   // dois pareamentos (o código é de uso único — o segundo POST já falharia).
   const enviadoRef = useRef(false)
@@ -93,6 +96,16 @@ export default function DispositivoPareamento() {
       setEnviando(false)
     }
   }
+
+  /* O foco entra na página assim que o teclado aparece — ver o comentário na tecla.
+     Só na PRIMEIRA vez: refocar a cada render roubaria o foco de quem já estivesse
+     navegando com o controle. */
+  useEffect(() => {
+    const el = primeiraTeclaRef.current
+    if (!el || focouRef.current) return
+    focouRef.current = true
+    el.focus()
+  })
 
   // Um dígito entra SEMPRE por aqui (teclado da tela ou físico). O valor de partida é a REF,
   // não o `codigo` do render: dois toques no mesmo instante partiriam do mesmo estado velho e
@@ -199,8 +212,23 @@ export default function DispositivoPareamento() {
         )}
 
         <div className="tq-teclado">
-          {TECLAS.map((t) => (
-            <button key={t} type="button" className="tq-tecla tq-disp tq-num" disabled={enviando} onClick={() => digitar(t)}>{t}</button>
+          {TECLAS.map((t, i) => (
+            <button
+              key={t}
+              type="button"
+              className="tq-tecla tq-disp tq-num"
+              /* A primeira tecla recebe o foco quando a tela abre. Num TABLET isso não
+                 muda nada — ninguém vê o anel de foco antes de tocar. Numa TV é o que
+                 faz o controle remoto funcionar: a WebView só começa a navegar entre os
+                 elementos depois que ALGUM deles tem foco, e sem isso as setas do
+                 controle não fazem absolutamente nada nesta página. O aparelho parece
+                 travado, e não há como parear a TV. */
+              ref={i === 0 ? primeiraTeclaRef : undefined}
+              disabled={enviando}
+              onClick={() => digitar(t)}
+            >
+              {t}
+            </button>
           ))}
           <button type="button" className="tq-tecla vazia" disabled aria-hidden="true" tabIndex={-1} />
           <button type="button" className="tq-tecla tq-disp tq-num" disabled={enviando} onClick={() => digitar('0')}>0</button>
