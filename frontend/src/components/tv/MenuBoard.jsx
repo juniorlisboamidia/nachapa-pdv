@@ -216,34 +216,41 @@ function Destaque({ produtos, destaqueId, ex }) {
 /* CARROSSEL — o único template em MOVIMENTO, e o único que não mostra tudo de uma vez.
 
    Ele é MONTRA, não cardápio. Quem quer consultar preço tem o tablet; esta parede existe
-   para fazer a pessoa olhar. Por isso ele não substitui Grade nem Lista: num cardápio
-   geral, esconder dois terços dos itens seria defeito — aqui é a proposta.
+   para fazer a pessoa olhar. Por isso não substitui Grade nem Lista: num cardápio geral,
+   esconder itens seria defeito — aqui é a proposta.
+
+   ── A COMPOSIÇÃO ────────────────────────────────────────────────────────────────────
+   Os produtos ficam lado a lado numa pista que desliza, e o do MEIO é o que está em
+   cena: maior, nítido, com nome e preço embaixo. Os vizinhos aparecem menores dos dois
+   lados, e os das pontas são cortados pela borda da tela — é esse corte que diz "a
+   fileira continua", e é o que faz o olho esperar o próximo em vez de achar que acabou.
 
    ── O TEMPO VEM DO BOARD, NÃO DE UMA CONFIGURAÇÃO NOVA ──────────────────────────────
-   O board fica no ar por `duracaoSegundos` e depois a playlist troca. Se o slide tivesse
+   O board fica no ar por `duracaoSegundos` e depois a playlist troca. Se o passo tivesse
    um tempo fixo, seis produtos a 4 s dariam 24 s dentro de um board de 20 s: os dois
-   últimos nunca apareceriam, e ninguém entenderia por quê — nem o gestor, que não tem como
-   ver isso no editor. Dividindo o tempo do board pelo número de produtos, cada um aparece
-   exatamente uma vez e o ciclo fecha quando o board sai.
+   últimos nunca chegariam ao meio, e ninguém entenderia por quê — nem o gestor, que no
+   editor vê a pista girando em laço, sem a troca que corta o ciclo na parede. Dividindo
+   o tempo do board pelos produtos, cada um passa pelo centro uma vez e o ciclo fecha
+   quando o board sai.
 
    O PISO existe para o caso extremo: 5 s (o mínimo) com seis produtos daria 833 ms por
-   slide, rápido demais para ler nome e preço de longe. Aí o ciclo não fecha e os últimos
-   ficam de fora — preferível a seis slides que ninguém consegue ler. O editor avisa quando
-   isso vai acontecer.
+   passo, rápido demais para ler de longe. Aí o ciclo não fecha e os últimos não chegam ao
+   centro — preferível a uma fileira que ninguém acompanha. O editor avisa quando isso
+   vai acontecer.
 
-   ── POR QUE TODOS OS SLIDES FICAM MONTADOS ──────────────────────────────────────────
-   Trocar por montagem/desmontagem descarregaria a foto e a próxima entrada começaria com
-   um quadro vazio enquanto o navegador busca a imagem de novo. Empilhados, todos já estão
-   decodificados; o que muda é qual deles está visível. Numa parede que roda o dia inteiro,
-   essa diferença é o que separa "passa" de "pisca". */
+   ── POR QUE A PISTA INTEIRA EXISTE DE UMA VEZ ───────────────────────────────────────
+   Todos os cards ficam montados e o que muda é o deslocamento da pista. Renderizar só os
+   visíveis obrigaria a montar o próximo no instante da troca, com a foto ainda
+   carregando — e o que se veria na parede seria um buraco entrando em cena. */
 export const MS_MINIMO_SLIDE = 1600
 
 function Carrossel({ produtos, ex, duracaoSegundos }) {
   const itens = produtos.slice(0, 6)
   const [indice, setIndice] = useState(0)
-  // O índice é normalizado na leitura, e não no estado: trocar a seleção do board no editor
-  // pode encurtar a lista enquanto o rodízio corre, e um índice velho apontaria para nada.
+  // Normalizado na leitura, não no estado: trocar a seleção no editor pode encurtar a
+  // lista enquanto a pista corre, e um índice velho apontaria para nada.
   const ativo = itens.length ? indice % itens.length : 0
+  const emCena = itens[ativo]
 
   useEffect(() => {
     if (itens.length < 2) return undefined
@@ -253,30 +260,36 @@ function Carrossel({ produtos, ex, duracaoSegundos }) {
     return () => clearInterval(t)
   }, [itens.length, duracaoSegundos])
 
+  if (!itens.length) return null
+
   return (
     <div className="tvmb-cr">
       <div className="tvmb-cr-palco">
-        {itens.map((p, i) => (
-          /* `aria-hidden` no que não está no ar: o board inteiro é decorativo para leitor de
-             tela, mas se um dia deixar de ser, seis nomes lidos de uma vez seriam ruído. */
-          <article
-            className={'tvmb-cr-slide' + (i === ativo ? ' ativo' : '')}
-            key={p.id}
-            aria-hidden={i !== ativo}
-          >
-            <Foto src={p.imagemUrl} alt="" />
-            <Selo selo={p.selo} mostrar={ex.fita} />
-            {/* O painel é um degradê sobre a foto, não uma faixa sólida: a foto é o que
-                vende, e cortar um terço dela para escrever por cima desperdiça o template. */}
-            <div className="tvmb-cr-txt">
-              <h3 className="tvmb-cr-nome">{p.nome}</h3>
-              {ex.descricao ? <Descricao texto={p.descricao} className="tvmb-desc-cr" /> : null}
-              <Preco produto={p} className="tvmb-preco-cr" />
-            </div>
-          </article>
-        ))}
+        {/* O índice vai para o CSS como número puro: é ele que a pista usa para se
+            deslocar, e é assim que a conta do passo mora num lugar só. */}
+        <div className="tvmb-cr-pista" style={{ '--tvmb-cr-i': ativo }}>
+          {itens.map((p, i) => (
+            <article
+              className={'tvmb-cr-card' + (i === ativo ? ' ativo' : '')}
+              key={p.id}
+              aria-hidden={i !== ativo}
+            >
+              <Foto src={p.imagemUrl} alt="" />
+              <Selo selo={p.selo} mostrar={ex.fita} />
+            </article>
+          ))}
+        </div>
       </div>
-      {/* Os PONTOS não são navegação — ninguém toca numa parede. Eles dizem "tem mais vindo",
+      {/* Nome e preço ficam FORA do card, embaixo do que está em cena. Dentro, eles
+          disputariam com a foto do produto — que neste template é o argumento inteiro.
+          A `key` troca o nó a cada produto, e é isso que faz o texto entrar junto com a
+          pista em vez de aparecer trocado no card antigo. */}
+      <div className="tvmb-cr-legenda" key={emCena.id}>
+        <h3 className="tvmb-cr-nome">{emCena.nome}</h3>
+        {ex.descricao ? <Descricao texto={emCena.descricao} className="tvmb-desc-cr" /> : null}
+        <Preco produto={emCena} className="tvmb-preco-cr" />
+      </div>
+      {/* Os pontos não são navegação — ninguém toca numa parede. Eles dizem quanto falta,
           que é o que segura o olhar de quem chegou no meio da rodada. */}
       {itens.length > 1 ? (
         <div className="tvmb-cr-pontos" aria-hidden="true">

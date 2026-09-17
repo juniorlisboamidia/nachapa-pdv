@@ -344,30 +344,32 @@ test('🔴 o editor conta o ritmo com o MESMO piso do renderer', () => {
   assert.equal(soltos.length, 1, 'o 1600 só pode existir na declaração da constante')
 })
 
-test('🔴 os slides ficam MONTADOS — trocar não descarrega a foto', () => {
-  /* Renderizar só o slide do momento faria a imagem seguinte ser buscada na hora da
-     troca, e a entrada começaria com um quadro vazio. Numa parede que roda o dia
-     inteiro, é a diferença entre "passa" e "pisca". O que muda é a classe, não a
-     existência do nó. */
+test('🔴 a pista inteira fica MONTADA — deslizar não descarrega foto', () => {
+  /* Renderizar só os cards visíveis obrigaria a montar o próximo no instante da troca,
+     com a foto ainda carregando — e o que entraria em cena seria um buraco. O que muda é
+     a classe e o deslocamento, nunca a existência do nó. */
   const codigo = semComentarios(renderer)
   const i = codigo.indexOf('function Carrossel(')
   const corpo = codigo.slice(i, codigo.indexOf('const TEMPLATES', i))
   assert.match(corpo, /itens\.map\(/, 'todos os itens são desenhados')
-  assert.match(corpo, /'tvmb-cr-slide' \+ \(i === ativo \? ' ativo' : ''\)/)
+  assert.match(corpo, /'tvmb-cr-card' \+ \(i === ativo \? ' ativo' : ''\)/)
   assert.equal(/i === ativo \?\s*<article/.test(corpo), false, 'nada de montar só o ativo')
 })
 
-test('🔴 o slide que SAI só fecha depois que o que entra abriu', () => {
-  /* Sem o atraso, os dois se mexem juntos: a imagem velha encolhe enquanto a nova cresce
-     e aparece uma fresta do fundo entre as duas. O atraso é o que faz a troca ler como
-     passagem em vez de piscada — e ele vive no CSS justamente para nenhum estado em JS
-     precisar lembrar qual era o slide anterior. */
-  const regra = css.slice(css.indexOf('.tvmb-cr-slide {'), css.indexOf('.tvmb-cr-slide .tvmb-selo'))
-  assert.match(regra, /transition: clip-path (\d+)ms/)
-  const [, dur] = regra.match(/transition: clip-path (\d+)ms/)
-  // O inativo espera a abertura inteira; o ativo não espera nada.
-  assert.match(regra, new RegExp('transition-delay: ' + dur + 'ms'))
-  assert.match(regra, /\.ativo \{[^}]*transition-delay: 0s/s)
+test('🔴 o card em cena cresce por SCALE, nunca por largura', () => {
+  /* A pista se desloca `i × passo`, e o passo é largura + vão. Se o card ativo ficasse
+     mais LARGO, cada produto teria um passo diferente e o alinhamento quebraria já no
+     segundo — o card em cena pararia torto, cada vez mais. `scale` não muda o layout,
+     então a conta continua valendo para os seis.
+
+     É por isso que a regra do ativo não pode ganhar `width` nem `flex-basis`. */
+  const ativo = css.slice(css.indexOf('.tvmb-cr-card.ativo {'), css.indexOf('.tvmb-cr-card .tvmb-selo'))
+  assert.match(ativo, /transform: scale\(var\(--tvmb-cr-zoom\)\)/)
+  assert.equal(/width|flex-basis|flex:/.test(ativo), false, 'o card em cena não pode mudar de tamanho no layout')
+  // E o deslocamento sai da conta única, não de um número escrito à mão por produto.
+  const pista = css.slice(css.indexOf('.tvmb-cr-pista {'), css.indexOf('.tvmb-cr-card {'))
+  assert.match(pista, /var\(--tvmb-cr-i, 0\) \* var\(--tvmb-cr-passo\)/)
+  assert.match(pista, /translate3d\(/, 'camada própria: a tela fica ligada por horas')
 })
 
 test('🔴 nenhum grid do board declara LINHAS sem declarar COLUNAS', () => {

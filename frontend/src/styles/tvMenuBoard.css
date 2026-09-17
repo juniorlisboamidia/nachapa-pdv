@@ -624,112 +624,111 @@
    quando alternam na mesma parede, a cada vinte segundos. */
 
 /* ── CARROSSEL ────────────────────────────────────────────────────────────
-   O único template em movimento. Seis produtos empilhados no mesmo palco; o que está
-   no ar tem a máscara aberta, os outros ficam fechados embaixo dele.
+   Uma FILEIRA que desliza, e não um slide que troca. O produto em cena fica no meio,
+   ampliado; os vizinhos aparecem menores dos dois lados e os das pontas são cortados
+   pela borda da tela — é o corte que diz "a fileira continua".
 
-   ── A COREOGRAFIA, E POR QUE ELA É SÓ CSS ─────────────────────────────────
-   O slide que ENTRA abre por cima (z-index) e imediatamente. O que SAI só começa a
-   fechar depois que a abertura terminou — é o que `transition-delay` faz aqui, e é o
-   detalhe que decide se a troca "passa" ou "pisca": sem ele os dois se mexem juntos, a
-   imagem velha encolhe enquanto a nova cresce, e aparece uma fresta do fundo entre as
-   duas. Com o atraso, a nova já cobriu tudo quando a velha se recolhe, e ninguém vê.
-   Nenhum estado extra em JS precisa saber qual era o slide anterior.
+   ── A CONTA DO DESLOCAMENTO ──────────────────────────────────────────────
+   Os números vivem aqui em cima e o resto deriva deles. Para o card `i` ficar no centro
+   do palco, a pista anda `metade do palco − metade do card − i × passo`. Como o palco
+   sangra até as bordas da tela, a metade dele é 960 (metade de 1920), e não 880.
 
-   ── CUSTO ────────────────────────────────────────────────────────────────
-   Só DOIS slides se mexem por troca; os outros quatro ficam parados com a máscara
-   fechada. Nada de `will-change` aqui de propósito: numa TV de loja, seis camadas
-   promovidas custam mais memória de vídeo do que a animação economiza — a mesma
-   conta que as esteiras do totem já cobraram. Se ainda assim engasgar na parede, o
-   plano B é trocar a máscara por `transform` + `opacity`, que é mais barato e mantém
-   a ideia: só estas duas regras mudam. */
-/* A FAIXA DE CONTEUDO, fixada.
-
-   O artboard e' `grid-template-rows: auto minmax(0, 1fr)`, e o cabecalho so' existe quando
-   ha' logo, titulo ou subtitulo. Sem ele, o corpo vira o PRIMEIRO filho e cai na linha 1 —
-   que e' `auto`, ou seja, a altura do proprio conteudo.
-
-   Os outros cinco templates nunca notaram: cards, linhas e fotos tem altura propria, entao
-   o `auto` resolve para algo. O Carrossel e' o primeiro cujo conteudo mede ZERO, porque
-   todos os slides sao `position: absolute` — o corpo inteiro ficava com 16px, a altura dos
-   pontinhos, e o palco com nada.
-
-   Fixando a linha 2, a altura passa a vir da faixa `1fr` com ou sem cabecalho. A regra e'
-   escopada no template de proposito: mudar `.tvmb-corpo` para todo mundo mexeria na
-   composicao dos cinco templates ja' validados em boards sem titulo. */
+   ⚠️ O card ativo cresce por `scale`, NUNCA por largura: `scale` não muda o layout, então
+   o passo continua constante e a conta acima continua valendo. Com largura maior, cada
+   card teria um passo diferente e o alinhamento quebraria no segundo produto. */
 .tvmb-tpl-carrossel .tvmb-corpo { grid-row: 2; }
 
 .tvmb-cr {
+  --tvmb-cr-card-l: 400px;
+  --tvmb-cr-card-a: 440px;
+  --tvmb-cr-vao: 44px;
+  --tvmb-cr-passo: calc(var(--tvmb-cr-card-l) + var(--tvmb-cr-vao));
+  --tvmb-cr-zoom: 1.34;
+
   display: grid;
-  /* ⚠️ A COLUNA precisa ser declarada — mesma armadilha do artboard, algumas centenas de
-     linhas acima, e aqui ela é ainda mais cruel: declarando só as linhas, a coluna
-     implícita vira `auto`, ou seja, o MAX-CONTENT dos filhos. E o max-content do palco é
-     ZERO, porque todos os slides são `position: absolute` e elemento absoluto não conta
-     para o tamanho intrínseco de quem o contém. A prévia mostrava os pontinhos e mais
-     nada: o palco existia, com largura de nada. */
+  /* ⚠️ A COLUNA precisa ser declarada: com ela implícita em `auto`, o grid mede o
+     MAX-CONTENT dos filhos, e a pista inteira (seis cards) é muito mais larga que a tela. */
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr) auto;
-  gap: 28px;
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  gap: 30px;
   min-height: 0;
   min-width: 0;
 }
+/* O palco SANGRA até as bordas da tela, cancelando o padding lateral do artboard (80px).
+   É o que permite os cards das pontas serem cortados pela borda, como na referência —
+   dentro do padding eles morreriam antes, e a fileira pareceria terminar ali. */
 .tvmb-cr-palco {
   position: relative;
   min-height: 0;
   min-width: 0;
+  margin: 0 -80px;
   overflow: hidden;
-  border-radius: 20px;
+  display: flex;
+  align-items: center;
+}
+.tvmb-cr-pista {
+  display: flex;
+  align-items: center;
+  gap: var(--tvmb-cr-vao);
+  /* `translate3d` põe a pista em camada própria: esta tela fica LIGADA por horas, e sem
+     isso o navegador repinta a faixa inteira a cada quadro do deslize. */
+  transform: translate3d(
+    calc(960px - var(--tvmb-cr-card-l) / 2 - var(--tvmb-cr-i, 0) * var(--tvmb-cr-passo)),
+    0, 0);
+  transition: transform 760ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.tvmb-cr-card {
+  position: relative;
+  flex: 0 0 auto;
+  width: var(--tvmb-cr-card-l);
+  height: var(--tvmb-cr-card-a);
+  border-radius: 22px;
+  overflow: hidden;
   background: var(--tvmb-superficie-2);
-  /* Contexto de empilhamento próprio: o z-index do slide ativo não escapa para o
-     cabeçalho do board. */
-  isolation: isolate;
+  /* Fora de cena o card recua: menor e mais apagado. É o contraste que faz o do meio ler
+     como "este aqui" sem precisar de moldura nem seta. */
+  transform: scale(1);
+  opacity: 0.55;
+  transition: transform 760ms cubic-bezier(0.4, 0, 0.2, 1), opacity 760ms linear;
 }
-.tvmb-cr-slide {
-  position: absolute;
-  inset: 0;
-  /* Fechado a partir do centro, nos dois sentidos — é a máscara que dá o efeito de
-     "abrir" em vez de deslizar. */
-  clip-path: inset(50% 0 50% 0);
-  transition: clip-path 820ms cubic-bezier(0.65, 0, 0.35, 1);
-  transition-delay: 820ms;
-}
-.tvmb-cr-slide.ativo {
-  clip-path: inset(0 0 0 0);
-  transition-delay: 0s;
+.tvmb-cr-card.ativo {
+  transform: scale(var(--tvmb-cr-zoom));
+  opacity: 1;
   z-index: 1;
+  border-radius: 26px;
 }
-.tvmb-cr-slide .tvmb-selo { top: 28px; left: 28px; font-size: 26px; padding: 10px 20px; }
-/* O painel é DEGRADÊ, não faixa sólida: a foto é o que vende neste template, e cortar
-   um terço dela para escrever por cima desperdiça exatamente o que ele tem de melhor. */
-.tvmb-cr-txt {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding: 90px 72px 56px;
+.tvmb-cr-card .tvmb-selo { top: 18px; left: 18px; font-size: 22px; padding: 8px 16px; }
+/* A legenda é do produto EM CENA, e entra junto com ele. A `key` no JSX recria o nó, e a
+   animação recomeça — sem ela, o texto trocaria no lugar, antes de a pista chegar. */
+.tvmb-cr-legenda {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  background: linear-gradient(to top,
-    rgba(0, 0, 0, 0.93) 0%,
-    rgba(0, 0, 0, 0.78) 42%,
-    rgba(0, 0, 0, 0) 100%);
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  min-width: 0;
+  animation: tvmb-cr-entra 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes tvmb-cr-entra {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .tvmb-cr-nome {
   margin: 0;
-  font-size: var(--tvmb-fs-nome-1);
+  font-size: var(--tvmb-fs-nome-2);
   font-weight: 900;
-  line-height: 1.02;
-  color: #fff;
-  /* Duas linhas e corta: um nome comprido não pode empurrar o preço para fora do palco. */
+  line-height: 1.05;
+  max-width: 24ch;
+  /* Duas linhas e corta: um nome comprido não pode empurrar o preço para fora da tela. */
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.tvmb-preco-cr .tvmb-preco-valor { font-size: var(--tvmb-fs-preco-1); }
+.tvmb-desc-cr { font-size: var(--tvmb-fs-desc-2); -webkit-line-clamp: 1; max-width: 40ch; }
+.tvmb-preco-cr { align-items: center; }
+.tvmb-preco-cr .tvmb-preco-valor { font-size: var(--tvmb-fs-preco-2); }
 .tvmb-preco-cr .tvmb-preco-de { font-size: var(--tvmb-fs-de); }
-/* Os pontos não são navegação — ninguém toca numa parede. Eles dizem "tem mais vindo",
-   que é o que segura o olhar de quem chegou no meio da rodada. */
 .tvmb-cr-pontos {
   display: flex;
   gap: 16px;
@@ -737,8 +736,8 @@
   align-items: center;
 }
 .tvmb-cr-pontos span {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   border-radius: 999px;
   background: var(--tvmb-linha);
   transition: background 300ms linear, transform 300ms ease;
@@ -747,10 +746,12 @@
   background: var(--tvmb-destaque);
   transform: scale(1.35);
 }
-/* Quem pediu menos movimento vê a mesma sequência de produtos, trocando sem a máscara
-   e sem o salto do ponto. O rodízio continua: ele é o conteúdo, não o enfeite. */
+/* Quem pediu menos movimento vê a mesma sequência de produtos, trocando sem o deslize e
+   sem o texto subindo. O rodízio continua: ele é o conteúdo, não o enfeite. */
 @media (prefers-reduced-motion: reduce) {
-  .tvmb-cr-slide { transition: none; }
+  .tvmb-cr-pista,
+  .tvmb-cr-card,
   .tvmb-cr-pontos span { transition: none; }
+  .tvmb-cr-legenda { animation: none; }
   .tvmb-cr-pontos span.ativo { transform: none; }
 }
