@@ -1387,6 +1387,19 @@ body.theme-dark .autocomplete-input {
   color: var(--d-text) !important;
 }
 body.theme-dark .form-input::placeholder { color: var(--d-text-3); }
+/* A LISTA do autocomplete no escuro.
+   O menu já recebia fundo escuro pela regra de superfícies, mas cada opção traz o seu
+   próprio `color: #333` da regra base — cor definida no elemento não herda do pai, então
+   o nome do insumo ficava cinza-escuro sobre fundo escuro, ilegível. E o realce era
+   `#fff7ed`, um creme quase branco que no escuro vira um bloco aceso no meio da lista.
+   Aqui o realce é o laranja do sistema, translúcido: marca a linha sem queimar a tela. */
+body.theme-dark .autocomplete-option { color: var(--d-text); }
+body.theme-dark .autocomplete-option:hover,
+body.theme-dark .autocomplete-option-active {
+  background: rgba(249, 115, 22, 0.18);
+  color: var(--d-text);
+}
+body.theme-dark .autocomplete-empty { color: var(--d-text-3); }
 body.theme-dark .form-input:focus { border-color: #f97316 !important; }
 
 /* Botões secundários / ícone */
