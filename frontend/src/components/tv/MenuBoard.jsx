@@ -300,17 +300,21 @@ function Carrossel({ produtos, ex, duracaoSegundos }) {
 
   return (
     <div className="tvmb-cr">
-      <div className="tvmb-cr-palco">
-        {/* O HALO atrás do produto em cena. A `key` é o id do produto, e é ela que faz a
-            luz reacender a cada troca: o nó é outro, então a animação recomeça do zero.
-            Sem a key, o elemento continuaria o mesmo e a animação rodaria uma vez só, na
-            montagem — o fundo acenderia no primeiro produto e ficaria parado para sempre.
+      {/* O HALO atrás do produto em cena. A `key` é o id do produto, e é ela que faz a luz
+          reacender a cada troca: o nó é outro, então a animação recomeça do zero. Sem a
+          key, o elemento continuaria o mesmo e a animação rodaria uma vez só, na montagem
+          — o fundo acenderia no primeiro produto e ficaria parado para sempre.
 
-            E ela não roda em laço de propósito: a animação termina num estado de repouso
-            e para. Numa parede ligada doze horas por dia, um brilho pulsando sozinho
-            cobra GPU o tempo inteiro sem ninguém estar olhando — a vida vem de reagir ao
-            que já acontece, não de se mexer por conta própria. */}
-        <span className="tvmb-cr-halo" key={'halo-' + emCena.id} aria-hidden="true" />
+          E ela não roda em laço de propósito: a animação termina num estado de repouso e
+          para. Numa parede ligada doze horas por dia, um brilho pulsando sozinho cobra GPU
+          o tempo inteiro sem ninguém estar olhando — a vida vem de reagir ao que já
+          acontece, não de se mexer por conta própria.
+
+          ⚠️ Ele fica FORA do palco. Dentro, o `overflow: hidden` que corta os cards nas
+          pontas cortava o halo junto, e o que era para ser uma sombra se esvaindo
+          terminava numa linha reta atravessando a tela. */}
+      <span className="tvmb-cr-halo" key={'halo-' + emCena.id} aria-hidden="true" />
+      <div className="tvmb-cr-palco">
         <div
           className={'tvmb-cr-pista' + (deslizando ? '' : ' parada')}
           style={{ '--tvmb-cr-i': n + passo }}

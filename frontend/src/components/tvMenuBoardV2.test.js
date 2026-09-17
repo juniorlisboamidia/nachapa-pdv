@@ -466,6 +466,17 @@ test('🔴 o fundo do Carrossel reage à troca — NUNCA anima em laço', () => 
      `infinite` aqui é exatamente o que este teste existe para impedir. */
   const codigo = semComentarios(renderer);
   assert.match(codigo, /className="tvmb-cr-halo" key=\{'halo-' \+ emCena\.id\}/);
+  /* ⚠️ O halo fica FORA do palco. Dentro, o `overflow: hidden` que corta os cards nas
+     pontas cortava o halo junto, e o que era para ser uma sombra se esvaindo terminava
+     numa linha reta atravessando a tela. */
+  const ordem = codigo.indexOf('tvmb-cr-halo') < codigo.indexOf('className="tvmb-cr-palco"');
+  assert.ok(ordem, 'o halo precisa vir ANTES do palco, como irmão — nunca dentro dele');
+
+  /* E a sintaxe do gradiente: forma e tamanho NÃO levam vírgula entre si. Com a vírgula
+     o gradiente inteiro é inválido, o navegador descarta a declaração e o halo some sem
+     erro nenhum no console. */
+  const ruins = [...css.matchAll(/radial-gradient\(([^,]+),\s*(circle|ellipse)/g)];
+  assert.deepEqual(ruins.map((m) => m[0]), [], 'gradiente com vírgula entre forma e tamanho é descartado');
 
   const halo = css.slice(css.indexOf('.tvmb-cr-halo {'), css.indexOf('@keyframes tvmb-cr-acende'));
   assert.match(halo, /animation: tvmb-cr-acende \d+ms [^;]*both;/);

@@ -663,9 +663,10 @@
   --tvmb-cr-passo: calc(var(--tvmb-cr-card-l) + var(--tvmb-cr-vao));
   --tvmb-cr-zoom: 1.36;
 
+  position: relative;
   display: grid;
   /* ⚠️ A COLUNA precisa ser declarada: com ela implícita em `auto`, o grid mede o
-     MAX-CONTENT dos filhos, e a pista inteira (seis cards) é muito mais larga que a tela. */
+     MAX-CONTENT dos filhos, e a pista inteira (dez cards) é muito mais larga que a tela. */
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr) auto auto;
   gap: 24px;
@@ -675,8 +676,13 @@
 /* O palco SANGRA até as bordas da tela, cancelando o padding lateral do artboard (80px).
    É o que permite os cards das pontas serem cortados pela borda, como na referência —
    dentro do padding eles morreriam antes, e a fileira pareceria terminar ali. */
+/* Os três irmãos do halo sobem: sem `z-index`, um elemento POSICIONADO (o halo) pinta
+   depois dos estáticos, e a luz passaria por cima do nome e do preço. */
+.tvmb-cr-palco,
+.tvmb-cr-legenda,
+.tvmb-cr-pontos { position: relative; z-index: 1; }
+
 .tvmb-cr-palco {
-  position: relative;
   min-height: 0;
   min-width: 0;
   margin: 0 -80px;
@@ -695,17 +701,28 @@
    `filter: blur` ficaria mais macio e custaria caro: cada quadro passaria por um passe de
    desfoque de 900px. O degradê radial dá a mesma borda suave pintando uma vez. */
 .tvmb-cr-halo {
+  /* Ancorado na RAIZ do template, e não no palco: lá dentro o `overflow: hidden` que
+     corta os cards nas pontas cortaria o halo junto, e a sombra terminaria numa linha
+     reta. Aqui ele só encontra a borda da tela, onde um corte é natural. */
   position: absolute;
   left: 50%;
-  top: 50%;
-  width: 940px;
-  height: 940px;
+  /* 38% e não 50%: o centro do template inclui legenda e pontos, e o produto em cena
+     está acima disso. A luz tem de nascer atrás dele. */
+  top: 38%;
+  z-index: 0;
+  width: 1500px;
+  height: 1180px;
   border-radius: 50%;
   pointer-events: none;
-  background: radial-gradient(circle,
-    rgba(255, 255, 255, 0.15) 0%,
-    rgba(255, 255, 255, 0.06) 42%,
-    rgba(255, 255, 255, 0) 70%);
+  /* As paradas ficam LONGE do fim de propósito: o último terço do raio é quase nada, e é
+     esse excesso que faz a borda sumir antes de qualquer coisa poder recortá-la. Um
+     gradiente que só chega a zero na beirada do elemento termina num anel visível. */
+  background: radial-gradient(ellipse closest-side,
+    rgba(255, 255, 255, 0.17) 0%,
+    rgba(255, 255, 255, 0.10) 26%,
+    rgba(255, 255, 255, 0.045) 46%,
+    rgba(255, 255, 255, 0.012) 64%,
+    rgba(255, 255, 255, 0) 82%);
   animation: tvmb-cr-acende 1500ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 @keyframes tvmb-cr-acende {
