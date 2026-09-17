@@ -1650,9 +1650,15 @@
      é cortado calado e o que se vê é o botão encostando nas duas pontas.
      Descontando o respiro da própria largura, sobra borda em qualquer tela — e o
      `align-items: center` do container continua centralizando. */
-  --tq-chamada-lado: clamp(24px, 5vw, 64px);
-  width: min(760px, calc(100% - var(--tq-chamada-lado) * 2));
+  --tq-chamada-lado: clamp(32px, 7vw, 92px);
+  width: min(640px, calc(100% - var(--tq-chamada-lado) * 2));
   margin: 0 0 clamp(40px, 7vh, 96px);
+  /* Menor nos dois eixos, e a FONTE não entra na conta — quem encolhe é a caixa.
+     Por isso o padding horizontal encolhe junto: mantendo os 5vw da base, a caixa mais
+     estreita apertaria o texto grande contra as beiradas e ele acabaria quebrando em
+     duas linhas, que é exatamente o que este ajuste não quer. */
+  min-height: clamp(80px, 9vh, 124px);
+  padding: clamp(14px, 1.6vh, 22px) clamp(20px, 3vw, 40px);
   /* Aqui a chamada é a única coisa tocável sobre a arte inteira, e disputa atenção com
      um cartaz feito para ser lido de longe: o corpo que serve na vitrine, onde ela
      divide a tela com título e subtítulo, fica pequeno neste contexto.
