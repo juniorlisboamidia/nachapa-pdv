@@ -638,6 +638,19 @@
    card teria um passo diferente e o alinhamento quebraria no segundo produto. */
 .tvmb-tpl-carrossel .tvmb-corpo { grid-row: 2; }
 
+/* O FUNDO do Carrossel: duas camadas PINTADAS, sem elemento e sem custo de composição.
+   A primeira acende o centro, onde o produto em cena está; a segunda escurece as bordas.
+   Juntas tiram o preto chapado e dão profundidade — o mesmo que uma textura faria, sem
+   uma camada cheia de ruído sendo repintada numa WebView de TV.
+
+   Duas camadas, e não uma, porque os dois temas precisam do efeito: no fundo escuro quem
+   trabalha é o clarão do centro; no claro, quem trabalha é o escurecimento das bordas. */
+.tvmb-tpl-carrossel {
+  background-image:
+    radial-gradient(ellipse 72% 58% at 50% 42%, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0) 68%),
+    radial-gradient(ellipse 104% 94% at 50% 50%, rgba(0, 0, 0, 0) 46%, rgba(0, 0, 0, 0.32) 100%);
+}
+
 .tvmb-cr {
   /* A conta da altura, para quem for mexer nestes números: o corpo tem ~944px (1080 menos
      o padding do artboard). Dele saem a legenda (~120px com o nome em UMA linha, ~168 com
@@ -671,12 +684,43 @@
   display: flex;
   align-items: center;
 }
+/* O HALO: a luz que reacende atrás do produto que acabou de chegar ao centro.
+
+   Ele NÃO roda em laço. A animação termina num estado de repouso (`both` segura o último
+   fotograma) e para até a próxima troca, que é quando a `key` no JSX recria o nó. Numa
+   parede ligada doze horas por dia, essa é a diferença entre um efeito que custa alguns
+   quadros a cada dois segundos e um que cobra GPU sem parar — e ninguém está olhando na
+   maior parte do tempo.
+
+   `filter: blur` ficaria mais macio e custaria caro: cada quadro passaria por um passe de
+   desfoque de 900px. O degradê radial dá a mesma borda suave pintando uma vez. */
+.tvmb-cr-halo {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 940px;
+  height: 940px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle,
+    rgba(255, 255, 255, 0.15) 0%,
+    rgba(255, 255, 255, 0.06) 42%,
+    rgba(255, 255, 255, 0) 70%);
+  animation: tvmb-cr-acende 1500ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes tvmb-cr-acende {
+  0% { opacity: 0.3; transform: translate(-50%, -50%) scale(0.88); }
+  20% { opacity: 1; transform: translate(-50%, -50%) scale(1.05); }
+  100% { opacity: 0.6; transform: translate(-50%, -50%) scale(1); }
+}
+
 .tvmb-cr-pista {
   display: flex;
   align-items: center;
   gap: var(--tvmb-cr-vao);
   /* `translate3d` põe a pista em camada própria: esta tela fica LIGADA por horas, e sem
      isso o navegador repinta a faixa inteira a cada quadro do deslize. */
+  position: relative;
   transform: translate3d(
     calc(960px - var(--tvmb-cr-card-l) / 2 - var(--tvmb-cr-i, 0) * var(--tvmb-cr-passo)),
     0, 0);
@@ -769,5 +813,7 @@
   .tvmb-cr-card,
   .tvmb-cr-pontos span { transition: none; }
   .tvmb-cr-legenda { animation: none; }
+  /* O halo continua existindo (é fundo, não movimento), só não pulsa ao chegar. */
+  .tvmb-cr-halo { animation: none; opacity: 0.6; transform: translate(-50%, -50%); }
   .tvmb-cr-pontos span.ativo { transform: none; }
 }

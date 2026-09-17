@@ -452,3 +452,28 @@ test('🔴 o Carrossel não depende de haver cabeçalho para ter altura', () => 
   const tela = css.slice(css.indexOf('.tvmb-tela {'), css.indexOf('.tvmb-cabeca'));
   assert.match(tela, /grid-template-rows: auto minmax\(0, 1fr\)/);
 });
+
+test('🔴 o fundo do Carrossel reage à troca — NUNCA anima em laço', () => {
+  /* Esta parede fica ligada doze horas por dia num aparelho fraco, e ninguém está olhando
+     na maior parte do tempo. Uma animação de fundo em laço cobra GPU o tempo inteiro sem
+     entregar nada; reagindo à troca, ela custa alguns quadros a cada dois segundos.
+
+     O que sustenta isso são duas peças, e as duas precisam existir: a `key` no halo (sem
+     ela o nó seria o mesmo, a animação rodaria uma vez na montagem e o fundo ficaria
+     parado para sempre depois do primeiro produto) e o `both`, que segura o último
+     fotograma num estado de repouso em vez de voltar ao início.
+
+     `infinite` aqui é exatamente o que este teste existe para impedir. */
+  const codigo = semComentarios(renderer);
+  assert.match(codigo, /className="tvmb-cr-halo" key=\{'halo-' \+ emCena\.id\}/);
+
+  const halo = css.slice(css.indexOf('.tvmb-cr-halo {'), css.indexOf('@keyframes tvmb-cr-acende'));
+  assert.match(halo, /animation: tvmb-cr-acende \d+ms [^;]*both;/);
+  assert.equal(/infinite|alternate/.test(halo), false, 'o halo não pode rodar em laço');
+
+  /* E o fundo em si é PINTADO (background-image), não uma camada extra: uma textura de
+     ruído de 1920×1080 seria repintada a cada quadro na WebView da TV. */
+  const fundo = css.slice(css.indexOf('.tvmb-tpl-carrossel {'), css.indexOf('.tvmb-cr {'));
+  assert.match(fundo, /background-image:\s*\n?\s*radial-gradient/);
+  assert.equal(/animation|url\(/.test(fundo), false, 'o fundo não anima nem carrega imagem');
+});
