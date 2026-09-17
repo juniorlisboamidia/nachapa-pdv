@@ -333,6 +333,13 @@ function Carrossel({ produtos, ex, duracaoSegundos }) {
           ))}
         </div>
       </div>
+      {/* NÃO há indicador de posição aqui, e a ausência é decisão, não esquecimento: numa
+          TV os pontos apagados somem — o cinza translúcido que funciona num monitor não
+          sobrevive ao painel — e sobra só o dourado do ativo, sozinho embaixo do preço.
+          Lido de longe, aquilo não diz "tem mais vindo": parece sujeira na tela, e rouba
+          atenção do que importa. Quem quiser trazer de volta precisa de um desenho que
+          sobreviva à TV, não do mesmo com outra cor. */}
+
       {/* Nome e preço ficam FORA do card, embaixo do que está em cena. Dentro, eles
           disputariam com a foto do produto — que neste template é o argumento inteiro.
           A `key` troca o nó a cada produto, e é isso que faz o texto entrar junto com a
@@ -342,15 +349,6 @@ function Carrossel({ produtos, ex, duracaoSegundos }) {
         {ex.descricao ? <Descricao texto={emCena.descricao} className="tvmb-desc-cr" /> : null}
         <Preco produto={emCena} className="tvmb-preco-cr" />
       </div>
-      {/* Os pontos não são navegação — ninguém toca numa parede. Eles dizem quanto falta,
-          que é o que segura o olhar de quem chegou no meio da rodada. */}
-      {n > 1 ? (
-        <div className="tvmb-cr-pontos" aria-hidden="true">
-          {itens.map((p, i) => (
-            <span key={p.id} className={i === ativo ? 'ativo' : undefined} />
-          ))}
-        </div>
-      ) : null}
     </div>
   )
 }

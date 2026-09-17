@@ -654,11 +654,11 @@
 .tvmb-cr {
   /* A conta da altura, para quem for mexer nestes números: o corpo tem ~944px (1080 menos
      o padding do artboard). Dele saem a legenda (~120px com o nome em UMA linha, ~168 com
-     duas), os pontos (14px) e dois vaos de 24px. Sobram ~762px para o palco, e o card em
-     cena ocupa `altura x zoom` = 680px. A folga de ~80px e' o que absorve o nome que
+     duas) e um vao de 24px. Sobram ~800px para o palco, e o card em cena ocupa
+     `altura x zoom` = 721px. A folga de ~80px e' o que absorve o nome que
      quebra em duas linhas sem o card ser cortado pelo `overflow` do palco. */
   --tvmb-cr-card-l: 400px;
-  --tvmb-cr-card-a: 500px;
+  --tvmb-cr-card-a: 530px;
   --tvmb-cr-vao: 44px;
   --tvmb-cr-passo: calc(var(--tvmb-cr-card-l) + var(--tvmb-cr-vao));
   --tvmb-cr-zoom: 1.36;
@@ -668,7 +668,7 @@
   /* ⚠️ A COLUNA precisa ser declarada: com ela implícita em `auto`, o grid mede o
      MAX-CONTENT dos filhos, e a pista inteira (dez cards) é muito mais larga que a tela. */
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: minmax(0, 1fr) auto auto;
+  grid-template-rows: minmax(0, 1fr) auto;
   gap: 24px;
   min-height: 0;
   min-width: 0;
@@ -679,8 +679,7 @@
 /* Os três irmãos do halo sobem: sem `z-index`, um elemento POSICIONADO (o halo) pinta
    depois dos estáticos, e a luz passaria por cima do nome e do preço. */
 .tvmb-cr-palco,
-.tvmb-cr-legenda,
-.tvmb-cr-pontos { position: relative; z-index: 1; }
+.tvmb-cr-legenda { position: relative; z-index: 1; }
 
 .tvmb-cr-palco {
   min-height: 0;
@@ -806,31 +805,12 @@
 .tvmb-preco-cr { align-items: center; }
 .tvmb-preco-cr .tvmb-preco-valor { font-size: var(--tvmb-fs-preco-2); }
 .tvmb-preco-cr .tvmb-preco-de { font-size: var(--tvmb-fs-de); }
-.tvmb-cr-pontos {
-  display: flex;
-  gap: 16px;
-  justify-content: center;
-  align-items: center;
-}
-.tvmb-cr-pontos span {
-  width: 14px;
-  height: 14px;
-  border-radius: 999px;
-  background: var(--tvmb-linha);
-  transition: background 300ms linear, transform 300ms ease;
-}
-.tvmb-cr-pontos span.ativo {
-  background: var(--tvmb-destaque);
-  transform: scale(1.35);
-}
 /* Quem pediu menos movimento vê a mesma sequência de produtos, trocando sem o deslize e
    sem o texto subindo. O rodízio continua: ele é o conteúdo, não o enfeite. */
 @media (prefers-reduced-motion: reduce) {
   .tvmb-cr-pista,
-  .tvmb-cr-card,
-  .tvmb-cr-pontos span { transition: none; }
+  .tvmb-cr-card { transition: none; }
   .tvmb-cr-legenda { animation: none; }
   /* O halo continua existindo (é fundo, não movimento), só não pulsa ao chegar. */
   .tvmb-cr-halo { animation: none; opacity: 0.6; transform: translate(-50%, -50%); }
-  .tvmb-cr-pontos span.ativo { transform: none; }
 }
