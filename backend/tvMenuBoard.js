@@ -73,6 +73,20 @@ export const TEMPLATES = Object.freeze({
     imagem: 'SEMPRE', descricao: 'OPCIONAL',
     resumo: 'Um produto só, em formato de campanha. Valoriza a promoção.',
   }),
+  /* CARROSSEL — o único template em MOVIMENTO, e o único que não mostra tudo de uma vez.
+
+     Ele é MONTRA, não cardápio: quem quer consultar preço tem o tablet; a parede aqui
+     existe para fazer a pessoa olhar. Por isso não substitui Grade nem Lista — num
+     cardápio geral, esconder dois terços dos itens seria defeito, e aqui é a proposta.
+
+     SEIS é o teto porque o tempo do board é finito: com os 20 s padrão dá ~3,3 s por
+     produto, que é o bastante para ver a foto e o preço sem pressa. Oito passaria a 2,5 s
+     e viraria efeito em vez de vitrine. */
+  CARROSSEL: Object.freeze({
+    id: 'CARROSSEL', rotulo: 'Carrossel', maximo: 6, destaque: false,
+    imagem: 'SEMPRE', descricao: 'OPCIONAL',
+    resumo: 'Até 6 produtos passando um a um, em tela cheia. Montra, não cardápio.',
+  }),
 });
 // `LAYOUTS` continua exportado com o nome antigo: internamente a coluna se chama `layout`, e
 // renomear tudo de uma vez seria trocar a fundação no meio da obra. Na UI, a palavra é

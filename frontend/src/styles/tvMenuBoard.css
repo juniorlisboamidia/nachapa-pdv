@@ -256,6 +256,7 @@
 .tvmb-desc-card { font-size: var(--tvmb-fs-desc-3); -webkit-line-clamp: 2; }
 .tvmb-desc-vt { font-size: var(--tvmb-fs-desc-2); -webkit-line-clamp: 2; }
 .tvmb-desc-of { font-size: var(--tvmb-fs-desc-1); -webkit-line-clamp: 3; }
+.tvmb-desc-cr { font-size: var(--tvmb-fs-desc-2); -webkit-line-clamp: 2; color: rgba(255, 255, 255, 0.82); }
 
 /* O CORPO é uma CÉLULA: o template ocupa exatamente ela, inteira, sem depender
    de `flex: 1 1 auto` no filho. Cada template só precisa saber desenhar dentro
@@ -621,3 +622,112 @@
 /* A safe area agora é a MESMA nos cinco (declarada em `.tvmb-tela`): cinco
    margens diferentes fariam os templates parecerem peças de sistemas distintos
    quando alternam na mesma parede, a cada vinte segundos. */
+
+/* ── CARROSSEL ────────────────────────────────────────────────────────────
+   O único template em movimento. Seis produtos empilhados no mesmo palco; o que está
+   no ar tem a máscara aberta, os outros ficam fechados embaixo dele.
+
+   ── A COREOGRAFIA, E POR QUE ELA É SÓ CSS ─────────────────────────────────
+   O slide que ENTRA abre por cima (z-index) e imediatamente. O que SAI só começa a
+   fechar depois que a abertura terminou — é o que `transition-delay` faz aqui, e é o
+   detalhe que decide se a troca "passa" ou "pisca": sem ele os dois se mexem juntos, a
+   imagem velha encolhe enquanto a nova cresce, e aparece uma fresta do fundo entre as
+   duas. Com o atraso, a nova já cobriu tudo quando a velha se recolhe, e ninguém vê.
+   Nenhum estado extra em JS precisa saber qual era o slide anterior.
+
+   ── CUSTO ────────────────────────────────────────────────────────────────
+   Só DOIS slides se mexem por troca; os outros quatro ficam parados com a máscara
+   fechada. Nada de `will-change` aqui de propósito: numa TV de loja, seis camadas
+   promovidas custam mais memória de vídeo do que a animação economiza — a mesma
+   conta que as esteiras do totem já cobraram. Se ainda assim engasgar na parede, o
+   plano B é trocar a máscara por `transform` + `opacity`, que é mais barato e mantém
+   a ideia: só estas duas regras mudam. */
+.tvmb-cr {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 28px;
+  min-height: 0;
+  min-width: 0;
+}
+.tvmb-cr-palco {
+  position: relative;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 20px;
+  background: var(--tvmb-superficie-2);
+  /* Contexto de empilhamento próprio: o z-index do slide ativo não escapa para o
+     cabeçalho do board. */
+  isolation: isolate;
+}
+.tvmb-cr-slide {
+  position: absolute;
+  inset: 0;
+  /* Fechado a partir do centro, nos dois sentidos — é a máscara que dá o efeito de
+     "abrir" em vez de deslizar. */
+  clip-path: inset(50% 0 50% 0);
+  transition: clip-path 820ms cubic-bezier(0.65, 0, 0.35, 1);
+  transition-delay: 820ms;
+}
+.tvmb-cr-slide.ativo {
+  clip-path: inset(0 0 0 0);
+  transition-delay: 0s;
+  z-index: 1;
+}
+.tvmb-cr-slide .tvmb-selo { top: 28px; left: 28px; font-size: 26px; padding: 10px 20px; }
+/* O painel é DEGRADÊ, não faixa sólida: a foto é o que vende neste template, e cortar
+   um terço dela para escrever por cima desperdiça exatamente o que ele tem de melhor. */
+.tvmb-cr-txt {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 90px 72px 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: linear-gradient(to top,
+    rgba(0, 0, 0, 0.93) 0%,
+    rgba(0, 0, 0, 0.78) 42%,
+    rgba(0, 0, 0, 0) 100%);
+}
+.tvmb-cr-nome {
+  margin: 0;
+  font-size: var(--tvmb-fs-nome-1);
+  font-weight: 900;
+  line-height: 1.02;
+  color: #fff;
+  /* Duas linhas e corta: um nome comprido não pode empurrar o preço para fora do palco. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tvmb-preco-cr .tvmb-preco-valor { font-size: var(--tvmb-fs-preco-1); }
+.tvmb-preco-cr .tvmb-preco-de { font-size: var(--tvmb-fs-de); }
+/* Os pontos não são navegação — ninguém toca numa parede. Eles dizem "tem mais vindo",
+   que é o que segura o olhar de quem chegou no meio da rodada. */
+.tvmb-cr-pontos {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  align-items: center;
+}
+.tvmb-cr-pontos span {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--tvmb-linha);
+  transition: background 300ms linear, transform 300ms ease;
+}
+.tvmb-cr-pontos span.ativo {
+  background: var(--tvmb-destaque);
+  transform: scale(1.35);
+}
+/* Quem pediu menos movimento vê a mesma sequência de produtos, trocando sem a máscara
+   e sem o salto do ponto. O rodízio continua: ele é o conteúdo, não o enfeite. */
+@media (prefers-reduced-motion: reduce) {
+  .tvmb-cr-slide { transition: none; }
+  .tvmb-cr-pontos span { transition: none; }
+  .tvmb-cr-pontos span.ativo { transform: none; }
+}

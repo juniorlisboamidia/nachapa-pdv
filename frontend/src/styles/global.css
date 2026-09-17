@@ -3993,7 +3993,18 @@ body.theme-dark .tvi-mon-cartao.off { background: rgba(239, 68, 68, 0.12); }
 .tvi-mini-tpl.tpl-lista { grid-template-rows: repeat(4, 1fr); }
 .tvi-mini-tpl.tpl-vitrine { grid-template-columns: repeat(3, 1fr); }
 .tvi-mini-tpl.tpl-oferta { grid-template-columns: 1fr; }
+/* Carrossel: um palco e tres pontos. A figura e' parada, entao quem diz "passa um de
+   cada vez, e tem mais" sao os pontos, nao o movimento. */
+.tvi-mini-tpl.tpl-carrossel { grid-template-columns: repeat(3, 1fr); grid-template-rows: 1fr 4px; }
+.tvi-mini-tpl.tpl-carrossel i.c { grid-column: span 3; }
+.tvi-mini-tpl.tpl-carrossel i.p { border-radius: 999px; }
 .tvi-mb-layout.on .tvi-mini-tpl { background: var(--brand-gold); }
+
+/* A dica que virou ALERTA: mesma voz e mesmo lugar da dica normal, so' que a cor diz
+   "isto muda o que vai ao ar". Nao e' um `.alert` porque nao e' um bloco a parte — e'
+   a mesma frase do campo, falando mais alto. */
+.ttm-dica-alerta { color: #b45309; font-weight: 600; }
+body.theme-dark .ttm-dica-alerta { color: #fbbf24; }
 
 .tvi-mb-switches { display: flex; flex-direction: column; gap: 8px; }
 .tvi-mb-switch { display: flex; align-items: center; gap: 10px; font-size: 13px; cursor: pointer; }

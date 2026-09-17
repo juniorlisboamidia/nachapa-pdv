@@ -213,7 +213,83 @@ function Destaque({ produtos, destaqueId, ex }) {
   )
 }
 
-const TEMPLATES = ['GRADE', 'DESTAQUE', 'LISTA', 'VITRINE', 'OFERTA']
+/* CARROSSEL — o único template em MOVIMENTO, e o único que não mostra tudo de uma vez.
+
+   Ele é MONTRA, não cardápio. Quem quer consultar preço tem o tablet; esta parede existe
+   para fazer a pessoa olhar. Por isso ele não substitui Grade nem Lista: num cardápio
+   geral, esconder dois terços dos itens seria defeito — aqui é a proposta.
+
+   ── O TEMPO VEM DO BOARD, NÃO DE UMA CONFIGURAÇÃO NOVA ──────────────────────────────
+   O board fica no ar por `duracaoSegundos` e depois a playlist troca. Se o slide tivesse
+   um tempo fixo, seis produtos a 4 s dariam 24 s dentro de um board de 20 s: os dois
+   últimos nunca apareceriam, e ninguém entenderia por quê — nem o gestor, que não tem como
+   ver isso no editor. Dividindo o tempo do board pelo número de produtos, cada um aparece
+   exatamente uma vez e o ciclo fecha quando o board sai.
+
+   O PISO existe para o caso extremo: 5 s (o mínimo) com seis produtos daria 833 ms por
+   slide, rápido demais para ler nome e preço de longe. Aí o ciclo não fecha e os últimos
+   ficam de fora — preferível a seis slides que ninguém consegue ler. O editor avisa quando
+   isso vai acontecer.
+
+   ── POR QUE TODOS OS SLIDES FICAM MONTADOS ──────────────────────────────────────────
+   Trocar por montagem/desmontagem descarregaria a foto e a próxima entrada começaria com
+   um quadro vazio enquanto o navegador busca a imagem de novo. Empilhados, todos já estão
+   decodificados; o que muda é qual deles está visível. Numa parede que roda o dia inteiro,
+   essa diferença é o que separa "passa" de "pisca". */
+export const MS_MINIMO_SLIDE = 1600
+
+function Carrossel({ produtos, ex, duracaoSegundos }) {
+  const itens = produtos.slice(0, 6)
+  const [indice, setIndice] = useState(0)
+  // O índice é normalizado na leitura, e não no estado: trocar a seleção do board no editor
+  // pode encurtar a lista enquanto o rodízio corre, e um índice velho apontaria para nada.
+  const ativo = itens.length ? indice % itens.length : 0
+
+  useEffect(() => {
+    if (itens.length < 2) return undefined
+    const bruto = (Number(duracaoSegundos) || 20) * 1000 / itens.length
+    const ms = Math.max(MS_MINIMO_SLIDE, Math.round(bruto))
+    const t = setInterval(() => setIndice((i) => i + 1), ms)
+    return () => clearInterval(t)
+  }, [itens.length, duracaoSegundos])
+
+  return (
+    <div className="tvmb-cr">
+      <div className="tvmb-cr-palco">
+        {itens.map((p, i) => (
+          /* `aria-hidden` no que não está no ar: o board inteiro é decorativo para leitor de
+             tela, mas se um dia deixar de ser, seis nomes lidos de uma vez seriam ruído. */
+          <article
+            className={'tvmb-cr-slide' + (i === ativo ? ' ativo' : '')}
+            key={p.id}
+            aria-hidden={i !== ativo}
+          >
+            <Foto src={p.imagemUrl} alt="" />
+            <Selo selo={p.selo} mostrar={ex.fita} />
+            {/* O painel é um degradê sobre a foto, não uma faixa sólida: a foto é o que
+                vende, e cortar um terço dela para escrever por cima desperdiça o template. */}
+            <div className="tvmb-cr-txt">
+              <h3 className="tvmb-cr-nome">{p.nome}</h3>
+              {ex.descricao ? <Descricao texto={p.descricao} className="tvmb-desc-cr" /> : null}
+              <Preco produto={p} className="tvmb-preco-cr" />
+            </div>
+          </article>
+        ))}
+      </div>
+      {/* Os PONTOS não são navegação — ninguém toca numa parede. Eles dizem "tem mais vindo",
+          que é o que segura o olhar de quem chegou no meio da rodada. */}
+      {itens.length > 1 ? (
+        <div className="tvmb-cr-pontos" aria-hidden="true">
+          {itens.map((p, i) => (
+            <span key={p.id} className={i === ativo ? 'ativo' : undefined} />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+const TEMPLATES = ['GRADE', 'DESTAQUE', 'LISTA', 'VITRINE', 'OFERTA', 'CARROSSEL']
 
 /* O que a tela mostra. Vem RESOLVIDO do servidor (`exibicaoDoBoard`) — o renderer não
    responde "a Lista mostra descrição?", ele desenha o que lhe disseram. Sem isto, a pergunta
@@ -229,6 +305,7 @@ function exibicaoDe(board, template) {
     fita: true,
     imagem: template !== 'LISTA',
     descricao: template === 'LISTA' || template === 'DESTAQUE',
+    // (CARROSSEL nasceu depois deste fallback; board antigo nunca tem esse layout.)
     descricaoSoNoDestaque: template === 'DESTAQUE',
   }
 }
@@ -270,6 +347,9 @@ export function MenuBoardTela({ board, logo }) {
         {template === 'VITRINE' ? <Vitrine produtos={produtos} ex={ex} /> : null}
         {template === 'OFERTA' ? <Oferta produtos={produtos} ex={ex} /> : null}
         {template === 'DESTAQUE' ? <Destaque produtos={produtos} destaqueId={board?.destaqueId} ex={ex} /> : null}
+        {template === 'CARROSSEL'
+          ? <Carrossel produtos={produtos} ex={ex} duracaoSegundos={board?.duracaoSegundos} />
+          : null}
       </div>
     </div>
   )

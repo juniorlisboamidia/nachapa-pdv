@@ -17,7 +17,7 @@ import { useCallback, useEffect, useState } from 'react'
 import api from '../services/api'
 import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
-import MenuBoard from '../components/tv/MenuBoard'
+import MenuBoard, { MS_MINIMO_SLIDE } from '../components/tv/MenuBoard'
 // O padrão de ação compacta do sistema (o mesmo dos Banners do Totem).
 import BotaoIcone from '../components/BotaoIcone'
 // O teto ABSOLUTO da seleção guardada — o mesmo do domínio, que é quem recusa na escrita.
@@ -281,6 +281,9 @@ function Miniatura({ id }) {
     LISTA: <><i className="l" /><i className="l" /><i className="l" /><i className="l" /></>,
     VITRINE: <><i className="v" /><i className="v" /><i className="v" /></>,
     OFERTA: <><i className="o" /></>,
+    // Um palco só e três pontos embaixo: é o desenho que diz "um de cada vez, e tem mais"
+    // sem precisar de movimento numa figura parada.
+    CARROSSEL: <><i className="c" /><i className="p" /><i className="p" /><i className="p" /></>,
   }
   return <span className={'tvi-mini-tpl tpl-' + id.toLowerCase()} aria-hidden="true">{blocos[id] ?? blocos.GRADE}</span>
 }
@@ -303,6 +306,25 @@ function Editor({ valor, layouts, identidade, limites, ocupado, aoFechar, aoSalv
 
   const regra = layouts.find((l) => l.id === form.layout) ?? { maximo: 8, destaque: false }
   const escolhidos = form.itens ?? []
+
+  /* O RITMO do carrossel, só quando ele é o template escolhido. A conta é a mesma do
+     renderer — o piso vem de lá, importado, para os dois nunca discordarem sobre quantos
+     produtos cabem no tempo. */
+  const ritmoCarrossel = (() => {
+    if (form.layout !== 'CARROSSEL') return null
+    const n = Math.min(escolhidos.length, regra.maximo ?? 6)
+    const duracao = Number(form.duracaoSegundos)
+    if (n < 2 || !Number.isFinite(duracao) || duracao <= 0) return null
+    const msPorSlide = (duracao * 1000) / n
+    if (msPorSlide >= MS_MINIMO_SLIDE) {
+      return { apertado: false, n, duracao, porSlide: (msPorSlide / 1000).toFixed(1).replace('.', ',') }
+    }
+    return {
+      apertado: true, n, duracao,
+      cabem: Math.max(1, Math.floor((duracao * 1000) / MS_MINIMO_SLIDE)),
+      sugerido: Math.ceil((n * MS_MINIMO_SLIDE) / 1000),
+    }
+  })()
 
   // Índice do catálogo por id, para resolver os escolhidos. Sem `useMemo` à mão: o React
   // Compiler está ligado neste projeto e escrever a memoização o faz desistir do arquivo.
@@ -489,6 +511,17 @@ function Editor({ valor, layouts, identidade, limites, ocupado, aoFechar, aoSalv
               <div className="ttm-dica">
                 Segundos, de {limites?.duracaoMin ?? 5} a {limites?.duracaoMax ?? 120}. Um menu precisa de mais tempo que uma arte — quem passa tem de achar o produto e o preço.
               </div>
+              {/* No Carrossel o tempo na tela deixa de ser só "quanto dura" e passa a
+                  decidir QUANTOS produtos aparecem: ele é dividido entre eles. Sem esta
+                  conta à vista, o gestor põe seis produtos em cinco segundos e descobre
+                  pela parede — se descobrir — que metade nunca entrou. */}
+              {ritmoCarrossel ? (
+                <div className={'ttm-dica' + (ritmoCarrossel.apertado ? ' ttm-dica-alerta' : '')}>
+                  {ritmoCarrossel.apertado
+                    ? `Com ${ritmoCarrossel.n} produtos em ${ritmoCarrossel.duracao}s, cada um teria menos de ${(MS_MINIMO_SLIDE / 1000).toFixed(1).replace('.', ',')}s — rápido demais para ler de longe. A tela mostra ${ritmoCarrossel.cabem} e os outros ficam de fora. Aumente o tempo para ${ritmoCarrossel.sugerido}s.`
+                    : `Cada produto fica cerca de ${ritmoCarrossel.porSlide}s no ar, e os ${ritmoCarrossel.n} passam uma vez antes de a tela trocar.`}
+                </div>
+              ) : null}
             </div>
 
             {/* ── Os escolhidos, na ordem ──────────────────────────────── */}

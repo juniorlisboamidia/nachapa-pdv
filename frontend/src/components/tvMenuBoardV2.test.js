@@ -220,7 +220,13 @@ test('🔴 o ResizeObserver resolve o contêiner que nasce com largura ZERO', ()
   const codigo = semComentarios(renderer)
   assert.match(codigo, /new ResizeObserver\(medir\)/)
   assert.match(codigo, /ro\.observe\(el\)/)
-  assert.equal(/requestAnimationFrame|setInterval/.test(codigo), false, 'nada de polling')
+  /* A proibição de polling vale para o BLOCO DA MEDIÇÃO, não para o arquivo: o Carrossel
+     usa `setInterval` para girar os produtos, que é conteúdo e não medida. A guarda antes
+     olhava o arquivo inteiro e teria reprovado o template novo sem que nada do invariante
+     dela tivesse mudado — mediu a letra, não a regra. */
+  const medicao = codigo.slice(codigo.indexOf('const medir = ()'), codigo.indexOf('ro.disconnect()'))
+  assert.ok(medicao.length > 100, 'não encontrei o bloco da medição')
+  assert.equal(/requestAnimationFrame|setInterval/.test(medicao), false, 'nada de polling na medição')
 })
 
 test('🔴 NENHUM template usa largura fixa — é impossível estourar o artboard', () => {
@@ -311,4 +317,55 @@ test('🔴 as dez linhas da LISTA têm a MESMA altura, com ou sem foto', () => {
   const bloco = css.slice(css.indexOf('.tvmb-lista {'), css.indexOf('.tvmb-linha {'))
   assert.match(bloco, /grid-template-rows: repeat\(5, minmax\(0, 1fr\)\)/)
   assert.equal(/\.tvmb-linha \{ min-height/.test(css), false, 'a altura é da fileira, não do item')
+})
+
+// ── CARROSSEL ────────────────────────────────────────────────────────────────
+test('🔴 o tempo do slide sai da DURAÇÃO DO BOARD, nunca de um número fixo', () => {
+  /* O board fica no ar por `duracaoSegundos` e depois a playlist troca. Com um tempo
+     fixo por slide, seis produtos a 4 s dariam 24 s dentro de um board de 20 s: os dois
+     últimos nunca apareceriam. E o gestor não teria como descobrir — o editor mostra o
+     carrossel rodando em laço, sem a troca de board que corta o ciclo na parede.
+
+     Dividindo, cada produto aparece uma vez e o ciclo fecha quando o board sai. */
+  const codigo = semComentarios(renderer)
+  assert.match(codigo, /function Carrossel\(\{[^}]*duracaoSegundos[^}]*\}\)/, 'o Carrossel precisa receber a duração')
+  assert.match(codigo, /\(Number\(duracaoSegundos\) \|\| 20\) \* 1000 \/ itens\.length/)
+  assert.match(codigo, /duracaoSegundos=\{board\?\.duracaoSegundos\}/, 'e a tela precisa passá-la')
+})
+
+test('🔴 o editor conta o ritmo com o MESMO piso do renderer', () => {
+  // Dois pisos diferentes fariam o editor prometer seis produtos e a parede mostrar
+  // quatro — e a conta do editor existe justamente para essa promessa ser confiável.
+  assert.match(renderer, /export const MS_MINIMO_SLIDE = \d+/)
+  assert.match(editor, /import MenuBoard, \{ MS_MINIMO_SLIDE \} from/)
+  assert.equal(/MS_MINIMO_SLIDE/.test(semComentarios(editor)), true)
+  // E o número não aparece solto em lugar nenhum dos dois.
+  const soltos = (semComentarios(renderer) + semComentarios(editor)).match(/\b1600\b/g) ?? []
+  assert.equal(soltos.length, 1, 'o 1600 só pode existir na declaração da constante')
+})
+
+test('🔴 os slides ficam MONTADOS — trocar não descarrega a foto', () => {
+  /* Renderizar só o slide do momento faria a imagem seguinte ser buscada na hora da
+     troca, e a entrada começaria com um quadro vazio. Numa parede que roda o dia
+     inteiro, é a diferença entre "passa" e "pisca". O que muda é a classe, não a
+     existência do nó. */
+  const codigo = semComentarios(renderer)
+  const i = codigo.indexOf('function Carrossel(')
+  const corpo = codigo.slice(i, codigo.indexOf('const TEMPLATES', i))
+  assert.match(corpo, /itens\.map\(/, 'todos os itens são desenhados')
+  assert.match(corpo, /'tvmb-cr-slide' \+ \(i === ativo \? ' ativo' : ''\)/)
+  assert.equal(/i === ativo \?\s*<article/.test(corpo), false, 'nada de montar só o ativo')
+})
+
+test('🔴 o slide que SAI só fecha depois que o que entra abriu', () => {
+  /* Sem o atraso, os dois se mexem juntos: a imagem velha encolhe enquanto a nova cresce
+     e aparece uma fresta do fundo entre as duas. O atraso é o que faz a troca ler como
+     passagem em vez de piscada — e ele vive no CSS justamente para nenhum estado em JS
+     precisar lembrar qual era o slide anterior. */
+  const regra = css.slice(css.indexOf('.tvmb-cr-slide {'), css.indexOf('.tvmb-cr-slide .tvmb-selo'))
+  assert.match(regra, /transition: clip-path (\d+)ms/)
+  const [, dur] = regra.match(/transition: clip-path (\d+)ms/)
+  // O inativo espera a abertura inteira; o ativo não espera nada.
+  assert.match(regra, new RegExp('transition-delay: ' + dur + 'ms'))
+  assert.match(regra, /\.ativo \{[^}]*transition-delay: 0s/s)
 })
