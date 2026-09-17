@@ -1643,7 +1643,16 @@
 /* Com banner, a chamada sai do meio e vai para baixo, sobre o véu. */
 .tq-espera.com-banner .tq-espera-chamada {
   position: relative;
-  margin: 0 clamp(24px, 5vw, 64px) clamp(40px, 7vh, 96px);
+  /* A BORDA LATERAL entra na LARGURA, não em margem.
+     Com `width: min(760px, 100%)` herdado da base, numa tela mais estreita que 760px o
+     `100%` ganha: o botão fica do tamanho do container e as margens laterais passam a
+     empurrar para fora dele. Como o modo banner tem `overflow: hidden`, esse transbordo
+     é cortado calado e o que se vê é o botão encostando nas duas pontas.
+     Descontando o respiro da própria largura, sobra borda em qualquer tela — e o
+     `align-items: center` do container continua centralizando. */
+  --tq-chamada-lado: clamp(24px, 5vw, 64px);
+  width: min(760px, calc(100% - var(--tq-chamada-lado) * 2));
+  margin: 0 0 clamp(40px, 7vh, 96px);
 }
 
 /* Marcadores do carrossel: informação de posição, discreta. Só aparecem com 2+. */
