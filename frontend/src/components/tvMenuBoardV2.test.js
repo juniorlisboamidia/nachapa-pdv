@@ -369,3 +369,24 @@ test('🔴 o slide que SAI só fecha depois que o que entra abriu', () => {
   assert.match(regra, new RegExp('transition-delay: ' + dur + 'ms'))
   assert.match(regra, /\.ativo \{[^}]*transition-delay: 0s/s)
 })
+
+test('🔴 nenhum grid do board declara LINHAS sem declarar COLUNAS', () => {
+  /* Declarar só as linhas deixa a coluna implícita em `auto`, que é o MAX-CONTENT dos
+     filhos. Isso já derrubou o artboard uma vez (o cabeçalho foi parar ao lado do corpo,
+     o corpo vazou para a direita) e derrubou o Carrossel de outro jeito: o palco tem
+     max-content ZERO, porque todos os slides são `position: absolute` e absoluto não
+     conta para o tamanho intrínseco de quem o contém — a prévia mostrava os pontinhos e
+     mais nada.
+
+     Dois sintomas opostos da mesma omissão. Por isso a guarda é sobre a omissão, e não
+     sobre nenhum dos dois estragos. */
+  const limpo = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const faltando = [];
+  for (const bloco of limpo.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+    const corpo = bloco[2];
+    if (corpo.includes('grid-template-rows') && !corpo.includes('grid-template-columns')) {
+      faltando.push(bloco[1].trim().split('\n').pop().trim());
+    }
+  }
+  assert.deepEqual(faltando, [], 'estes grids precisam declarar a coluna também');
+});

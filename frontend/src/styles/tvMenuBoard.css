@@ -644,6 +644,13 @@
    a ideia: só estas duas regras mudam. */
 .tvmb-cr {
   display: grid;
+  /* ⚠️ A COLUNA precisa ser declarada — mesma armadilha do artboard, algumas centenas de
+     linhas acima, e aqui ela é ainda mais cruel: declarando só as linhas, a coluna
+     implícita vira `auto`, ou seja, o MAX-CONTENT dos filhos. E o max-content do palco é
+     ZERO, porque todos os slides são `position: absolute` e elemento absoluto não conta
+     para o tamanho intrínseco de quem o contém. A prévia mostrava os pontinhos e mais
+     nada: o palco existia, com largura de nada. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr) auto;
   gap: 28px;
   min-height: 0;
