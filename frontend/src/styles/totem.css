@@ -919,6 +919,79 @@
 .tq-toast.erro { background: #3a1210; }
 .tq-toast.erro .tq-toast-ico { background: var(--tq-branco); color: #3a1210; }
 
+/* ═══ Confirmação de item adicionado ═══════════════════════════════════════
+   Um cartão no CENTRO, com a foto do que acabou de entrar no pedido. Fica pouco mais
+   de um segundo e vai embora sozinho.
+
+   `pointer-events: none` no envoltório é o que o separa de um modal: ele cobre a tela
+   inteira para poder centralizar, mas o toque atravessa. Quem já decidiu o próximo
+   produto não espera a animação acabar para tocar nele. */
+.tq-conf {
+  position: absolute; inset: 0; z-index: 45;
+  display: grid; place-items: center;
+  pointer-events: none;
+}
+.tq-conf-card {
+  width: min(380px, 72vw);
+  display: flex; flex-direction: column; align-items: center; gap: clamp(10px, 1.4vh, 16px);
+  padding: clamp(22px, 3.4vw, 34px) clamp(20px, 3vw, 30px) clamp(24px, 3.6vw, 36px);
+  border-radius: 26px;
+  background: var(--tq-superficie); color: var(--tq-texto);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.5);
+  text-align: center;
+  /* UMA animação cobre a vida inteira do cartão: chega, balança, segura, sai. Em duas
+     (uma de entrada, outra de saída disparada por estado) haveria um quadro entre elas
+     em que o cartão fica parado sem que ninguém tenha mandado — e é justamente esse
+     quadro que se vê como engasgo. `both` segura o primeiro e o último fotograma. */
+  animation: tq-conf-vida var(--tq-conf-dur, 1400ms) cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.tq-conf-foto-caixa { position: relative; flex: 0 0 auto; }
+/* Dois níveis de especificidade de propósito: `.tq-foto` vem do componente Foto e é
+   declarada depois no arquivo — sem isto ela venceria e a foto sairia quadrada. */
+.tq-conf-foto-caixa .tq-conf-foto {
+  width: clamp(96px, 15vw, 140px); height: clamp(96px, 15vw, 140px);
+  border-radius: 999px; object-fit: cover;
+}
+.tq-conf-selo {
+  position: absolute; right: -2px; bottom: -2px;
+  width: 38px; height: 38px; border-radius: 999px;
+  display: grid; place-items: center;
+  background: var(--tq-amarelo); color: var(--tq-tinta);
+  /* O anel é da cor do cartão, não branco: é ele que descola o selo da foto sem virar
+     uma borda visível por cima dela. */
+  box-shadow: 0 0 0 4px var(--tq-superficie);
+}
+.tq-conf-tit { font-size: clamp(20px, 2.7vw, 28px); line-height: 1.15; }
+.tq-conf-nome {
+  font-size: clamp(15px, 1.9vw, 20px); line-height: 1.3;
+  color: var(--tq-texto-claro);
+  /* Duas linhas e corta: o cartão não pode crescer por causa de um nome comprido. */
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+/* Os primeiros 9% são a chegada; até 33%, a balançada; o resto segura e sai. As
+   porcentagens seguem a duração, então mexer só em `--tq-conf-dur` continua dando um
+   movimento com as mesmas proporções. */
+@keyframes tq-conf-vida {
+  0%   { opacity: 0; transform: scale(0.72); }
+  9%   { opacity: 1; transform: scale(1.07); }
+  15%  { transform: scale(0.97) rotate(-2deg); }
+  21%  { transform: scale(1.02) rotate(1.6deg); }
+  27%  { transform: scale(1) rotate(-0.9deg); }
+  33%  { transform: scale(1) rotate(0deg); }
+  78%  { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.86); }
+}
+/* Quem pediu menos movimento recebe a mesma informação pelo mesmo tempo, sem o balanço
+   nem o salto de escala — só a passagem suave. */
+@media (prefers-reduced-motion: reduce) {
+  @keyframes tq-conf-vida {
+    0%   { opacity: 0; }
+    9%   { opacity: 1; }
+    78%  { opacity: 1; }
+    100% { opacity: 0; }
+  }
+}
+
 /* ═══ V5 — detalhe do produto ══════════════════════════════════════════════ */
 
 /* Sem `display` aqui de propósito: `.tq-foto` já dá `block` à imagem, e redeclarar isto

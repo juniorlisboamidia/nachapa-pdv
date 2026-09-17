@@ -39,6 +39,7 @@ import Spinner from '../components/totem/Spinner'
 import TelaAviso from '../components/totem/TelaAviso'
 import TelaResultado from '../components/totem/TelaResultado'
 import SheetInatividade from '../components/totem/SheetInatividade'
+import ConfirmacaoItem, { MS_CONFIRMACAO } from '../components/totem/ConfirmacaoItem'
 import { Ico } from '../components/totem/icones'
 import { obrigatoriosPendentes, aplicarToque, aplicarMenos } from '../components/totemLayout'
 import { atingiuMax, proximoFoco } from '../components/totemFoco'
@@ -109,6 +110,15 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
   // vitrine que saiu do ar. O totem não tem Toast (é público e standalone), então
   // é um aviso próprio, que some sozinho. `{ texto, tom, ms }`.
   const [aviso, setAviso] = useState(null)
+  /* O cartão de "produto adicionado": `{ nome, imagem, vez }`, ou null.
+
+     `vez` é um contador, e é ele que vai na `key` do componente. Dois produtos seguidos
+     trazem nome e imagem diferentes, mas o React remontaria nada — o elemento continua
+     sendo o mesmo e a animação CSS não recomeça sozinha. O segundo cartão apareceria
+     parado, no fim do movimento do primeiro. Trocando a chave, o elemento é outro, e o
+     movimento recomeça do zero. */
+  const [confirmado, setConfirmado] = useState(null)
+  const vezConfirmacaoRef = useRef(0)
   const [metodoId, setMetodoId] = useState(null)
 
   // Revisar / confirmar
@@ -197,6 +207,17 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
     return () => clearTimeout(t)
   }, [aviso])
 
+  /* O cartão sai no instante em que a animação acaba — o mesmo número, importado de onde
+     a animação é escrita. A dependência é `vez`, e não o objeto: adicionar o MESMO
+     produto duas vezes seguidas muda só o contador, e é isso que tem de reiniciar o
+     relógio junto com o movimento. */
+  const vezConfirmada = confirmado?.vez ?? null
+  useEffect(() => {
+    if (vezConfirmada === null) return undefined
+    const t = setTimeout(() => setConfirmado(null), MS_CONFIRMACAO)
+    return () => clearTimeout(t)
+  }, [vezConfirmada])
+
   // ── Bootstrap ─────────────────────────────────────────────────────────────
   // `silencioso` = refresh de fundo: ele NUNCA derruba um cliente no meio do pedido.
   // Um catálogo que mudou no meio da escolha é problema da cotação (o HUB recusa a linha);
@@ -259,6 +280,7 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
     setLiberouNovo(false)
     setCategoriaId(null)
     setAviso(null)
+    setConfirmado(null)
     setAlertaInatividade(null)
     // TODA volta ao início é abandono de sessão — cancelar no cabeçalho, "começar de novo"
     // depois de um erro, "novo pedido" depois do comprovante, e o próprio estouro do
@@ -510,7 +532,19 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
     // e voltas ao carrinho, que fica sempre à mão na barra. EDIÇÃO volta ao
     // carrinho, que é de onde ela partiu.
     setTela(edicao ? 'carrinho' : 'catalogo')
-    setAviso({ texto: edicao ? 'Item atualizado' : 'Adicionado ao pedido', tom: 'ok', ms: 2_500 })
+    /* Item NOVO ganha o cartão central com a foto; edição continua no toast do rodapé.
+       Os dois juntos seriam a mesma notícia contada duas vezes, e quem está no carrinho
+       vendo a linha mudar na frente dele não precisa de uma foto para acreditar. */
+    if (edicao) {
+      setAviso({ texto: 'Item atualizado', tom: 'ok', ms: 2_500 })
+    } else {
+      vezConfirmacaoRef.current += 1
+      setConfirmado({
+        nome: nomeApresentado(linha),
+        imagem: imagemApresentada(linha),
+        vez: vezConfirmacaoRef.current,
+      })
+    }
   }
 
   function removerLinha(uid) {
@@ -921,6 +955,9 @@ export default function TotemQuiosque({ loja: lojaInicial, onNaoPareado }) {
       {alertaInatividade !== null && tela !== 'inicio' && tela !== 'resultado' && !enviando && !travado ? (
         <SheetInatividade segundos={Math.max(0, alertaInatividade)} aoContinuar={() => setAlertaInatividade(null)} />
       ) : null}
+      {confirmado && (
+        <ConfirmacaoItem key={confirmado.vez} nome={confirmado.nome} imagem={confirmado.imagem} />
+      )}
       {aviso && (
         <div className={'tq-toast' + (aviso.tom === 'erro' ? ' erro' : '')} role="status" aria-live="polite">
           <span className="tq-toast-ico" aria-hidden="true">
