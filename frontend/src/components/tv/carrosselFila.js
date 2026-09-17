@@ -35,3 +35,23 @@ export function msPorPasso(duracaoSegundos, n, piso) {
   const qtd = Number.isFinite(n) && n > 0 ? n : 1;
   return Math.max(piso, Math.round((total * 1000) / qtd));
 }
+
+/* O tempo em que um produto é LIDO, e não apenas visto.
+
+   O piso (`MS_MINIMO_SLIDE`, no renderer) é outra coisa: é o limite abaixo do qual a fila
+   deixa de ser acompanhável. Este aqui é o conforto — o tempo em que quem está na fila do
+   balcão termina de ler o nome, olhar a foto e registrar o preço sem pressa. Entre os dois
+   há uma faixa larga que funciona; o editor usa este número para sugerir, nunca para
+   impor. */
+export const MS_CONFORTO = 3500;
+
+/* Quanto o board precisa durar para dar `MS_CONFORTO` a cada produto.
+
+   Arredonda para CIMA: sobrar meio segundo é melhor que faltar. E respeita os limites do
+   board — com muitos produtos a conta estoura o teto, e aí o que dá para fazer é usar o
+   teto, que é o que esta função devolve em vez de um número que a rota recusaria. */
+export function duracaoConfortavel(n, { min = 5, max = 120 } = {}) {
+  const qtd = Number.isFinite(n) && n > 0 ? n : 1;
+  const ideal = Math.ceil((qtd * MS_CONFORTO) / 1000);
+  return Math.min(max, Math.max(min, ideal));
+}

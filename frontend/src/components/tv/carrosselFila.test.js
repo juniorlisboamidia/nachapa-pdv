@@ -2,7 +2,7 @@
 // Rodar: node --test frontend/src/components/tv/carrosselFila.test.js
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { indiceEmCena, msPorPasso, precisaRecuar } from './carrosselFila.js'
+import { MS_CONFORTO, duracaoConfortavel, indiceEmCena, msPorPasso, precisaRecuar } from './carrosselFila.js'
 
 test('o passo anda em círculo pelos produtos', () => {
   assert.equal(indiceEmCena(0, 10), 0)
@@ -67,5 +67,24 @@ test('duração ausente cai no padrão, não em zero', () => {
      esquentaria sem mostrar nada. */
   for (const ruim of [null, undefined, 0, -5, '', 'vinte', NaN]) {
     assert.equal(msPorPasso(ruim, 10, 1600), 2000, `${JSON.stringify(ruim)} devia cair no padrão`)
+  }
+})
+
+test('a duração confortável dá 3,5s a cada produto', () => {
+  assert.equal(duracaoConfortavel(10), 35)
+  assert.equal(duracaoConfortavel(6), 21)
+  assert.equal(duracaoConfortavel(3), 11, 'arredonda para cima: 10,5 vira 11')
+  assert.equal(MS_CONFORTO, 3500)
+})
+
+test('🔴 a sugestão nunca cai fora do que o board aceita', () => {
+  // A rota recusa duração fora de 5..120, e uma sugestão que o servidor rejeita é pior
+  // que nenhuma sugestão: o gestor clica, salva e leva um erro que não é culpa dele.
+  assert.equal(duracaoConfortavel(1), 5, 'o mínimo do board manda')
+  assert.equal(duracaoConfortavel(100), 120, 'o teto do board manda')
+  assert.equal(duracaoConfortavel(10, { min: 5, max: 30 }), 30)
+  for (const ruim of [0, -3, null, undefined, NaN, 'dez']) {
+    const d = duracaoConfortavel(ruim)
+    assert.ok(d >= 5 && d <= 120, `${JSON.stringify(ruim)} devolveu ${d}`)
   }
 })

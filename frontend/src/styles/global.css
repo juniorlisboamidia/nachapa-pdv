@@ -4004,6 +4004,14 @@ body.theme-dark .tvi-mon-cartao.off { background: rgba(239, 68, 68, 0.12); }
    "isto muda o que vai ao ar". Nao e' um `.alert` porque nao e' um bloco a parte — e'
    a mesma frase do campo, falando mais alto. */
 .ttm-dica-alerta { color: #b45309; font-weight: 600; }
+/* Acao DENTRO da dica: e' uma frase que se pode clicar, nao um botao de formulario. Se
+   virasse botao de verdade competiria com Salvar, que e' a acao real da tela. */
+.ttm-dica-acao {
+  background: none; border: 0; padding: 0;
+  font: inherit; color: var(--brand-gold-ink-alt, #b45309);
+  font-weight: 700; text-decoration: underline; cursor: pointer;
+}
+.ttm-dica-acao:hover { text-decoration: none; }
 body.theme-dark .ttm-dica-alerta { color: #fbbf24; }
 
 .tvi-mb-switches { display: flex; flex-direction: column; gap: 8px; }

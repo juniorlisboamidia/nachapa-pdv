@@ -18,6 +18,7 @@ import api from '../services/api'
 import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
 import MenuBoard, { MS_MINIMO_SLIDE } from '../components/tv/MenuBoard'
+import { MS_CONFORTO, duracaoConfortavel } from '../components/tv/carrosselFila.js'
 // O padrão de ação compacta do sistema (o mesmo dos Banners do Totem).
 import BotaoIcone from '../components/BotaoIcone'
 // O teto ABSOLUTO da seleção guardada — o mesmo do domínio, que é quem recusa na escrita.
@@ -310,19 +311,39 @@ function Editor({ valor, layouts, identidade, limites, ocupado, aoFechar, aoSalv
   /* O RITMO do carrossel, só quando ele é o template escolhido. A conta é a mesma do
      renderer — o piso vem de lá, importado, para os dois nunca discordarem sobre quantos
      produtos cabem no tempo. */
+  /* O RITMO do carrossel, só quando ele é o template escolhido.
+
+     Há DUAS réguas aqui, e elas não são a mesma coisa. O PISO é o limite abaixo do qual a
+     fila deixa de ser acompanhável: passando dele, produtos ficam de fora e o aviso é
+     vermelho. O CONFORTO é o tempo em que o cliente termina de ler nome, foto e preço sem
+     pressa — entre um e outro a tela funciona, só corre mais do que o ideal.
+
+     A sugestão é sempre um BOTÃO, nunca um ajuste automático: quem calibrou a duração à
+     mão não pode vê-la mudar sozinha porque trocou um produto. */
   const ritmoCarrossel = (() => {
     if (form.layout !== 'CARROSSEL') return null
-    const n = Math.min(escolhidos.length, regra.maximo ?? 6)
+    const n = Math.min(escolhidos.length, regra.maximo ?? 10)
     const duracao = Number(form.duracaoSegundos)
     if (n < 2 || !Number.isFinite(duracao) || duracao <= 0) return null
     const msPorSlide = (duracao * 1000) / n
-    if (msPorSlide >= MS_MINIMO_SLIDE) {
-      return { apertado: false, n, duracao, porSlide: (msPorSlide / 1000).toFixed(1).replace('.', ',') }
+    const confortavel = duracaoConfortavel(n, {
+      min: limites?.duracaoMin ?? 5,
+      max: limites?.duracaoMax ?? 120,
+    })
+    const base = {
+      n,
+      duracao,
+      confortavel,
+      porSlide: (msPorSlide / 1000).toFixed(1).replace('.', ','),
+      // A sugestão só aparece quando muda alguma coisa: com a duração já no ponto, um
+      // botão que não faz nada é ruído.
+      sugerir: confortavel !== duracao && msPorSlide < MS_CONFORTO,
     }
+    if (msPorSlide >= MS_MINIMO_SLIDE) return { ...base, apertado: false }
     return {
-      apertado: true, n, duracao,
+      ...base,
+      apertado: true,
       cabem: Math.max(1, Math.floor((duracao * 1000) / MS_MINIMO_SLIDE)),
-      sugerido: Math.ceil((n * MS_MINIMO_SLIDE) / 1000),
     }
   })()
 
@@ -518,8 +539,21 @@ function Editor({ valor, layouts, identidade, limites, ocupado, aoFechar, aoSalv
               {ritmoCarrossel ? (
                 <div className={'ttm-dica' + (ritmoCarrossel.apertado ? ' ttm-dica-alerta' : '')}>
                   {ritmoCarrossel.apertado
-                    ? `Com ${ritmoCarrossel.n} produtos em ${ritmoCarrossel.duracao}s, cada um teria menos de ${(MS_MINIMO_SLIDE / 1000).toFixed(1).replace('.', ',')}s — rápido demais para ler de longe. A tela mostra ${ritmoCarrossel.cabem} e os outros ficam de fora. Aumente o tempo para ${ritmoCarrossel.sugerido}s.`
+                    ? `Com ${ritmoCarrossel.n} produtos em ${ritmoCarrossel.duracao}s, cada um teria menos de ${(MS_MINIMO_SLIDE / 1000).toFixed(1).replace('.', ',')}s — rápido demais para ler de longe. A tela mostra ${ritmoCarrossel.cabem} e os outros ficam de fora.`
                     : `Cada produto fica cerca de ${ritmoCarrossel.porSlide}s no ar, e os ${ritmoCarrossel.n} passam uma vez antes de a tela trocar.`}
+                  {ritmoCarrossel.sugerir ? (
+                    <>
+                      {' '}Com {ritmoCarrossel.confortavel}s cada um ganha {(MS_CONFORTO / 1000).toFixed(1).replace('.', ',')}s,
+                      que é o tempo de ler o nome e o preço sem pressa.{' '}
+                      <button
+                        type="button"
+                        className="ttm-dica-acao"
+                        onClick={() => mudar('duracaoSegundos', String(ritmoCarrossel.confortavel))}
+                      >
+                        Usar {ritmoCarrossel.confortavel}s
+                      </button>
+                    </>
+                  ) : null}
                 </div>
               ) : null}
             </div>
