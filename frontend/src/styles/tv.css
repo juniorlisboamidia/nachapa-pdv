@@ -93,6 +93,56 @@
 /* O institucional é o REPOUSO do canal, e agora ele usa a marca da loja: o fundo
    configurado, o texto configurado, e o disco da inicial no destaque. Continua
    sem degradê inventado — o chão é o chão, e o que aparece é a marca. */
+/* ── A TELA SEM PLAYLIST (a que o GESTOR ve) ──────────────────────────────────────
+   Nao e' o repouso institucional: aquela e' a parede em operacao, vista de longe pelo
+   cliente. Esta e' uma tela de TRABALHO, vista de perto na bancada enquanto se configura
+   o aparelho — por isso o fundo CLARO, que tambem impede a confusao de achar que a TV
+   voltou sozinha para o estado de repouso.
+
+   Fundo fixo, sem os tokens da identidade: a paleta da loja e' do canal em operacao, e
+   aqui ainda nao ha canal nenhum. */
+.tv-configurar {
+  background: #f4f4f5;
+  color: #18181b;
+  grid-auto-flow: row;
+  align-content: center;
+  justify-items: center;
+  gap: clamp(14px, 2.2vh, 30px);
+  padding: clamp(24px, 4vh, 64px);
+  text-align: center;
+}
+.tv-cfg-marca { display: flex; align-items: center; gap: clamp(10px, 1.2vw, 18px); }
+.tv-cfg-icone { width: clamp(34px, 3.4vw, 58px); height: clamp(34px, 3.4vw, 58px); border-radius: 10px; display: block; }
+.tv-cfg-produto {
+  font-family: var(--tvmb-fonte-display, inherit);
+  font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
+  font-size: clamp(20px, 2.1vw, 36px);
+}
+/* O simbolo e' desenhado com traco, nao preenchido: numa TV, uma silhueta cheia deste
+   tamanho pesa mais que o titulo e rouba a leitura. Só o play e' solido. */
+.tv-cfg-simbolo {
+  width: clamp(72px, 7vw, 120px); height: clamp(72px, 7vw, 120px);
+  fill: none; stroke: #71717a; stroke-width: 3.4;
+  stroke-linecap: round; stroke-linejoin: round;
+  margin-top: clamp(6px, 1.4vh, 18px);
+}
+.tv-cfg-simbolo .cheio { fill: #71717a; stroke-width: 2; }
+.tv-cfg-tit {
+  margin: 0;
+  font-family: var(--tvmb-fonte-display, inherit);
+  font-weight: 900; line-height: 1.1;
+  font-size: clamp(34px, 4.4vw, 76px);
+}
+.tv-cfg-sub {
+  margin: 0; max-width: 34ch; line-height: 1.45;
+  color: #52525b; font-size: clamp(16px, 1.7vw, 30px);
+}
+/* Com quatro TVs na loja, esta linha e' o que diz ao gestor QUAL delas ele esta' vendo. */
+.tv-cfg-eu {
+  margin-top: clamp(8px, 1.6vh, 22px);
+  color: #71717a; font-size: clamp(14px, 1.4vw, 24px);
+}
+
 .tv-institucional {
   background: var(--tvmb-fundo);
   gap: clamp(20px, 3vh, 48px);

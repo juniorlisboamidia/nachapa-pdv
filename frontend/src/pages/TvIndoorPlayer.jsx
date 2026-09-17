@@ -399,6 +399,18 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
   // decoração — é o conteúdo — e continua acontecendo.
   const reduzido = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
 
+  /* SEM CONTEÚDO — e são dois estados diferentes, não um.
+
+     A tela NUNCA CONFIGURADA (`playlist: null`) é a que o gestor está olhando agora, com
+     a TV recém-pareada na bancada: aí a orientação é bem-vinda, porque ela é para ele.
+
+     A tela CONFIGURADA sem nada exibível agora (playlist vazia, tudo agendado para
+     amanhã, todas as imagens falhando) é outra coisa: essa TV já está na parede, e quem
+     passa na frente é o cliente da loja. Ali a orientação seria um recado interno exposto
+     ao público — por isso continua sendo o repouso institucional, calado. */
+  if (!atual && programacao && !programacao.playlist) {
+    return <Configurar aparelho={aparelho} raizRef={raizRef} />
+  }
   if (!atual) return <Institucional loja={loja} aparelho={aparelho} aparencia={aparencia} raizRef={raizRef} />
 
   // MENU BOARD: a mesma casca, o mesmo temporizador, outro desenho. O board chega RESOLVIDO
@@ -493,6 +505,43 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
 // sem placa. A da empresa costuma vir de material impresso, com fundo branco embutido —
 // sobre um fundo escuro o retângulo branco aparece como um erro, então ela ganha uma placa
 // clara discreta. A decisão é da ORIGEM (que o servidor manda), não do arquivo.
+/* A tela que o GESTOR vê enquanto a TV ainda não tem playlist.
+
+   Ela existe para responder três perguntas, nessa ordem: "o aparelho conectou?" (a marca
+   no topo), "qual das minhas telas é esta?" (o nome do aparelho — com quatro TVs na loja,
+   sem ele o gestor não sabe qual configurar) e "o que falta fazer?" (o caminho no PDV).
+
+   Fundo CLARO de propósito, ao contrário do repouso institucional: é uma tela de trabalho,
+   vista de perto na bancada, e não a parede em repouso vista de longe pelo cliente. A
+   diferença visual também evita a confusão de achar que a TV "voltou" para cá sozinha. */
+function Configurar({ aparelho, raizRef }) {
+  const nome = (aparelho?.nome ?? '').trim()
+  return (
+    <div className="tv-raiz tv-configurar" ref={raizRef}>
+      <div className="tv-cfg-marca">
+        <img className="tv-cfg-icone" src="/favicon.png" alt="" />
+        <span className="tv-cfg-produto">TV Indoor</span>
+      </div>
+
+      {/* TV com um play dentro: o canal existe, só não tem o que tocar. Desenhado aqui e
+          não trazido de uma fonte de ícones — é um só, e a TV não deve baixar nada que
+          não seja conteúdo. */}
+      <svg className="tv-cfg-simbolo" viewBox="0 0 64 64" aria-hidden="true">
+        <rect x="6" y="10" width="52" height="36" rx="5" />
+        <path d="M24 44v6h16v-6" />
+        <path d="M20 54h24" />
+        <path d="M27 21l12 7-12 7z" className="cheio" />
+      </svg>
+
+      <h1 className="tv-cfg-tit">Configure uma playlist</h1>
+      <p className="tv-cfg-sub">
+        No PDV, em <strong>TV Indoor › Telas</strong>, escolha o que esta tela deve mostrar.
+      </p>
+      {nome ? <div className="tv-cfg-eu">Esta tela: <strong>{nome}</strong></div> : null}
+    </div>
+  )
+}
+
 function Institucional({ loja, aparelho, aparencia, raizRef }) {
   const nome = (loja?.nome ?? '').trim()
   const inicial = (nome || aparelho?.nome || '?').trim().charAt(0).toUpperCase()

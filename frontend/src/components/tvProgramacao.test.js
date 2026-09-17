@@ -508,3 +508,20 @@ test('🔴 a recarga NÃO corta um vídeo no meio', () => {
   // presa na versão velha até o fim do expediente.
   assert.match(codigo, /unico=\{total < 2 && !pendente && !recarregar\}/)
 })
+
+test('🔴 a orientação de configurar NÃO vaza para a parede em operação', () => {
+  /* A tela sem conteúdo cobre três situações, e só UMA delas é do gestor: a TV recém-
+     pareada, que nunca teve playlist (`playlist: null`). As outras duas — playlist vazia
+     e tudo agendado para outra hora — acontecem com a TV já na parede, e quem passa na
+     frente é o cliente da loja.
+
+     Mostrar "Configure uma playlist" ali seria expor um recado interno ao público, que é
+     exatamente o que o repouso institucional existe para evitar. Por isso a condição
+     exige `programacao` carregada E `playlist` ausente: sem a primeira metade, a tela
+     apareceria também no cold start, antes de a TV saber qualquer coisa. */
+  const codigo = fontePlayer()
+  assert.match(codigo, /if \(!atual && programacao && !programacao\.playlist\) \{/)
+  assert.match(codigo, /<Configurar aparelho=\{aparelho\}/)
+  // E o caminho institucional continua existindo, para os outros dois casos.
+  assert.match(codigo, /if \(!atual\) return <Institucional/)
+})
