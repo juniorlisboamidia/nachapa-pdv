@@ -14,7 +14,6 @@ const brlFormatter = new Intl.NumberFormat('pt-BR', {
   style: 'currency',
   currency: 'BRL'
 })
-const numberFormatter = new Intl.NumberFormat('pt-BR')
 const qtyFormatter = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 4 })
 
 function brl(value) {
@@ -24,10 +23,6 @@ function brl(value) {
 function pct(value) {
   if (value === null || value === undefined) return '—'
   return `${Number(value).toFixed(2).replace('.', ',')}%`
-}
-function int(value) {
-  if (value === null || value === undefined) return '—'
-  return numberFormatter.format(Number(value))
 }
 function num(value) {
   if (value === null || value === undefined) return '—'
@@ -565,14 +560,6 @@ export default function Produtos() {
     )
   }
 
-  // Métricas agregadas: ficha técnica e CMV são conceitos de item MONTADO — entram
-  // produtos e sobremesas feitas na casa; revenda (bebida/sobremesa pronta) e combo não
-  const produtosMontados = produtos.filter((p) => usaFichaTecnica(p))
-  const totalAtivos = produtosMontados.length
-  const semFicha = produtosMontados.filter((p) => p.analise?.statusCmv === 'SEM_FICHA').length
-  const criticos = produtosMontados.filter((p) => p.analise?.statusCmv === 'CRITICO').length
-  const fichasCadastradas = totalAtivos - semFicha
-
   // Itens da aba selecionada
   const produtosDaAba = produtos.filter((p) => tipoDoProduto(p) === tipoTab)
 
@@ -800,34 +787,6 @@ export default function Produtos() {
           }}
         />
       )}
-
-      <div className="section-title">Resumo</div>
-      <div className="grid-4" style={{ marginBottom: 4 }}>
-        <Card
-          title="Produtos Cadastrados"
-          value={int(totalAtivos)}
-          hint="Ativos no cardápio"
-          variant="info"
-        />
-        <Card
-          title="Sem Ficha Técnica"
-          value={int(semFicha)}
-          hint="Sem CMV calculado"
-          variant={semFicha > 0 ? 'warn' : 'success'}
-        />
-        <Card
-          title="CMV Crítico"
-          value={int(criticos)}
-          hint="CMV do produto acima de 35%"
-          variant={criticos > 0 ? 'danger' : 'success'}
-        />
-        <Card
-          title="Fichas Cadastradas"
-          value={int(fichasCadastradas)}
-          hint="Produtos com composição"
-          variant={fichasCadastradas > 0 ? 'success' : 'info'}
-        />
-      </div>
 
       <div className="section-title">Produtos e Fichas</div>
 
