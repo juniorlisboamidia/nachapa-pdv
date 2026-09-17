@@ -79,13 +79,16 @@ export const TEMPLATES = Object.freeze({
      existe para fazer a pessoa olhar. Por isso não substitui Grade nem Lista — num
      cardápio geral, esconder dois terços dos itens seria defeito, e aqui é a proposta.
 
-     SEIS é o teto porque o tempo do board é finito: com os 20 s padrão dá ~3,3 s por
-     produto, que é o bastante para ver a foto e o preço sem pressa. Oito passaria a 2,5 s
-     e viraria efeito em vez de vitrine. */
+     DEZ é o teto, e aqui ele não é só "quantos cabem": a fila precisa estar CHEIA dos
+     dois lados o tempo todo, e com poucos produtos a repetição fica evidente — o mesmo
+     lanche aparece duas vezes na mesma tela. Dez enchem a pista sem se repetir à vista.
+
+     O contrapeso é o tempo: nos 20 s padrão, dez dão 2 s por produto. Quem quiser
+     contemplação aumenta o tempo na tela, e o editor mostra a conta enquanto ele digita. */
   CARROSSEL: Object.freeze({
-    id: 'CARROSSEL', rotulo: 'Carrossel', maximo: 6, destaque: false,
+    id: 'CARROSSEL', rotulo: 'Carrossel', maximo: 10, destaque: false,
     imagem: 'SEMPRE', descricao: 'OPCIONAL',
-    resumo: 'Até 6 produtos passando um a um, em tela cheia. Montra, não cardápio.',
+    resumo: 'Até 10 produtos numa fila contínua, com o do meio em destaque.',
   }),
 });
 // `LAYOUTS` continua exportado com o nome antigo: internamente a coluna se chama `layout`, e

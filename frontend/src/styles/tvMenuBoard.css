@@ -677,6 +677,10 @@
     0, 0);
   transition: transform 760ms cubic-bezier(0.4, 0, 0.2, 1);
 }
+/* O RECUO invisível do fim da volta: a pista anda n posições para trás sem transição, e
+   como a lista se repete, o que está na tela não muda um pixel. Sem isto, a volta seria
+   um deslize gigante para a direita, desfazendo a fila inteira à vista de todos. */
+.tvmb-cr-pista.parada { transition: none; }
 .tvmb-cr-card {
   position: relative;
   flex: 0 0 auto;

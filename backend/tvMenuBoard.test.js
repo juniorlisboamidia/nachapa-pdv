@@ -46,10 +46,10 @@ test('são SEIS templates fechados, com tetos pensados para 1920×1080', () => {
   assert.equal(LAYOUTS.DESTAQUE.maximo, 5, '1 grande + 2 × 2');
   assert.equal(LAYOUTS.VITRINE.maximo, 3);
   assert.equal(LAYOUTS.OFERTA.maximo, 1);
-  /* Seis, e não mais: o board fica no ar por `duracaoSegundos`, e o carrossel divide esse
-     tempo entre os produtos. Nos 20 s padrão, seis dão ~3,3 s cada; oito dariam 2,5 s, que
-     é rápido demais para ler nome e preço de uma parede. */
-  assert.equal(LAYOUTS.CARROSSEL.maximo, 6);
+  /* Dez: a fila do carrossel fica cheia dos dois lados o tempo todo, e com poucos
+     produtos a repetição aparece na mesma tela — o mesmo lanche duas vezes. O contrapeso
+     é o tempo, que o board divide entre eles; o editor mostra a conta ao gestor. */
+  assert.equal(LAYOUTS.CARROSSEL.maximo, 10);
   assert.equal(LAYOUTS.CARROSSEL.destaque, false);
   // Montra vive de foto: um slide sem imagem não é um card feio, é o efeito inteiro parado.
   assert.equal(LAYOUTS.CARROSSEL.imagem, 'SEMPRE');

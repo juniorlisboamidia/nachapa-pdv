@@ -329,7 +329,7 @@ test('🔴 o tempo do slide sai da DURAÇÃO DO BOARD, nunca de um número fixo'
      Dividindo, cada produto aparece uma vez e o ciclo fecha quando o board sai. */
   const codigo = semComentarios(renderer)
   assert.match(codigo, /function Carrossel\(\{[^}]*duracaoSegundos[^}]*\}\)/, 'o Carrossel precisa receber a duração')
-  assert.match(codigo, /\(Number\(duracaoSegundos\) \|\| 20\) \* 1000 \/ itens\.length/)
+  assert.match(codigo, /\(Number\(duracaoSegundos\) \|\| 20\) \* 1000 \/ n/)
   assert.match(codigo, /duracaoSegundos=\{board\?\.duracaoSegundos\}/, 'e a tela precisa passá-la')
 })
 
@@ -351,9 +351,40 @@ test('🔴 a pista inteira fica MONTADA — deslizar não descarrega foto', () =
   const codigo = semComentarios(renderer)
   const i = codigo.indexOf('function Carrossel(')
   const corpo = codigo.slice(i, codigo.indexOf('const TEMPLATES', i))
-  assert.match(corpo, /itens\.map\(/, 'todos os itens são desenhados')
-  assert.match(corpo, /'tvmb-cr-card' \+ \(i === ativo \? ' ativo' : ''\)/)
+  assert.match(corpo, /trilha\.map\(/, 'todos os cards da trilha são desenhados')
+  assert.match(corpo, /'tvmb-cr-card' \+ \(i === n \+ passo \? ' ativo' : ''\)/)
   assert.equal(/i === ativo \?\s*<article/.test(corpo), false, 'nada de montar só o ativo')
+})
+
+test('🔴 a fila nunca tem ponta vazia — a lista é desenhada TRÊS vezes', () => {
+  /* Com uma cópia só, a tela abria com metade da fila (nada à esquerda do primeiro) e
+     terminava com a outra metade faltando (nada à direita do último). Três cópias, com a
+     pista sempre no bloco do meio, garantem vizinhos dos dois lados em qualquer produto.
+
+     O deslocamento soma `n` justamente para começar no bloco do meio — sem isso, as três
+     cópias existiriam e a fila continuaria abrindo vazia à esquerda. */
+  const codigo = semComentarios(renderer)
+  assert.match(codigo, /const trilha = \[\.\.\.itens, \.\.\.itens, \.\.\.itens\]/)
+  assert.match(codigo, /'--tvmb-cr-i': n \+ passo/)
+  // A lista se repete, então o id sozinho identificaria três nós diferentes.
+  assert.match(codigo, /key=\{i \+ '-' \+ p\.id\}/)
+})
+
+test('🔴 a volta da fila é INVISÍVEL — recuo sem transição, na posição gêmea', () => {
+  /* A posição `n + n` mostra exatamente o mesmo que `n`, porque a lista é a mesma. Então,
+     quando o deslize até lá termina, a pista recua `n` posições sem transição e nada na
+     tela muda. Tirar o `parada` (ou trocar o gatilho por um timer que dispare antes da
+     hora) transforma isso num deslize gigante para a direita, desfazendo a fila inteira à
+     vista de quem estiver olhando.
+
+     O gatilho é `onTransitionEnd` de propósito: um timer erraria o instante sempre que a
+     WebView da TV atrasasse um quadro. */
+  const codigo = semComentarios(renderer)
+  assert.match(codigo, /onTransitionEnd=\{aoFimDoDeslize\}/)
+  assert.match(codigo, /if \(passo < n\) return/, 'só recua no fim da volta')
+  assert.match(codigo, /setDeslizando\(false\)[\s\S]{0,40}setPasso\(\(v\) => v - n\)/)
+  assert.match(codigo, /\(deslizando \? '' : ' parada'\)/)
+  assert.match(css, /\.tvmb-cr-pista\.parada \{ transition: none; \}/)
 })
 
 test('🔴 o card em cena cresce por SCALE, nunca por largura', () => {

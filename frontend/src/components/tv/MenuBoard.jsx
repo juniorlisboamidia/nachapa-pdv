@@ -243,36 +243,65 @@ function Destaque({ produtos, destaqueId, ex }) {
    visíveis obrigaria a montar o próximo no instante da troca, com a foto ainda
    carregando — e o que se veria na parede seria um buraco entrando em cena. */
 export const MS_MINIMO_SLIDE = 1600
+// Quanto dura o deslize. Vive aqui porque o JS precisa do mesmo número que o CSS para
+// saber quando a transição acabou — e é nesse instante que a pista se reposiciona.
+export const MS_DESLIZE = 760
 
 function Carrossel({ produtos, ex, duracaoSegundos }) {
-  const itens = produtos.slice(0, 6)
-  const [indice, setIndice] = useState(0)
-  // Normalizado na leitura, não no estado: trocar a seleção no editor pode encurtar a
-  // lista enquanto a pista corre, e um índice velho apontaria para nada.
-  const ativo = itens.length ? indice % itens.length : 0
+  const itens = produtos.slice(0, 10)
+  const n = itens.length
+  /* `passo` só CRESCE, de 0 a n, e volta a 0 sem que ninguém veja. Ele não é o índice do
+     produto: é a posição na pista. */
+  const [passo, setPasso] = useState(0)
+  const [deslizando, setDeslizando] = useState(true)
+  const ativo = n ? passo % n : 0
   const emCena = itens[ativo]
 
   useEffect(() => {
-    if (itens.length < 2) return undefined
-    const bruto = (Number(duracaoSegundos) || 20) * 1000 / itens.length
+    if (n < 2) return undefined
+    const bruto = (Number(duracaoSegundos) || 20) * 1000 / n
     const ms = Math.max(MS_MINIMO_SLIDE, Math.round(bruto))
-    const t = setInterval(() => setIndice((i) => i + 1), ms)
+    const t = setInterval(() => { setDeslizando(true); setPasso((v) => v + 1) }, ms)
     return () => clearInterval(t)
-  }, [itens.length, duracaoSegundos])
+  }, [n, duracaoSegundos])
 
-  if (!itens.length) return null
+  if (!n) return null
+
+  /* ── A FILA CONTÍNUA ────────────────────────────────────────────────────────────────
+     A lista é desenhada TRÊS vezes e a pista fica sempre no bloco do meio. É o que tira
+     os dois vazios: no primeiro produto já existem dez cards à esquerda, e no último,
+     dez à direita. Sem isso, a tela abria com metade da fila e terminava com a outra
+     metade faltando.
+
+     A volta é invisível de graça, e por uma coincidência que vale explicar: a posição
+     `n + n` mostra exatamente o mesmo que a posição `n`, porque a lista é a mesma. Então,
+     assim que o deslize até lá termina, a pista recua n posições SEM transição — e o que
+     está na tela não muda um pixel. Nenhum fade, nenhuma pausa, nenhum truque de opacidade.
+
+     O gatilho é `onTransitionEnd`, e não um timer: assim o recuo acontece quando a
+     animação realmente acabou, inclusive se o navegador da TV atrasar um quadro. */
+  const aoFimDoDeslize = () => {
+    if (passo < n) return
+    setDeslizando(false)
+    setPasso((v) => v - n)
+  }
+
+  const trilha = [...itens, ...itens, ...itens]
 
   return (
     <div className="tvmb-cr">
       <div className="tvmb-cr-palco">
-        {/* O índice vai para o CSS como número puro: é ele que a pista usa para se
-            deslocar, e é assim que a conta do passo mora num lugar só. */}
-        <div className="tvmb-cr-pista" style={{ '--tvmb-cr-i': ativo }}>
-          {itens.map((p, i) => (
+        <div
+          className={'tvmb-cr-pista' + (deslizando ? '' : ' parada')}
+          style={{ '--tvmb-cr-i': n + passo }}
+          onTransitionEnd={aoFimDoDeslize}
+        >
+          {trilha.map((p, i) => (
             <article
-              className={'tvmb-cr-card' + (i === ativo ? ' ativo' : '')}
-              key={p.id}
-              aria-hidden={i !== ativo}
+              // A lista se repete, então o id sozinho não identifica o nó.
+              key={i + '-' + p.id}
+              className={'tvmb-cr-card' + (i === n + passo ? ' ativo' : '')}
+              aria-hidden={i !== n + passo}
             >
               <Foto src={p.imagemUrl} alt="" />
               <Selo selo={p.selo} mostrar={ex.fita} />
@@ -291,7 +320,7 @@ function Carrossel({ produtos, ex, duracaoSegundos }) {
       </div>
       {/* Os pontos não são navegação — ninguém toca numa parede. Eles dizem quanto falta,
           que é o que segura o olhar de quem chegou no meio da rodada. */}
-      {itens.length > 1 ? (
+      {n > 1 ? (
         <div className="tvmb-cr-pontos" aria-hidden="true">
           {itens.map((p, i) => (
             <span key={p.id} className={i === ativo ? 'ativo' : undefined} />
