@@ -70,7 +70,21 @@ export default function DispositivoPareamento() {
     const aoTeclar = (ev) => {
       if (/^[0-9]$/.test(ev.key)) { ev.preventDefault(); digitar(ev.key) }
       else if (ev.key === 'Backspace') { ev.preventDefault(); apagar() }
-      else if (ev.key === 'Enter') { ev.preventDefault(); enviarSeCompleto() }
+      else if (ev.key === 'Enter') {
+        /* ⚠️ Com uma TECLA focada, o Enter É o clique dela — e é assim que o controle
+           remoto da TV digita: o botão OK do D-pad chega aqui como Enter.
+
+           Interceptando sempre, o `preventDefault` engolia esse clique: a tecla nunca
+           entrava e o `enviarSeCompleto` rodava com o código vazio. Na TV isso parecia o
+           controle não funcionar, com a navegação entre as teclas funcionando
+           perfeitamente ao lado — o que torna o defeito difícil de ler.
+
+           Sem foco em botão (o caso do teclado bluetooth do balcão), o Enter continua
+           sendo "enviar". */
+        if (document.activeElement?.tagName === 'BUTTON') return
+        ev.preventDefault()
+        enviarSeCompleto()
+      }
     }
     window.addEventListener('keydown', aoTeclar)
     return () => window.removeEventListener('keydown', aoTeclar)

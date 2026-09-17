@@ -67,3 +67,22 @@ test('🔴 todo filho do pareamento tem linha atribuída na paisagem', () => {
   const semArea = todos.filter((c) => !new RegExp('\\.' + c + '\\b[^{]*\\{[^}]*grid-(column|row)').test(paisagem))
   assert.deepEqual(semArea, [], 'estes filhos não têm área no layout deitado')
 })
+
+test('🔴 o OK do controle CLICA a tecla focada — não é engolido pelo Enter', () => {
+  /* O botão OK do D-pad chega à página como `Enter`. O handler do teclado físico tratava
+     todo Enter como "enviar o código" e dava `preventDefault`, o que engolia o clique do
+     botão focado: a tecla nunca entrava e o envio rodava com o código vazio.
+
+     Na TV isso lia como "o controle não funciona" — com a navegação entre as teclas
+     funcionando perfeitamente ao lado, que é o que torna o defeito difícil de diagnosticar.
+
+     Fora de um botão (teclado bluetooth no balcão) o Enter continua sendo "enviar", e é
+     por isso que a saída é condicional ao foco, e não a remoção do tratamento. */
+  const i = pagina.indexOf("ev.key === 'Enter'")
+  assert.ok(i > 0, 'sumiu o tratamento do Enter')
+  const bloco = pagina.slice(i, i + 900)
+  const saida = bloco.indexOf("document.activeElement?.tagName === 'BUTTON'")
+  const prevent = bloco.indexOf('ev.preventDefault()')
+  assert.ok(saida > 0, 'o Enter precisa sair quando há um botão focado')
+  assert.ok(saida < prevent, 'a saída tem de vir ANTES do preventDefault, senão o clique já foi engolido')
+})
