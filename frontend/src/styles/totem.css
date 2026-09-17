@@ -1653,6 +1653,12 @@
   --tq-chamada-lado: clamp(24px, 5vw, 64px);
   width: min(760px, calc(100% - var(--tq-chamada-lado) * 2));
   margin: 0 0 clamp(40px, 7vh, 96px);
+  /* Aqui a chamada é a única coisa tocável sobre a arte inteira, e disputa atenção com
+     um cartaz feito para ser lido de longe: o corpo que serve na vitrine, onde ela
+     divide a tela com título e subtítulo, fica pequeno neste contexto.
+     Sem `nowrap`: o texto é da loja e pode não ser "Iniciar pedido" — quebrar em duas
+     linhas é feio, transbordar o botão é defeito. */
+  font-size: clamp(28px, 5.2vw, 62px);
 }
 
 /* Marcadores do carrossel: informação de posição, discreta. Só aparecem com 2+. */
