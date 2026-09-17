@@ -1390,6 +1390,13 @@
   width: auto; align-self: flex-start; margin-top: clamp(6px, 1.4vh, 18px);
   padding-left: clamp(24px, 3.2vw, 44px); padding-right: clamp(24px, 3.2vw, 44px);
   font-size: clamp(21px, 3.3vw, 40px);
+  /* A ALTURA é o que sobrava. O padrão (até 168px) é a medida da tela em que a chamada
+     ocupa o lugar de tudo; aqui ela divide a metade de cima com título, subtítulo e a
+     foto, e aquela barra vertical empurrava a composição inteira.
+     O piso de 72px é deliberado e não deve descer: num totem isto é área de toque, e
+     72px continua muito acima dos 48px de alvo confortável mesmo com luva. */
+  min-height: clamp(72px, 7.4vh, 116px);
+  padding-top: clamp(12px, 1.4vh, 18px); padding-bottom: clamp(12px, 1.4vh, 18px);
 }
 
 /* ── As esteiras ──
