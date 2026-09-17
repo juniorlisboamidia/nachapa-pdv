@@ -1,28 +1,22 @@
-import { Ico } from './icones'
 import { moeda } from './formato'
 
 // Barra do pedido — o pedido sempre à vista, no rodapé do catálogo.
 //
-// Duas mudanças de comportamento em relação ao botão flutuante que ela
-// substitui: a altura é RESERVADA mesmo com o pedido vazio (nada salta quando o
-// primeiro item entra, e a última fileira de produtos nunca fica escondida
-// embaixo de um botão sobreposto), e o contador pulsa a cada item novo — é o
-// sinal de que o toque em "Adicionar" funcionou, já que agora o cliente volta ao
-// catálogo em vez de cair no carrinho.
+// COM O PEDIDO VAZIO ELA NÃO EXISTE. Antes reservava a altura e dizia "toque num
+// produto para começar", para nada saltar quando o primeiro item entrasse. Mas é
+// justamente na tela vazia que a altura pesa mais: 132px de rodapé explicando o
+// óbvio a quem está olhando para um cardápio de fotos, tirados do catálogo e da
+// coluna de categorias, que são o que a pessoa veio ver.
 //
-// O pulso não guarda estado: a `key` do contador é a própria quantidade, então o
-// nó é recriado a cada mudança e a animação do CSS recomeça sozinha.
+// O salto que a reserva evitava continua existindo, e agora é aceito: quando o
+// primeiro item entra, quem avisa é o cartão central com a foto do produto
+// (ConfirmacaoItem) — o olho está nele, não no rodapé que apareceu atrás.
+//
+// Com pedido, o contador pulsa a cada item novo. O pulso não guarda estado: a
+// `key` do contador é a própria quantidade, então o nó é recriado a cada mudança
+// e a animação do CSS recomeça sozinha.
 export default function BarraPedido({ quantidade, total, aoVerPedido }) {
-  if (!quantidade) {
-    return (
-      <div className="tq-barra">
-        <div className="tq-barra-vazia">
-          <Ico nome="carrinho" tam={26} />
-          Toque num produto para começar o seu pedido
-        </div>
-      </div>
-    )
-  }
+  if (!quantidade) return null
   return (
     <div className="tq-barra tq-sobre-preto">
       <div className="tq-barra-linha">

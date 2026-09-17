@@ -883,11 +883,6 @@
 }
 .tq-barra-linha { display: flex; align-items: center; gap: 12px; font-size: clamp(15px, 2.04vw, 22px); color: var(--tq-texto-claro); }
 .tq-barra-total { margin-left: auto; font-size: clamp(22px, 3.52vw, 38px); color: var(--tq-amarelo); }
-.tq-barra-vazia {
-  display: flex; align-items: center; justify-content: center; gap: 12px;
-  min-height: calc(var(--tq-barra-h) - 32px); color: rgba(var(--tq-tinta-base), 0.55);
-  font-size: clamp(15px, 2.04vw, 22px); text-align: center;
-}
 .tq-qtd {
   min-width: 40px; height: 40px; padding: 0 10px; border-radius: 999px;
   background: var(--tq-amarelo); color: var(--tq-tinta);
