@@ -392,7 +392,10 @@ test('🔴 a volta da fila é INVISÍVEL — recuo sem transição, na posição
   assert.match(codigo, /if \(!precisaRecuar\(passo, n\)\) return/, 'só recua no fim da volta')
   assert.match(codigo, /setDeslizando\(false\)[\s\S]{0,40}setPasso\(\(v\) => v - n\)/)
   assert.match(codigo, /\(deslizando \? '' : ' parada'\)/)
-  assert.match(css, /\.tvmb-cr-pista\.parada \{ transition: none; \}/)
+  /* A pista E os cards param juntos. Parando só a pista, no recuo o card que sai de cena
+     encolhe animado enquanto o gêmeo dele cresce animado, na mesma posição da tela — o
+     produto do meio "cresce duas vezes" e a fila engasga na volta. */
+  assert.match(css, /\.tvmb-cr-pista\.parada,\s*\.tvmb-cr-pista\.parada \.tvmb-cr-card \{ transition: none; \}/)
 })
 
 test('🔴 o card em cena cresce por SCALE, nunca por largura', () => {

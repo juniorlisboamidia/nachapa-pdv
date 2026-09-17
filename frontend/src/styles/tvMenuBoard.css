@@ -679,8 +679,15 @@
 }
 /* O RECUO invisível do fim da volta: a pista anda n posições para trás sem transição, e
    como a lista se repete, o que está na tela não muda um pixel. Sem isto, a volta seria
-   um deslize gigante para a direita, desfazendo a fila inteira à vista de todos. */
-.tvmb-cr-pista.parada { transition: none; }
+   um deslize gigante para a direita, desfazendo a fila inteira à vista de todos.
+
+   ⚠️ OS CARDS TAMBÉM PARAM, e esta é a metade que falta quando só a pista é parada. No
+   recuo, o card que estava em cena perde o destaque e o GÊMEO dele assume — o mesmo
+   produto, uma volta atrás na trilha. Se os dois continuarem animando, um encolhe e o
+   outro cresce na MESMA posição da tela, e o que se vê é o produto do meio crescendo
+   duas vezes seguidas. Parados, a troca acontece dentro de um quadro e ninguém percebe. */
+.tvmb-cr-pista.parada,
+.tvmb-cr-pista.parada .tvmb-cr-card { transition: none; }
 .tvmb-cr-card {
   position: relative;
   flex: 0 0 auto;
