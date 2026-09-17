@@ -1408,6 +1408,13 @@ body.theme-dark .btn-danger { background: transparent !important; color: #f87171
 body.theme-dark .btn-danger:hover { background: rgba(220, 38, 38, 0.16) !important; border-color: #5a2b2b !important; }
 body.theme-dark .btn-icon { background: var(--d-surface) !important; color: var(--d-text-3) !important; border-color: var(--d-border) !important; }
 body.theme-dark .ficha-add-trigger { color: var(--d-text-3); border-color: var(--d-border); }
+/* O hover trazia `#fff7ed` da regra base — um creme quase branco acendendo debaixo do
+   cursor. No escuro o mesmo destaque é o laranja do sistema, translúcido. */
+body.theme-dark .ficha-add-trigger:hover {
+  background: rgba(249, 115, 22, 0.16);
+  border-color: rgba(249, 115, 22, 0.5);
+  color: #fb923c;
+}
 
 /* Abas / acordeões / pílulas */
 body.theme-dark .av-tabs,
@@ -1420,6 +1427,13 @@ body.theme-dark .ic-filtro.active { background: #2b2510 !important; border-color
 
 /* Faixas/alertas neutros e divisórias */
 body.theme-dark .alert-gray { background: var(--d-surface-2) !important; border-color: var(--d-border) !important; }
+/* Os alertas COLORIDOS no escuro. Só o cinza tinha versão escura; os outros três seguiam
+   com os cremes e rosas do tema claro — manchas quase brancas no meio da tela escura.
+   A cor continua dizendo a mesma coisa, agora como tinta translúcida sobre a superfície
+   escura em vez de fundo próprio: a semântica se mantém e o brilho sai. */
+body.theme-dark .alert-yellow { background: rgba(245, 158, 11, 0.13) !important; border-color: rgba(245, 158, 11, 0.32) !important; }
+body.theme-dark .alert-red    { background: rgba(220, 38, 38, 0.13)  !important; border-color: rgba(220, 38, 38, 0.34)  !important; }
+body.theme-dark .alert-green  { background: rgba(34, 197, 94, 0.13)  !important; border-color: rgba(34, 197, 94, 0.32)  !important; }
 body.theme-dark .ic-vazio-faixa,
 body.theme-dark .ficha-add-area { background: var(--d-surface-2) !important; border-color: var(--d-border) !important; color: var(--d-text-3) !important; }
 body.theme-dark .ic-dep-row { border-bottom-color: var(--d-border-soft) !important; }
