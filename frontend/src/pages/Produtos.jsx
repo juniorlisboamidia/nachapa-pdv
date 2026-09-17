@@ -788,10 +788,9 @@ export default function Produtos() {
         />
       )}
 
-      <div className="section-title">Produtos e Fichas</div>
-
-      {/* Abas por tipo de item vendido */}
-      <div className="modal-tabs" style={{ marginBottom: 14 }}>
+      {/* Abas por tipo de item vendido. O marginTop substitui o respiro que vinha do
+          rótulo de seção removido — sem ele as abas encostam no cabeçalho da página. */}
+      <div className="modal-tabs" style={{ marginTop: 20, marginBottom: 14 }}>
         {TIPOS_PRODUTO_TABS.map((t) => (
           <button
             key={t.value}
