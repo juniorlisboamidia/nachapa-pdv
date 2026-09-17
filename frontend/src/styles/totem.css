@@ -1360,6 +1360,18 @@
     rgba(0, 0, 0, 0.55) 52%,
     rgba(0, 0, 0, 0.86) 100%);
 }
+/* O PÉ DA FOTO se dissolve no chão do template, em vez de terminar numa linha reta.
+   É esta camada que faz a faixa deixar de parecer um bloco colado entre as metades:
+   quando a imagem chega ao fim já virou o mesmo fundo que a faixa e a esteira usam,
+   e não sobra aresta nenhuma para o olho achar.
+   Termina exatamente em `--tq-fundo` — a mesma cor dos dois vizinhos, nos dois temas —
+   então a emenda não existe como cor, só como distância. */
+.tq-vit-alto::after {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 0;
+  height: clamp(90px, 13vh, 210px);
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0) 0%, var(--tq-fundo) 100%);
+  pointer-events: none; z-index: 0;
+}
 .tq-vit-txt { position: relative; z-index: 1; display: flex; flex-direction: column; gap: clamp(12px, 2vh, 28px); }
 .tq-vit-tit {
   font-size: clamp(40px, 8.6vw, 122px); line-height: 0.96; letter-spacing: -0.02em;
@@ -1370,9 +1382,14 @@
   color: var(--tq-texto-claro); max-width: 30ch;
 }
 /* Dentro da vitrine o botão não é mais a tela inteira: ele é um alvo entre outros
-   elementos, então volta a ter largura de conteúdo e a se alinhar com o texto. */
+   elementos, então volta a ter largura de conteúdo e a se alinhar com o texto.
+   E aqui ele se aperta: o padrão é dimensionado para a tela em que a chamada é a única
+   coisa que existe, e no meio de uma composição a mesma folga lê como exagero. Só o
+   EIXO HORIZONTAL encolhe — a altura mínima é área de toque e não se mexe nela. */
 .tq-espera.vitrine .tq-espera-chamada {
   width: auto; align-self: flex-start; margin-top: clamp(6px, 1.4vh, 18px);
+  padding-left: clamp(24px, 3.2vw, 44px); padding-right: clamp(24px, 3.2vw, 44px);
+  font-size: clamp(21px, 3.3vw, 40px);
 }
 
 /* ── As esteiras ──
@@ -1402,14 +1419,20 @@
   position: relative; flex: 0 0 auto; display: grid; place-items: center;
   height: clamp(72px, 6.2vh, 124px);
   background: var(--tq-fundo);
-  overflow: hidden;
+  /* Sem `overflow: hidden`: o halo transborda de propósito para os vizinhos, e é esse
+     transbordo que apaga a emenda. O chão opaco continua aqui e segue impedindo a foto
+     de aparecer — quem recorta a metade de cima é o clip-path dela, não este overflow. */
 }
+/* A sombra continua existindo porque no fundo CLARO é ela que segura a frase branca
+   sobre o papel. Mas agora é um halo largo e fraco, não um caroço opaco: com a foto já
+   se dissolvendo acima, ela não precisa mais separar nada — só dar chão ao texto.
+   No fundo escuro ela some quase por completo, que é o resultado pedido. */
 .tq-vit-faixa::before {
-  content: ''; position: absolute; inset: 0; pointer-events: none;
-  background: radial-gradient(ellipse 58% 120% at 50% 50%,
-    rgba(0, 0, 0, 0.98) 0%,
-    rgba(0, 0, 0, 0.88) 38%,
-    rgba(0, 0, 0, 0.42) 70%,
+  content: ''; position: absolute; inset: -20% -6%; pointer-events: none;
+  background: radial-gradient(ellipse 60% 92% at 50% 50%,
+    rgba(0, 0, 0, 0.62) 0%,
+    rgba(0, 0, 0, 0.40) 40%,
+    rgba(0, 0, 0, 0.14) 72%,
     rgba(0, 0, 0, 0) 100%);
 }
 .tq-vit-faixa-txt {
