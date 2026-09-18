@@ -1,15 +1,19 @@
 // A POSIÇÃO FÍSICA de uma TV: como ela está na parede, e se a imagem está saindo em pé.
 //
 // ── POR QUE ISTO É UMA CONVERSA, E NÃO UM CAMPO ───────────────────────────────────────
-// Uma TV pendurada em pé continua recebendo a imagem deitada: a box não sabe que o painel
-// foi girado, e o navegador também não. Não existe API que conte ao sistema como a TV está
-// na parede — nem para que LADO ela foi virada, nem se aquela box em particular é das raras
-// que giram a saída sozinhas.
+// Uma TV pendurada em pé costuma continuar recebendo a imagem deitada: a box não sabe que
+// o painel foi girado. Não existe API que conte ao sistema como a TV está na parede, nem
+// para que LADO ela foi virada.
 //
-// Então o sistema não tenta adivinhar. O gestor DECLARA a orientação, o sistema aplica o
-// palpite mais provável, e a confirmação é feita do único jeito confiável: olhando para a
-// parede. "Está errado" avança para a próxima posição provável; em no máximo três toques
-// qualquer combinação de TV, box e suporte fica certa.
+// Uma coisa o sistema NÃO adivinha: o formato do que chega. A TV mede a própria janela e
+// reporta no heartbeat, e o servidor devolve isso em `tela.saida` — é o que separa "falta
+// um quarto de volta" de "não falta nada" (há boxes que giram a saída sozinhas). Quem mede
+// é o SERVIDOR: duas réguas para a mesma medida é como a parede e a gestão discordam.
+//
+// O resto continua sendo conversa. O gestor DECLARA a orientação, o sistema aplica o palpite
+// mais provável, e a confirmação é feita do único jeito confiável: olhando para a parede.
+// "Está errado" avança para a próxima posição provável; em no máximo três toques qualquer
+// combinação de TV, box e suporte fica certa.
 //
 // ── A JANELA DE AJUSTE ────────────────────────────────────────────────────────────────
 // A TV consulta o servidor uma vez por minuto. Com este modal aberto ela passa a consultar
@@ -17,6 +21,16 @@
 // modal abre a janela ao nascer e a fecha ao sair.
 import { useEffect, useState } from 'react'
 import api from '../../services/api'
+
+/* A primeira frase, antes de qualquer giro. Quando a TV já reporta que recebe a imagem na
+   posição declarada, o sistema não gira nada — e dizer isso poupa o gestor de procurar
+   defeito onde está tudo certo, que foi exatamente o que a primeira parede em pé gerou. */
+function dicaInicial(tela) {
+  if (tela.saida && tela.saida === tela.orientacao) {
+    return 'Esta TV já recebe a imagem nessa posição, então ela deve aparecer certa sem nenhum giro.'
+  }
+  return 'A TV pode levar até um minuto para responder na primeira vez. Depois disso, cada giro aparece em poucos segundos.'
+}
 
 const ORIENTACOES = [
   { id: 'PAISAGEM', titulo: 'Deitada', desc: 'TV na horizontal, como em casa.' },
@@ -117,7 +131,7 @@ export default function PosicaoDaTela({ tela, aoAtualizar, aoFechar }) {
           </div>
           <div className="ttm-dica">
             {giros === 0
-              ? 'A TV pode levar até um minuto para responder na primeira vez. Depois disso, cada giro aparece em poucos segundos.'
+              ? dicaInicial(tela)
               : `Girei a imagem (${giros}ª tentativa). Espere alguns segundos e olhe de novo — são no máximo três giros até acertar.`}
           </div>
         </div>

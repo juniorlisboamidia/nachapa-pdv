@@ -15,8 +15,15 @@
 //               virada — por isso não dá para derivar uma da outra.
 //
 // Uma TV em pé pode precisar de 90 ou de 270 (virada para um lado ou para o outro), ou de
-// 0 (as raras boxes que giram a saída sozinhas). Uma TV deitada pode precisar de 180:
-// suporte de teto costuma pendurar o painel de ponta-cabeça.
+// 0 (as boxes que giram a saída sozinhas). Uma TV deitada pode precisar de 180: suporte de
+// teto costuma pendurar o painel de ponta-cabeça.
+//
+// ── O QUE A PRÓPRIA TV MEDE ───────────────────────────────────────────────────────────
+// Uma coisa o sistema NÃO precisa adivinhar: o formato da imagem que CHEGA. A TV reporta
+// o tamanho da própria janela no heartbeat, e é isso que separa "falta um quarto de volta"
+// de "não falta nada" — sem ele, uma box que já manda 1080 × 1920 levaria o gestor a girar
+// duas vezes para voltar ao zero de onde partiu. O que continua sendo declarado é a parede;
+// o que continua sendo conferido no olho é para que LADO ela foi virada.
 
 export const ORIENTACOES = Object.freeze(['PAISAGEM', 'RETRATO']);
 export const ORIENTACAO_PADRAO = 'PAISAGEM';
@@ -48,25 +55,53 @@ export function rotacaoDe(d) {
   return typeof r === 'number' && ROTACOES.includes(r) ? r : 0;
 }
 
-/* A rotação com que uma orientação NASCE. Em pé começa em 90 porque a maioria das boxes
-   não gira a saída sozinha; se estiver errado, o gestor gira na conferência. */
-export function rotacaoInicial(orientacao) {
-  return orientacao === 'RETRATO' ? 90 : 0;
+/* O formato da imagem que a TV está REALMENTE recebendo, medido por ela mesma e reportado
+   no heartbeat. Não é a posição do painel na parede: é a da imagem que chega nele.
+
+   A maioria das boxes manda 1920 × 1080 aconteça o que acontecer. Algumas — e o Fully com
+   a rotação forçada — mandam 1080 × 1920, e nessas a correção por CSS não é um quarto de
+   volta: é NENHUMA.
+
+   `null` = ainda não deu sinal, ou mediu torto. Quem chama decide o que fazer com isso. */
+export function saidaDe(d) {
+  const t = d?.heartbeatJson?.tela;
+  const l = Number(t?.w);
+  const a = Number(t?.h);
+  if (!Number.isFinite(l) || !Number.isFinite(a) || l <= 0 || a <= 0 || l === a) return null;
+  return a > l ? 'RETRATO' : 'PAISAGEM';
 }
 
 /* A ordem em que o "está errado, girar" percorre as posições: da MAIS provável para a
-   menos, dada a orientação. Girar +90 às cegas levaria uma TV em pé de 90 para 180 — de
-   lado para de ponta-cabeça, que é certamente errado — antes de chegar ao outro lado. */
-const CICLO = Object.freeze({
-  RETRATO: Object.freeze([90, 270, 0, 180]),
-  PAISAGEM: Object.freeze([0, 180, 90, 270]),
-});
+   menos. O que decide não é a orientação sozinha — é se a imagem que CHEGA já está na
+   posição declarada:
 
-export function proximaRotacao(orientacao, atual) {
-  const ciclo = CICLO[ORIENTACOES.includes(orientacao) ? orientacao : ORIENTACAO_PADRAO];
-  const i = ciclo.indexOf(atual);
+     já chega certa  →  a correção provável é NENHUMA, e o suspeito seguinte é o painel
+                        pendurado de ponta-cabeça (suporte de teto).
+     chega virada    →  falta um quarto de volta, e o que resta adivinhar é para que LADO.
+
+   Girar +90 às cegas levaria uma TV em pé de 90 para 180 — de lado para de ponta-cabeça,
+   que é certamente errado — antes de chegar ao outro lado. */
+const CICLO_DIRETO = Object.freeze([0, 180, 90, 270]);
+const CICLO_QUARTO = Object.freeze([90, 270, 0, 180]);
+
+function ciclo(orientacao, saida) {
+  const o = ORIENTACOES.includes(orientacao) ? orientacao : ORIENTACAO_PADRAO;
+  /* Sem medida — TV que nunca deu sinal —, assume-se a box que NÃO gira: é a maioria, e é
+     exatamente o que este canal fazia antes de a medida entrar na conta. */
+  const s = ORIENTACOES.includes(saida) ? saida : ORIENTACAO_PADRAO;
+  return s === o ? CICLO_DIRETO : CICLO_QUARTO;
+}
+
+/* A rotação com que uma orientação NASCE: o primeiro palpite do ciclo. */
+export function rotacaoInicial(orientacao, saida = null) {
+  return ciclo(orientacao, saida)[0];
+}
+
+export function proximaRotacao(orientacao, atual, saida = null) {
+  const c = ciclo(orientacao, saida);
+  const i = c.indexOf(atual);
   // Rotação fora do catálogo: recomeça do mais provável.
-  return ciclo[(i + 1) % ciclo.length];
+  return c[(i + 1) % c.length];
 }
 
 /* A janela de ajuste está aberta? `agora` e o valor do banco em qualquer forma de data. */

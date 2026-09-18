@@ -28,6 +28,7 @@ import { ordemDeRecalculo } from './custos/propagacaoCusto.js';
 import {
   validarOrientacao as tvValidarOrientacao, orientacaoDe as tvOrientacaoDe, rotacaoDe as tvRotacaoDe,
   rotacaoInicial as tvRotacaoInicial, proximaRotacao as tvProximaRotacao, emAjuste as tvEmAjuste,
+  saidaDe as tvSaidaDe,
   posicaoPublica as tvPosicaoPublica, MS_JANELA_AJUSTE as TV_MS_JANELA_AJUSTE,
 } from './tvOrientacao.js';
 // A regra ÚNICA de como o custo de um item vendido é apurado. Quem precisa decidir
@@ -11575,6 +11576,9 @@ function tvTelaAdmin(d, agora) {
     ...aparelhoAdmin(d, agora),
     orientacao: tvOrientacaoDe(d),
     rotacao: tvRotacaoDe(d),
+    // O formato que a TV diz estar recebendo. O modal de posição usa para avisar que aquela
+    // box já gira sozinha — e para não haver duas réguas, quem mede é o servidor.
+    saida: tvSaidaDe(d),
     emAjuste: tvEmAjuste(d, new Date(agora).getTime()),
   };
 }
@@ -11635,7 +11639,7 @@ app.put('/api/tv-indoor/telas/:id/posicao', async (req, res) => {
     const mudou = orientacao !== tvOrientacaoDe(alvo.d);
     await tvGravarPosicao(res, alvo, {
       tvOrientacao: orientacao,
-      ...(mudou ? { tvRotacao: tvRotacaoInicial(orientacao) } : {}),
+      ...(mudou ? { tvRotacao: tvRotacaoInicial(orientacao, tvSaidaDe(alvo.d)) } : {}),
       tvAjusteAte: tvAbrirAjuste(),
     });
   } catch (err) { console.error('[tv-indoor/telas posicao PUT]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }
@@ -11648,7 +11652,7 @@ app.post('/api/tv-indoor/telas/:id/girar', async (req, res) => {
   try {
     const alvo = await tvTelaDoAdmin(req, res); if (!alvo) return;
     await tvGravarPosicao(res, alvo, {
-      tvRotacao: tvProximaRotacao(tvOrientacaoDe(alvo.d), tvRotacaoDe(alvo.d)),
+      tvRotacao: tvProximaRotacao(tvOrientacaoDe(alvo.d), tvRotacaoDe(alvo.d), tvSaidaDe(alvo.d)),
       tvAjusteAte: tvAbrirAjuste(),
     });
   } catch (err) { console.error('[tv-indoor/telas girar POST]', err); res.status(500).json({ erro: 'ERRO_INTERNO' }); }

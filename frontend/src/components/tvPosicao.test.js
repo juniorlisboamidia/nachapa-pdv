@@ -95,6 +95,15 @@ test('🔴 "girar" não manda graus — quem decide a próxima posição é o se
   assert.equal(/girar`, \{/.test(modal), false, 'o POST de girar não leva corpo')
 })
 
+test('🔴 quem mede o formato da saída é o SERVIDOR — o modal só repete', () => {
+  /* A medida vem em `tela.saida`, calculada no backend a partir do heartbeat. Se o modal
+     voltasse a comparar largura e altura por conta própria, um dia ele diria "já está em
+     pé" enquanto o servidor ainda mandava girar — duas réguas para a mesma medida. */
+  const modal = ler('./tv/PosicaoDaTela.jsx')
+  assert.match(modal, /tela\.saida === tela\.orientacao/)
+  assert.equal(/tela\.tela/.test(modal), false, 'o modal não mede a tela por conta própria')
+})
+
 test('🔴 o modal de posição abre a janela de ajuste ao nascer e a FECHA ao sair', () => {
   // Janela esquecida aberta = a TV batendo no servidor a cada 5 s por dez minutos à toa.
   // (O teto de 10 min no servidor é o cinto de segurança; isto aqui é o comportamento.)
