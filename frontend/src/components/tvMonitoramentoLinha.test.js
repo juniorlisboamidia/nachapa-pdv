@@ -159,3 +159,22 @@ test('os três tipos de item compõem a linha saudável igualmente bem', () => {
     assert.equal(composicao(tela({ itemAtual: item }), AGORA).item, esperado)
   }
 })
+
+// ── Guardas estáticas: o monitoramento mora em Telas ─────────────────────────────────
+import fs from 'node:fs'
+const ler = (rel) => fs.readFileSync(new URL(rel, import.meta.url), 'utf8').replace(/\r\n/g, '\n')
+
+test('🔴 o monitoramento é camada por cima da lista de Telas — nunca condição', () => {
+  /* A página própria saiu; o diagnóstico virou o botão "Monitorar" na linha da TV. Três
+     coisas não podem regredir: a leitura de saúde é SEPARADA e silenciosa (um 500 dela não
+     apaga a lista nem gera toast a cada 30 s); o selo de ATENÇÃO sobe para a linha (é o que
+     online/offline não diz); e o modal desenha a TV da leitura MAIS RECENTE, pelo id —
+     aberto por dois minutos, ele não pode envelhecer. */
+  const telas = ler('../pages/TvIndoorTelas.jsx')
+  assert.match(telas, /api\.get\('\/tv-indoor\/monitoramento'\)[\s\S]{0,400}\.catch\(\(\) => \{\}\)/, 'leitura silenciosa')
+  assert.match(telas, /m\?\.saude === 'ATENCAO'/)
+  assert.match(telas, /monitor\?\.porId\[monitorando\]/, 'o modal lê a TV da leitura mais recente')
+  assert.match(telas, />\s*Monitorar\s*</)
+  assert.equal(fs.existsSync(new URL('../pages/TvIndoorMonitoramento.jsx', import.meta.url)), false, 'a página própria não volta')
+  assert.match(ler('../App.jsx'), /path="tv-indoor\/monitoramento" element=\{<Navigate to="\/tv-indoor\/telas" replace \/>\}/)
+})

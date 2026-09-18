@@ -178,12 +178,10 @@ export const grupos = [
       {
         label: 'TV Indoor', icon: 'megaphone', area: 'aparelhos',
         itens: [
+          // O monitoramento ("esta TV está funcionando?") mora DENTRO de Telas — selo de
+          // atenção na linha e botão "Monitorar" por TV. Já foi folha própria aqui; era uma
+          // porta a mais para uma pergunta que se faz olhando para uma TV específica.
           { to: '/tv-indoor/telas', label: 'Telas', icon: 'cpu' },
-          // Monitoramento logo depois de Telas, e NÃO dentro delas: "cadastrar um aparelho"
-          // e "descobrir por que a parede está errada" são tarefas de momentos diferentes, e
-          // entupir a gestão com diagnóstico faria as duas piores. Fica em cima porque é a
-          // pergunta com pressa — as outras folhas são trabalho planejado.
-          { to: '/tv-indoor/monitoramento', label: 'Monitoramento', icon: 'analise' },
           // Conteúdos é O acervo: imagens e vídeos juntos. Já foram duas folhas (a de vídeo
           // tem cota de disco, envio com progresso e o estado "falta o arquivo"), mas para
           // quem monta uma playlist os dois são a mesma matéria-prima — separar era obrigar

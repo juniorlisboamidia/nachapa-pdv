@@ -55,7 +55,6 @@ import TotemBanners from './pages/TotemBanners'
 import TotemDestaques from './pages/TotemDestaques'
 import DispositivoPareamento from './pages/DispositivoPareamento'
 import TvIndoorTelas from './pages/TvIndoorTelas'
-import TvIndoorMonitoramento from './pages/TvIndoorMonitoramento'
 import TvIndoorConteudos from './pages/TvIndoorConteudos'
 import TvIndoorPlaylists from './pages/TvIndoorPlaylists'
 import TvIndoorProgramacao from './pages/TvIndoorProgramacao'
@@ -179,7 +178,8 @@ export default function App() {
                 `/tv-indoor` cai na PRIMEIRA folha, como o `/totem` faz. */}
             <Route path="tv-indoor" element={<Navigate to="/tv-indoor/telas" replace />} />
             <Route path="tv-indoor/telas" element={<TvIndoorTelas />} />
-            <Route path="tv-indoor/monitoramento" element={<TvIndoorMonitoramento />} />
+            {/* O monitoramento virou parte de Telas (botão "Monitorar" por TV). */}
+            <Route path="tv-indoor/monitoramento" element={<Navigate to="/tv-indoor/telas" replace />} />
             <Route path="tv-indoor/conteudos" element={<TvIndoorConteudos />} />
             {/* Vídeos virou parte de Conteúdos. O endereço antigo continua valendo: pode
                 estar num favorito ou num histórico, e um 404 aqui leria como "sumiu com meus

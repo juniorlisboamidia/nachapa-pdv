@@ -3932,54 +3932,12 @@ body.theme-dark .hb-table tr.ttm-linha-revisao:hover td { background: #3a2612; }
 .tvi-aviso-overlap { color: #b45309; }
 body.theme-dark .tvi-aviso-overlap { color: #fbbf24; }
 
-/* ── Monitoramento ────────────────────────────────────────────────────────
-   Os números do topo existem para uma pergunta: "tem algo errado agora?".
-   Por isso o cartão de ATENÇÃO tem cor e os outros não — se tudo fosse
-   colorido, nada chamaria atenção. */
-.tvi-mon-resumo {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-bottom: 16px;
-}
-.tvi-mon-cartao {
-  display: flex; flex-direction: column; gap: 2px; padding: 12px 14px;
-  border: 1px solid var(--app-border); border-radius: 10px; background: var(--app-surface);
-}
-.tvi-mon-cartao.alerta { border-color: #f59e0b; background: #fffbeb; }
-.tvi-mon-cartao.off { border-color: #ef4444; background: #fef2f2; }
-body.theme-dark .tvi-mon-cartao.alerta { background: rgba(245, 158, 11, 0.12); }
-body.theme-dark .tvi-mon-cartao.off { background: rgba(239, 68, 68, 0.12); }
-.tvi-mon-numero { font-size: 26px; line-height: 1.1; font-variant-numeric: tabular-nums; }
-
-/* A bolinha é redundante com o selo, de propósito: cor sozinha não pode ser a
-   única portadora de informação, e forma + texto sobrevivem a quem não
-   distingue as cores. */
-.tvi-mon-linha { display: flex; align-items: flex-start; gap: 12px; padding: 12px; border: 1px solid var(--app-border); border-radius: 10px; flex-wrap: wrap; }
-/* O botão Diagnóstico nunca some: com pouca largura ele desce para a própria
-   linha em vez de ser espremido para fora da tela. */
-.tvi-mon-linha .tvi-item-info { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.tvi-mon-linha .tvi-item-acoes { flex: 0 0 auto; margin-left: auto; }
-.tvi-ponto { width: 10px; height: 10px; border-radius: 50%; margin-top: 6px; flex: 0 0 auto; background: var(--app-text-3); }
-.tvi-ponto.ok { background: #16a34a; }
-.tvi-ponto.alerta { background: #f59e0b; }
-.tvi-ponto.off { background: #ef4444; }
-.tvi-ponto.neutro { background: var(--app-text-3); }
-
-/* HIERARQUIA DE COR. A cor semântica forte fica no PONTO e no SELO — dois
-   elementos, e chega. A mensagem é texto normal: com três coisas gritando o
-   mesmo alarme, nenhuma informa, e o olho aprende a pular todas. O peso da
-   fonte já a separa do apoio sem precisar de cor. */
-.tvi-mon-aviso { font-size: 13.5px; font-weight: 600; color: var(--app-text); margin: 2px 0; }
-
-.tvi-mon-cabeca { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-/* O nome trunca em vez de empurrar o selo para fora da linha. */
-.tvi-mon-nome { font-weight: 600; font-size: 14.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
-
-/* O que está no ar é a segunda coisa mais importante da linha saudável — e a
-   primeira que interessa quando está tudo certo. */
-.tvi-mon-item { font-size: 13.5px; color: var(--app-text); }
-.tvi-mon-prog { font-size: 12.5px; color: var(--app-text-2); }
-/* Apoio em muted: sincronização e resolução são conferência, não leitura. */
-.tvi-mon-apoio { font-size: 12px; color: var(--app-text-3, var(--app-text-2)); }
-.tvi-mon-item, .tvi-mon-prog, .tvi-mon-apoio, .tvi-mon-aviso { display: block; overflow-wrap: anywhere; }
+/* ── Monitoramento na linha de Telas ──────────────────────────────────────
+   Só a ATENÇÃO aparece na lista: online/offline a linha já diz, e um selo
+   verde em toda TV saudável não informaria nada. A cor fica no selo; a frase
+   do servidor é texto normal, com peso — dois alarmes já é o bastante. */
+.apr-atencao { display: flex; align-items: flex-start; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.apr-atencao-txt { font-size: 12.5px; font-weight: 600; color: var(--app-text); overflow-wrap: anywhere; }
 
 /* ── Menu Board V2: seletor de template e interruptores ───────────────────
    O wireframe é desenhado em CSS, não em imagem: "Vitrine" não diz nada a quem

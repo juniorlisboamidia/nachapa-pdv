@@ -1,4 +1,4 @@
-// TV Indoor › Monitoramento — a COMPOSIÇÃO de cada linha da lista.
+// TV Indoor › monitoramento — os rótulos de saúde e a COMPOSIÇÃO do que cada TV diz.
 //
 // ── POR QUE ISTO NÃO MORA NO JSX ──────────────────────────────────────────────────────
 // Porque "o que a linha diz em cada estado" é a regra de produto desta tela, e regra de
@@ -24,6 +24,25 @@ import { haQuanto } from '../lib/duracaoRelativa.js'
 // na loja chama o filme assim.
 export const TIPOS = Object.freeze({ IMAGEM: 'Imagem', MENU_BOARD: 'Menu Board', VIDEO: 'Vídeo' })
 export const ORIGENS = Object.freeze({ REGRA: 'Regra semanal', PADRAO: 'Playlist padrão' })
+
+/* UMA linguagem, do selo na lista de Telas ao modal de monitoramento. O nome técnico
+   interno continua `SAUDAVEL`; o que o gestor lê é "Tudo certo" em todo lugar. Duas
+   palavras para a mesma coisa obrigam a pessoa a traduzir mentalmente a cada leitura. */
+export const SAUDE = Object.freeze({
+  SAUDAVEL: { texto: 'Tudo certo', cor: 'badge-green', ponto: 'ok' },
+  ATENCAO: { texto: 'Atenção', cor: 'badge-orange', ponto: 'alerta' },
+  OFFLINE: { texto: 'Offline', cor: 'badge-red', ponto: 'off' },
+  SEM_TELEMETRIA: { texto: 'Sem telemetria', cor: 'badge-slate', ponto: 'neutro' },
+  SEM_PROGRAMACAO: { texto: 'Sem programação', cor: 'badge-gray', ponto: 'neutro' },
+})
+
+export const ESTADO_PLAYER = Object.freeze({
+  REPRODUZINDO: 'Reproduzindo normalmente',
+  INSTITUCIONAL: 'Mostrando a marca da loja',
+  SEM_CONTEUDO: 'Sem conteúdo para exibir',
+  ATUALIZANDO: 'Iniciando',
+  FALHA_TOTAL: 'Nenhum conteúdo pôde ser exibido',
+})
 
 /* O nome da mídia no ar. "Item removido" quando ela foi apagada entre o heartbeat e agora —
    e não um id cru, que obrigaria o gestor a ir procurar o que é o 44. */

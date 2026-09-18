@@ -11,6 +11,13 @@
 //
 // O que é PRÓPRIO: a programação associada — e é a única coluna que o totem não tem.
 //
+// E o MONITORAMENTO: "esta TV está realmente funcionando?" é pergunta que se faz olhando
+// para uma TV, então mora aqui, na linha dela — o selo de atenção na coluna do sinal e o
+// botão "Monitorar" com o diagnóstico inteiro. Já foi uma página própria na sidebar; a
+// lista de saúde vem de `/tv-indoor/monitoramento`, lida junto com a de telas e cruzada
+// pelo id. Se essa leitura falhar, a lista de telas continua inteira: o monitoramento é
+// camada por cima, nunca condição.
+//
 // Como nos totens, esta tela nunca mostra token: o que ela entrega é o código temporário
 // (10 min, uso único) e o endereço fixo /dispositivo, igual para todos os aparelhos.
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -18,6 +25,8 @@ import api from '../services/api'
 import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
 import PosicaoDaTela from '../components/tv/PosicaoDaTela'
+import MonitorDaTela from '../components/tv/MonitorDaTela'
+import { SAUDE } from '../components/tvMonitoramentoLinha'
 import BotaoCopiar from '../components/BotaoCopiar'
 import { matrizQr } from '../lib/qr'
 
@@ -85,6 +94,11 @@ export default function TvIndoorTelas() {
   // O modal de POSIÇÃO guarda o id, e não a tela: cada giro devolve a tela atualizada, e o
   // modal tem de desenhar sempre a versão que está na lista — nunca uma cópia velha.
   const [posicionando, setPosicionando] = useState(null)
+  // O modal de MONITORAMENTO também guarda só o id: a cada leitura (30 s) o diagnóstico
+  // aberto é redesenhado com a TV recém-buscada, em vez de envelhecer com o modal aberto.
+  const [monitorando, setMonitorando] = useState(null)
+  // { porId: { [id]: telaDoMonitoramento }, agoraIso } — ou null enquanto não leu.
+  const [monitor, setMonitor] = useState(null)
   const [pareando, setPareando] = useState(null)
   const [confirmacao, setConfirmacao] = useState(null) // { acao, tela }
   const [agindo, setAgindo] = useState(false)
@@ -105,15 +119,26 @@ export default function TvIndoorTelas() {
       .finally(() => setCarregando(false))
   }, [])
 
-  useEffect(() => { carregar() }, [carregar])
+  // Leitura SEPARADA e silenciosa: um erro aqui não pode derrubar a lista de telas nem
+  // gerar toast a cada 30 s. Sem monitoramento, a linha mostra o que sempre mostrou.
+  const monitorar = useCallback(() => api.get('/tv-indoor/monitoramento')
+    .then((r) => {
+      const porId = {}
+      for (const t of Array.isArray(r.data?.telas) ? r.data.telas : []) porId[t.id] = t
+      setMonitor({ porId, agoraIso: r.data?.agoraServidor ?? null })
+    })
+    .catch(() => {}), [])
 
-  // Lista a cada 30 s (o "online" do servidor é ultimoHeartbeatEm < 150 s) e relógio a cada
-  // 1 s. Dois intervalos porque a contagem do código não justifica bater no servidor.
+  useEffect(() => { carregar(); monitorar() }, [carregar, monitorar])
+
+  // Lista e monitoramento a cada 30 s (o "online" do servidor é ultimoHeartbeatEm < 150 s;
+  // o heartbeat é de 60 s, então nada se perde) e relógio a cada 1 s. Dois intervalos
+  // porque a contagem do código não justifica bater no servidor.
   useEffect(() => {
-    const t1 = setInterval(() => carregar(true), 30_000)
+    const t1 = setInterval(() => { carregar(true); monitorar() }, 30_000)
     const t2 = setInterval(() => setAgora(Date.now()), 1000)
     return () => { clearInterval(t1); clearInterval(t2) }
-  }, [carregar])
+  }, [carregar, monitorar])
 
   async function criar(e) {
     e.preventDefault()
@@ -292,6 +317,12 @@ export default function TvIndoorTelas() {
               {telas.map((t) => {
                 const seg = restante(t.pareamentoExpiraEm, agora)
                 const codigoVivo = t.pareamentoAtivo && seg > 0
+                const m = monitor?.porId[t.id] ?? null
+                /* PROBLEMA SOBE. Online/offline a linha já diz; o que o monitoramento
+                   acrescenta aqui é só o que ela não sabe: a TV está online mas algo está
+                   errado (ATENÇÃO), com a frase do servidor. "Tudo certo" fica implícito no
+                   Online — um selo verde em toda linha saudável não informaria nada. */
+                const atencao = m?.saude === 'ATENCAO' ? m : null
                 return (
                   <tr key={t.id} className={t.ativo ? undefined : 'apr-linha-off'}>
                     <td>
@@ -323,6 +354,12 @@ export default function TvIndoorTelas() {
                       <div className="apr-meta-txt">
                         {t.tela ? `${t.tela.w} × ${t.tela.h} px` : 'resolução não reportada'}
                       </div>
+                      {atencao && (
+                        <div className="apr-atencao">
+                          <span className={'badge ' + SAUDE.ATENCAO.cor}>{SAUDE.ATENCAO.texto}</span>
+                          {atencao.mensagem ? <span className="apr-atencao-txt">{atencao.mensagem}</span> : null}
+                        </div>
+                      )}
                     </td>
                     <td>
                       <select
@@ -341,6 +378,12 @@ export default function TvIndoorTelas() {
                     </td>
                     <td>
                       <div className="apr-acoes">
+                        {/* Desabilitado só enquanto o monitoramento não chegou (ou falhou):
+                            o modal desenha o objeto do monitoramento, e sem ele não há o
+                            que mostrar. Toda TV cadastrada tem uma entrada lá, pareada ou não. */}
+                        <button type="button" className="btn btn-secondary btn-sm" disabled={!m} onClick={() => setMonitorando(t.id)}>
+                          Monitorar
+                        </button>
                         <button type="button" className="btn btn-secondary btn-sm" onClick={() => setPosicionando(t.id)}>
                           Posição
                         </button>
@@ -365,6 +408,11 @@ export default function TvIndoorTelas() {
           </table>
         </div>
       )}
+
+      {(() => {
+        const alvo = monitorando === null ? null : monitor?.porId[monitorando] ?? null
+        return alvo ? <MonitorDaTela tela={alvo} agoraIso={monitor.agoraIso} aoFechar={() => setMonitorando(null)} /> : null
+      })()}
 
       {(() => {
         const alvo = posicionando === null ? null : telas.find((t) => t.id === posicionando)
