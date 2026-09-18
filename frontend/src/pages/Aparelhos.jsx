@@ -25,24 +25,14 @@ import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
 import BotaoCopiar from '../components/BotaoCopiar'
 import { matrizQr } from '../lib/qr'
+// "último sinal agora" / "há 4min": o formato é o do resto do sistema, inclusive o do modal de
+// monitoramento — antes esta página tinha uma cópia própria, e os dois divergiam na mesma tela.
+import { haQuantoNaLista } from '../lib/duracaoRelativa'
 
 const erroDe = (e, fallback) => {
   const d = e?.response?.data
   if (d?.erro === 'APARELHO_COM_PEDIDOS') return 'Este aparelho já enviou pedidos e não pode ser excluído. Desative-o em vez de apagar — o histórico do totem é auditoria.'
   return d?.error ?? d?.erro ?? fallback
-}
-
-// "há 2 min" / "agora" — relativo, porque o que o dono quer saber é se o tablet está
-// vivo, não o horário exato do último sinal.
-function haQuanto(iso, agora) {
-  if (!iso) return null
-  const seg = Math.max(0, Math.round((agora - new Date(iso).getTime()) / 1000))
-  if (seg < 60) return 'agora'
-  const min = Math.round(seg / 60)
-  if (min < 60) return `há ${min} min`
-  const h = Math.round(min / 60)
-  if (h < 24) return `há ${h} h`
-  return `há ${Math.round(h / 24)} d`
 }
 
 // Contagem regressiva do código (mm:ss). Zero = expirado.
@@ -297,7 +287,7 @@ export default function Aparelhos() {
                         <span>{ap.online ? 'Online' : 'Offline'}</span>
                       </div>
                       <div className="apr-meta-txt">
-                        {ap.ultimoSinalEm ? `último sinal ${haQuanto(ap.ultimoSinalEm, agora)}` : 'nunca deu sinal'}
+                        {ap.ultimoSinalEm ? `último sinal ${haQuantoNaLista(ap.ultimoSinalEm, agora)}` : 'nunca deu sinal'}
                         {ap.versao ? ` · ${ap.versao}` : ''}
                       </div>
                     </td>

@@ -29,25 +29,15 @@ import MonitorDaTela from '../components/tv/MonitorDaTela'
 import { SAUDE } from '../components/tvMonitoramentoLinha'
 import BotaoCopiar from '../components/BotaoCopiar'
 import { matrizQr } from '../lib/qr'
+// "último sinal agora" / "há 4min": o formato é o do resto do sistema, inclusive o do modal de
+// monitoramento — antes esta página tinha uma cópia própria, e os dois divergiam na mesma tela.
+import { haQuantoNaLista } from '../lib/duracaoRelativa'
 
 const erroDe = (e, fallback) => {
   const d = e?.response?.data
   if (d?.erro === 'APARELHO_COM_PEDIDOS') return 'Este aparelho tem histórico e não pode ser excluído. Desative-o em vez de apagar.'
   if (d?.erro === 'PLAYLIST_NAO_ENCONTRADA') return 'Essa playlist não existe mais. Atualize a página.'
   return d?.error ?? d?.erro ?? fallback
-}
-
-// "há 2 min" / "agora" — relativo, porque o que o dono quer saber é se a TV está viva, não
-// o horário exato do último sinal.
-function haQuanto(iso, agora) {
-  if (!iso) return null
-  const seg = Math.max(0, Math.round((agora - new Date(iso).getTime()) / 1000))
-  if (seg < 60) return 'agora'
-  const min = Math.round(seg / 60)
-  if (min < 60) return `há ${min} min`
-  const h = Math.round(min / 60)
-  if (h < 24) return `há ${h} h`
-  return `há ${Math.round(h / 24)} d`
 }
 
 function restante(iso, agora) {
@@ -362,7 +352,7 @@ export default function TvIndoorTelas() {
                       {t.pareado ? (
                         <>
                           <div className="apr-meta-txt">
-                            {t.ultimoSinalEm ? `último sinal ${haQuanto(t.ultimoSinalEm, agora)}` : 'nunca deu sinal'}
+                            {t.ultimoSinalEm ? `último sinal ${haQuantoNaLista(t.ultimoSinalEm, agora)}` : 'nunca deu sinal'}
                           </div>
                           {/* A RESOLUÇÃO reportada pela própria TV, no heartbeat: é como o gestor
                               confere, do escritório, que o painel é mesmo 16:9. */}

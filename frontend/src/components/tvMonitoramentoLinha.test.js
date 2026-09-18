@@ -9,7 +9,7 @@
 //   5. o formato da duração é compacto e único.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { compacta, duracao, haQuanto } from '../lib/duracaoRelativa.js'
+import { compacta, duracao, haQuanto, haQuantoNaLista } from '../lib/duracaoRelativa.js'
 import { composicao, textoDaProgramacao, textoDaSincronizacao, textoDoItem } from './tvMonitoramentoLinha.js'
 
 const AGORA = '2026-09-15T20:00:00.000Z'
@@ -177,4 +177,37 @@ test('🔴 o monitoramento é camada por cima da lista de Telas — nunca condi�
   assert.match(telas, />\s*Monitorar\s*</)
   assert.equal(fs.existsSync(new URL('../pages/TvIndoorMonitoramento.jsx', import.meta.url)), false, 'a página própria não volta')
   assert.match(ler('../App.jsx'), /path="tv-indoor\/monitoramento" element=\{<Navigate to="\/tv-indoor\/telas" replace \/>\}/)
+})
+
+// ── O "último sinal" nas listas de aparelhos ─────────────────────────────────────────
+
+test('🔴 na lista, abaixo de um minuto é "agora" — no detalhe, são os segundos', () => {
+  /* A lista se redesenha todo segundo (a contagem do código anda). "há 3s, há 4s, há 5s"
+     numa linha que o olho varre só pisca, e para um aparelho que bate a cada 60s tudo abaixo
+     disso quer dizer a mesma coisa: está vivo. O modal de diagnóstico não passa o limite. */
+  const sinal = '2026-09-18T12:00:00.000Z'
+  const depois = (s) => new Date(Date.parse(sinal) + s * 1000).toISOString()
+
+  assert.equal(haQuanto(sinal, depois(30)), 'há 30s', 'sem limite: o detalhe mostra os segundos')
+  assert.equal(haQuanto(sinal, depois(30), { agoraAbaixoDe: 60 }), 'agora')
+  assert.equal(haQuanto(sinal, depois(60), { agoraAbaixoDe: 60 }), 'há 1min', 'o limite é exclusivo')
+
+  const ms = (s) => Date.parse(sinal) + s * 1000
+  assert.equal(haQuantoNaLista(sinal, ms(59)), 'agora')
+  // As cópias antigas arredondavam 90s para "2 min" — mais tempo do que passou.
+  assert.equal(haQuantoNaLista(sinal, ms(90)), 'há 1min')
+  assert.equal(haQuantoNaLista(sinal, ms(4 * 3600 + 2 * 60)), 'há 4h 2min')
+  assert.equal(haQuantoNaLista(null, ms(10)), null, 'sem instante, quem chama escreve "nunca deu sinal"')
+})
+
+test('🔴 as listas de aparelhos não têm formatador próprio', () => {
+  /* Eram duas cópias fora da lib, com espaço ("5 min") e arredondando para cima. Quando o
+     monitoramento passou a abrir dentro da lista de Telas, a linha e o modal escreviam o
+     mesmo sinal de dois jeitos, na mesma tela. */
+  for (const pagina of ['../pages/TvIndoorTelas.jsx', '../pages/Aparelhos.jsx']) {
+    const codigo = ler(pagina)
+    assert.equal(/function haQuanto\b|const haQuanto\b/.test(codigo), false, `${pagina} voltou a ter um formatador próprio`)
+    assert.match(codigo, /import \{ haQuantoNaLista \} from '\.\.\/lib\/duracaoRelativa'/)
+    assert.match(codigo, /haQuantoNaLista\((t|ap)\.ultimoSinalEm, agora\)/)
+  }
 })
