@@ -37,6 +37,19 @@ const ORIENTACOES = [
   { id: 'RETRATO', titulo: 'Em pé', desc: 'TV na vertical, como um totem ou cartaz.' },
 ]
 
+/* A seta de girar. Desenho, e não palavra: o botão fica curto e o símbolo carrega o
+   sentido. O "está errado" que ele dizia antes não se perdeu — está no cartão logo acima,
+   que é onde o gestor compara o que vê na parede. */
+function IconeGirar({ size = 15 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <polyline points="23 4 23 10 17 10" />
+      <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+    </svg>
+  )
+}
+
 /* A TV desenhada em CSS. `emPe` é o formato do PAINEL; `torto` gira o conteúdo 90° dentro
    dele — que é exatamente o defeito que o gestor veria na parede. Desenho, e não foto: o
    que importa é a relação entre a moldura e o sentido das linhas, e isso lê melhor num
@@ -139,8 +152,8 @@ export default function PosicaoDaTela({ tela, aoAtualizar, aoFechar }) {
         {erro ? <div className="alert alert-red" style={{ marginTop: 12, marginBottom: 0 }}><div className="alert-msg clr-red">{erro}</div></div> : null}
 
         <div className="modal-actions">
-          <button type="button" className="btn btn-secondary" disabled={ocupado} onClick={girar}>
-            {ocupado ? 'Salvando…' : 'Está errado — girar'}
+          <button type="button" className="btn btn-secondary tvp-girar" disabled={ocupado} onClick={girar}>
+            {ocupado ? 'Salvando…' : <><IconeGirar />Girar</>}
           </button>
           <button type="button" className="btn btn-primary" disabled={ocupado} onClick={aoFechar}>
             Está certo

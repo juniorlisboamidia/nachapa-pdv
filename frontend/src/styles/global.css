@@ -3947,7 +3947,10 @@ body.theme-dark .tvi-aviso-overlap { color: #fbbf24; }
    As TVs sao DESENHADAS em CSS. O que importa e' a relacao entre a moldura e o sentido
    das linhas de dentro, e isso le melhor num esquema do que numa foto. */
 .tvp-modal { max-width: 560px; }
-.tvp-opcoes, .tvp-comparar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.tvp-opcoes, /* Ícone + palavra na mesma linha, com o mesmo respiro dos outros botões da casa. */
+.tvp-girar { display: inline-flex; align-items: center; gap: 7px; }
+
+.tvp-comparar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .tvp-opcao, .tvp-caso {
   display: flex; flex-direction: column; align-items: center; gap: 6px;
   padding: 16px 12px; border-radius: 12px; text-align: center;
