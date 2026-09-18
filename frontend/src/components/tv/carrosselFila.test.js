@@ -73,11 +73,11 @@ test('duração ausente cai no padrão, não em zero', () => {
   }
 })
 
-test('a duração confortável dá 3,5s a cada produto', () => {
-  assert.equal(duracaoConfortavel(10), 35)
-  assert.equal(duracaoConfortavel(6), 21)
-  assert.equal(duracaoConfortavel(3), 11, 'arredonda para cima: 10,5 vira 11')
-  assert.equal(MS_CONFORTO, 3500)
+test('a duração confortável dá 5s a cada produto', () => {
+  assert.equal(duracaoConfortavel(10), 50)
+  assert.equal(duracaoConfortavel(6), 30)
+  assert.equal(duracaoConfortavel(3), 15)
+  assert.equal(MS_CONFORTO, 5000)
 })
 
 test('🔴 a sugestão nunca cai fora do que o board aceita', () => {
@@ -95,9 +95,9 @@ test('🔴 a sugestão nunca cai fora do que o board aceita', () => {
 test('🔴 o ritmo diz o que a duração FAZ com os produtos', () => {
   /* É a conta que o editor e a playlist mostram, e a promessa que ela faz tem de valer na
      parede: "cada um fica Xs" e "a tela mostra N dos M". */
-  const bom = ritmoDoCarrossel(10, 35)
+  const bom = ritmoDoCarrossel(10, 50)
   assert.equal(bom.apertado, false)
-  assert.equal(bom.msPorSlide, 3500)
+  assert.equal(bom.msPorSlide, 5000)
   assert.equal(bom.cabem, 10, 'quando o tempo dá, cabem todos')
   assert.equal(bom.sugerir, false, 'já está no ponto: um botão que não muda nada é ruído')
 
@@ -105,7 +105,7 @@ test('🔴 o ritmo diz o que a duração FAZ com os produtos', () => {
   const apertado = ritmoDoCarrossel(10, 8)
   assert.equal(apertado.apertado, true)
   assert.equal(apertado.cabem, 5, '8000ms / 1600ms')
-  assert.equal(apertado.confortavel, 35)
+  assert.equal(apertado.confortavel, 50)
   assert.equal(apertado.sugerir, true)
 
   // Abaixo do conforto mas acima do piso: funciona, e vale sugerir.
@@ -113,7 +113,7 @@ test('🔴 o ritmo diz o que a duração FAZ com os produtos', () => {
   assert.equal(meio.apertado, false)
   assert.equal(meio.msPorSlide, 3000)
   assert.equal(meio.sugerir, true)
-  assert.equal(meio.confortavel, 21)
+  assert.equal(meio.confortavel, 30)
 })
 
 test('🔴 sem o que dizer, o ritmo é `null` — nunca uma frase com NaN', () => {
@@ -132,6 +132,7 @@ test('o piso é o mesmo que o renderer usa para andar', () => {
 })
 
 test('meio segundo com vírgula, e nada de NaN na tela', () => {
+  assert.equal(segundosCurtos(5000), '5,0')
   assert.equal(segundosCurtos(3500), '3,5')
   assert.equal(segundosCurtos(1600), '1,6')
   assert.equal(segundosCurtos(800), '0,8')

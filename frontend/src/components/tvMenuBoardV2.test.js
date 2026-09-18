@@ -391,7 +391,7 @@ test('🔴 renderer, editor e playlist contam o ritmo com o MESMO piso', () => {
 
 test('🔴 o aviso de ritmo da playlist obedece à duração DO ITEM', () => {
   /* O item da playlist pode sobrescrever a duração do board, e é a dele que a parede
-     obedece. Um aviso que lesse só a do board diria "cada produto fica 3,5s" enquanto a TV
+     obedece. Um aviso que lesse só a do board diria "cada produto fica 5s" enquanto a TV
      mostrava metade dos produtos a 0,8s — pior que aviso nenhum, porque tranquiliza.
 
      E a conta é a MESMA do editor, chamada: uma cópia aqui divergiria no primeiro ajuste. */

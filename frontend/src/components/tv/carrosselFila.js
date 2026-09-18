@@ -49,8 +49,13 @@ export const MS_MINIMO_SLIDE = 1600;
    O piso acima é outra coisa: é o limite do acompanhável. Este aqui é o conforto — o tempo
    em que quem está na fila do balcão termina de ler o nome, olhar a foto e registrar o
    preço sem pressa. Entre os dois há uma faixa larga que funciona; as telas de gestão usam
-   este número para sugerir, nunca para impor. */
-export const MS_CONFORTO = 3500;
+   este número para sugerir, nunca para impor.
+
+   Já foi 3,5s. Subiu para 5s por decisão de quem olha a parede: no editor, com a tela a um
+   palmo, 3,5s parecem folgados; de longe, com foto, nome e preço para absorver de uma vez,
+   o produto sai de cena antes de a conta estar feita. Mexer aqui NÃO muda board nenhum que
+   já existe — muda o número que os avisos sugerem daqui em diante. */
+export const MS_CONFORTO = 5000;
 
 /* Quanto o board precisa durar para dar `MS_CONFORTO` a cada produto.
 
@@ -98,8 +103,8 @@ export function ritmoDoCarrossel(n, duracaoSegundos, { piso = MS_MINIMO_SLIDE, m
   };
 }
 
-/* Meio segundo importa aqui, e o Brasil escreve com vírgula. Uma casa decimal: "3,5s" é
-   preciso o bastante para decidir, e "3,47s" é ruído. */
+/* Meio segundo importa aqui, e o Brasil escreve com vírgula. Uma casa decimal: "1,6s" é
+   preciso o bastante para decidir, e "1,63s" é ruído. */
 export function segundosCurtos(ms) {
   // ⚠️ `typeof`, e não `Number(ms)`: nulo viraria 0 e a tela diria "cada produto fica 0,0s
   // no ar" — uma frase que parece medida e não é. É a mesma armadilha que já mordeu a
