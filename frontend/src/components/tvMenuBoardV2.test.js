@@ -413,6 +413,10 @@ test('🔴 a pista inteira fica MONTADA — deslizar não descarrega foto', () =
   assert.match(corpo, /trilha\.map\(/, 'todos os cards da trilha são desenhados')
   assert.match(corpo, /'tvmb-cr-card' \+ \(i === n \+ passo \? ' ativo' : ''\)/)
   assert.equal(/i === ativo \?\s*<article/.test(corpo), false, 'nada de montar só o ativo')
+  /* E a foto não pode ser decodificada no quadro em que o deslize começa: numa imagem de
+     catálogo isso são dezenas de milissegundos na thread principal, bem no instante em que
+     a pista precisa de todos eles. Montada é metade do trabalho; pronta é a outra. */
+  assert.match(renderer, /<img className="tvmb-foto"[^>]*decoding="async"/)
 })
 
 test('🔴 a fila nunca tem ponta vazia — a lista é desenhada TRÊS vezes', () => {

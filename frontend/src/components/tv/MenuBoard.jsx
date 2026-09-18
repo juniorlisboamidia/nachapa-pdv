@@ -37,10 +37,17 @@ const moeda = (v) => (typeof v === 'number' ? v.toLocaleString('pt-BR', { style:
 // A foto do produto vem do CATÁLOGO, por URL — bytes nenhum foi copiado para o PDV. Se ela
 // não abrir (link velho, CDN fora), o produto CONTINUA na tela com nome e preço: perder o
 // item inteiro por causa de uma imagem seria deixar um buraco por um detalhe.
+//
+// `decoding="async"` tira a decodificação do caminho da animação. O padrão deixa o navegador
+// decidir, e ele costuma decodificar na hora de pintar — na thread principal. Numa foto de
+// catálogo (fáceis 2000px de lado) isso são dezenas de milissegundos gastos EXATAMENTE no
+// quadro em que o Carrossel começa a deslizar, que é a "leve travada" que se vê na parede.
+// O card em cena fica mais tempo parado do que o tempo de decodificar o próximo, então nada
+// se perde em esperar: o que não pode é a decodificação acontecer no meio do movimento.
 function Foto({ src, alt }) {
   const [quebrou, setQuebrou] = useState(false)
   if (!src || quebrou) return <span className="tvmb-foto tvmb-foto-vazia" aria-hidden="true" />
-  return <img className="tvmb-foto" src={src} alt={alt ?? ''} onError={() => setQuebrou(true)} />
+  return <img className="tvmb-foto" src={src} alt={alt ?? ''} decoding="async" onError={() => setQuebrou(true)} />
 }
 
 /* O SELO do produto, com a cor que vem resolvida do servidor — a mesma paleta do HUB.
