@@ -307,7 +307,11 @@ export default function TvIndoorTelas() {
             <thead>
               <tr>
                 <th>TV</th>
-                <th>Conexão</th>
+                {/* POSIÇÃO no lugar de "Conexão": depois do pareamento a conexão é sempre
+                    "Conectada", e o que muda no dia a dia é o sinal — as duas colunas diziam
+                    a mesma coisa. Já a posição decide como a arte é desenhada, e era um selo
+                    pequeno perdido no meio do nome. */}
+                <th>Posição</th>
                 <th>Sinal</th>
                 <th>Playlist padrão</th>
                 <th style={{ textAlign: 'right' }}>Ações</th>
@@ -329,31 +333,49 @@ export default function TvIndoorTelas() {
                       <div className="apr-nome">{t.nome}</div>
                       <div className="apr-meta">
                         {!t.ativo && <span className="badge badge-gray">Desativada</span>}
-                        <span className="badge badge-slate">{t.orientacao === 'RETRATO' ? 'Em pé' : 'Deitada'}</span>
                         <span className="apr-meta-txt">criada em {dataHora(t.criadoEm)}</span>
                       </div>
                     </td>
                     <td>
-                      {t.pareado
-                        ? <div className="apr-conexao">Conectada <span className="apr-meta-txt">· {dataHora(t.pareadoEm)}</span></div>
-                        : <div className="apr-conexao apr-conexao-off">Não conectada</div>}
+                      {/* A célula INTEIRA abre o ajuste, como o seletor de playlist ao lado
+                          edita a playlist: a coluna mostra o estado e é por onde se muda. */}
+                      <button
+                        type="button"
+                        className="tvi-pos"
+                        onClick={() => setPosicionando(t.id)}
+                        aria-label={`Conferir a posição de ${t.nome}`}
+                      >
+                        <span className={'tvi-pos-tv' + (t.orientacao === 'RETRATO' ? ' em-pe' : '')} aria-hidden="true" />
+                        <span className="tvi-pos-txt">{t.orientacao === 'RETRATO' ? 'Em pé' : 'Deitada'}</span>
+                      </button>
+                    </td>
+                    <td>
+                      {/* SINAL, e dentro dele o pareamento: uma TV que nunca foi conectada não
+                          está "offline" — ela ainda não existe para o sistema, e o que ela
+                          precisa é do código, não de um diagnóstico. */}
+                      <div className="apr-sinal">
+                        <span className={'apr-dot' + (t.online ? ' on' : '')} aria-hidden="true" />
+                        <span className={t.pareado ? undefined : 'apr-conexao-off'}>
+                          {t.pareado ? (t.online ? 'Online' : 'Offline') : 'Não conectada'}
+                        </span>
+                      </div>
+                      {t.pareado ? (
+                        <>
+                          <div className="apr-meta-txt">
+                            {t.ultimoSinalEm ? `último sinal ${haQuanto(t.ultimoSinalEm, agora)}` : 'nunca deu sinal'}
+                          </div>
+                          {/* A RESOLUÇÃO reportada pela própria TV, no heartbeat: é como o gestor
+                              confere, do escritório, que o painel é mesmo 16:9. */}
+                          <div className="apr-meta-txt">
+                            {t.tela ? `${t.tela.w} × ${t.tela.h} px` : 'resolução não reportada'}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="apr-meta-txt">use “Parear” para gerar o código</div>
+                      )}
                       {codigoVivo && (
                         <div className="apr-codigo-inline">código ativo · expira em <strong>{mmss(seg)}</strong></div>
                       )}
-                    </td>
-                    <td>
-                      <div className="apr-sinal">
-                        <span className={'apr-dot' + (t.online ? ' on' : '')} aria-hidden="true" />
-                        <span>{t.online ? 'Online' : 'Offline'}</span>
-                      </div>
-                      <div className="apr-meta-txt">
-                        {t.ultimoSinalEm ? `último sinal ${haQuanto(t.ultimoSinalEm, agora)}` : 'nunca deu sinal'}
-                      </div>
-                      {/* A RESOLUÇÃO reportada pela própria TV, no heartbeat: é como o gestor
-                          confere, do escritório, que o painel é mesmo 16:9. */}
-                      <div className="apr-meta-txt">
-                        {t.tela ? `${t.tela.w} × ${t.tela.h} px` : 'resolução não reportada'}
-                      </div>
                       {atencao && (
                         <div className="apr-atencao">
                           <span className={'badge ' + SAUDE.ATENCAO.cor}>{SAUDE.ATENCAO.texto}</span>
@@ -383,9 +405,6 @@ export default function TvIndoorTelas() {
                             que mostrar. Toda TV cadastrada tem uma entrada lá, pareada ou não. */}
                         <button type="button" className="btn btn-secondary btn-sm" disabled={!m} onClick={() => setMonitorando(t.id)}>
                           Monitorar
-                        </button>
-                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setPosicionando(t.id)}>
-                          Posição
                         </button>
                         <button type="button" className="btn btn-secondary btn-sm" disabled={pareando === t.id} onClick={() => parear(t)}>
                           {pareando === t.id ? 'Gerando…' : (t.pareado ? 'Parear de novo' : 'Parear')}
