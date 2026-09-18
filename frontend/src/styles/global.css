@@ -3947,10 +3947,7 @@ body.theme-dark .tvi-aviso-overlap { color: #fbbf24; }
    As TVs sao DESENHADAS em CSS. O que importa e' a relacao entre a moldura e o sentido
    das linhas de dentro, e isso le melhor num esquema do que numa foto. */
 .tvp-modal { max-width: 560px; }
-.tvp-opcoes, /* Ícone + palavra na mesma linha, com o mesmo respiro dos outros botões da casa. */
-.tvp-girar { display: inline-flex; align-items: center; gap: 7px; }
-
-.tvp-comparar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.tvp-opcoes, .tvp-comparar { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .tvp-opcao, .tvp-caso {
   display: flex; flex-direction: column; align-items: center; gap: 6px;
   padding: 16px 12px; border-radius: 12px; text-align: center;
@@ -3982,6 +3979,8 @@ body.theme-dark .tvi-aviso-overlap { color: #fbbf24; }
 .tvp-bola { width: 12px; height: 12px; border-radius: 999px; background: #f97316; display: block; }
 .tvp-linha { width: 34px; height: 4px; border-radius: 2px; background: var(--app-text-2); display: block; }
 .tvp-linha.curta { width: 22px; opacity: 0.6; }
+/* Ícone + palavra na mesma linha, com o mesmo respiro dos outros botões da casa. */
+.tvp-girar { display: inline-flex; align-items: center; gap: 7px; }
 
 /* A previa EM PE' do menu board: com a largura da coluna inteira ela teria 800px de
    altura e empurraria o editor para fora da tela. Estreita e centrada, cabe ao lado. */

@@ -95,6 +95,21 @@ test('🔴 "girar" não manda graus — quem decide a próxima posição é o se
   assert.equal(/girar`, \{/.test(modal), false, 'o POST de girar não leva corpo')
 })
 
+test('🔴 as duas escolhas e os dois casos ficam LADO A LADO', () => {
+  /* Comparar duas coisas exige que elas estejam do mesmo tamanho, uma ao lado da outra —
+     senão o desenho maior parece o "certo" só por ser maior.
+
+     Esta guarda nasceu de um estrago: uma regra nova entrou NO MEIO do seletor agrupado
+     `.tvp-opcoes, .tvp-comparar { … }`, a primeira metade ficou com a declaração errada, e
+     os cartões de orientação viraram largura de conteúdo, cada um de um tamanho. */
+  const css = ler('../styles/global.css')
+  for (const sel of ['.tvp-opcoes', '.tvp-comparar']) {
+    const bloco = css.match(new RegExp(sel.replace('.', '\\.') + '[^{}]*\\{([^}]*)\\}'))
+    assert.ok(bloco, `${sel} não tem regra`)
+    assert.match(bloco[1], /grid-template-columns: repeat\(2/, `${sel} deixou de ser duas colunas`)
+  }
+})
+
 test('🔴 quem mede o formato da saída é o SERVIDOR — o modal só repete', () => {
   /* A medida vem em `tela.saida`, calculada no backend a partir do heartbeat. Se o modal
      voltasse a comparar largura e altura por conta própria, um dia ele diria "já está em
