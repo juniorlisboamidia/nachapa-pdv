@@ -46,9 +46,14 @@ test('a TV em pé nasce girada; a deitada, não', () => {
 });
 
 test('🔴 a box que JÁ gira a saída não leva um quarto de volta a mais', () => {
-  /* Aconteceu na primeira parede em pé de verdade: a box mandava 1080 × 1920, o sistema
-     chutou 90 mesmo assim, e o gestor teve de girar DUAS vezes (90 → 270 → 0) para voltar
-     ao zero de onde a imagem já estava certa. A medida existia o tempo todo, no heartbeat.
+  /* Apareceu na primeira conferência em pé: a janela já era em pé — 1080 × 1920, um monitor
+     girado —, o sistema chutou 90 assim mesmo, e o gestor teve de girar DUAS vezes (90 →
+     270 → 0) para voltar ao zero de onde a imagem já estava certa. A medida existia o tempo
+     todo, no heartbeat.
+
+     ⚠️ Numa box de TV o caso é o OUTRO: a saída continua deitada, o palpite 90 continua
+     valendo, e o que se confere é o lado. Esta regra não troca um chute por outro — ela só
+     deixa de chutar quando há medida.
 
      A regra não é "em pé gira": é "gira quem está recebendo a imagem na posição errada". */
   assert.equal(rotacaoInicial('RETRATO', 'RETRATO'), 0, 'imagem já chega em pé: nada a corrigir');

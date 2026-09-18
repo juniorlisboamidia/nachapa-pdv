@@ -21,8 +21,8 @@
 // ── O QUE A PRÓPRIA TV MEDE ───────────────────────────────────────────────────────────
 // Uma coisa o sistema NÃO precisa adivinhar: o formato da imagem que CHEGA. A TV reporta
 // o tamanho da própria janela no heartbeat, e é isso que separa "falta um quarto de volta"
-// de "não falta nada" — sem ele, uma box que já manda 1080 × 1920 levaria o gestor a girar
-// duas vezes para voltar ao zero de onde partiu. O que continua sendo declarado é a parede;
+// de "não falta nada" — sem ele, um aparelho que já manda 1080 × 1920 levaria o gestor a
+// girar duas vezes para voltar ao zero de onde partiu. O que continua sendo declarado é a parede;
 // o que continua sendo conferido no olho é para que LADO ela foi virada.
 
 export const ORIENTACOES = Object.freeze(['PAISAGEM', 'RETRATO']);
@@ -58,9 +58,9 @@ export function rotacaoDe(d) {
 /* O formato da imagem que a TV está REALMENTE recebendo, medido por ela mesma e reportado
    no heartbeat. Não é a posição do painel na parede: é a da imagem que chega nele.
 
-   A maioria das boxes manda 1920 × 1080 aconteça o que acontecer. Algumas — e o Fully com
-   a rotação forçada — mandam 1080 × 1920, e nessas a correção por CSS não é um quarto de
-   volta: é NENHUMA.
+   A box de TV costuma mandar 1920 × 1080 aconteça o que acontecer. Mas nem todo aparelho:
+   um monitor girado — ou um navegador com a orientação forçada — já entrega 1080 × 1920, e
+   nesses a correção por CSS não é um quarto de volta: é NENHUMA.
 
    `null` = ainda não deu sinal, ou mediu torto. Quem chama decide o que fazer com isso. */
 export function saidaDe(d) {
