@@ -36,13 +36,20 @@ export function msPorPasso(duracaoSegundos, n, piso) {
   return Math.max(piso, Math.round((total * 1000) / qtd));
 }
 
+/* O PISO: abaixo disto a fila deixa de ser acompanhável. 5 s (o mínimo do board) com seis
+   produtos daria 833 ms por passo — a fila vira um piscar. Quando o tempo não dá, o ciclo
+   NÃO fecha: os últimos não chegam ao centro, o que é preferível a uma fileira que ninguém
+   acompanha. Mora aqui, com a aritmética, porque três lugares dependem do mesmo número — o
+   renderer para andar, o editor e a playlist para avisar. Dois pisos diferentes fariam a
+   tela de gestão prometer seis produtos e a parede mostrar quatro. */
+export const MS_MINIMO_SLIDE = 1600;
+
 /* O tempo em que um produto é LIDO, e não apenas visto.
 
-   O piso (`MS_MINIMO_SLIDE`, no renderer) é outra coisa: é o limite abaixo do qual a fila
-   deixa de ser acompanhável. Este aqui é o conforto — o tempo em que quem está na fila do
-   balcão termina de ler o nome, olhar a foto e registrar o preço sem pressa. Entre os dois
-   há uma faixa larga que funciona; o editor usa este número para sugerir, nunca para
-   impor. */
+   O piso acima é outra coisa: é o limite do acompanhável. Este aqui é o conforto — o tempo
+   em que quem está na fila do balcão termina de ler o nome, olhar a foto e registrar o
+   preço sem pressa. Entre os dois há uma faixa larga que funciona; as telas de gestão usam
+   este número para sugerir, nunca para impor. */
 export const MS_CONFORTO = 3500;
 
 /* Quanto o board precisa durar para dar `MS_CONFORTO` a cada produto.
@@ -54,4 +61,49 @@ export function duracaoConfortavel(n, { min = 5, max = 120 } = {}) {
   const qtd = Number.isFinite(n) && n > 0 ? n : 1;
   const ideal = Math.ceil((qtd * MS_CONFORTO) / 1000);
   return Math.min(max, Math.max(min, ideal));
+}
+
+/* O RITMO de um carrossel: o que a duração escolhida faz com os produtos.
+
+   No Carrossel o tempo na tela deixa de ser só "quanto dura" e passa a decidir QUANTOS
+   produtos aparecem — ele é dividido entre eles. Sem esta conta à vista, o gestor põe dez
+   produtos em oito segundos e descobre pela parede, se descobrir, que metade nunca entrou.
+
+   Uma conta só, usada em dois lugares: o editor do board (onde a duração nasce) e a
+   playlist (onde o item pode sobrescrevê-la). Duas cópias divergiriam, e aí as duas telas
+   dariam respostas diferentes sobre a MESMA parede.
+
+   `null` quando não há o que dizer: menos de dois produtos, ou duração ainda inválida
+   enquanto o gestor digita. */
+export function ritmoDoCarrossel(n, duracaoSegundos, { piso = MS_MINIMO_SLIDE, min = 5, max = 120 } = {}) {
+  const qtd = Math.trunc(Number(n));
+  const duracao = Number(duracaoSegundos);
+  if (!Number.isFinite(qtd) || qtd < 2) return null;
+  if (!Number.isFinite(duracao) || duracao <= 0) return null;
+  const msPorSlide = (duracao * 1000) / qtd;
+  const confortavel = duracaoConfortavel(qtd, { min, max });
+  const apertado = msPorSlide < piso;
+  return {
+    n: qtd,
+    duracao,
+    msPorSlide,
+    confortavel,
+    apertado,
+    // Quantos cabem quando o tempo não dá para todos. Fora desse caso são todos.
+    cabem: apertado ? Math.max(1, Math.floor((duracao * 1000) / piso)) : qtd,
+    /* A sugestão só aparece quando muda alguma coisa: com a duração já no ponto, um botão
+       que não faz nada é ruído. E ela é sempre um BOTÃO, nunca um ajuste automático — quem
+       calibrou a duração à mão não pode vê-la mudar sozinha porque trocou um produto. */
+    sugerir: confortavel !== duracao && msPorSlide < MS_CONFORTO,
+  };
+}
+
+/* Meio segundo importa aqui, e o Brasil escreve com vírgula. Uma casa decimal: "3,5s" é
+   preciso o bastante para decidir, e "3,47s" é ruído. */
+export function segundosCurtos(ms) {
+  // ⚠️ `typeof`, e não `Number(ms)`: nulo viraria 0 e a tela diria "cada produto fica 0,0s
+  // no ar" — uma frase que parece medida e não é. É a mesma armadilha que já mordeu a
+  // duração do item e a rotação da TV.
+  if (typeof ms !== 'number' || !Number.isFinite(ms)) return '0';
+  return (ms / 1000).toFixed(1).replace('.', ',');
 }

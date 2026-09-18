@@ -17,8 +17,8 @@ import { useCallback, useEffect, useState } from 'react'
 import api from '../services/api'
 import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
-import MenuBoard, { MS_MINIMO_SLIDE } from '../components/tv/MenuBoard'
-import { MS_CONFORTO, duracaoConfortavel } from '../components/tv/carrosselFila.js'
+import MenuBoard from '../components/tv/MenuBoard'
+import { MS_CONFORTO, MS_MINIMO_SLIDE, ritmoDoCarrossel, segundosCurtos } from '../components/tv/carrosselFila.js'
 // O padrão de ação compacta do sistema (o mesmo dos Banners do Totem).
 import BotaoIcone from '../components/BotaoIcone'
 // O teto ABSOLUTO da seleção guardada — o mesmo do domínio, que é quem recusa na escrita.
@@ -321,32 +321,12 @@ function Editor({ valor, layouts, identidade, limites, ocupado, aoFechar, aoSalv
 
      A sugestão é sempre um BOTÃO, nunca um ajuste automático: quem calibrou a duração à
      mão não pode vê-la mudar sozinha porque trocou um produto. */
-  const ritmoCarrossel = (() => {
-    if (form.layout !== 'CARROSSEL') return null
-    const n = Math.min(escolhidos.length, regra.maximo ?? 10)
-    const duracao = Number(form.duracaoSegundos)
-    if (n < 2 || !Number.isFinite(duracao) || duracao <= 0) return null
-    const msPorSlide = (duracao * 1000) / n
-    const confortavel = duracaoConfortavel(n, {
+  const ritmoCarrossel = form.layout === 'CARROSSEL'
+    ? ritmoDoCarrossel(Math.min(escolhidos.length, regra.maximo ?? 10), form.duracaoSegundos, {
       min: limites?.duracaoMin ?? 5,
       max: limites?.duracaoMax ?? 120,
     })
-    const base = {
-      n,
-      duracao,
-      confortavel,
-      porSlide: (msPorSlide / 1000).toFixed(1).replace('.', ','),
-      // A sugestão só aparece quando muda alguma coisa: com a duração já no ponto, um
-      // botão que não faz nada é ruído.
-      sugerir: confortavel !== duracao && msPorSlide < MS_CONFORTO,
-    }
-    if (msPorSlide >= MS_MINIMO_SLIDE) return { ...base, apertado: false }
-    return {
-      ...base,
-      apertado: true,
-      cabem: Math.max(1, Math.floor((duracao * 1000) / MS_MINIMO_SLIDE)),
-    }
-  })()
+    : null
 
   // Índice do catálogo por id, para resolver os escolhidos. Sem `useMemo` à mão: o React
   // Compiler está ligado neste projeto e escrever a memoização o faz desistir do arquivo.
@@ -540,11 +520,11 @@ function Editor({ valor, layouts, identidade, limites, ocupado, aoFechar, aoSalv
               {ritmoCarrossel ? (
                 <div className={'ttm-dica' + (ritmoCarrossel.apertado ? ' ttm-dica-alerta' : '')}>
                   {ritmoCarrossel.apertado
-                    ? `Com ${ritmoCarrossel.n} produtos em ${ritmoCarrossel.duracao}s, cada um teria menos de ${(MS_MINIMO_SLIDE / 1000).toFixed(1).replace('.', ',')}s — rápido demais para ler de longe. A tela mostra ${ritmoCarrossel.cabem} e os outros ficam de fora.`
-                    : `Cada produto fica cerca de ${ritmoCarrossel.porSlide}s no ar, e os ${ritmoCarrossel.n} passam uma vez antes de a tela trocar.`}
+                    ? `Com ${ritmoCarrossel.n} produtos em ${ritmoCarrossel.duracao}s, cada um teria menos de ${segundosCurtos(MS_MINIMO_SLIDE)}s — rápido demais para ler de longe. A tela mostra ${ritmoCarrossel.cabem} e os outros ficam de fora.`
+                    : `Cada produto fica cerca de ${segundosCurtos(ritmoCarrossel.msPorSlide)}s no ar, e os ${ritmoCarrossel.n} passam uma vez antes de a tela trocar.`}
                   {ritmoCarrossel.sugerir ? (
                     <>
-                      {' '}Com {ritmoCarrossel.confortavel}s cada um ganha {(MS_CONFORTO / 1000).toFixed(1).replace('.', ',')}s,
+                      {' '}Com {ritmoCarrossel.confortavel}s cada um ganha {segundosCurtos(MS_CONFORTO)}s,
                       que é o tempo de ler o nome e o preço sem pressa.{' '}
                       <button
                         type="button"

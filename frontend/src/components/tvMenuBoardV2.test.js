@@ -17,6 +17,8 @@ const renderer = ler('./tv/MenuBoard.jsx')
 const editor = ler('../pages/TvIndoorMenuBoards.jsx')
 const player = ler('../pages/TvIndoorPlayer.jsx')
 const css = ler('../styles/tvMenuBoard.css')
+const playlists = ler('../pages/TvIndoorPlaylists.jsx')
+const fila = ler('./tv/carrosselFila.js')
 
 // ── A guarda arquitetural ────────────────────────────────────────────────────
 test('🔴 o admin e a TV desenham pelo MESMO componente', () => {
@@ -371,15 +373,34 @@ test('🔴 o tempo do slide sai da DURAÇÃO DO BOARD, nunca de um número fixo'
   assert.match(codigo, /duracaoSegundos=\{board\?\.duracaoSegundos\}/, 'e a tela precisa passá-la')
 })
 
-test('🔴 o editor conta o ritmo com o MESMO piso do renderer', () => {
-  // Dois pisos diferentes fariam o editor prometer seis produtos e a parede mostrar
-  // quatro — e a conta do editor existe justamente para essa promessa ser confiável.
-  assert.match(renderer, /export const MS_MINIMO_SLIDE = \d+/)
-  assert.match(editor, /import MenuBoard, \{ MS_MINIMO_SLIDE \} from/)
-  assert.equal(/MS_MINIMO_SLIDE/.test(semComentarios(editor)), true)
-  // E o número não aparece solto em lugar nenhum dos dois.
-  const soltos = (semComentarios(renderer) + semComentarios(editor)).match(/\b1600\b/g) ?? []
-  assert.equal(soltos.length, 1, 'o 1600 só pode existir na declaração da constante')
+test('🔴 renderer, editor e playlist contam o ritmo com o MESMO piso', () => {
+  /* Dois pisos diferentes fariam a tela de gestão prometer seis produtos e a parede mostrar
+     quatro — e os avisos existem justamente para essa promessa ser confiável.
+
+     O número mora com a aritmética (carrosselFila.js) porque são TRÊS os interessados: o
+     renderer, que anda a fila; o editor, onde a duração nasce; e a playlist, onde o item
+     pode sobrescrevê-la depois. */
+  assert.match(fila, /export const MS_MINIMO_SLIDE = \d+/)
+  for (const [nome, codigo] of [['renderer', renderer], ['editor', editor], ['playlist', playlists]]) {
+    assert.match(codigo, /MS_MINIMO_SLIDE[^\n]*from '[^']*carrosselFila\.js'/, `o ${nome} precisa importar o piso da fila`)
+  }
+  // E o número não aparece solto em lugar nenhum dos quatro.
+  const fontes = [fila, renderer, editor, playlists].map(semComentarios).join('')
+  assert.equal((fontes.match(/\b1600\b/g) ?? []).length, 1, 'o 1600 só pode existir na declaração da constante')
+})
+
+test('🔴 o aviso de ritmo da playlist obedece à duração DO ITEM', () => {
+  /* O item da playlist pode sobrescrever a duração do board, e é a dele que a parede
+     obedece. Um aviso que lesse só a do board diria "cada produto fica 3,5s" enquanto a TV
+     mostrava metade dos produtos a 0,8s — pior que aviso nenhum, porque tranquiliza.
+
+     E a conta é a MESMA do editor, chamada: uma cópia aqui divergiria no primeiro ajuste. */
+  assert.match(playlists, /ritmoDoCarrossel\(c\.exibidos, item\.duracaoSegundos \?\? c\.duracaoSegundos\)/)
+  assert.match(editor, /ritmoDoCarrossel\(/)
+  // O botão de sugestão grava no ITEM, não no board: a playlist não edita o board alheio.
+  assert.match(playlists, /onClick=\{\(\) => mudarTempo\(i, ritmo\.confortavel\)\}/)
+  // E o aviso só existe para o Carrossel — nos outros templates o tempo não se divide.
+  assert.match(playlists, /c\.layout === 'CARROSSEL'/)
 })
 
 test('🔴 a pista inteira fica MONTADA — deslizar não descarrega foto', () => {

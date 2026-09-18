@@ -27,7 +27,7 @@ import { useEffect, useRef, useState } from 'react'
 import { aplicar as aplicarTemaTv } from '../tvIndoorTema'
 // A aritmética da fila do Carrossel vive fora daqui, num módulo puro, porque é a parte
 // que dá para testar de verdade — e é a parte que já derrubou a parede uma vez.
-import { indiceEmCena, msPorPasso, precisaRecuar } from './carrosselFila.js'
+import { MS_MINIMO_SLIDE, indiceEmCena, msPorPasso, precisaRecuar } from './carrosselFila.js'
 // As medidas do artboard por orientação e a conta da escala — puras, com teste.
 import { ehRetrato, escalaDe } from './artboard.js'
 import '../../styles/tvMenuBoard.css'
@@ -238,16 +238,15 @@ function Destaque({ produtos, destaqueId, ex }) {
    o tempo do board pelos produtos, cada um passa pelo centro uma vez e o ciclo fecha
    quando o board sai.
 
-   O PISO existe para o caso extremo: 5 s (o mínimo) com seis produtos daria 833 ms por
-   passo, rápido demais para ler de longe. Aí o ciclo não fecha e os últimos não chegam ao
-   centro — preferível a uma fileira que ninguém acompanha. O editor avisa quando isso
-   vai acontecer.
+   O PISO (`MS_MINIMO_SLIDE`, no módulo da fila) existe para o caso extremo: 5 s (o mínimo)
+   com seis produtos daria 833 ms por passo, rápido demais para ler de longe. Aí o ciclo não
+   fecha e os últimos não chegam ao centro — preferível a uma fileira que ninguém acompanha.
+   O editor e a playlist avisam quando isso vai acontecer.
 
    ── POR QUE A PISTA INTEIRA EXISTE DE UMA VEZ ───────────────────────────────────────
    Todos os cards ficam montados e o que muda é o deslocamento da pista. Renderizar só os
    visíveis obrigaria a montar o próximo no instante da troca, com a foto ainda
    carregando — e o que se veria na parede seria um buraco entrando em cena. */
-export const MS_MINIMO_SLIDE = 1600
 // Quanto dura o deslize. Vive aqui porque o JS precisa do mesmo número que o CSS para
 // saber quando a transição acabou — e é nesse instante que a pista se reposiciona.
 export const MS_DESLIZE = 760

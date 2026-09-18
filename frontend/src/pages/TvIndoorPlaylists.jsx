@@ -18,6 +18,9 @@ import Toast from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
 // O padrão de ação compacta do sistema (o mesmo dos Banners do Totem).
 import BotaoIcone from '../components/BotaoIcone'
+/* A conta do ritmo é a MESMA do editor do board — e tem de ser: lá a duração nasce, aqui o
+   item pode sobrescrevê-la, e as duas telas falam da mesma parede. */
+import { MS_MINIMO_SLIDE, ritmoDoCarrossel, segundosCurtos } from '../components/tv/carrosselFila.js'
 
 const STATUS = {
   ATIVO: { texto: 'No ar', cor: 'badge-green' },
@@ -345,6 +348,12 @@ export default function TvIndoorPlaylists() {
                   const video = item.tipo === 'VIDEO'
                   const c = pecaDoItem(item)
                   const ligado = board ? c.ativo !== false : c.status === 'ATIVO'
+                  /* No Carrossel o tempo não é só "quanto dura": ele é dividido entre os
+                     produtos, então mexer nele aqui decide QUANTOS aparecem. A duração que
+                     vale é a do item quando ele tem uma; senão, a do board. */
+                  const ritmo = board && c.layout === 'CARROSSEL'
+                    ? ritmoDoCarrossel(c.exibidos, item.duracaoSegundos ?? c.duracaoSegundos)
+                    : null
                   return (
                     <li key={idDoItem(item)} className={'tvi-item' + (ligado ? '' : ' off')}>
                       <span className="tvi-ordem">{i + 1}</span>
@@ -382,6 +391,29 @@ export default function TvIndoorPlaylists() {
                               />
                             )}
                         </span>
+                        {/* O aviso fica ao lado do campo que o causa. No editor do board a
+                            mesma frase aparece; aqui ela reaparece porque o item pode
+                            sobrescrever a duração DEPOIS, e a parede obedece a esta. */}
+                        {ritmo ? (
+                          <span className={'tvi-item-ritmo' + (ritmo.apertado ? ' ttm-dica-alerta' : '')}>
+                            {ritmo.apertado
+                              ? `Cada produto ficaria menos de ${segundosCurtos(MS_MINIMO_SLIDE)}s no ar: a tela mostra ${ritmo.cabem} dos ${ritmo.n} e os outros ficam de fora.`
+                              : `Cada produto fica cerca de ${segundosCurtos(ritmo.msPorSlide)}s no ar — os ${ritmo.n} passam uma vez.`}
+                            {ritmo.sugerir ? (
+                              <>
+                                {' '}
+                                <button
+                                  type="button"
+                                  className="ttm-dica-acao"
+                                  disabled={ocupado}
+                                  onClick={() => mudarTempo(i, ritmo.confortavel)}
+                                >
+                                  Usar {ritmo.confortavel}s
+                                </button>
+                              </>
+                            ) : null}
+                          </span>
+                        ) : null}
                       </span>
                       <span className="tvi-item-acoes">
                         {/* Subir/descer em vez de arrastar: funciona no teclado e no toque

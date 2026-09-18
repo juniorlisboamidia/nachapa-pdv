@@ -2,7 +2,10 @@
 // Rodar: node --test frontend/src/components/tv/carrosselFila.test.js
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { MS_CONFORTO, duracaoConfortavel, indiceEmCena, msPorPasso, precisaRecuar } from './carrosselFila.js'
+import {
+  MS_CONFORTO, MS_MINIMO_SLIDE, duracaoConfortavel, indiceEmCena, msPorPasso, precisaRecuar,
+  ritmoDoCarrossel, segundosCurtos,
+} from './carrosselFila.js'
 
 test('o passo anda em círculo pelos produtos', () => {
   assert.equal(indiceEmCena(0, 10), 0)
@@ -87,4 +90,50 @@ test('🔴 a sugestão nunca cai fora do que o board aceita', () => {
     const d = duracaoConfortavel(ruim)
     assert.ok(d >= 5 && d <= 120, `${JSON.stringify(ruim)} devolveu ${d}`)
   }
+})
+
+test('🔴 o ritmo diz o que a duração FAZ com os produtos', () => {
+  /* É a conta que o editor e a playlist mostram, e a promessa que ela faz tem de valer na
+     parede: "cada um fica Xs" e "a tela mostra N dos M". */
+  const bom = ritmoDoCarrossel(10, 35)
+  assert.equal(bom.apertado, false)
+  assert.equal(bom.msPorSlide, 3500)
+  assert.equal(bom.cabem, 10, 'quando o tempo dá, cabem todos')
+  assert.equal(bom.sugerir, false, 'já está no ponto: um botão que não muda nada é ruído')
+
+  // O caso que o aviso existe para pegar: dez produtos em oito segundos.
+  const apertado = ritmoDoCarrossel(10, 8)
+  assert.equal(apertado.apertado, true)
+  assert.equal(apertado.cabem, 5, '8000ms / 1600ms')
+  assert.equal(apertado.confortavel, 35)
+  assert.equal(apertado.sugerir, true)
+
+  // Abaixo do conforto mas acima do piso: funciona, e vale sugerir.
+  const meio = ritmoDoCarrossel(6, 18)
+  assert.equal(meio.apertado, false)
+  assert.equal(meio.msPorSlide, 3000)
+  assert.equal(meio.sugerir, true)
+  assert.equal(meio.confortavel, 21)
+})
+
+test('🔴 sem o que dizer, o ritmo é `null` — nunca uma frase com NaN', () => {
+  /* A duração chega do campo enquanto o gestor digita, e "1 produto" não é fila nenhuma.
+     Uma frase com NaN na tela de gestão é pior que silêncio: parece defeito do sistema. */
+  for (const [n, d] of [[1, 20], [0, 20], [-2, 20], [10, 0], [10, -5], [10, null], [10, ''], [10, 'x'], [null, 20]]) {
+    assert.equal(ritmoDoCarrossel(n, d), null, `${n} produtos em ${JSON.stringify(d)}s`)
+  }
+})
+
+test('o piso é o mesmo que o renderer usa para andar', () => {
+  assert.equal(MS_MINIMO_SLIDE, 1600)
+  assert.equal(msPorPasso(8, 10, MS_MINIMO_SLIDE), MS_MINIMO_SLIDE, 'o renderer segura no piso')
+  // E o aviso da gestão fala do MESMO caso: 8s/10 produtos não fecha o ciclo.
+  assert.equal(ritmoDoCarrossel(10, 8).apertado, true)
+})
+
+test('meio segundo com vírgula, e nada de NaN na tela', () => {
+  assert.equal(segundosCurtos(3500), '3,5')
+  assert.equal(segundosCurtos(1600), '1,6')
+  assert.equal(segundosCurtos(800), '0,8')
+  for (const ruim of [null, undefined, NaN, 'x']) assert.equal(segundosCurtos(ruim), '0')
 })

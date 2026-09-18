@@ -4081,6 +4081,9 @@ body.theme-dark .ttm-dica-alerta { color: #fbbf24; }
 .tvi-item-meta { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--app-text-3); }
 /* Mesmo motivo de `.ttm-acoes`: o interruptor tem altura fixa e, sem
    `align-items: center`, sobe para o topo da linha ao lado de botões mais altos. */
+/* O ritmo do carrossel, embaixo do tempo que o causa. Sem `margin-top`: quem dá o respiro
+   é o `gap` da coluna do item. */
+.tvi-item-ritmo { font-size: 11.5px; color: var(--app-text-3); }
 .tvi-item-acoes { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; }
 .tvi-item-acoes .btn { min-height: 32px; }
 
