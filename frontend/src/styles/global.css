@@ -3025,13 +3025,186 @@ body.theme-dark .gv-bubble .wa-link { color: #53bdeb; }
 .bt-cand-acts .ind-act-danger{margin-left:auto}
 
 /* Tema escuro: .bt-cand segue o mesmo mecanismo de .table-card (superfície) +
-   .ent-row-nome/.ent-row-whats (texto forte/fraco), já que .bt-vaga não tem
-   tratamento de escuro hoje. */
+   .ent-row-nome/.ent-row-whats (texto forte/fraco). As vagas, a ficha do candidato
+   e o construtor de formulário vêm no bloco logo abaixo. */
 body.theme-dark .bt-cand { background: var(--d-surface) !important; border-color: var(--d-border) !important; }
 body.theme-dark .bt-cand-nome { color: var(--d-text) !important; }
 body.theme-dark .bt-cand-fone,
 body.theme-dark .bt-cand-meta { color: var(--d-text-3) !important; }
 body.theme-dark .bt-cand-meta { border-top-color: var(--d-border-soft) !important; }
+
+/* ── TEMA ESCURO: Banco de Talentos, Indicação e toasts ───────────────────
+   Estas telas nasceram só com cores de tema claro (#fff, #fafafa, #111…): no escuro a
+   ficha do candidato era um painel branco inteiro, e as vagas, cartões brancos sobre o
+   fundo azul-marinho. Aqui elas passam pelos mesmos tokens do resto do sistema —
+   superfície, sub-superfície, borda e três pesos de texto — e os selos coloridos pelo
+   mesmo tratamento dos alertas: fundo translúcido da cor, borda um pouco mais forte e o
+   texto num tom mais claro, que é o que se lê sobre fundo escuro.
+
+   Três cuidados que NÃO são óbvios, e cada um já quebraria algo que funciona no claro:
+   • A borda das vagas é pintada lado a lado, NUNCA com `border-color`: a borda esquerda
+     é a faixa de status (aberta verde, pausada âmbar), e o atalho a apagaria.
+   • Todo estado (`.active`, `.on`, `:hover`, `.fb-campo-on`) tem a sua versão escura. A
+     regra escura da classe base tem especificidade maior que a do estado claro, e sem
+     isso a aba ativa ficaria igual às outras.
+   • Os toasts levam `!important` porque o `.toast` escuro lá em cima leva — sem isso,
+     sucesso, erro e aviso saíam idênticos, cinza sobre cinza.
+
+   As classes de kanban, `exp-item`, `bt-pesos` e alguns `fb-*`/`insc-*` ficaram de fora de
+   propósito: não são usadas em nenhum componente deste repo. */
+
+/* Superfícies */
+body.theme-dark .drawer,
+body.theme-dark .bt-vaga,
+body.theme-dark .proc-tab,
+body.theme-dark .fb-sec,
+body.theme-dark .fb-obrig-chip,
+body.theme-dark .fb-add { background: var(--d-surface); }
+
+body.theme-dark .ind-stat,
+body.theme-dark .ind-note,
+body.theme-dark .drawer-painel,
+body.theme-dark .drawer-obs,
+body.theme-dark .drawer-resp-a,
+body.theme-dark .proc-detalhe,
+body.theme-dark .fb-fixo,
+body.theme-dark .fb-pergunta,
+body.theme-dark .modal .fb-sec { background: var(--d-surface-2); }
+
+/* Bordas */
+body.theme-dark .ind-stat,
+body.theme-dark .ind-note,
+body.theme-dark .drawer-score,
+body.theme-dark .proc-tab,
+body.theme-dark .proc-detalhe,
+body.theme-dark .insc-item,
+body.theme-dark .fb-sec,
+body.theme-dark .fb-pergunta,
+body.theme-dark .fb-obrig-chip,
+body.theme-dark .fb-add { border-color: var(--d-border); }
+/* A esquerda da vaga é a faixa de status — fica como está. */
+body.theme-dark .bt-vaga {
+  border-top-color: var(--d-border);
+  border-right-color: var(--d-border);
+  border-bottom-color: var(--d-border);
+}
+body.theme-dark .drawer-head,
+body.theme-dark .drawer-painel { border-bottom-color: var(--d-border); }
+body.theme-dark .drawer-acoes,
+body.theme-dark .drawer-kv { border-bottom-color: var(--d-border-soft); }
+body.theme-dark .fb-campo { border-top-color: var(--d-border-soft); border-bottom-color: var(--d-border-soft); }
+body.theme-dark .fb-opcoes-box { border-top-color: var(--d-border-soft); }
+body.theme-dark .drawer-av { border-left-color: var(--d-border); }
+body.theme-dark .drawer-sep { background: var(--d-border); }
+
+/* Texto forte: títulos, nomes, valores */
+body.theme-dark .ind-stat-num,
+body.theme-dark .ind-note strong,
+body.theme-dark .bt-vaga-titulo,
+body.theme-dark .bt-vaga-stats strong,
+body.theme-dark .drawer-titulo,
+body.theme-dark .drawer-score-vaga,
+body.theme-dark .drawer-score-detalhe strong,
+body.theme-dark .drawer-kv strong,
+body.theme-dark .drawer-exp,
+body.theme-dark .drawer-obs,
+body.theme-dark .drawer-av,
+body.theme-dark .drawer-tl-txt,
+body.theme-dark .drawer-crit-row,
+body.theme-dark .drawer-resp-a,
+body.theme-dark .proc-tab-vaga,
+body.theme-dark .proc-vaga,
+body.theme-dark .insc-nome,
+body.theme-dark .fb-sec-t,
+body.theme-dark .fb-campo-on .fb-campo-nome { color: var(--d-text); }
+
+/* Texto de apoio */
+body.theme-dark .ind-stat-label,
+body.theme-dark .ind-note,
+body.theme-dark .bt-vaga-sub,
+body.theme-dark .drawer-sub,
+body.theme-dark .drawer-kv span,
+body.theme-dark .drawer-exp-sub,
+body.theme-dark .drawer-score-detalhe > div,
+body.theme-dark .drawer-mini-titulo,
+body.theme-dark .drawer-resp-q,
+body.theme-dark .proc-meta,
+body.theme-dark .insc-sub,
+body.theme-dark .fb-fixo,
+body.theme-dark .fb-campo-nome,
+body.theme-dark .fb-peso,
+body.theme-dark .fb-ideal { color: var(--d-text-2); }
+
+/* Texto discreto: contadores, metadados, dicas */
+body.theme-dark .bt-vaga-stats span,
+body.theme-dark .drawer-x,
+body.theme-dark .drawer-sec-titulo,
+body.theme-dark .drawer-vazio,
+body.theme-dark .drawer-av-top,
+body.theme-dark .drawer-tl-meta,
+body.theme-dark .fb-sec-s,
+body.theme-dark .fb-hint,
+body.theme-dark .fb-obrig-chip { color: var(--d-text-3); }
+
+/* Hover: um degrau acima da borda, para o cursor ter resposta sem acender nada. */
+body.theme-dark .insc-item:hover,
+body.theme-dark .fb-obrig-chip:hover { border-color: #3a4260; }
+
+/* LARANJA — a cor da casa: aba ativa, chip ligado, etiqueta, link */
+body.theme-dark .proc-tab.active,
+body.theme-dark .fb-obrig-chip.on,
+body.theme-dark .fb-tag,
+body.theme-dark .fb-add:hover {
+  background: rgba(249, 115, 22, 0.13);
+  border-color: rgba(249, 115, 22, 0.42);
+}
+body.theme-dark .fb-obrig-chip.on,
+body.theme-dark .fb-tag,
+body.theme-dark .fb-add,
+body.theme-dark .drawer-link { color: #fb923c; }
+body.theme-dark .fb-sec-ico { background: rgba(249, 115, 22, 0.15); }
+
+/* VERMELHO — motivo de reprovação, permanência baixa */
+body.theme-dark .proc-motivo,
+body.theme-dark .perm-baixa { background: rgba(220, 38, 38, 0.15); color: #f87171; }
+body.theme-dark .fb-tag-x:hover { color: #f87171; }
+
+/* ÂMBAR — próximo passo, aviso, dado parcial */
+body.theme-dark .drawer-prox {
+  background: rgba(245, 158, 11, 0.13);
+  border-color: rgba(245, 158, 11, 0.32);
+  color: #fbbf24;
+}
+body.theme-dark .proc-aviso { color: #fbbf24; }
+body.theme-dark .q-parcial,
+body.theme-dark .perm-media { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+
+/* VERDE — dado completo, permanência alta */
+body.theme-dark .q-completo,
+body.theme-dark .perm-alta { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
+
+/* NEUTRO e ÍNDIGO — estimado, duração da experiência */
+body.theme-dark .q-estimado { background: rgba(255, 255, 255, 0.08); color: var(--d-text-3); }
+body.theme-dark .drawer-exp-dur { background: rgba(99, 102, 241, 0.18); color: #a5b4fc; }
+
+/* TOASTS — `!important` porque o `.toast` escuro lá em cima leva. E fundo SÓLIDO, ao
+   contrário dos selos: o toast flutua por cima da página, e um fundo translúcido deixaria
+   o texto de trás aparecer através da mensagem. */
+body.theme-dark .toast-success {
+  background: #2a1d12 !important;
+  border-color: rgba(249, 115, 22, 0.45) !important;
+  color: #fdba74 !important;
+}
+body.theme-dark .toast-error {
+  background: #2b1518 !important;
+  border-color: rgba(220, 38, 38, 0.5) !important;
+  color: #fca5a5 !important;
+}
+body.theme-dark .toast-info {
+  background: #2a2312 !important;
+  border-color: rgba(245, 158, 11, 0.45) !important;
+  color: #fcd34d !important;
+}
 
 /* ===== Formulário permanente — 2 colunas (FormBuilder + prévia ao vivo) ===== */
 .bt-fp-grid{display:grid;grid-template-columns:minmax(0,1fr) 384px;gap:26px;align-items:start}
