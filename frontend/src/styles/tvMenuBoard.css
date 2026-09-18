@@ -906,10 +906,19 @@
    A FOLGA tem de ser maior que o quanto o card cresce (650 × 0,14 = 91), senão o herói
    volta a comer a fatia do vizinho — que é justamente o que dá a sensação de vitrine.
 
-   Na vertical sobra ar: o palco tem ~1610px sem cabeçalho e o herói ocupa 1186, com a
-   vinheta e o halo preenchendo o resto. Com cabeçalho e nome em duas linhas o palco cai
-   para ~1250 e o herói ainda cabe. */
+   NA VERTICAL o palco deixa de esticar. Deitado ele ocupa toda a altura livre, e tudo bem:
+   o herói quase a preenche. Em pé sobrariam ~420px de nada entre o card e a legenda, e o
+   nome ficaria boiando longe do produto que descreve. Então a linha do palco passa a ter a
+   altura do herói (1186 + folga) e o conjunto inteiro — palco, vão e legenda — é centrado
+   no corpo. O ar sai de onde não fazia falta (acima e abaixo do grupo) e a legenda encosta
+   no card. */
 .tvmb-tela.retrato .tvmb-cr {
+  /* ⚠️ As COLUNAS vêm junto: declarar só as linhas deixa a coluna implícita em `auto`, que
+     é o max-content da pista inteira — dez cards, muito mais largos que a tela. */
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 1210px auto;
+  align-content: center;
+
   --tvmb-cr-centro: 540px;
   --tvmb-cr-card-l: 650px;
   --tvmb-cr-card-a: 1040px;
