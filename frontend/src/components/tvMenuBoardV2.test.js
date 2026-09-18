@@ -470,6 +470,42 @@ test('🔴 o card em cena cresce por SCALE, nunca por largura', () => {
   assert.match(pista, /translate3d\(/, 'camada própria: a tela fica ligada por horas')
 })
 
+test('🔴 em pé, o herói do Carrossel não come a fatia do vizinho', () => {
+  /* É a sensação de VITRINE que está em jogo: o produto em cena domina a tela e dos
+     vizinhos aparece só uma fatia nas bordas, dizendo "tem mais vindo".
+
+     A primeira versão em pé errou essa conta — o card ampliado invadia 40px do vizinho,
+     cortava o selo de oferta, e a fila virava uma pilha de fotos coladas. Duas medidas
+     seguram o resultado: a folga entre os cards tem de ser maior que o quanto o card
+     CRESCE ao entrar em cena, e o vizinho tem de começar antes da borda da tela.
+
+     Deitado a régua é outra de propósito: lá são quatro vizinhos próximos, o card em cena
+     os cobre de leve, e essa sobreposição é o que dá profundidade à fileira. */
+  const i = css.indexOf('.tvmb-tela.retrato .tvmb-cr {')
+  const bloco = css.slice(i, css.indexOf('}', i))
+  // Sem regex de propósito: `parseFloat` ignora o espaço e para no `px`, e a busca pela
+  // chave com os dois-pontos não confunde `card-l` com `card-a`.
+  const medida = (nome) => {
+    const chave = `--tvmb-cr-${nome}:`
+    const k = bloco.indexOf(chave)
+    assert.ok(k >= 0, `a composição em pé precisa declarar ${chave}`)
+    const v = parseFloat(bloco.slice(k + chave.length))
+    assert.ok(Number.isFinite(v), `${chave} não tem número`)
+    return v
+  }
+  const cardL = medida('card-l')
+  const vao = medida('vao')
+  const zoom = medida('zoom')
+  const centro = medida('centro')
+
+  assert.ok(vao > cardL * (zoom - 1),
+    `o card cresce ${Math.round(cardL * (zoom - 1))}px e a folga é ${vao}px: o herói invade o vizinho`)
+  assert.ok(cardL * zoom < centro * 2, 'o herói não cabe na largura da tela em pé')
+  // O vizinho começa antes da borda: é isso que deixa a fatia aparecendo.
+  const fatia = centro - (cardL + vao - cardL / 2)
+  assert.ok(fatia > 40, `sobram ${Math.round(fatia)}px do vizinho — pouco para ler como fila`)
+})
+
 test('🔴 nenhum grid do board declara LINHAS sem declarar COLUNAS', () => {
   /* Declarar só as linhas deixa a coluna implícita em `auto`, que é o MAX-CONTENT dos
      filhos. Isso já derrubou o artboard uma vez (o cabeçalho foi parar ao lado do corpo,

@@ -668,6 +668,10 @@
   --tvmb-cr-vao: 44px;
   --tvmb-cr-passo: calc(var(--tvmb-cr-card-l) + var(--tvmb-cr-vao));
   --tvmb-cr-zoom: 1.36;
+  /* Onde fica o CENTRO do palco, em pixels do artboard: é para cá que a pista traz o card
+     em cena. Deitado o palco sangra até as bordas (1920 de largura), então o meio é 960.
+     Em pé são 1080, e o meio é 540 — a única medida da pista que depende da orientação. */
+  --tvmb-cr-centro: 960px;
 
   position: relative;
   display: grid;
@@ -744,7 +748,7 @@
      isso o navegador repinta a faixa inteira a cada quadro do deslize. */
   position: relative;
   transform: translate3d(
-    calc(960px - var(--tvmb-cr-card-l) / 2 - var(--tvmb-cr-i, 0) * var(--tvmb-cr-passo)),
+    calc(var(--tvmb-cr-centro) - var(--tvmb-cr-card-l) / 2 - var(--tvmb-cr-i, 0) * var(--tvmb-cr-passo)),
     0, 0);
   transition: transform 760ms cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -878,29 +882,44 @@
 .tvmb-tela.retrato .tvmb-of-txt { text-align: center; align-items: center; }
 .tvmb-tela.retrato .tvmb-of-txt .tvmb-preco { align-items: center; }
 
-/* Carrossel: a fila anda na VERTICAL.
-   A pista vira coluna, ancorada no centro do palco, e o deslocamento sobe em vez de
-   andar para o lado. O passo passa a ser altura + vão (deitado é largura + vão), e é a
-   ÚNICA conta que muda — o índice, o recuo invisível e o piso de tempo são os mesmos.
-   Os cards ficam mais largos e mais baixos (700 × 470): em pé a largura sobra e a altura
-   é o que se divide entre os visíveis. */
+/* Carrossel em pé: a MESMA fila andando de lado, mas como VITRINE — um produto de cada vez.
+
+   Deitado, três ou quatro produtos convivem na tela e a leitura é "olha o que tem". Em pé
+   não há largura para isso. A primeira tentativa virou a fila para a vertical, e o
+   resultado foi uma pilha de fotos coladas: os cards (700 × 470, passo 514) eram invadidos
+   em 40px pelo card em cena, que ampliado tinha 639 de altura — o selo de oferta saía
+   cortado, e a legenda, lá no rodapé, parecia pertencer ao produto DE BAIXO.
+
+   Aqui o herói domina e dos vizinhos aparece só uma fatia nas bordas, cortada pela tela.
+   É o bastante para dizer "tem mais vindo" sem disputar a atenção — e como a fila continua
+   horizontal, a única coisa que muda em relação à TV deitada são quatro medidas.
+
+   A CONTA, para quem for mexer nestes números (artboard 1080 × 1920, padding 64/80/72; o
+   palco sangra os 80px laterais, então ele tem a largura inteira):
+
+     herói  = 650 × 1040 ampliado por 1,14  →  741 × 1186
+     passo  = 650 + 106 = 756
+     folga escura entre o herói e o vizinho = 756 − 650 × (1 + 1,14)/2 = 60px
+     fatia do vizinho visível = 1080/2 − (756 − 325) = 109px
+     ao todo: 109 + 60 + 741 + 60 + 109 = 1079px
+
+   A FOLGA tem de ser maior que o quanto o card cresce (650 × 0,14 = 91), senão o herói
+   volta a comer a fatia do vizinho — que é justamente o que dá a sensação de vitrine.
+
+   Na vertical sobra ar: o palco tem ~1610px sem cabeçalho e o herói ocupa 1186, com a
+   vinheta e o halo preenchendo o resto. Com cabeçalho e nome em duas linhas o palco cai
+   para ~1250 e o herói ainda cabe. */
 .tvmb-tela.retrato .tvmb-cr {
-  --tvmb-cr-card-l: 700px;
-  --tvmb-cr-card-a: 470px;
-  --tvmb-cr-passo: calc(var(--tvmb-cr-card-a) + var(--tvmb-cr-vao));
+  --tvmb-cr-centro: 540px;
+  --tvmb-cr-card-l: 650px;
+  --tvmb-cr-card-a: 1040px;
+  --tvmb-cr-vao: 106px;
+  /* Menos zoom que deitado (1,36): ali o crescimento separa o do meio de quatro vizinhos
+     próximos; aqui o herói já está sozinho, e um salto grande só serviria para ele comer a
+     fatia que dá a sensação de vitrine. */
+  --tvmb-cr-zoom: 1.14;
 }
-/* Sem sangria lateral: em pé o palco é limitado em cima pelo cabeçalho e embaixo pela
-   legenda, e é o próprio `overflow` dele que corta os cards das pontas. */
-.tvmb-tela.retrato .tvmb-cr-palco { margin: 0; }
-.tvmb-tela.retrato .tvmb-cr-pista {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  flex-direction: column;
-  /* -50% em X centra a coluna; em Y, a pista sobe `i` passos mais meio card, para o card
-     `i` ficar exatamente no meio do palco. */
-  transform: translate3d(-50%, calc(-1 * var(--tvmb-cr-i, 0) * var(--tvmb-cr-passo) - var(--tvmb-cr-card-a) / 2), 0);
-}
-/* O halo nasce mais alto: o palco em pé é muito mais alto que a legenda, e o produto em
-   cena fica perto da metade dele, não da metade do template. */
-.tvmb-tela.retrato .tvmb-cr-halo { top: 42%; width: 1100px; height: 1100px; }
+/* O halo acompanha o herói: em pé ele é alto, então a luz também é — uma mancha larga e
+   baixa deixaria o topo e o pé do produto no escuro. O centro fica um pouco acima da
+   metade porque abaixo do palco ainda há o vão e a legenda. */
+.tvmb-tela.retrato .tvmb-cr-halo { top: 44%; width: 1300px; height: 1500px; }
