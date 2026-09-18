@@ -4022,6 +4022,10 @@ body.theme-dark .tvi-mon-cartao.off { background: rgba(239, 68, 68, 0.12); }
 .tvp-linha { width: 34px; height: 4px; border-radius: 2px; background: var(--app-text-2); display: block; }
 .tvp-linha.curta { width: 22px; opacity: 0.6; }
 
+/* A previa EM PE' do menu board: com a largura da coluna inteira ela teria 800px de
+   altura e empurraria o editor para fora da tela. Estreita e centrada, cabe ao lado. */
+.tvi-mb-previa-em-pe { max-width: 300px; margin: 0 auto; }
+
 /* O tempo do item na playlist: um campo que cabe na linha de meta sem virar formulario.
    Estreito de proposito — sao no maximo tres digitos. */
 .tvi-tempo { display: inline-flex; align-items: center; gap: 5px; }

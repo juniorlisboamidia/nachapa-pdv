@@ -291,6 +291,7 @@ function Miniatura({ id }) {
 
 function Editor({ valor, layouts, identidade, limites, ocupado, aoFechar, aoSalvar, aoAvisar }) {
   const [form, setForm] = useState(valor)
+  const [previaEmPe, setPreviaEmPe] = useState(false)
   const [catalogo, setCatalogo] = useState(null)      // { categorias, desatualizado }
   const [erroCatalogo, setErroCatalogo] = useState(null)
   const [carregandoCat, setCarregandoCat] = useState(true)
@@ -682,11 +683,20 @@ function Editor({ valor, layouts, identidade, limites, ocupado, aoFechar, aoSalv
             <div className="ttm-cab-secao">
               <h3 className="ttm-secao-t">Prévia</h3>
               <span className="ttm-meta-txt">é o mesmo desenho que vai para a TV</span>
+              {/* O mesmo board serve TV deitada e TV em pé, com composições diferentes. A
+                  prévia precisa poder mostrar as duas — senão ela mente para metade das
+                  paredes. Não é atributo do board: é só de onde se está olhando. */}
+              <div className="ttm-cab-acao tvi-abas">
+                <button type="button" className={'tvi-aba' + (previaEmPe ? '' : ' on')} onClick={() => setPreviaEmPe(false)}>Deitada</button>
+                <button type="button" className={'tvi-aba' + (previaEmPe ? ' on' : '')} onClick={() => setPreviaEmPe(true)}>Em pé</button>
+              </div>
             </div>
             {/* Os MESMOS tokens e a MESMA logo que o player usa. É o que torna a frase acima
                 literalmente verdadeira — antes a prévia desenhava com os padrões da folha
                 enquanto a parede usava a paleta da loja. */}
-            <MenuBoard board={previa} tokens={identidade?.tokens} logo={identidade?.logo} />
+            <div className={previaEmPe ? 'tvi-mb-previa-em-pe' : undefined}>
+              <MenuBoard board={previa} tokens={identidade?.tokens} logo={identidade?.logo} orientacao={previaEmPe ? 'RETRATO' : 'PAISAGEM'} />
+            </div>
             {previa.produtos.length === 0 && (
               <div className="ttm-dica">
                 Sem produto disponível, este board <strong>não entra</strong> na programação: a TV pula para o próximo item.

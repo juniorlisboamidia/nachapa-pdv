@@ -174,12 +174,47 @@ test('a prévia recebe o teto do template — mostra o que a parede mostraria', 
 })
 
 // ── Responsividade e safe area ───────────────────────────────────────────────
-test('🔴 a tela é 1920×1080 e quem encolhe é a escala — um caminho só', () => {
-  // É o que faz "o card cabe?" ter uma resposta só. Com layout fluido, o admin em 600px
-  // tomaria decisões de quebra diferentes das da TV.
+test('🔴 a tela tem tamanho FIXO por orientação e quem encolhe é a escala — um caminho só', () => {
+  /* É o que faz "o card cabe?" ter uma resposta só. Com layout fluido, o admin em 600px
+     tomaria decisões de quebra diferentes das da TV.
+     Deitada é 1920 × 1080; em pé é a MESMA tela virada, 1080 × 1920 — e a escala divide
+     pela largura do artboard em uso (a conta tem teste em artboard.test.js). O que esta
+     guarda proíbe é um terceiro caminho: um template medindo a si mesmo. */
   assert.match(css, /\.tvmb-tela \{\n\s*width: 1920px;\n\s*height: 1080px;/)
+  assert.match(css, /\.tvmb-tela\.retrato \{ width: 1080px; height: 1920px; \}/)
   assert.match(renderer, /--tvmb-escala/)
-  assert.match(renderer, /largura \/ 1920/)
+  assert.match(renderer, /escalaDe\(largura, retrato \? 'RETRATO' : 'PAISAGEM'\)/)
+  assert.equal(/largura \/ \d+/.test(semComentarios(renderer)), false, 'nenhuma divisão à mão: a conta é do artboard.js')
+})
+
+test('🔴 em pé, cada template tem composição própria — e nenhuma soma pixels', () => {
+  /* As regras `.retrato` reorganizam o que já existe: colunas viram linhas, o herói sobe, a
+     fila anda na vertical. A regra de nunca somar pixels vale nas duas orientações, e toda
+     regra em pé que declara linhas declara colunas (a coluna implícita já derrubou o
+     artboard e o Carrossel). */
+  const emPe = css.slice(css.indexOf('EM PÉ — as composições'))
+  assert.ok(emPe.length > 0, 'faltam as composições em pé')
+  for (const corpo of ['.tvmb-grade', '.tvmb-destaque', '.tvmb-lista', '.tvmb-vitrine', '.tvmb-of', '.tvmb-cr']) {
+    assert.ok(emPe.includes('.tvmb-tela.retrato ' + corpo + ' {'), `${corpo} não tem composição em pé`)
+  }
+  const grids = [...emPe.matchAll(/\.tvmb-tela\.retrato [^{]+\{([^}]*grid-template-(?:columns|rows)[^}]*)\}/g)]
+  assert.ok(grids.length >= 5)
+  for (const [regra, bloco] of grids) {
+    assert.equal(/grid-template-columns:[^;]*\d+px/.test(bloco), false, `coluna em px: ${regra.slice(0, 60)}`)
+    if (bloco.includes('grid-template-rows')) assert.match(bloco, /grid-template-columns/, `linhas sem colunas: ${regra.slice(0, 60)}`)
+  }
+  // E as regras em pé ficam DEPOIS das deitadas: as guardas acima leem a primeira ocorrência.
+  assert.ok(css.indexOf('.tvmb-tela.retrato .tvmb-grade {') > css.indexOf('.tvmb-grade {'))
+})
+
+test('🔴 na TV em pé o board preenche a tela — a centralização usa a altura certa', () => {
+  // A conta do centro é "metade da caixa menos metade do artboard". Em pé o artboard tem
+  // 1920 de altura, não 1080: com o número deitado, o board em pé desceria 420px.
+  const tv = ler('../styles/tv.css')
+  assert.match(tv, /\.tv-board \.tvmb-palco \{ top: calc\(50% - 540px \* var\(--tvmb-escala\)\); \}/)
+  assert.match(tv, /\.tv-board \.tvmb-caixa\.retrato \.tvmb-palco \{ top: calc\(50% - 960px \* var\(--tvmb-escala\)\); \}/)
+  // E o player passa a orientação DA TELA para o board.
+  assert.match(player, /<MenuBoard board=\{atual\}[^>]*orientacao=\{programacao\?\.tela\?\.orientacao \?\? aparelho\?\.orientacao \?\? 'PAISAGEM'\}/)
 })
 
 test('a margem de segurança é UMA, e vale para os cinco', () => {

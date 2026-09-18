@@ -463,7 +463,9 @@ export default function TvIndoorPlayer({ aparelho, loja }) {
     return (
       <div className={'tv-raiz' + giroCls} ref={raizRef}>
         <div key={`b${atual.id}`} className={'tv-board' + (reduzido ? '' : ' entrando')}>
-          <MenuBoard board={atual} tokens={aparencia?.tokens} />
+          {/* A orientação é da TELA, e chega com a programação (ou com o /eu, antes dela).
+              Servidor antigo não manda: fica deitada, como toda parede se comportava. */}
+          <MenuBoard board={atual} tokens={aparencia?.tokens} orientacao={programacao?.tela?.orientacao ?? aparelho?.orientacao ?? 'PAISAGEM'} />
         </div>
       </div>
     )

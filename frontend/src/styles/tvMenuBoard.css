@@ -130,6 +130,12 @@
 }
 .tvmb-caixa.medido .tvmb-palco { visibility: visible; }
 
+/* A caixa EM PÉ: proporção 9:16 na prévia e palco de 1080 × 1920. A escala continua sendo
+   medida em JS, agora dividindo pela largura do artboard em pé (ver `medir`). */
+.tvmb-caixa.retrato { aspect-ratio: 9 / 16; }
+.tvmb-caixa.retrato .tvmb-palco { width: 1080px; height: 1920px; }
+.tvmb-tela.retrato { width: 1080px; height: 1920px; }
+
 /* O ARTBOARD. Safe area generosa e IGUAL nos cinco: TV de loja com overscan mal
    configurado é a regra, não a exceção, e informação colada na borda simplesmente
    desaparece. 80px na horizontal são ~4% da largura, que é a margem que os fabricantes
@@ -814,3 +820,87 @@
   /* O halo continua existindo (é fundo, não movimento), só não pulsa ao chegar. */
   .tvmb-cr-halo { animation: none; opacity: 0.6; transform: translate(-50%, -50%); }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   EM PÉ — as composições para o artboard de 1080 × 1920.
+
+   Uma TV pendurada em pé é a mesma tela virada, e o mesmo board a alimenta. O que muda é
+   a COMPOSIÇÃO: colunas viram linhas, o herói vai para cima, a fila do carrossel anda na
+   vertical. Cada regra aqui só reorganiza o que já existe — nada de card novo, nada de
+   tipografia nova, e os tetos por template são os mesmos (Grade 8 = 2 × 4, Destaque 5 =
+   1 + 2 × 2, Lista 10 = uma coluna, Vitrine 3 = empilhados).
+
+   ⚠️ Estas regras ficam no FIM do arquivo de propósito. As guardas do teste leem a
+   PRIMEIRA ocorrência de cada seletor (`.tvmb-grade {`, `.tvmb-lista {`…) para conferir a
+   composição deitada; uma regra `.retrato .tvmb-grade {` declarada antes seria lida no
+   lugar dela. E toda coluna continua `minmax(0, fr)`: a regra de nunca somar pixels vale
+   nas duas orientações. */
+
+/* Grade: 2 × 4. Os cards ficam mais largos que na deitada (446px contra 419), então a
+   tipografia deitada serve sem ajuste. */
+.tvmb-tela.retrato .tvmb-grade {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(4, minmax(0, 1fr));
+}
+
+/* Destaque: o herói em cima, os quatro embaixo em 2 × 2. Cinco partes para o herói e
+   quatro para o resto — o herói continua sendo o maior, mas os secundários ganham altura
+   para a foto de 180px não virar uma fresta. */
+.tvmb-tela.retrato .tvmb-destaque {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 5fr) minmax(0, 4fr);
+}
+
+/* Lista: uma coluna de dez, na ordem. Deitada ela é 5 + 5 (duas colunas, preenchendo por
+   coluna); em pé a segunda coluna não existe, e o fluxo volta a ser por linha. */
+.tvmb-tela.retrato .tvmb-lista {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: repeat(10, minmax(0, 1fr));
+  grid-auto-flow: row;
+}
+
+/* Vitrine: três empilhados. Cada um fica com ~570px de altura — a foto (62%) continua
+   dominante, e o texto abaixo dela tem o dobro da largura da versão deitada. */
+.tvmb-tela.retrato .tvmb-vitrine {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: repeat(3, minmax(0, 1fr));
+}
+
+/* Oferta: a foto em cima, o texto embaixo. Em pé a foto pode ser quase quadrada, que é o
+   formato em que a maioria das fotos de lanche existe — a Oferta em pé corta MENOS que a
+   deitada. */
+.tvmb-tela.retrato .tvmb-of {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 11fr) auto;
+  gap: 40px;
+  align-items: stretch;
+}
+.tvmb-tela.retrato .tvmb-of-txt { text-align: center; align-items: center; }
+.tvmb-tela.retrato .tvmb-of-txt .tvmb-preco { align-items: center; }
+
+/* Carrossel: a fila anda na VERTICAL.
+   A pista vira coluna, ancorada no centro do palco, e o deslocamento sobe em vez de
+   andar para o lado. O passo passa a ser altura + vão (deitado é largura + vão), e é a
+   ÚNICA conta que muda — o índice, o recuo invisível e o piso de tempo são os mesmos.
+   Os cards ficam mais largos e mais baixos (700 × 470): em pé a largura sobra e a altura
+   é o que se divide entre os visíveis. */
+.tvmb-tela.retrato .tvmb-cr {
+  --tvmb-cr-card-l: 700px;
+  --tvmb-cr-card-a: 470px;
+  --tvmb-cr-passo: calc(var(--tvmb-cr-card-a) + var(--tvmb-cr-vao));
+}
+/* Sem sangria lateral: em pé o palco é limitado em cima pelo cabeçalho e embaixo pela
+   legenda, e é o próprio `overflow` dele que corta os cards das pontas. */
+.tvmb-tela.retrato .tvmb-cr-palco { margin: 0; }
+.tvmb-tela.retrato .tvmb-cr-pista {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  flex-direction: column;
+  /* -50% em X centra a coluna; em Y, a pista sobe `i` passos mais meio card, para o card
+     `i` ficar exatamente no meio do palco. */
+  transform: translate3d(-50%, calc(-1 * var(--tvmb-cr-i, 0) * var(--tvmb-cr-passo) - var(--tvmb-cr-card-a) / 2), 0);
+}
+/* O halo nasce mais alto: o palco em pé é muito mais alto que a legenda, e o produto em
+   cena fica perto da metade dele, não da metade do template. */
+.tvmb-tela.retrato .tvmb-cr-halo { top: 42%; width: 1100px; height: 1100px; }

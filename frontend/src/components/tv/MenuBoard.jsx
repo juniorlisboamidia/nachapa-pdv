@@ -28,6 +28,8 @@ import { aplicar as aplicarTemaTv } from '../tvIndoorTema'
 // A aritmética da fila do Carrossel vive fora daqui, num módulo puro, porque é a parte
 // que dá para testar de verdade — e é a parte que já derrubou a parede uma vez.
 import { indiceEmCena, msPorPasso, precisaRecuar } from './carrosselFila.js'
+// As medidas do artboard por orientação e a conta da escala — puras, com teste.
+import { ehRetrato, escalaDe } from './artboard.js'
 import '../../styles/tvMenuBoard.css'
 
 const moeda = (v) => (typeof v === 'number' ? v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : null)
@@ -375,7 +377,10 @@ function exibicaoDe(board, template) {
 }
 
 /* A TELA do board, em 1920 × 1080 absolutos. Quem encolhe é quem monta (a prévia). */
-export function MenuBoardTela({ board, logo }) {
+/* A orientação é da TELA (a TV ou o seletor da prévia), nunca do board: o mesmo board
+   serve as duas paredes, e em pé cada template tem uma composição própria (as regras
+   `.retrato` no fim da folha). As medidas moram em `artboard.js`. */
+export function MenuBoardTela({ board, logo, orientacao = 'PAISAGEM' }) {
   const produtos = Array.isArray(board?.produtos) ? board.produtos : []
   const template = TEMPLATES.includes(board?.layout) ? board.layout : 'GRADE'
   const ex = exibicaoDe(board, template)
@@ -388,7 +393,7 @@ export function MenuBoardTela({ board, logo }) {
        corpo na célula vizinha, espremido. A colisão existia desde o V1 e era inofensiva
        porque `.tvmb-tela` era `display: flex`, e flex ignora `grid-template-*`; ela acordou
        quando o artboard virou grid. */
-    <div className={'tvmb-tela tvmb-tpl-' + template.toLowerCase()}>
+    <div className={'tvmb-tela tvmb-tpl-' + template.toLowerCase() + (ehRetrato(orientacao) ? ' retrato' : '')}>
       {/* O CABEÇALHO só existe quando tem o que dizer. Um bloco vazio com altura fixa
           empurraria a composição para baixo em todo board sem título — e a diferença
           apareceria na parede, não aqui. */}
@@ -434,8 +439,9 @@ export function MenuBoardTela({ board, logo }) {
    O observer escreve DIRETO no nó (`style.setProperty`), sem passar por estado do React: a
    TV redimensiona uma vez na vida, e um `setState` a cada quadro de resize remontaria o
    board inteiro à toa. */
-export default function MenuBoard({ board, tokens, logo }) {
+export default function MenuBoard({ board, tokens, logo, orientacao = 'PAISAGEM' }) {
   const caixaRef = useRef(null)
+  const retrato = ehRetrato(orientacao)
 
   // A paleta entra por `style.setProperty`, uma propriedade conhecida de cada vez — nunca
   // uma `<style>` montada com string. O adaptador (`tvIndoorTema`) é o único que sabe
@@ -454,7 +460,11 @@ export default function MenuBoard({ board, tokens, logo }) {
     const medir = () => {
       const largura = el.clientWidth
       if (largura <= 0) return
-      el.style.setProperty('--tvmb-escala', String(largura / 1920))
+      // A escala é "quantas vezes o artboard cabe na caixa", e o artboard em pé tem OUTRA
+      // largura — a conta mora em artboard.js, com teste.
+      const escala = escalaDe(largura, retrato ? 'RETRATO' : 'PAISAGEM')
+      if (escala === null) return
+      el.style.setProperty('--tvmb-escala', String(escala))
       el.classList.add('medido')
     }
     medir()
@@ -472,12 +482,14 @@ export default function MenuBoard({ board, tokens, logo }) {
     const ro = new ResizeObserver(medir)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [])
+    // `retrato` na dependência: trocar a orientação na prévia muda o divisor da escala, e a
+    // caixa precisa medir de novo com o divisor certo.
+  }, [retrato])
 
   return (
-    <div className="tvmb-caixa" ref={caixaRef}>
+    <div className={'tvmb-caixa' + (retrato ? ' retrato' : '')} ref={caixaRef}>
       <div className="tvmb-palco">
-        <MenuBoardTela board={board} logo={logo} />
+        <MenuBoardTela board={board} logo={logo} orientacao={orientacao} />
       </div>
     </div>
   )
